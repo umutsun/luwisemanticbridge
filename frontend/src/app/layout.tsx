@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alice Semantic Bridge - AI Hukuk Asistanı",
-  description: "Yapay Zeka Destekli Hukuki Danışmanlık ve Müşteri Yönetim Sistemi",
+  title: "Alice Semantic Bridge - AI Legal Assistant",
+  description: "AI-powered Legal Consulting and Client Management System",
 };
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
       </head>

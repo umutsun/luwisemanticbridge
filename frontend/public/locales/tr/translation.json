@@ -53,7 +53,8 @@
       "prompts": "Promptlar",
       "settings": "Ayarlar",
       "activities": "Aktiviteler",
-      "chatbot": "Chatbot"
+      "chatbot": "Chatbot",
+      "users": "Kullanıcılar"
     }
   },
   "prompts": {
@@ -79,7 +80,7 @@
       "chatbotTitle": "Chatbot Başlığı",
       "logoUrl": "Logo URL",
       "welcomeMessage": "Karşılama Mesajı",
-      "inputPlaceholder": "Input Placeholder",
+      "inputPlaceholder": "Giriş Yer Tutucu",
       "primaryColor": "Ana Renk"
     },
     "placeholders": {
@@ -248,6 +249,13 @@
     "avgChunkSize": "Ortalama Parça Boyutu",
     "indexStatus": "İndeks Durumu",
     "lastIndexTime": "Son İndeksleme Zamanı"
+  },
+  "users": {
+    "title": "Kullanıcılar",
+    "description": "Tüm sistem kullanıcılarını görüntüleyin ve yönetin",
+    "loadFailed": "Kullanıcılar yüklenemedi",
+    "statusUpdated": "Kullanıcı durumu güncellendi",
+    "statusUpdateFailed": "Durum güncellenemedi"
   },
   "toasts": {
     "settingsSavedSuccessTitle": "Başarılı ✨",

@@ -25,6 +25,8 @@ interface EmbeddingProgress {
   currentTable: string | null;
   error: string | null;
   tokensUsed?: number;
+  tokensThisSession?: number;
+  estimatedTotalTokens?: number;
   estimatedCost?: number;
   startTime?: number;
   estimatedTimeRemaining?: number;
@@ -33,6 +35,7 @@ interface EmbeddingProgress {
   processingSpeed?: number;
   fallbackMode?: boolean;
   fallbackReason?: string;
+  mightBeStuck?: boolean;
 }
 
 interface VerticalProgressDisplayProps {
@@ -138,6 +141,16 @@ export default function VerticalProgressDisplay({
         </div>
       </div>
 
+      {/* Stuck Process Warning */}
+      {progress.mightBeStuck && (
+        <Alert className="py-2 border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+          <Clock className="h-3 w-3" />
+          <AlertDescription className="text-xs">
+            İşlem yanıt vermiyor. Lütfen bekleyin veya işlemi duraklatıp tekrar başlatın.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Progress Bar */}
       <div className="space-y-1">
         <div className="flex justify-between text-xs">
@@ -178,6 +191,53 @@ export default function VerticalProgressDisplay({
           <div className="text-muted-foreground">kalan süre</div>
         </div>
       </div>
+
+      {/* Token Usage */}
+      {(progress.tokensThisSession !== undefined || progress.estimatedTotalTokens !== undefined) && (
+        <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Zap className="w-3 h-3" />
+              Token Kullanımı
+            </span>
+            {progress.estimatedTotalTokens && (
+              <span className="text-xs text-muted-foreground">
+                Tahmini Toplam: {progress.estimatedTotalTokens.toLocaleString('tr-TR')}
+              </span>
+            )}
+          </div>
+
+          {progress.tokensThisSession !== undefined && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span>Bu Oturum:</span>
+                <span className="font-mono font-bold text-blue-600">
+                  {progress.tokensThisSession.toLocaleString('tr-TR')}
+                </span>
+              </div>
+              {progress.estimatedTotalTokens && (
+                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-blue-500 h-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, (progress.tokensThisSession / progress.estimatedTotalTokens) * 100)}%`
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {progress.tokensUsed !== undefined && progress.tokensUsed > 0 && (
+            <div className="flex justify-between text-xs pt-1 border-t border-muted-foreground/20">
+              <span className="text-muted-foreground">Toplam (tüm oturumlar):</span>
+              <span className="font-mono">
+                {progress.tokensUsed.toLocaleString('tr-TR')}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Time Info */}
       <div className="text-xs space-y-1">

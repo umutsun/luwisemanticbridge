@@ -9,7 +9,7 @@
     "start:interactive": "npx tsx start-multi-agent-system.ts --interactive",
     "mcp:server": "npx tsx claude-code-mcp-server.ts",
     "mcp:demo": "npx tsx claude-code-mcp-demo.ts",
-    "test": "vitest",
+    "test": "vitest run --coverage",
     "build": "tsc --outDir dist --target es2020 --module commonjs --moduleResolution node --esModuleInterop --resolveJsonModule --skipLibCheck",
     "dev": "tsx watch start-multi-agent-system.ts"
   },
@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
     "msw": "^2.11.2",
     "tsx": "^4.6.0",
     "typescript": "^5.0.0",

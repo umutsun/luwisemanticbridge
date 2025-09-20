@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       },
+      // Add timeout to prevent hanging
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
@@ -22,11 +24,22 @@ export async function GET(request: NextRequest) {
       async start(controller) {
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
+        let lastDataTime = Date.now();
 
         if (!reader) {
           controller.close();
           return;
         }
+
+        // Set up timeout to detect stalled connections
+        const timeoutInterval = setInterval(() => {
+          const now = Date.now();
+          if (now - lastDataTime > 15000) { // 15 seconds without data
+            console.error('SSE connection timeout detected');
+            controller.error(new Error('SSE connection timeout'));
+            clearInterval(timeoutInterval);
+          }
+        }, 5000);
 
         try {
           while (true) {
@@ -34,11 +47,18 @@ export async function GET(request: NextRequest) {
             if (done) break;
 
             const chunk = decoder.decode(value);
-            controller.enqueue(new TextEncoder().encode(chunk));
+            lastDataTime = Date.now();
+
+            // Check if this is actual data or keepalive
+            if (chunk.trim() && !chunk.startsWith(':')) {
+              controller.enqueue(new TextEncoder().encode(chunk));
+            }
           }
         } catch (error) {
           console.error('SSE stream error:', error);
+          controller.error(error);
         } finally {
+          clearInterval(timeoutInterval);
           controller.close();
           reader.releaseLock();
         }
@@ -56,8 +76,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('SSE proxy error:', error);
-    return new Response('data: {"error": "Failed to connect to SSE stream"}\n\n', {
-      status: 500,
+    // Return error as SSE event instead of HTTP error
+    return new Response(`data: ${JSON.stringify({ error: 'Failed to connect to SSE stream', fallback: true })}\n\n`, {
+      status: 200,
       headers: {
         'Content-Type': 'text/event-stream',
       },

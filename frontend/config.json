@@ -3,7 +3,7 @@
     "name": "Alice Semantic Bridge",
     "description": "Mali Müşavir Asistanı",
     "version": "1.0.0",
-    "locale": "tr"
+    "locale": "en"
   },
   "database": {
     "host": "91.99.229.96",

@@ -149,7 +149,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
     { href: '/dashboard/embeddings-manager', label: t('header.menu.embeddingsManager'), icon: Cpu },
     { href: '/dashboard/scraper', label: t('header.menu.scraper'), icon: Globe },
     { href: '/dashboard/activity', label: t('header.menu.activities'), icon: Activity },
-    ...(currentUser?.role === 'admin' ? [{ href: '/dashboard/users', label: 'Kullanıcılar', icon: Users }] : []),
+    ...(currentUser?.role === 'admin' ? [{ href: '/dashboard/users', label: t('header.menu.users'), icon: Users }] : []),
     { href: '/', label: t('header.menu.chatbot'), icon: Brain },
   ];
 

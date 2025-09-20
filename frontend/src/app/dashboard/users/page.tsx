@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +76,7 @@ interface UserData {
 }
 
 export default function UsersPage() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -102,7 +104,7 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('Failed to fetch users:', error);
-      toast.error('Kullanıcılar yüklenemedi');
+      toast.error(t('users.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -121,11 +123,11 @@ export default function UsersPage() {
       });
 
       if (response.ok) {
-        toast.success('Kullanıcı durumu güncellendi');
+        toast.success(t('users.statusUpdated'));
         fetchUsers();
       }
     } catch (error) {
-      toast.error('Durum güncellenemedi');
+      toast.error(t('users.statusUpdateFailed'));
     }
   };
 
@@ -324,8 +326,8 @@ export default function UsersPage() {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Kullanıcılar</CardTitle>
-          <CardDescription>Tüm sistem kullanıcılarını görüntüleyin ve yönetin</CardDescription>
+          <CardTitle>{t('users.title')}</CardTitle>
+          <CardDescription>{t('users.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-4 mb-4">

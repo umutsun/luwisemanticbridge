@@ -26,10 +26,13 @@ import {
   Settings,
   AlertTriangle,
   X,
-  RotateCcw
+  RotateCcw,
+  ChevronDown,
+  Circle
 } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface TableInfo {
   name: string;
@@ -37,6 +40,11 @@ interface TableInfo {
   database: string;
   totalRecords: number;
   embeddedRecords: number;
+}
+
+interface RecentRecord {
+  [key: string]: any;
+  isEmbedded: boolean;
 }
 
 interface MigrationStats {
@@ -54,6 +62,8 @@ interface EmbeddingProgress {
   currentTable: string | null;
   error: string | null;
   tokensUsed?: number;
+  tokensThisSession?: number;
+  estimatedTotalTokens?: number;
   estimatedCost?: number;
   startTime?: number;
   estimatedTimeRemaining?: number;
@@ -62,6 +72,7 @@ interface EmbeddingProgress {
   processingSpeed?: number;
   fallbackMode?: boolean;
   fallbackReason?: string;
+  mightBeStuck?: boolean;
 }
 
 export default function EmbeddingsManagerPage() {
@@ -88,84 +99,172 @@ export default function EmbeddingsManagerPage() {
   const [displayProgress, setDisplayProgress] = useState<EmbeddingProgress | null>(null);
   const [migrationTables, setMigrationTables] = useState<string[]>([]);
   const [embeddingHistory, setEmbeddingHistory] = useState<any[]>([]);
+  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [recentRecords, setRecentRecords] = useState<{ [tableName: string]: RecentRecord[] }>({});
+  const [loadingRecentRecords, setLoadingRecentRecords] = useState<Set<string>>(new Set());
+  const [showCleanupAlert, setShowCleanupAlert] = useState(false);
+  const [cleanupIssues, setCleanupIssues] = useState<any[]>([]);
+  const [cleanupRecommendations, setCleanupRecommendations] = useState<string[]>([]);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
   const { toast } = useToast();
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings';
 
-  // Component cleanup - ensure state is properly reset when component unmounts
+  // Check and recover from stuck process
+  const checkAndRecoverStuckProcess = async () => {
+    if (!progress || progress.status !== 'processing') return;
+
+    try {
+      const response = await fetch(`${API_BASE}/recover`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (data.action === 'paused') {
+          // Process was stuck and has been paused
+          toast({
+            title: "İşlem Duraklatıldı",
+            description: "Embedding işlemi aktif değil olduğu için otomatik olarak duraklatıldı.",
+            variant: "default",
+          });
+
+          // Update progress to reflect paused state
+          setProgress(data.progress);
+          setDisplayProgress(data.progress);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking stuck process:', error);
+    }
+  };
+
+  // Fetch recent records for a table
+  const fetchRecentRecords = async (tableName: string) => {
+    setLoadingRecentRecords(prev => new Set(prev).add(tableName));
+    try {
+      const response = await fetch(`${API_BASE}/table/${tableName}/details`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecentRecords(prev => ({
+          ...prev,
+          [tableName]: data.recentRecords || []
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch recent records:', error);
+    } finally {
+      setLoadingRecentRecords(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tableName);
+        return newSet;
+      });
+    }
+  };
+
+  // Refresh recent records for a table
+  const refreshRecentRecords = async (tableName: string) => {
+    // Clear cached records first
+    setRecentRecords(prev => {
+      const newRecords = { ...prev };
+      delete newRecords[tableName];
+      return newRecords;
+    });
+    // Fetch fresh records
+    await fetchRecentRecords(tableName);
+  };
+
+  // Toggle table expansion
+  const toggleTableExpansion = (tableName: string) => {
+    setExpandedTables(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tableName)) {
+        newSet.delete(tableName);
+      } else {
+        newSet.add(tableName);
+        // Fetch recent records if not already loaded
+        if (!recentRecords[tableName]) {
+          fetchRecentRecords(tableName);
+        }
+      }
+      return newSet;
+    });
+  };
+
+  // Initial consistency check when component mounts
   useEffect(() => {
+    const checkConsistency = async () => {
+      try {
+        console.log('🔍 Running initial consistency check...');
+        const response = await fetch(`${API_BASE}/check-consistency`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Consistency check result:', data);
+
+          if (data.status === 'needs_cleanup') {
+            setShowCleanupAlert(true);
+            setCleanupIssues(data.issues || []);
+            setCleanupRecommendations(data.recommendations || []);
+            toast({
+              title: "Embedding System Issues Detected",
+              description: "Some inconsistencies were found. Consider running cleanup.",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Consistency check failed:', error);
+      }
+    };
+
+    checkConsistency();
+
+    // Component cleanup - ensure state is properly reset when component unmounts
     return () => {
       // Clean up any pending state
       cleanupMigrationState();
     };
   }, []);
 
-  // Smooth animation effect for progress
+  // Direct progress update without smoothing for immediate feedback
   useEffect(() => {
-    let animationFrame: number;
-    let lastUpdateTime = Date.now();
+    if (!progress) {
+      setDisplayProgress(null);
+      return;
+    }
 
-    const animateProgress = () => {
-      if (!progress) {
-        setDisplayProgress(null);
-        return;
-      }
-
-      setDisplayProgress(prev => {
-        if (!prev) return progress;
-
-        // Calculate time-based smoothing for more natural progress
-        const now = Date.now();
-        const timeDiff = now - lastUpdateTime;
-        lastUpdateTime = now;
-
-        // Smooth transition for percentage
-        const targetPercentage = progress.percentage || 0;
-        const currentPercentage = prev.percentage || 0;
-        const diff = targetPercentage - currentPercentage;
-
-        // Adaptive smoothing based on difference and time
-        let smoothingFactor = 0.3; // Default 30% smoothing for faster response
-
-        // If difference is large, use more aggressive smoothing
-        if (Math.abs(diff) > 10) {
-          smoothingFactor = 0.5; // 50% smoothing for large jumps
-        } else if (Math.abs(diff) < 0.2) {
-          // If difference is very small, update directly
-          return progress;
-        }
-
-        // Apply time-based smoothing
-        const timeAdjustment = Math.min(timeDiff / 50, 1); // Faster adjustment
-        const newPercentage = currentPercentage + diff * smoothingFactor * timeAdjustment;
-
-        return {
-          ...progress,
-          percentage: Math.max(0, Math.min(100, newPercentage))
-        };
-      });
-
-      animationFrame = requestAnimationFrame(animateProgress);
-    };
-
-    animationFrame = requestAnimationFrame(animateProgress);
-
-    return () => {
-      if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
-      }
-    };
+    // Update display progress directly for immediate UI feedback
+    setDisplayProgress(progress);
   }, [progress]);
 
   const fetchAvailableTablesAndStats = async () => {
     setIsLoadingTables(true);
     try {
-      const response = await fetch(`${API_BASE}/tables`);
+      const response = await fetch(`${API_BASE}/tables-fixed?t=${Date.now()}&force=${Math.random()}`, {
+        cache: 'no-cache',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setAvailableTables(data.tables || []);
         const totalRecords = data.tables.reduce((acc: number, t: TableInfo) => acc + t.totalRecords, 0);
         const embeddedRecords = data.tables.reduce((acc: number, t: TableInfo) => acc + t.embeddedRecords, 0);
+
+        // Debug: Log the actual values from backend
+        console.log('DEBUG Frontend - Tables data:', data.tables);
+        console.log('DEBUG Frontend - Calculated totalRecords:', totalRecords);
+        console.log('DEBUG Frontend - Calculated embeddedRecords:', embeddedRecords);
+
         setMigrationStats({
             totalRecords,
             embeddedRecords,
@@ -217,6 +316,58 @@ export default function EmbeddingsManagerPage() {
     // Note: Not refreshing tables here to avoid unnecessary API calls
   };
 
+  // Run embedding system cleanup
+  const runCleanup = async () => {
+    if (!confirm('Are you sure you want to run cleanup? This will clear all progress data.')) {
+      return;
+    }
+
+    setIsCleaningUp(true);
+    try {
+      const response = await fetch(`${API_BASE}/cleanup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Cleanup result:', data);
+
+        // Reset state after cleanup
+        cleanupMigrationState();
+        setShowCleanupAlert(false);
+        setCleanupIssues([]);
+        setCleanupRecommendations([]);
+
+        // Refresh tables
+        await fetchAvailableTablesAndStats();
+
+        toast({
+          title: "Cleanup Completed",
+          description: "Embedding system has been cleaned up successfully.",
+        });
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Cleanup Failed",
+          description: errorData.error || 'Failed to run cleanup.',
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Cleanup error:', error);
+      toast({
+        title: "Cleanup Error",
+        description: "Failed to run cleanup. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   const resetMigration = async () => {
     try {
       const response = await fetch(`${API_BASE}/reset`, { method: 'POST' });
@@ -252,6 +403,9 @@ export default function EmbeddingsManagerPage() {
   // Custom hook for SSE progress updates
   const useProgressStream = () => {
     const eventSourceRef = useRef<EventSource | null>(null);
+    const reconnectAttemptsRef = useRef(0);
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000;
 
     useEffect(() => {
       // Only connect if there's an active process AND no existing connection
@@ -260,43 +414,33 @@ export default function EmbeddingsManagerPage() {
         const eventSource = new EventSource(process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings/progress/stream');
         eventSourceRef.current = eventSource;
 
+        eventSource.onopen = () => {
+          console.log('📡 SSE connection established');
+          reconnectAttemptsRef.current = 0; // Reset reconnection attempts
+        };
+
         eventSource.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
             console.log('📡 SSE Progress update:', data);
 
-            if (data.status && data.status !== 'idle') {
-              // Update progress for internal state
-              setProgress(prev => {
-                if (!prev) return data;
-                // If status changed, always update
-                if (prev.status !== data.status) return data;
-                // If current table changed, always update
-                if (prev.currentTable !== data.currentTable) return data;
-                // If percentage changed by more than 0.1%, update
-                const prevPercentage = prev.percentage || 0;
-                const newPercentage = data.percentage || 0;
-                if (Math.abs(newPercentage - prevPercentage) > 0.1) return data;
-                // If count changed, update
-                const prevCurrent = prev.current || 0;
-                const newCurrent = data.current || 0;
-                if (newCurrent !== prevCurrent) return data;
-                // Otherwise, keep previous state to prevent unnecessary re-renders
-                return prev;
-              });
+            // Handle connection confirmation
+            if (data.status === 'connected') {
+              console.log('SSE connection confirmed');
+              return;
+            }
 
-              // Update display progress for vertical display (with throttling)
-              setDisplayProgress(prev => {
-                if (!prev) return data;
-                // Only update if significant change to prevent UI flicker
-                if (prev.current !== data.current ||
-                    prev.status !== data.status ||
-                    prev.currentTable !== data.currentTable ||
-                    Math.abs((prev.percentage || 0) - (data.percentage || 0)) > 0.5) {
-                  return data;
-                }
-                return prev;
-              });
+            // Handle fallback mode indicator
+            if (data.fallback) {
+              console.warn('SSE in fallback mode:', data.error);
+              return;
+            }
+
+            if (data.status && data.status !== 'idle') {
+              // Update progress immediately for real-time UI updates
+              setProgress(data);
+              // Also update display progress directly
+              setDisplayProgress(data);
 
               // Update progress and potentially refresh tables
               if (data.status === 'processing') {
@@ -311,9 +455,13 @@ export default function EmbeddingsManagerPage() {
                 // Show completion notification
                 if (data.status === 'completed') {
                   toast({
-                    title: "Tamamlandı",
-                    description: `Embedding işlemi başarıyla tamamlandı. ${data.current || 0} kayıt işlendi.`,
+                    title: "Completed",
+                    description: `Embedding process completed successfully. ${data.current || 0} records processed.`,
                   });
+
+                  // Refresh tables and stats after completion
+                  fetchAvailableTablesAndStats();
+
                   // Keep progress visible for 5 seconds after completion
                   setTimeout(() => {
                     setProgress(null);
@@ -321,8 +469,8 @@ export default function EmbeddingsManagerPage() {
                   }, 5000);
                 } else if (data.status === 'error' && data.error) {
                   toast({
-                    title: "Hata Oluştu",
-                    description: `Embedding işlemi hata ile sonlandı: ${data.error}`,
+                    title: "Error Occurred",
+                    description: `Embedding process failed: ${data.error}`,
                     variant: "destructive",
                   });
                   // Keep progress visible for 5 seconds after error
@@ -334,7 +482,7 @@ export default function EmbeddingsManagerPage() {
               }
             }
           } catch (error) {
-            console.error('Error parsing SSE message:', error);
+            console.error('Error parsing SSE message:', error, event.data);
           }
         };
 
@@ -344,18 +492,32 @@ export default function EmbeddingsManagerPage() {
           eventSource.close();
           eventSourceRef.current = null;
 
-          // Try to reconnect after 2 seconds if still processing
-          if (progress?.status === 'processing' || progress?.status === 'paused') {
-            setTimeout(() => {
-              console.log('Attempting to reconnect SSE...');
-              if (progress?.status === 'processing' || progress?.status === 'paused') {
-                const newEventSource = new EventSource(process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings/progress/stream');
-                eventSourceRef.current = newEventSource;
+          // Try to reconnect if still processing and haven't exceeded max attempts
+          if ((progress?.status === 'processing' || progress?.status === 'paused') &&
+              reconnectAttemptsRef.current < maxReconnectAttempts) {
 
-                newEventSource.onmessage = eventSource.onmessage;
-                newEventSource.onerror = eventSource.onerror;
+            reconnectAttemptsRef.current++;
+            console.log(`Attempting to reconnect SSE... Attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`);
+
+            setTimeout(() => {
+              if ((progress?.status === 'processing' || progress?.status === 'paused') &&
+                  !eventSourceRef.current) {
+                try {
+                  const newEventSource = new EventSource(process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings/progress/stream');
+                  eventSourceRef.current = newEventSource;
+
+                  newEventSource.onopen = eventSource.onopen;
+                  newEventSource.onmessage = eventSource.onmessage;
+                  newEventSource.onerror = eventSource.onerror;
+                } catch (reconnectError) {
+                  console.error('Failed to create new EventSource:', reconnectError);
+                  eventSourceRef.current = null;
+                }
               }
-            }, 2000);
+            }, reconnectDelay * reconnectAttemptsRef.current); // Exponential backoff
+          } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+            console.warn('Max SSE reconnection attempts reached, switching to polling mode');
+            // Fallback to polling mode will be handled by the existing polling useEffect
           }
         };
 
@@ -365,11 +527,54 @@ export default function EmbeddingsManagerPage() {
           eventSourceRef.current = null;
         };
       }
-    }, [progress?.status]);
+    }, [progress?.status, progressUpdateCount]);
   };
 
   // Use the SSE hook
   useProgressStream();
+
+  // Additional effect to check for active processes and update progress
+  useEffect(() => {
+    const checkForActiveProcess = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/progress`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'processing' || data.status === 'paused') {
+            console.log('Found active process, updating progress:', data);
+            setProgress(data);
+            setDisplayProgress(data);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking for active process:', error);
+      }
+    };
+
+    // Check immediately and then periodically
+    checkForActiveProcess();
+    const interval = setInterval(checkForActiveProcess, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Effect to update selected tables when progress is active
+  useEffect(() => {
+    if (progress?.status === 'processing' || progress?.status === 'paused') {
+      // Get tables from progress data
+      const tablesFromProgress = progress.tables || [];
+      if (tablesFromProgress.length > 0) {
+        console.log('Updating selected tables from progress:', tablesFromProgress);
+        setSelectedTables(tablesFromProgress);
+        setMigrationTables(tablesFromProgress);
+      } else if (progress.currentTable) {
+        // Fallback to currentTable if tables array is empty
+        console.log('Updating selected tables from currentTable:', [progress.currentTable]);
+        setSelectedTables([progress.currentTable]);
+        setMigrationTables([progress.currentTable]);
+      }
+    }
+  }, [progress?.status, progress?.tables, progress?.currentTable]);
 
   useEffect(() => {
     fetchAvailableTablesAndStats();
@@ -383,11 +588,17 @@ export default function EmbeddingsManagerPage() {
           console.log('Initial progress check:', data);
           if (data.status && data.status !== 'idle') {
             setProgress(data);
-            // If there's a paused migration, restore the selected tables
-            if (data.status === 'paused') {
-              // Use processedTables as the selected tables for resume
-              const tablesToRestore = data.tables || data.processedTables || [];
-              console.log('Restoring tables for paused migration:', tablesToRestore);
+            setDisplayProgress(data);
+            // If there's an active migration (processing or paused), restore the selected tables
+            if (data.status === 'processing' || data.status === 'paused') {
+              // Use currentTable first, then fallback to tables/processedTables
+              let tablesToRestore: string[] = [];
+              if (data.currentTable) {
+                tablesToRestore = [data.currentTable];
+              } else {
+                tablesToRestore = data.tables || data.processedTables || [];
+              }
+              console.log('Restoring tables for active migration:', tablesToRestore);
               if (tablesToRestore.length > 0) {
                 setSelectedTables(tablesToRestore);
                 setMigrationTables(tablesToRestore);
@@ -405,53 +616,25 @@ export default function EmbeddingsManagerPage() {
 
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
+    let eventSourceExists = false;
+
+    // Check if EventSource is available and if we should use SSE
+    const shouldUseSSE = typeof EventSource !== 'undefined' &&
+                        (progress?.status === 'processing' || progress?.status === 'paused');
+
+    // Only use polling if SSE is not available or has failed
+    const shouldUsePolling = !shouldUseSSE || eventSourceExists;
 
     const pollProgress = async () => {
       try {
         const response = await fetch(`${API_BASE}/progress`);
         if (response.ok) {
           const data = await response.json();
-          console.log('🔄 Progress update:', data);
-          console.log('📊 Current table in progress:', data.currentTable);
-          console.log('⚡ Polling active for status:', progress?.status);
+          console.log('🔄 Progress update (polling):', data);
 
           if (data.status && data.status !== 'idle') {
-            // Only update progress if there's a significant change AND it's not idle
-            setProgress(prev => {
-              if (!prev) return data;
-
-              // If status changed, always update
-              if (prev.status !== data.status) return data;
-
-              // If current table changed, always update
-              if (prev.currentTable !== data.currentTable) return data;
-
-              // If percentage changed by more than 0.1%, update
-              const prevPercentage = prev.percentage || 0;
-              const newPercentage = data.percentage || 0;
-              if (Math.abs(newPercentage - prevPercentage) > 0.1) return data;
-
-              // If count changed, update
-              const prevCurrent = prev.current || 0;
-              const newCurrent = data.current || 0;
-              if (newCurrent !== prevCurrent) return data;
-
-              // Otherwise, keep previous state to prevent unnecessary re-renders
-              return prev;
-            });
-
-            // Update display progress for vertical display (with throttling)
-            setDisplayProgress(prev => {
-              if (!prev) return data;
-              // Only update if significant change to prevent UI flicker
-              if (prev.current !== data.current ||
-                  prev.status !== data.status ||
-                  prev.currentTable !== data.currentTable ||
-                  Math.abs((prev.percentage || 0) - (data.percentage || 0)) > 0.5) {
-                return data;
-              }
-              return prev;
-            });
+            // Update progress immediately for real-time UI updates
+            setProgress(data);
 
             // Check for quota exceeded error, which now pauses the process
             if ((data.status === 'paused' || data.status === 'error') && data.error &&
@@ -459,8 +642,8 @@ export default function EmbeddingsManagerPage() {
                  data.error.includes('You exceeded your current quota') ||
                  data.error.includes('insufficient_quota'))) {
               toast({
-                title: "OpenAI Kota Aşıldı",
-                description: "İşlem duraklatıldı. Lütfen OpenAI faturalandırmanızı kontrol edip devam edin.",
+                title: "OpenAI Quota Exceeded",
+                description: "Process paused. Please check your OpenAI billing and continue.",
                 variant: "destructive",
               });
             }
@@ -469,24 +652,22 @@ export default function EmbeddingsManagerPage() {
             if (data.status === 'processing') {
               const newCount = progressUpdateCount + 1;
               setProgressUpdateCount(newCount);
-
-              // Note: Automatic table refresh disabled per user request
-              // Tables will only refresh when manually clicked
             }
 
             if (data.status === 'completed' || data.status === 'error') {
-              // Note: Automatic table refresh disabled per user request
-              console.log('🔄 Process completed');
-              // Reset counter
+              console.log('🔄 Process completed (polling)');
               setProgressUpdateCount(0);
 
               // Show completion notification
               if (data.status === 'completed') {
                 toast({
-                  title: "Tamamlandı",
-                  description: `Embedding işlemi başarıyla tamamlandı. ${data.current || 0} kayıt işlendi.`,
+                  title: "Completed",
+                  description: `Embedding process completed successfully. ${data.current || 0} records processed.`,
                 });
-                // Note: Automatic table refresh disabled per user request
+
+                // Refresh tables and stats after completion
+                fetchAvailableTablesAndStats();
+
                 // Keep progress visible for 5 seconds after completion
                 setTimeout(() => {
                   setProgress(null);
@@ -494,8 +675,8 @@ export default function EmbeddingsManagerPage() {
                 }, 5000);
               } else if (data.status === 'error' && data.error) {
                 toast({
-                  title: "Hata Oluştu",
-                  description: `Embedding işlemi hata ile sonlandı: ${data.error}`,
+                  title: "Error Occurred",
+                  description: `Embedding process failed: ${data.error}`,
                   variant: "destructive",
                 });
                 // Keep progress visible for 5 seconds after error
@@ -505,9 +686,6 @@ export default function EmbeddingsManagerPage() {
                 }, 5000);
               }
             }
-
-            // Note: Automatic table refresh disabled per user request
-            // Tables will only refresh when manually clicked
           }
         }
       } catch (error) {
@@ -515,13 +693,14 @@ export default function EmbeddingsManagerPage() {
       }
     };
 
-    // Only poll if there's an active process (processing or paused)
-    if (progress?.status === 'processing' || progress?.status === 'paused') {
+    // Only poll if there's an active process AND SSE is not the primary method
+    if (shouldUsePolling && (progress?.status === 'processing' || progress?.status === 'paused')) {
+      console.log('🔄 Using polling for progress updates...');
       // Initial check
       pollProgress();
 
-      // Start polling more frequently for smoother updates
-      pollInterval = setInterval(pollProgress, 500); // Update every 500ms for real-time feel
+      // Start polling less frequently since SSE is preferred
+      pollInterval = setInterval(pollProgress, 2000); // Poll every 2 seconds as fallback
     }
 
     return () => {
@@ -530,6 +709,29 @@ export default function EmbeddingsManagerPage() {
       }
     };
   }, [progress?.status, progressUpdateCount]);
+
+  // Effect to monitor for stuck processes
+  useEffect(() => {
+    let stuckCheckInterval: NodeJS.Timeout;
+
+    if (progress?.status === 'processing' && progress.mightBeStuck) {
+      // Check more frequently when process might be stuck
+      stuckCheckInterval = setInterval(async () => {
+        await checkAndRecoverStuckProcess();
+      }, 10000); // Check every 10 seconds when might be stuck
+    } else if (progress?.status === 'processing') {
+      // Regular check when processing
+      stuckCheckInterval = setInterval(async () => {
+        await checkAndRecoverStuckProcess();
+      }, 30000); // Check every 30 seconds
+    }
+
+    return () => {
+      if (stuckCheckInterval) {
+        clearInterval(stuckCheckInterval);
+      }
+    };
+  }, [progress?.status, progress?.mightBeStuck]);
 
   const startMigration = async (resume = false) => {
     console.log('Starting migration:', { resume, selectedTables, migrationTables });
@@ -578,21 +780,21 @@ export default function EmbeddingsManagerPage() {
           setError('Invalid API Key. Please update your OpenAI API key in settings.');
         } else {
           const errorData = await response.json();
-          const errorMessage = errorData.error || 'Migration başlatılamadı.';
+          const errorMessage = errorData.error || 'Failed to start migration.';
           setError(errorMessage);
 
-          // Özel hata mesajları
+          // Detailed error messages
           let detailedMessage = errorMessage;
           if (errorMessage.includes('HuggingFace API key')) {
-            detailedMessage = "HuggingFace API anahtarı bulunamadı. Lütfen ayarlardan ekleyin.";
+            detailedMessage = "HuggingFace API key not found. Please add it in settings.";
           } else if (errorMessage.includes('Invalid credentials')) {
-            detailedMessage = "HuggingFace API anahtarı geçersiz. Lütfen kontrol edin.";
+            detailedMessage = "HuggingFace API key is invalid. Please check it.";
           } else if (errorMessage.includes('quota')) {
-            detailedMessage = "API kotası aşıldı. Lütfen faturalandırmanızı kontrol edin.";
+            detailedMessage = "API quota exceeded. Please check your billing.";
           }
 
           toast({
-            title: "Hata",
+            title: "Error",
             description: detailedMessage,
             variant: "destructive",
           });
@@ -605,12 +807,12 @@ export default function EmbeddingsManagerPage() {
           ? `${data.progress.embeddingSettings.provider} (${data.progress.embeddingSettings.model})`
           : currentEmbeddingMethod || 'Seçili Embedder';
 
-        // Başlangıç toast'ı
+        // Start toast
         toast({
-          title: resume ? "Devam Ediliyor" : "Başlatıldı",
+          title: resume ? "Resuming" : "Started",
           description: resume
-            ? `Embedding işlemi devam ettiriliyor. (${embedderInfo})`
-            : `Embedding işlemi başlatılıyor... (${embedderInfo})`,
+            ? `Embedding process is being resumed. (${embedderInfo})`
+            : `Embedding process is starting... (${embedderInfo})`,
         });
 
         // Backend'den gelen progress durumunu ayarla
@@ -627,6 +829,8 @@ export default function EmbeddingsManagerPage() {
             currentTable: selectedTables[0],
             error: null,
             tokensUsed: 0,
+            tokensThisSession: 0,
+            estimatedTotalTokens: 0,
             estimatedCost: 0,
             startTime: Date.now(),
             estimatedTimeRemaining: null,
@@ -671,15 +875,15 @@ export default function EmbeddingsManagerPage() {
         throw new Error('Failed to clear migration progress');
       }
 
-      // Frontend state'ini temizle
+      // Clear frontend state
       cleanupMigrationState();
 
       // Manually set progress to null to ensure UI updates immediately
       setProgress(null);
 
       toast({
-        title: "İptal Edildi",
-        description: "Embedding işlemi tamamen iptal edildi.",
+        title: "Cancelled",
+        description: "Embedding process has been completely cancelled.",
       });
 
       // Note: Automatic table refresh disabled per user request
@@ -687,8 +891,8 @@ export default function EmbeddingsManagerPage() {
     } catch (error) {
       console.error('Failed to abort migration:', error);
       toast({
-        title: "Hata",
-        description: "Migration iptal edilemedi.",
+        title: "Error",
+        description: "Migration could not be cancelled.",
         variant: "destructive",
       });
     }
@@ -701,17 +905,17 @@ export default function EmbeddingsManagerPage() {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to pause migration.');
         toast({
-          title: "Hata",
-          description: errorData.error || 'Migration durdurulamadı.',
+          title: "Error",
+          description: errorData.error || 'Migration could not be paused.',
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Durduruldu",
-          description: "Embedding işlemi durduruldu.",
+          title: "Paused",
+          description: "Embedding process has been paused.",
         });
 
-        // UI'ı güncellemek için progress durumunu manuel olarak güncelle
+        // Manually update progress status to update UI
         if (progress) {
           setProgress({
             ...progress,
@@ -722,8 +926,8 @@ export default function EmbeddingsManagerPage() {
     } catch (error) {
       setError('An error occurred while pausing the migration.');
       toast({
-        title: "Hata",
-        description: "Migration durdurulurken bir hata oluştu.",
+        title: "Error",
+        description: "An error occurred while pausing the migration.",
         variant: "destructive",
       });
     }
@@ -736,25 +940,25 @@ export default function EmbeddingsManagerPage() {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to stop migration.');
         toast({
-          title: "Hata",
-          description: errorData.error || 'Migration durdurulamadı.',
+          title: "Error",
+          description: errorData.error || 'Migration could not be paused.',
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Durduruldu",
-          description: "Embedding işlemi tamamen durduruldu.",
+          title: "Stopped",
+          description: "Embedding process has been completely stopped.",
         });
 
-        // Progress durumunu temizle
+        // Clear progress status
         cleanupMigrationState();
         // Note: Automatic table refresh disabled per user request
       }
     } catch (error) {
       setError('An error occurred while stopping the migration.');
       toast({
-        title: "Hata",
-        description: "Migration durdurulurken bir hata oluştu.",
+        title: "Error",
+        description: "An error occurred while pausing the migration.",
         variant: "destructive",
       });
     }
@@ -789,46 +993,90 @@ export default function EmbeddingsManagerPage() {
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">RAG & Embeddings Yönetimi</h1>
-          <p className="text-sm text-muted-foreground mt-1">Vektör Veritabanı İşlemleri</p>
+          <h1 className="text-xl font-semibold">RAG & Embeddings Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">Vector Database Operations</p>
         </div>
-        <Link href="/dashboard/settings?tab=database"><Button variant="outline" size="sm"><Settings className="w-4 h-4 mr-2" />Veritabanı Ayarları</Button></Link>
+        <Link href="/dashboard/settings?tab=database"><Button variant="outline" size="sm"><Settings className="w-4 h-4 mr-2" />Database Settings</Button></Link>
       </div>
 
       {error && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{error}</AlertDescription></Alert>}
       {success && <Alert><CheckCircle className="h-4 w-4" /><AlertDescription>{success}</AlertDescription></Alert>}
 
+      {/* Cleanup Alert */}
+      {showCleanupAlert && (
+        <Alert variant="destructive" className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-2">
+              <p className="font-medium">Embedding System Issues Detected</p>
+              <ul className="text-sm space-y-1">
+                {cleanupIssues.map((issue, index) => (
+                  <li key={index}>• {issue.message}</li>
+                ))}
+              </ul>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={runCleanup}
+                  disabled={isCleaningUp}
+                >
+                  {isCleaningUp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Cleaning...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Run Cleanup
+                    </>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowCleanupAlert(false)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-5 max-w-2xl">
-          <TabsTrigger value="overview">RAG Durumu</TabsTrigger>
-          <TabsTrigger value="migration">Embedding İşlemleri</TabsTrigger>
-          <TabsTrigger value="history">Geçmiş</TabsTrigger>
-          <TabsTrigger value="statistics">İstatistikler</TabsTrigger>
-          <TabsTrigger value="search">Test & Arama</TabsTrigger>
+          <TabsTrigger value="overview">RAG Status</TabsTrigger>
+          <TabsTrigger value="migration">Embedding Operations</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="statistics">Statistics</TabsTrigger>
+          <TabsTrigger value="search">Test & Search</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-6">
             {/* Summary Statistics */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Toplam Kayıt</p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Records</p>
                     <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{migrationStats?.totalRecords.toLocaleString('tr-TR') || '0'}</p>
                 </div>
                 <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
-                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">İşlenmiş</p>
+                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">Processed</p>
                     <p className="text-lg font-bold text-green-700 dark:text-green-300">{migrationStats?.embeddedRecords.toLocaleString('tr-TR') || '0'}</p>
                 </div>
                 <div className="bg-orange-50 dark:bg-orange-950/20 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
-                    <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">Bekleyen</p>
+                    <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">Pending</p>
                     <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{migrationStats?.pendingRecords.toLocaleString('tr-TR') || '0'}</p>
                 </div>
                 <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-3 border border-purple-200 dark:border-purple-800">
-                    <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Tamamlandi</p>
+                    <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Completed</p>
                     <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
                         {migrationStats?.totalRecords > 0 ? Math.round((migrationStats.embeddedRecords / migrationStats.totalRecords) * 100) : 0}%
                     </p>
                 </div>
                 <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-3 border border-red-200 dark:border-red-800">
-                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">Tahmini Maliyet</p>
+                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">Estimated Cost</p>
                     <p className="text-lg font-bold text-red-700 dark:text-red-300">
                         ${(((migrationStats?.pendingRecords || 0) * 250) / 1000 * 0.0001).toFixed(2)}
                     </p>
@@ -842,7 +1090,46 @@ export default function EmbeddingsManagerPage() {
             </div>
             <Card>
                 <CardHeader>
-                    <CardTitle>Veri Tabloları</CardTitle>
+                    <div className="flex justify-between items-center">
+                        <CardTitle>Data Tables</CardTitle>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={fetchAvailableTablesAndStats}
+                            disabled={isLoadingTables}
+                        >
+                            {isLoadingTables ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                            <span className="ml-2">Refresh</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(`${API_BASE}/refresh-tables`, {
+                                method: 'POST'
+                              });
+                              if (response.ok) {
+                                toast({
+                                  title: "Success",
+                                  description: "Cache cleared. Tables will refresh.",
+                                });
+                                // Refresh after clearing cache
+                                setTimeout(fetchAvailableTablesAndStats, 500);
+                              }
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: "Failed to clear cache",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <Database className="h-4 w-4" />
+                          <span className="ml-2">Clear Cache</span>
+                        </Button>
+                    </div>
                     {migrationStats?.databaseName && (
                         <CardDescription className="text-sm">
                             Database: {migrationStats.databaseName}
@@ -853,9 +1140,14 @@ export default function EmbeddingsManagerPage() {
                     {isLoadingTables ? <div className="text-center"><Loader2 className="h-8 w-8 animate-spin" /></div> :
                     <div className="space-y-4">
                         {availableTables.map(table => (
-                            <div key={table.name}>
-                                <div className="flex justify-between items-center">
-                                    <span className="font-medium">{table.displayName}</span>
+                            <div key={table.name} className="border rounded-lg p-4">
+                                <div className="flex justify-between items-center cursor-pointer" onClick={() => toggleTableExpansion(table.name)}>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-medium">{table.displayName}</span>
+                                        <ChevronDown
+                                            className={`h-4 w-4 transition-transform ${expandedTables.has(table.name) ? 'rotate-180' : ''}`}
+                                        />
+                                    </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm text-muted-foreground">
                                             {table.embeddedRecords?.toLocaleString('tr-TR') || '0'} / {table.totalRecords?.toLocaleString('tr-TR') || '0'}
@@ -865,7 +1157,57 @@ export default function EmbeddingsManagerPage() {
                                         </span>
                                     </div>
                                 </div>
-                                <Progress value={(table.totalRecords > 0 ? (table.embeddedRecords / table.totalRecords) * 100 : 100)} className="h-2 mt-1" />
+                                <Progress value={(table.totalRecords > 0 ? (table.embeddedRecords / table.totalRecords) * 100 : 100)} className="h-2 mt-2" />
+
+                                {/* Recent Records Section */}
+                                {expandedTables.has(table.name) && (
+                                    <div className="mt-4 pt-4 border-t">
+                                        {loadingRecentRecords.has(table.name) ? (
+                                            <div className="text-center py-4">
+                                                <Loader2 className="h-4 w-4 animate-spin inline" />
+                                                <span className="text-sm text-muted-foreground ml-2">Loading recent records...</span>
+                                            </div>
+                                        ) : recentRecords[table.name] && recentRecords[table.name].length > 0 ? (
+                                            <div>
+                                                <h4 className="text-sm font-medium mb-2">Recent 20 Records</h4>
+                                                <div className="overflow-x-auto">
+                                                    <Table>
+                                                        <TableHeader>
+                                                            <TableRow>
+                                                                <TableHead className="w-16">ID</TableHead>
+                                                                <TableHead>Status</TableHead>
+                                                                <TableHead>Content Preview</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {recentRecords[table.name].slice(0, 20).map((record, index) => (
+                                                                <TableRow key={record.id || index}>
+                                                                    <TableCell className="text-sm">
+                                                                        {record.id || '-'}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        {record.isEmbedded ? (
+                                                                            <CheckCircle className="h-4 w-4 text-green-600" />
+                                                                        ) : (
+                                                                            <Circle className="h-4 w-4 text-gray-400" />
+                                                                        )}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-sm max-w-md truncate">
+                                                                        {record.content || record.baslik || record.title || record.question || record.soru || '-'}
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-4 text-sm text-muted-foreground">
+                                                No recent records found
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>}
@@ -989,7 +1331,7 @@ export default function EmbeddingsManagerPage() {
                       <Select
                         value={embeddingMethod}
                         onValueChange={setEmbeddingMethod}
-                        disabled={progress?.status === 'processing'}
+                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1022,7 +1364,7 @@ export default function EmbeddingsManagerPage() {
                       <Select
                         value={batchSize.toString()}
                         onValueChange={(v) => setBatchSize(parseInt(v))}
-                        disabled={progress?.status === 'processing'}
+                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1048,7 +1390,7 @@ export default function EmbeddingsManagerPage() {
                       <Select
                         value={workerCount.toString()}
                         onValueChange={(v) => setWorkerCount(parseInt(v))}
-                        disabled={progress?.status === 'processing'}
+                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1085,28 +1427,26 @@ export default function EmbeddingsManagerPage() {
                     </div> :
                   progress?.status === 'paused' ?
                     <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <Button onClick={() => startMigration(true)} className="flex-1">
+                      <div className="space-y-2">
+                        <Button onClick={() => startMigration(true)} className="w-full">
                           <Play className="w-4 h-4 mr-2" />Devam Et
                         </Button>
-                        <Button onClick={abortMigration} variant="destructive" className="flex-1">
+                        <Button onClick={() => { abortMigration(); resetMigration(); }} variant="destructive" className="w-full">
                           <X className="w-4 h-4 mr-2" />İptal Et
                         </Button>
+                        <p className="text-xs text-muted-foreground text-center">
+                          {progress.currentTable ? `${progress.currentTable} duraklatıldı` : "İşlem duraklatıldı"}
+                        </p>
                       </div>
-                      <Button onClick={resetMigration} variant="outline" className="w-full">
-                        <RotateCcw className="w-4 h-4 mr-2" />Sıfırla
-                      </Button>
                     </div> :
                   progress?.status === 'processing' ?
                     <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <Button onClick={pauseMigration} variant="secondary" className="flex-1">
-                          <Pause className="w-4 h-4 mr-2" />Duraklat
-                        </Button>
-                        <Button onClick={abortMigration} variant="destructive" className="flex-1">
-                          <X className="w-4 h-4 mr-2" />İptal Et
-                        </Button>
-                      </div>
+                      <Button onClick={pauseMigration} variant="secondary" className="w-full">
+                        <Pause className="w-4 h-4 mr-2" />Duraklat
+                      </Button>
+                      <Button onClick={() => { abortMigration(); resetMigration(); }} variant="destructive" className="w-full">
+                        <X className="w-4 h-4 mr-2" />İptal Et
+                      </Button>
                       <p className="text-xs text-muted-foreground text-center">
                         {progress.currentTable ? `${progress.currentTable} işleniyor...` : "İşlem devam ediyor..."}
                       </p>
@@ -1157,7 +1497,7 @@ export default function EmbeddingsManagerPage() {
                           setSelectedTables(availableTables.map(t => t.name));
                         }
                       }}
-                      disabled={progress?.status === 'processing'}
+                      disabled={progress?.status === 'processing' || progress?.status === 'paused'}
                     >
                       {selectedTables.length === availableTables.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
                     </Button>
@@ -1179,7 +1519,7 @@ export default function EmbeddingsManagerPage() {
                               setSelectedTables(selectedTables.filter(t => t !== table.name));
                             }
                           }}
-                          disabled={progress?.status === 'processing'}
+                          disabled={progress?.status === 'processing' || progress?.status === 'paused'}
                           className="mt-1 rounded"
                         />
                         <label htmlFor={`table-${table.name}`} className="text-sm cursor-pointer flex-1">

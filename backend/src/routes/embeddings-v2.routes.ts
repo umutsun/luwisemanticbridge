@@ -27,6 +27,50 @@ function logEmbeddingOperation(data: {
   // Don't log anything to avoid confusion
 }
 
+// Token estimation for different embedding models
+function estimateTokens(text: string, model: string): number {
+  // Simple approximation: 1 token ≈ 4 characters for English text
+  // This is a rough estimate - actual tokenization depends on the specific model
+  const charCount = text.length;
+
+  switch (model) {
+    case 'text-embedding-004':
+    case 'google-text-embedding-004':
+      // Google's models use similar tokenization to BERT
+      return Math.ceil(charCount / 3.5);
+
+    case 'text-embedding-3-large':
+    case 'text-embedding-3-small':
+    case 'text-embedding-ada-002':
+      // OpenAI's models use their own tokenization
+      return Math.ceil(charCount / 4);
+
+    case 'e5-mistral':
+    case 'bge-m3':
+    case 'mistral':
+    case 'all-mpnet-base-v2':
+      // Sentence transformer models typically use WordPiece or similar
+      return Math.ceil(charCount / 3.8);
+
+    case 'jina-embeddings-v2':
+    case 'jina-embeddings-v2-small':
+      // Jina models
+      return Math.ceil(charCount / 3.6);
+
+    case 'cohere-embed-v3':
+      // Cohere models
+      return Math.ceil(charCount / 3.7);
+
+    case 'voyage-large-2':
+      // Voyage models
+      return Math.ceil(charCount / 3.5);
+
+    default:
+      // Generic estimate
+      return Math.ceil(charCount / 4);
+  }
+}
+
 // ASEMB database - where unified_embeddings table is stored
 // Using asembPool from database.config.ts
 
@@ -98,8 +142,11 @@ let migrationProgress: any = {
   currentTable: null,
   error: null,
   tokensUsed: 0,
+  tokensThisSession: 0,
+  estimatedTotalTokens: 0,
   estimatedCost: 0,
   startTime: null,
+  lastHeartbeat: null, // Last time the process was confirmed to be running
   estimatedTimeRemaining: null,
   processingSpeed: 0, // records per minute
   processedTables: [],
@@ -113,6 +160,28 @@ let migrationProgress: any = {
 function getEmbeddingCacheKey(text: string): string {
   const hash = crypto.createHash('md5').update(text).digest('hex');
   return `embedding:${hash}`;
+}
+
+// Update heartbeat for active process
+function updateHeartbeat() {
+  if (migrationProgress.status === 'processing') {
+    migrationProgress.lastHeartbeat = Date.now();
+  }
+}
+
+// Check if process is actually running or stuck
+function isProcessStuck() {
+  if (migrationProgress.status !== 'processing') {
+    return false;
+  }
+
+  // If no heartbeat in the last 30 seconds, process is likely stuck
+  if (!migrationProgress.lastHeartbeat) {
+    return true;
+  }
+
+  const timeSinceHeartbeat = Date.now() - migrationProgress.lastHeartbeat;
+  return timeSinceHeartbeat > 30000; // 30 seconds threshold
 }
 
 // Save progress to Redis for resume functionality
@@ -245,25 +314,58 @@ async function ensureEmbeddingColumn(tableName: string) {
 // Check for duplicates in batch (more efficient)
 async function checkDuplicatesInBatch(table: string, ids: any[]): Promise<Set<any>> {
   try {
+    console.log(`🔎 Checking duplicates for table "${table}" with ${ids.length} IDs:`, ids.slice(0, 5));
+
+    // Get display name mapping
+    const displayNames: { [key: string]: string } = {
+      'ozelgeler': 'Özelgeler',
+      'makaleler': 'Makaleler',
+      'sorucevap': 'Soru-Cevap',
+      'danistaykararlari': 'Danıştay Kararları',
+      'chat_history': 'Sohbet Geçmişi'
+    };
+    const displayName = displayNames[table] || table;
+
+    // Check only the specified table name (not both displayName and table)
+    // This prevents false positives when different tables have the same IDs
     const result = await asembPool.query(
       `SELECT source_id
        FROM unified_embeddings
-       WHERE source_table = $1
-       AND source_type = 'database'
+       WHERE source_type = 'database'
+       AND source_table = $1
        AND source_id = ANY($2)`,
-      [table, ids]
+      [displayName, ids]
     );
 
-    return new Set(result.rows.map(row => row.source_id));
+    const duplicateIds = new Set(result.rows.map(row => row.source_id));
+
+    // Debug: Show what source_table values actually exist
+    if (duplicateIds.size > 0) {
+      const sampleResult = await asembPool.query(
+        `SELECT DISTINCT source_table, COUNT(*) as count
+         FROM unified_embeddings
+         WHERE source_id = ANY($1)
+         GROUP BY source_table
+         LIMIT 5`,
+        [Array.from(duplicateIds).slice(0, 10)]
+      );
+      console.log(`🔍 Sample source_table values for duplicate IDs:`, sampleResult.rows);
+    }
+
+    console.log(`📋 Found ${duplicateIds.size} existing embeddings for table "${table}" (displayName: ${displayName}, actual: ${table})`);
+
+    return duplicateIds;
   } catch (err) {
     console.error('Duplicate check error:', err);
     return new Set();
   }
 }
 
-// Get tables with accurate embedded counts
-router.get('/tables', async (req: Request, res: Response) => {
+// Get tables with accurate embedded counts - FIXED
+router.get('/tables-fixed', async (req: Request, res: Response) => {
+  console.log('[TABLES-FIXED] Loading tables with correct counts...');
   try {
+    console.log('[TABLES] Loading tables with correct counts...');
     const tablesWithMeta = [];
 
     // Get source database name
@@ -279,17 +381,30 @@ router.get('/tables', async (req: Request, res: Response) => {
       ORDER BY table_name
     `);
 
-    // Get display names from settings or generate from table name
-    const settings = await getDatabaseSettings();
-    const tableDisplayNames = settings.tableDisplayNames || {};
+    // Use consistent display name mapping
+    const displayNames: { [key: string]: string } = {
+      'ozelgeler': 'Özelgeler',
+      'makaleler': 'Makaleler',
+      'sorucevap': 'Soru-Cevap',
+      'danistaykararlari': 'Danıştay Kararları',
+      'chat_history': 'Sohbet Geçmişi'
+    };
+
+    // Also check for common variations in source_table field
+    const sourceTableVariations: { [key: string]: string[] } = {
+      'ozelgeler': ['Özelgeler', 'Ozelgeler', 'ozelgeler'],
+      'makaleler': ['Makaleler', 'makaleler'],
+      'sorucevap': ['Soru-Cevap', 'sorucevap'],
+      'danistaykararlari': ['Danıştay Kararları', 'danistaykararlari'],
+      'chat_history': ['Sohbet Geçmişi', 'chat_history']
+    };
 
     // Process each table from the database
     for (const tableRow of tablesQuery.rows) {
       const tableName = tableRow.table_name;
 
-      // Get display name from settings or generate from table name
-      const displayName = tableDisplayNames[tableName] ||
-                         tableName.charAt(0).toUpperCase() + tableName.slice(1);
+      // Get display name from consistent mapping
+      const displayName = displayNames[tableName] || tableName.charAt(0).toUpperCase() + tableName.slice(1);
 
       try {
         // Get total records count
@@ -300,24 +415,36 @@ router.get('/tables', async (req: Request, res: Response) => {
         const totalRecords = parseInt(countResult.rows[0].total);
 
         // Get embedded records count from unified_embeddings
+        // Check all variations for this table
+        const variations = sourceTableVariations[tableName] || [displayName, tableName];
+        const placeholders = variations.map((_, i) => `$${i + 1}`).join(', ');
         const embeddedResult = await asembPool.query(`
           SELECT COUNT(*) as embedded
           FROM unified_embeddings
-          WHERE source_table = $1
-          AND source_type = 'database'
-        `, [displayName]);
-        const embeddedRecords = parseInt(embeddedResult.rows[0].embedded) || 0;
+          WHERE source_table IN (${placeholders})
+        `, variations);
+        let embeddedRecords = parseInt(embeddedResult.rows[0].embedded) || 0;
+
+        console.log(`[TABLES] ${tableName}: ${embeddedRecords} embeddings found`);
 
         // Check if table is currently being processed
-        const progressResult = await asembPool.query(`
-          SELECT status
-          FROM embedding_progress
-          WHERE table_name = $1
-          ORDER BY created_at DESC
-          LIMIT 1
-        `, [tableName]);
+        // Note: embedding_progress table might not exist or have different structure
+        let status = 'pending';
+        try {
+          const progressResult = await asembPool.query(`
+            SELECT status
+            FROM embedding_progress
+            WHERE table_name = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+          `, [tableName]);
+          status = progressResult.rows[0]?.status || 'pending';
+        } catch (error) {
+          // Table doesn't exist or has different structure
+          status = 'pending';
+        }
 
-        const status = progressResult.rows[0]?.status || 'pending';
+        // The embeddedRecords already includes all variations due to our query
 
         tablesWithMeta.push({
           name: tableName,
@@ -332,6 +459,25 @@ router.get('/tables', async (req: Request, res: Response) => {
       }
     }
 
+    // Log the final response
+    console.log('📤 Final response:');
+    console.log('  - Total tables:', tablesWithMeta.length);
+    console.log('  - Total records:', tablesWithMeta.reduce((acc, t) => acc + t.totalRecords, 0));
+    console.log('  - Total embedded:', tablesWithMeta.reduce((acc, t) => acc + t.embeddedRecords, 0));
+    console.log('  - Table details:');
+    tablesWithMeta.forEach(t => {
+      console.log(`    ${t.name}: ${t.embeddedRecords}/${t.totalRecords}`);
+    });
+
+    console.log('[TABLES ENDPOINT] About to send response:', {
+      tablesCount: tablesWithMeta.length,
+      totalEmbedded: tablesWithMeta.reduce((acc, t) => acc + t.embeddedRecords, 0),
+      databaseName
+    });
+
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({
       tables: tablesWithMeta,
       databaseName
@@ -339,6 +485,65 @@ router.get('/tables', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Tables fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch tables' });
+  }
+});
+
+// Test endpoint - this should definitely work
+router.get('/test-tables', async (req: Request, res: Response) => {
+  console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  console.log('[TEST ENDPOINT] CALLED!');
+  console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+
+  // Check both databases
+  const asembResult = await asembPool.query('SELECT COUNT(*) FROM unified_embeddings');
+  const asembCount = parseInt(asembResult.rows[0].count);
+
+  let pgCount = 0;
+  try {
+    const pgResult = await pgPool.query('SELECT COUNT(*) FROM unified_embeddings');
+    pgCount = parseInt(pgResult.rows[0].count);
+  } catch (e) {
+    // Table might not exist in pg database
+  }
+
+  res.json({
+    message: 'Test endpoint',
+    asembDatabase: {
+      host: process.env.ASEMB_DB_HOST,
+      name: process.env.ASEMB_DB_NAME,
+      count: asembCount
+    },
+    pgDatabase: {
+      connectionString: process.env.DATABASE_URL?.split('@')[1] || 'localhost',
+      count: pgCount
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Debug endpoint to check source_table distribution
+router.get('/debug-source-tables', async (req: Request, res: Response) => {
+  try {
+    // Get all source_table values and their counts
+    const result = await asembPool.query(`
+      SELECT source_table, COUNT(*) as count
+      FROM unified_embeddings
+      GROUP BY source_table
+      ORDER BY count DESC
+    `);
+
+    // Get total count
+    const totalResult = await asembPool.query('SELECT COUNT(*) FROM unified_embeddings');
+    const total = parseInt(totalResult.rows[0].count);
+
+    res.json({
+      total,
+      sourceTables: result.rows,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Debug source tables error:', error);
+    res.status(500).json({ error: 'Failed to get source tables' });
   }
 });
 
@@ -359,7 +564,16 @@ router.get('/progress', async (req: Request, res: Response) => {
     }
   }
 
-  res.json(migrationProgress);
+  // Check if process might be stuck
+  const mightBeStuck = isProcessStuck();
+
+  // Add status flag to response
+  const response = {
+    ...migrationProgress,
+    mightBeStuck
+  };
+
+  res.json(response);
 });
 
 // Get last selected tables for resume functionality
@@ -414,6 +628,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         (migrationProgress.status === 'paused' || migrationProgress.status === 'processing')) {
       // Continue existing migration
       migrationProgress.status = 'processing';
+      migrationProgress.lastHeartbeat = Date.now(); // Initialize heartbeat
       console.log('Continuing existing migration from progress:', {
         current: migrationProgress.current,
         total: migrationProgress.total
@@ -428,8 +643,11 @@ router.post('/generate', async (req: Request, res: Response) => {
         currentTable: tables[0],
         error: null,
         tokensUsed: 0,
+        tokensThisSession: 0,
+        estimatedTotalTokens: 0,
         estimatedCost: 0,
         startTime: Date.now(),
+        lastHeartbeat: Date.now(), // Initialize heartbeat
         estimatedTimeRemaining: null,
         processedTables: [],
         currentBatch: 0,
@@ -469,7 +687,7 @@ router.post('/generate', async (req: Request, res: Response) => {
     }
 
     // Start processing (don't wait for completion)
-    processTables(tables, batchSize, embeddingMethod, operationId).catch(err => {
+    processTables(tables, batchSize, embeddingMethod, operationId, resume).catch(err => {
       console.error('Processing error:', err);
       migrationProgress.error = err.message;
       migrationProgress.status = 'error';
@@ -484,7 +702,7 @@ router.post('/generate', async (req: Request, res: Response) => {
 });
 
 // Process tables with resume support
-async function processTables(tables: string[], batchSize: number, embeddingMethod: string, operationId?: string) {
+async function processTables(tables: string[], batchSize: number, embeddingMethod: string, operationId?: string, resume?: boolean) {
   try {
     // Calculate total records to process
     let totalToProcess = 0;
@@ -533,6 +751,12 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
     migrationProgress.total = totalToProcess;
     migrationProgress.current = 0; // Start from 0 for the remaining records
     migrationProgress.newlyEmbedded = 0; // Track newly embedded in this session
+    // Initialize token tracking for new session
+    if (!resume) {
+      migrationProgress.tokensThisSession = 0;
+      // Estimate total tokens (rough estimate based on average text length)
+      migrationProgress.estimatedTotalTokens = totalToProcess * 500; // Assume ~500 tokens per record on average
+    }
     await saveProgressToRedis();
 
     // Update embedding operation with total records
@@ -566,6 +790,10 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 
       migrationProgress.currentTable = table;
 
+      // Initialize consecutive duplicate batch counter
+      let consecutiveDuplicateBatches = 0;
+      const maxConsecutiveDuplicateBatches = 50; // Stop after 50 consecutive duplicate batches (higher threshold)
+
       // Get content column
       const contentColumns: { [key: string]: string } = {
         'ozelgeler': '"Icerik"',
@@ -585,6 +813,8 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 
       let hasMore = true;
       while (hasMore && migrationProgress.status === 'processing') {
+        // Update heartbeat to show process is active
+        updateHeartbeat();
         // For resume, we need to get records that are NOT embedded yet
         const displayNames: { [key: string]: string } = {
           'ozelgeler': 'Özelgeler',
@@ -656,6 +886,8 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         const uniqueRows = [];
         const uniqueIds = [];
 
+        console.log(`🔍 Batch processing for table ${table}: ${batchTexts.length} records, ${duplicateIds.size} duplicates found`);
+
         for (let i = 0; i < batchTexts.length; i++) {
           const id = rowIds[i];
           if (!duplicateIds.has(id)) {
@@ -665,11 +897,48 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
           }
         }
 
+        console.log(`✅ Unique records to process: ${uniqueTexts.length}`);
+
         if (uniqueTexts.length === 0) {
+          console.log(`⏭️  Skipping batch - all records are duplicates`);
+
+          // Update progress even for duplicates to show progress in UI
+          processedInTable += batchResult.rows.length;
+          migrationProgress.current += batchResult.rows.length;
+
+          // Update table progress
+          migrationProgress.tableProgress[table] = {
+            total: tableProgress.total,
+            embedded: tableProgress.embedded + batchResult.rows.length,
+            processed: processedInTable,
+            offset: primaryKey !== 'ROW_NUMBER' ?
+              (validRows.length > 0 ? validRows[validRows.length - 1][primaryKey] : offset) :
+              processedInTable
+          };
+
+          // Update percentage
+          migrationProgress.percentage = (migrationProgress.current / migrationProgress.total) * 100;
+
+          // Save progress to Redis
+          await saveProgressToRedis();
+
+          // Increment consecutive duplicate counter
+          consecutiveDuplicateBatches++;
+
+          // Check if we should stop processing due to too many consecutive duplicates
+          if (consecutiveDuplicateBatches >= maxConsecutiveDuplicateBatches) {
+            console.log(`🛑 Stopping processing for table ${table} - ${maxConsecutiveDuplicateBatches} consecutive duplicate batches detected`);
+            console.log(`💡 This likely means all remaining records are already embedded`);
+            break;
+          }
+
           offset = primaryKey !== 'ROW_NUMBER' ?
             validRows[validRows.length - 1]?.[primaryKey] || offset :
             offset + batchSize;
           continue;
+        } else {
+          // Reset counter when we find non-duplicate records
+          consecutiveDuplicateBatches = 0;
         }
 
         // Generate embeddings
@@ -683,7 +952,9 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 
             // Update progress
             processedInTable++;
+            // Only count non-duplicate records towards progress
             migrationProgress.current++;
+            migrationProgress.newlyEmbedded++;
           }
         } else if (embeddingMethod === 'google-text-embedding-004') {
           // Google Text Embedding API
@@ -725,11 +996,16 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               if (data.embedding && data.embedding.values) {
                 // If only one text was processed
                 const embedding = data.embedding.values;
-                await saveEmbedding(table, subBatchRows[0], subBatchIds[0], subBatchTexts[0], embedding, 'text-embedding-004');
+                const text = subBatchTexts[0];
+                const tokens = estimateTokens(text, 'text-embedding-004');
+
+                await saveEmbedding(table, subBatchRows[0], subBatchIds[0], text, embedding, 'text-embedding-004');
 
                 // Update progress
                 processedInTable++;
                 migrationProgress.current++;
+                migrationProgress.tokensUsed += tokens;
+                migrationProgress.tokensThisSession += tokens;
               } else {
                 // Handle batch response
                 for (let j = 0; j < subBatchTexts.length; j++) {
@@ -800,20 +1076,30 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               if (data.embedding && data.embedding.values) {
                 // If only one text was processed
                 const embedding = data.embedding.values;
-                await saveEmbedding(table, subBatchRows[0], subBatchIds[0], subBatchTexts[0], embedding, 'text-embedding-004');
+                const text = subBatchTexts[0];
+                const tokens = estimateTokens(text, 'text-embedding-004');
+
+                await saveEmbedding(table, subBatchRows[0], subBatchIds[0], text, embedding, 'text-embedding-004');
 
                 // Update progress
                 processedInTable++;
                 migrationProgress.current++;
+                migrationProgress.tokensUsed += tokens;
+                migrationProgress.tokensThisSession += tokens;
               } else {
                 // Handle batch response
                 for (let j = 0; j < subBatchTexts.length; j++) {
                   if (data.embeddings && data.embeddings[j] && data.embeddings[j].values) {
                     const embedding = data.embeddings[j].values;
-                    await saveEmbedding(table, subBatchRows[j], subBatchIds[j], subBatchTexts[j], embedding, 'text-embedding-004');
+                    const text = subBatchTexts[j];
+                    const tokens = estimateTokens(text, 'text-embedding-004');
+
+                    await saveEmbedding(table, subBatchRows[j], subBatchIds[j], text, embedding, 'text-embedding-004');
 
                     processedInTable++;
                     migrationProgress.current++;
+                    migrationProgress.tokensUsed += tokens;
+                    migrationProgress.tokensThisSession += tokens;
                   }
                 }
               }
@@ -1089,14 +1375,22 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               });
 
               // Save embeddings
+              const totalTokens = response.usage?.total_tokens || 0;
+              const tokensPerEmbedding = Math.ceil(totalTokens / response.data.length);
+
               for (let j = 0; j < response.data.length; j++) {
                 const embedding = response.data[j].embedding;
-                await saveEmbedding(table, subBatchRows[j], subBatchIds[j], subBatchTexts[j], embedding, 'text-embedding-ada-002');
+                const text = subBatchTexts[j];
+                // Use actual tokens from API response or estimate
+                const tokens = totalTokens > 0 ? tokensPerEmbedding : estimateTokens(text, model);
+
+                await saveEmbedding(table, subBatchRows[j], subBatchIds[j], text, embedding, 'text-embedding-ada-002');
 
                 // Update progress
                 processedInTable++;
                 migrationProgress.current++;
-                migrationProgress.tokensUsed += 150; // Estimate
+                migrationProgress.tokensUsed += tokens;
+                migrationProgress.tokensThisSession += tokens;
               }
 
               // Rate limiting
@@ -1253,10 +1547,20 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 // Save embedding to database
 async function saveEmbedding(table: string, row: any, id: any, text: string, embedding: number[], model: string, sourceDbName?: string) {
   try {
-    // Get display name from settings
-    const settings = await getDatabaseSettings();
-    const tableDisplayNames = settings.tableDisplayNames || {};
-    const displayName = tableDisplayNames[table] || table.charAt(0).toUpperCase() + table.slice(1);
+    console.log(`💾 Saving embedding for ${table} ID ${id} with model ${model}`);
+
+    // Get display name from consistent mapping
+    const displayNames: { [key: string]: string } = {
+      'ozelgeler': 'Özelgeler',
+      'makaleler': 'Makaleler',
+      'sorucevap': 'Soru-Cevap',
+      'danistaykararlari': 'Danıştay Kararları',
+      'chat_history': 'Sohbet Geçmişi'
+    };
+    const displayName = displayNames[table] || table.charAt(0).toUpperCase() + table.slice(1);
+
+    // Get settings for source database
+    const dbSettings = await getDatabaseSettings();
 
     // Convert id to integer, but handle invalid ids
     const numericId = parseInt(id);
@@ -1268,7 +1572,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
     const existingRecord = await targetPool.query(
       `SELECT id FROM unified_embeddings
        WHERE source_table = $1 AND source_id = $2`,
-      [displayNames[table] || table, numericId]
+      [displayName, numericId]
     );
 
     let result;
@@ -1302,7 +1606,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
         RETURNING id`,
         [
           'database',
-          sourceDbName || (settings.sourceDatabase || 'rag_chatbot'),
+          sourceDbName || (dbSettings?.sourceDatabase || 'rag_chatbot'),
           displayName,
           numericId,
           text,
@@ -1313,10 +1617,11 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
         ]
       );
 
-      // Saved embedding
-    } catch (err) {
+      console.log('✅ Saved embedding for', table, 'ID:', id, 'returned ID:', result.rows[0].id, 'Display name:', displayName);
+    }
+  } catch (err) {
     console.error('❌ Error saving embedding:', err);
-    console.error('Table:', table, 'ID:', id);
+    console.error('Table:', table, 'ID:', id, 'Display name:', displayName);
     throw err; // Re-throw to stop processing
   }
 }
@@ -1416,6 +1721,21 @@ router.post('/clear', async (req: Request, res: Response) => {
   }
 });
 
+// Force refresh tables (temporary endpoint for debugging)
+router.post('/refresh-tables', async (req: Request, res: Response) => {
+  try {
+    // Clear any caches
+    await redis.del('embedding:tables:cache');
+
+    res.json({
+      success: true,
+      message: 'Tables cache cleared. Please refresh the page.'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
 // Get embedding stats
 router.get('/stats', async (req: Request, res: Response) => {
   try {
@@ -1426,7 +1746,6 @@ router.get('/stats', async (req: Request, res: Response) => {
         SUM(CAST(metadata->>'tokens' AS INTEGER)) as totalTokens,
         COUNT(DISTINCT metadata->>'model') as modelsUsed
       FROM unified_embeddings
-      WHERE source_type = 'database'
     `);
 
     const byTable = await asembPool.query(`
@@ -1468,6 +1787,15 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
       ORDER BY table_name
     `);
 
+    // Use consistent display name mapping
+    const displayNames: { [key: string]: string } = {
+      'ozelgeler': 'Özelgeler',
+      'makaleler': 'Makaleler',
+      'sorucevap': 'Soru-Cevap',
+      'danistaykararlari': 'Danıştay Kararları',
+      'chat_history': 'Sohbet Geçmişi'
+    };
+
     const tables = [];
 
     for (const tableRow of tablesQuery.rows) {
@@ -1485,10 +1813,23 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
         const embeddedResult = await asembPool.query(`
           SELECT COUNT(*) as embedded
           FROM unified_embeddings
-          WHERE source_table = $1
-          AND source_type = 'database'
-        `, [tableName]);
-        const embeddedRecords = parseInt(embeddedResult.rows[0].embedded);
+          WHERE source_type = 'database'
+          AND (
+            source_table = $1
+            OR metadata->>'table' = $2
+          )
+        `, [displayName, tableName]);
+        const embeddedRecords = parseInt(embeddedResult.rows[0].embedded) || 0;
+
+        console.log(`📊 ${tableName}: ${embeddedRecords} embedded records found (counting both source_table and metadata)`);
+
+        // Additional debug for ozelgeler
+        if (tableName === 'ozelgeler') {
+          console.log(`🔍 DEBUG for ozelglers:`);
+          console.log(`  - Query result: ${embeddedResult.rows[0].embedded}`);
+          console.log(`  - Parsed result: ${embeddedRecords}`);
+          console.log(`  - Table name passed to query: '${tableName}'`);
+        }
 
         // Check if table is currently being processed
         const progressResult = await asembPool.query(`
@@ -1520,10 +1861,137 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
       }
     }
 
+    // Debug: Calculate total embedded records before sending response
+    const totalEmbeddedRecords = tables.reduce((acc, t) => acc + t.embeddedRecords, 0);
+    console.log('📊 Backend tables endpoint debug:');
+    console.log('  - Individual table embedded records:', tables.map(t => `${t.name}: ${t.embeddedRecords}`));
+    console.log(`  - Total embedded records calculated: ${totalEmbeddedRecords}`);
+    console.log('  - Tables being sent:', JSON.stringify(tables, null, 2));
+
     res.json({ tables });
   } catch (error) {
     console.error('Tables error:', error);
     res.status(500).json({ error: 'Failed to fetch tables' });
+  }
+});
+
+// Debug endpoint to check unified_embeddings content
+router.get('/debug/embeddings', async (req: Request, res: Response) => {
+  try {
+    // Check all variations of ozelgeler
+    const variations = ['ozelgeler', 'Ozelgeler', 'Özelgler', 'özelgeler'];
+
+    const results = {};
+    let totalCount = 0;
+
+    for (const variation of variations) {
+      const result = await asembPool.query(`
+        SELECT COUNT(*) as count
+        FROM unified_embeddings
+        WHERE source_table = $1
+        AND source_type = 'database'
+      `, [variation]);
+
+      const count = parseInt(result.rows[0].count) || 0;
+      results[variation] = count;
+      totalCount += count;
+    }
+
+    // Also get a sample of records
+    const sampleResult = await asembPool.query(`
+      SELECT source_table, source_id, metadata
+      FROM unified_embeddings
+      WHERE source_type = 'database'
+      AND source_table ILIKE '%ozelgeler%'
+      LIMIT 5
+    `);
+
+    res.json({
+      byVariation: results,
+      totalCount: totalCount,
+      sampleRecords: sampleResult.rows
+    });
+  } catch (error) {
+    console.error('Debug endpoint error:', error);
+    res.status(500).json({ error: 'Debug query failed' });
+  }
+});
+
+// Get table details with recent records
+router.get('/table/:tableName/details', async (req: Request, res: Response) => {
+  try {
+    const { tableName } = req.params;
+
+    // Use consistent display name mapping
+    const displayNames: { [key: string]: string } = {
+      'ozelgeler': 'Özelgeler',
+      'makaleler': 'Makaleler',
+      'sorucevap': 'Soru-Cevap',
+      'danistaykararlari': 'Danıştay Kararları',
+      'chat_history': 'Sohbet Geçmişi'
+    };
+    const displayName = displayNames[tableName] || tableName.charAt(0).toUpperCase() + tableName.slice(1);
+
+    // Get primary key for the table
+    const primaryKey = await getPrimaryKey(tableName);
+
+    // Get recent 20 records from the source table
+    let recentRecords = [];
+    try {
+      const recentQuery = await sourcePool.query(`
+        SELECT * FROM public."${tableName}"
+        ORDER BY ${primaryKey === 'ROW_NUMBER' ? 'ctid' : primaryKey} DESC
+        LIMIT 20
+      `);
+      recentRecords = recentQuery.rows;
+    } catch (err) {
+      console.error(`Error fetching recent records for ${tableName}:`, err);
+    }
+
+    // Check which of these records are already embedded
+    const embeddedRecordIds = new Set();
+    if (recentRecords.length > 0) {
+      const ids = recentRecords.map(record => {
+        const id = record[primaryKey] || record.id;
+        return parseInt(id);
+      }).filter(id => !isNaN(id));
+
+      if (ids.length > 0) {
+        const embeddedResult = await asembPool.query(`
+          SELECT source_id FROM unified_embeddings
+          WHERE source_type = 'database'
+          AND (
+            source_table = $1
+            OR metadata->>'table' = $2
+          )
+          AND source_id = ANY($3)
+        `, [displayName, tableName, ids]);
+
+        embeddedResult.rows.forEach(row => {
+          embeddedRecordIds.add(parseInt(row.source_id));
+        });
+      }
+    }
+
+    // Mark records as embedded or not
+    const recentRecordsWithStatus = recentRecords.map(record => {
+      const id = record[primaryKey] || record.id;
+      const numericId = parseInt(id);
+      return {
+        ...record,
+        isEmbedded: !isNaN(numericId) && embeddedRecordIds.has(numericId)
+      };
+    });
+
+    res.json({
+      tableName,
+      displayName,
+      recentRecords: recentRecordsWithStatus,
+      primaryKey
+    });
+  } catch (error) {
+    console.error('Table details error:', error);
+    res.status(500).json({ error: 'Failed to fetch table details' });
   }
 });
 
@@ -1580,6 +2048,68 @@ router.post('/reset', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to reset migration progress'
+    });
+  }
+});
+
+// Check and recover from stuck embedding process
+router.post('/recover', async (req: Request, res: Response) => {
+  try {
+    console.log('🔧 Checking for stuck embedding process...');
+
+    // Load current progress
+    await loadProgressFromRedis();
+
+    // Check if process appears to be stuck
+    if (isProcessStuck()) {
+      console.log('⚠️  Detected stuck embedding process, attempting recovery...');
+
+      // Check if there's actually an active process by looking for recent embeddings
+      const recentEmbeddings = await asembPool.query(`
+        SELECT COUNT(*) as count
+        FROM unified_embeddings
+        WHERE created_at > NOW() - INTERVAL '2 minutes'
+      `);
+
+      const hasRecentActivity = parseInt(recentEmbeddings.rows[0].count) > 0;
+
+      if (!hasRecentActivity) {
+        // Process is stuck, pause it
+        migrationProgress.status = 'paused';
+        await saveProgressToRedis();
+
+        console.log('🛑 Process paused due to inactivity');
+
+        res.json({
+          success: true,
+          message: 'Stuck process detected and paused',
+          action: 'paused',
+          progress: migrationProgress
+        });
+      } else {
+        // Process might still be running but heartbeat not updating
+        console.log('✅ Recent activity detected, process may still be running');
+        res.json({
+          success: true,
+          message: 'Recent activity detected, process appears active',
+          action: 'none',
+          progress: migrationProgress
+        });
+      }
+    } else {
+      console.log('✅ No stuck process detected');
+      res.json({
+        success: true,
+        message: 'Process is running normally',
+        action: 'none',
+        progress: migrationProgress
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error checking stuck process:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check process status'
     });
   }
 });

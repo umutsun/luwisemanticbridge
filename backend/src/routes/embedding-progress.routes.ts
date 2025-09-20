@@ -722,6 +722,15 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Cache-Control'
     });
+
+    // Send initial connection confirmation
+    res.write(`data: ${JSON.stringify({ status: 'connected', message: 'SSE connection established' })}\n\n`);
+
+    let isClientConnected = true;
+    req.on('close', () => {
+      isClientConnected = false;
+      console.log('SSE client disconnected from backend');
+    });
     
     // Get actual progress from database and Redis
     const getActualProgress = async () => {
@@ -953,7 +962,7 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
     
     // Send initial progress
     const initialProgress = await getActualProgress();
-    
+
     if (!initialProgress) {
       // No active process, send idle status
       const idleProgress = {
@@ -974,54 +983,65 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
         errorCount: 0,
         newlyEmbedded: 0
       };
-      
+
       res.write(`data: ${JSON.stringify(idleProgress)}\n\n`);
       res.end();
       return;
     }
-    
+
     res.write(`data: ${JSON.stringify(initialProgress)}\n\n`);
-    
+
     // Poll for actual progress updates
     const interval = setInterval(async () => {
-      const progress = await getActualProgress();
-
-      if (!progress) {
-        // Process completed or failed
+      if (!isClientConnected) {
         clearInterval(interval);
         clearInterval(keepAliveInterval);
-        const completedProgress = {
-          ...initialProgress,
-          status: 'completed',
-          percentage: 100
-        };
-        res.write(`data: ${JSON.stringify(completedProgress)}\n\n`);
-        res.end();
         return;
       }
 
-      res.write(`data: ${JSON.stringify(progress)}\n\n`);
+      try {
+        const progress = await getActualProgress();
 
-      // Stop when process is completed or failed
-      if (progress.status === 'completed' || progress.status === 'failed') {
-        clearInterval(interval);
-        clearInterval(keepAliveInterval);
+        if (!progress) {
+          // Process completed or failed
+          clearInterval(interval);
+          clearInterval(keepAliveInterval);
+          const completedProgress = {
+            ...initialProgress,
+            status: 'completed',
+            percentage: 100
+          };
+          res.write(`data: ${JSON.stringify(completedProgress)}\n\n`);
+          res.end();
+          return;
+        }
+
         res.write(`data: ${JSON.stringify(progress)}\n\n`);
-        res.end();
+
+        // Stop when process is completed or failed
+        if (progress.status === 'completed' || progress.status === 'failed') {
+          clearInterval(interval);
+          clearInterval(keepAliveInterval);
+          res.write(`data: ${JSON.stringify(progress)}\n\n`);
+          res.end();
+        }
+      } catch (error) {
+        console.error('Error getting progress in SSE stream:', error);
+        // Send error message but keep connection alive
+        res.write(`data: ${JSON.stringify({
+          status: 'error',
+          error: 'Failed to fetch progress data',
+          fallback: true
+        })}\n\n`);
       }
     }, 1000);
 
     // Send keep-alive comment every 10 seconds to prevent timeout
     const keepAliveInterval = setInterval(() => {
-      res.write(':keepalive\n\n');
+      if (isClientConnected) {
+        res.write(':keepalive\n\n');
+      }
     }, 10000);
-    
-    // Clean up on client disconnect
-    req.on('close', () => {
-      clearInterval(interval);
-      clearInterval(keepAliveInterval);
-      console.log('SSE client disconnected');
-    });
     
   } catch (error: any) {
     console.error('Error in progress stream:', error);
