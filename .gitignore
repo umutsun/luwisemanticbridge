@@ -300,7 +300,13 @@ jest.config.cjs
 /nul
 /frontend/nul
 
-# Moved to old
-/old/"config/config.json"  
-"config/config.json"  
-"config/config.json"  
+# Custom Ignores
+# Configuration files with secrets
+config/config.json
+
+# Legacy, maintenance and temporary scripts
+old/
+scripts/legacy/
+scripts/maintenance/
+backend/*.js
+backend/nul

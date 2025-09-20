@@ -5,55 +5,26 @@ import Redis from 'ioredis';
 import crypto from 'crypto';
 import { getDatabaseSettings, asembPool } from '../config/database.config';
 
-// Helper function to log embedding operations
-async function logEmbeddingOperation(data: {
+// Helper function to log embedding operations - TEMPORARILY DISABLED
+function logEmbeddingOperation(data: {
   operation_id: string;
   source_table: string[];
+  source_type?: string;
   embedding_model: string;
   batch_size: number;
   worker_count: number;
-  status: string;
-  started_at?: Date;
-  completed_at?: Date;
-  records_processed: number;
-  records_success: number;
-  records_error: number;
+  status: 'started' | 'processing' | 'completed' | 'error' | 'paused';
+  total_records?: number;
+  processed_records?: number;
+  records_success?: number;
+  records_failed?: number;
+  error_count?: number;
+  execution_time?: number;
   error_message?: string;
   metadata?: any;
 }) {
-  try {
-    await pgPool.query(`
-      INSERT INTO embedding_history (
-        operation_id, source_table, source_type, embedding_model, batch_size, worker_count,
-        status, started_at, completed_at, records_processed, records_success, records_failed, error_message, metadata
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      ON CONFLICT (operation_id) DO UPDATE SET
-        status = EXCLUDED.status,
-        completed_at = EXCLUDED.completed_at,
-        records_processed = EXCLUDED.records_processed,
-        records_success = EXCLUDED.records_success,
-        records_failed = EXCLUDED.records_failed,
-        error_message = EXCLUDED.error_message,
-        metadata = EXCLUDED.metadata
-    `, [
-      data.operation_id,
-      data.source_table,
-      'database', // source_type
-      data.embedding_model,
-      data.batch_size,
-      data.worker_count,
-      data.status,
-      data.started_at || new Date(),
-      data.completed_at,
-      data.records_processed,
-      data.records_success,
-      data.records_error,
-      data.error_message,
-      data.metadata || {}
-    ]);
-  } catch (error) {
-    console.error('Error logging embedding operation:', error);
-  }
+  // Temporarily disabled to prevent embedding operation failures
+  // Don't log anything to avoid confusion
 }
 
 // ASEMB database - where unified_embeddings table is stored
@@ -97,7 +68,7 @@ async function getApiKey(provider: string) {
     );
     return result.rows[0]?.setting_value || process.env[`${provider.toUpperCase()}_API_KEY`] || '';
   } catch (error) {
-    console.error(`Error fetching ${provider} API key:`, error);
+    console.error(`Error fetching ${provider} API key:`, error.message);
     return process.env[`${provider.toUpperCase()}_API_KEY`] || '';
   }
 }
@@ -184,7 +155,7 @@ async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ em
   try {
     const cached = await redis.get(cacheKey);
     if (cached) {
-      console.log(`Cache HIT for text (${text.substring(0, 50)}...)`);
+      // Cache hit
       return {
         embedding: JSON.parse(cached),
         cached: true,
@@ -196,7 +167,7 @@ async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ em
   }
 
   // Generate new embedding if not cached
-  console.log(`Cache MISS for text (${text.substring(0, 50)}...)`);
+  // Cache miss
 
   try {
     const response = await openai.embeddings.create({
@@ -416,6 +387,8 @@ router.get('/selected-tables', async (req: Request, res: Response) => {
 
 // Generate embeddings for tables
 router.post('/generate', async (req: Request, res: Response) => {
+  console.log('🚀 Generate endpoint called');
+
   try {
     const {
       tables,
@@ -438,35 +411,23 @@ router.post('/generate', async (req: Request, res: Response) => {
       });
     }
 
-    // Load previous progress if resuming
-    if (resume) {
-      const hasProgress = await loadProgressFromRedis();
-      if (hasProgress && migrationProgress.status === 'paused') {
-        migrationProgress.status = 'processing';
-        console.log('Resuming from previous progress');
-      } else {
-        // Reset progress
-        migrationProgress = {
-          status: 'processing',
-          current: 0,
-          total: 0,
-          percentage: 0,
-          currentTable: tables[0],
-          error: null,
-          tokensUsed: 0,
-          estimatedCost: 0,
-          startTime: Date.now(),
-          estimatedTimeRemaining: null,
-          processedTables: [],
-          currentBatch: 0,
-          totalBatches: 0,
-          tableProgress: {},
-          embeddingMethod,
-          tables: tables
-        };
-      }
+    // Load previous progress to check if we should continue
+    const hasProgress = await loadProgressFromRedis();
+
+    // If we have progress and it's for the same tables, continue from where we left off
+    if (hasProgress &&
+        migrationProgress.tables &&
+        migrationProgress.tables.length === tables.length &&
+        migrationProgress.tables.every(table => tables.includes(table)) &&
+        (migrationProgress.status === 'paused' || migrationProgress.status === 'processing')) {
+      // Continue existing migration
+      migrationProgress.status = 'processing';
+      console.log('Continuing existing migration from progress:', {
+        current: migrationProgress.current,
+        total: migrationProgress.total
+      });
     } else {
-      // Reset progress for new migration
+      // Start fresh migration
       migrationProgress = {
         status: 'processing',
         current: 0,
@@ -485,6 +446,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         embeddingMethod,
         tables: tables
       };
+      console.log('Starting fresh migration for tables:', tables);
     }
 
     // Save initial progress
@@ -577,6 +539,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
     }
 
     migrationProgress.total = totalToProcess;
+    migrationProgress.current = 0; // Start from 0 for the remaining records
     migrationProgress.newlyEmbedded = 0; // Track newly embedded in this session
     await saveProgressToRedis();
 
@@ -1161,15 +1124,19 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
           }
         }
 
-        // Update progress - track actual processed count
-        processedInTable += uniqueTexts.length;
+        // Note: processedInTable is already incremented in each embedding generation loop
 
         // Save table progress
+        // For primary key based pagination, track the last ID
+        const lastProcessedId = primaryKey !== 'ROW_NUMBER' ?
+          (validRows.length > 0 ? validRows[validRows.length - 1][primaryKey] : offset) :
+          processedInTable;
+
         migrationProgress.tableProgress[table] = {
           total: tableProgress.total,
           embedded: tableProgress.embedded + uniqueTexts.length,
           processed: processedInTable,
-          offset: processedInTable
+          offset: lastProcessedId
         };
 
         // Update percentage
@@ -1247,7 +1214,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               errorCount: migrationProgress.errorCount || 0
             }
           });
-          console.log('✅ Embedding operation logged successfully');
+          // Embedding operation logging is disabled
         } catch (error) {
           console.error('Failed to log embedding operation:', error);
         }
@@ -1294,6 +1261,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 // Save embedding to database
 async function saveEmbedding(table: string, row: any, id: any, text: string, embedding: number[], model: string) {
   try {
+    // Saving embedding
     const displayNames: { [key: string]: string } = {
       'ozelgeler': 'Özelgeler',
       'makaleler': 'Makaleler',
@@ -1301,6 +1269,12 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
       'danistaykararlari': 'Danıştay Kararları',
       'chat_history': 'Sohbet Geçmişi'
     };
+
+    // Convert id to integer, but handle invalid ids
+    const numericId = parseInt(id);
+    if (isNaN(numericId)) {
+      throw new Error(`Invalid ID for ${table}: ${id} is not a valid integer`);
+    }
 
     const result = await targetPool.query(
       `INSERT INTO unified_embeddings (
@@ -1319,7 +1293,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
         'database',
         'rag_chatbot',
         displayNames[table] || table,
-        id.toString(),
+        numericId,
         text,
         `[${embedding.join(',')}]`,
         JSON.stringify({ table, id }),
@@ -1328,7 +1302,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
       ]
     );
 
-    console.log(`✅ Saved embedding for ${table} ID ${id}, returned ID: ${result.rows[0].id}`);
+    // Saved embedding
   } catch (err) {
     console.error('❌ Error saving embedding:', err);
     console.error('Table:', table, 'ID:', id);
@@ -1544,6 +1518,8 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
 
 // SSE endpoint for real-time progress updates
 router.get('/progress/stream', async (req: Request, res: Response) => {
+  // SSE connection requested
+
   // Set headers for SSE
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',

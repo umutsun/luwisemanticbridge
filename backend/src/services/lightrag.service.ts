@@ -129,18 +129,24 @@ export class LightRAGService {
             this.embeddings
           );
           
-          console.log(`✅ LightRAG initialized with ${documents.length} documents`);
+          console.log(`✅ LightRAG initialized with ${documents.length} documents in memory`);
+        console.log(`   Provider: ${this.currentProvider}`);
+        console.log(`   Embeddings: ${this.embeddings.constructor.name}`);
         } else {
           // Create empty vector store
           this.vectorStore = new MemoryVectorStore(this.embeddings);
           console.log('✅ LightRAG initialized with empty vector store');
+          console.log(`   Provider: ${this.currentProvider}`);
+          console.log(`   Embeddings: ${this.embeddings.constructor.name}`);
         }
       } catch (embeddingError: any) {
         console.error('⚠️ Embedding initialization failed:', embeddingError.message);
         
         // If OpenAI embeddings fail, create vector store without pre-loading
         // We'll generate embeddings on-demand when documents are added
-        console.log('🔄 Initializing LightRAG without pre-loaded embeddings...');
+        console.log('🔄 LightRAG initialized in fallback mode (query-only)');
+        console.log(`   Provider: ${this.currentProvider}`);
+        console.log(`   Embeddings: ${this.embeddings.constructor.name}`);
         this.vectorStore = new MemoryVectorStore(this.embeddings);
         
         // Try to reinitialize LLM with fallback providers
@@ -570,7 +576,7 @@ export class LightRAGService {
 
       // Get AI settings from database
       const aiSettings = await getAiSettings();
-      console.log('📊 AI Settings from database:', JSON.stringify(aiSettings, null, 2));
+      // AI settings loaded from database
 
       let openaiApiKey = aiSettings?.openaiApiKey || process.env.OPENAI_API_KEY;
       let deepseekApiKey = aiSettings?.deepseekApiKey || process.env.DEEPSEEK_API_KEY;
@@ -578,23 +584,22 @@ export class LightRAGService {
 
       // Get embedding provider from settings
       const embeddingProvider = forceProvider || aiSettings?.embeddingProvider || 'openai';
-      console.log('🎯 Embedding Provider:', embeddingProvider);
+      // Embedding provider determined
 
       // If force provider is specified, use that
       if (forceProvider === 'deepseek') {
         openaiApiKey = null; // Force disable OpenAI
-        console.log('🔧 Forcing DeepSeek provider');
+        // Forcing DeepSeek provider
       } else if (forceProvider === 'openai') {
         deepseekApiKey = null; // Force disable DeepSeek
-        console.log('🔧 Forcing OpenAI provider');
+        // Forcing OpenAI provider
       } else if (forceProvider === 'ollama') {
         openaiApiKey = null;
         deepseekApiKey = null;
-        console.log('🔧 Forcing Ollama provider');
+        // Forcing Ollama provider
       }
 
-      console.log('🔑 OpenAI Key:', openaiApiKey ? 'Found' : 'Not found');
-      console.log('🔑 DeepSeek Key:', deepseekApiKey ? 'Found' : 'Not found');
+      // API keys checked
 
       // Try OpenAI first (primary)
       if (openaiApiKey) {

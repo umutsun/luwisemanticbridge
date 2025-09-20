@@ -86,7 +86,12 @@ app.use(cors({
   credentials: true
 }));
 app.use(compression());
-app.use(morgan('dev'));
+app.use(morgan('dev', {
+  skip: (req, res) => {
+    // Skip logging for progress endpoint to reduce console noise
+    return req.path.includes('/embeddings/progress') || req.path.includes('/embeddings/progress/stream');
+  }
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -166,12 +171,9 @@ app.get('/api/v2', (req: Request, res: Response) => {
 
 // WebSocket handling
 io.on('connection', (socket) => {
-  console.log('New WebSocket connection:', socket.id);
-  
   // Join user room
   socket.on('join', (userId: string) => {
     socket.join(`user:${userId}`);
-    console.log(`User ${userId} joined`);
   });
   
   // Handle typing indicators
@@ -191,11 +193,10 @@ io.on('connection', (socket) => {
   // Dashboard real-time updates
   socket.on('dashboard:subscribe', () => {
     socket.join('dashboard:updates');
-    console.log('Client subscribed to dashboard updates');
   });
   
   socket.on('disconnect', () => {
-    console.log('WebSocket disconnected:', socket.id);
+    // WebSocket disconnected
   });
 });
 
@@ -233,44 +234,126 @@ import { loadProgressFromRedis } from './routes/embeddings.routes';
 const PORT = parseInt(process.env.PORT || '8083');
 httpServer.listen(PORT, async () => {
   console.log(`🚀 ASB Backend Server running on port ${PORT}`);
-  console.log(`📡 WebSocket server ready`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-  
+
   try {
-    // Test database connection
+    // Test database connections
+    console.log('\n📊 Initializing Services...');
+
+    // PostgreSQL connection
     await pgPool.query('SELECT 1');
-    console.log('✅ PostgreSQL connected');
-    
-    // Test Redis connection
+    console.log('✅ PostgreSQL: Connected');
+
+    // Redis connection
     await redis.ping();
-    console.log('✅ Redis connected');
-    
-    // Pre-initialize LightRAG service
-    console.log('🔄 Pre-initializing LightRAG service...');
+    console.log('✅ Redis: Connected');
+
+    // Check Redis database info
+    const redisInfo = await redis.info('keyspace');
+    const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
+    if (dbKeys) {
+      console.log(`📋 Redis DB${process.env.REDIS_DB || 2}: ${dbKeys[1]} keys`);
+    }
+
+    // Initialize AI Services
+    console.log('\n🤖 AI Services Status:');
+
+    // Check API keys from both .env and database
+    try {
+      const dbSettings = await getAiSettings();
+      const aiServices = [
+        { name: 'OpenAI', envKey: 'OPENAI_API_KEY', dbKey: 'openai_api_key', model: 'GPT-3.5/4' },
+        { name: 'Claude', envKey: 'ANTHROPIC_API_KEY', dbKey: 'anthropic_api_key', model: 'Claude 3' },
+        { name: 'Gemini', envKey: 'GOOGLE_API_KEY', dbKey: 'google_api_key', model: 'Gemini Pro' },
+        { name: 'DeepSeek', envKey: 'DEEPSEEK_API_KEY', dbKey: 'deepseek_api_key', model: 'DeepSeek' }
+      ];
+
+      aiServices.forEach(service => {
+        const envKey = process.env[service.envKey];
+        const dbKey = dbSettings[service.dbKey];
+
+        if (envKey || dbKey) {
+          const source = envKey && dbKey ? 'both' : (envKey ? '.env' : 'database');
+          console.log(`✅ ${service.name}: Available (${service.model}) [${source}]`);
+        } else {
+          console.log(`❌ ${service.name}: Not configured`);
+        }
+      });
+    } catch (error) {
+      // Fallback to .env only
+      const aiServices = [
+        { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-3.5/4' },
+        { name: 'Claude', key: 'ANTHROPIC_API_KEY', model: 'Claude 3' },
+        { name: 'Gemini', key: 'GOOGLE_API_KEY', model: 'Gemini Pro' },
+        { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek' }
+      ];
+
+      aiServices.forEach(service => {
+        if (process.env[service.key]) {
+          console.log(`✅ ${service.name}: Available (${service.model}) [.env]`);
+        } else {
+          console.log(`❌ ${service.name}: Not configured`);
+        }
+      });
+    }
+
+    // Check Embedding settings
+    console.log('\n🔤 Embedding Configuration:');
+    try {
+      const aiSettings = await getAiSettings();
+      const embeddingProvider = aiSettings?.embeddingProvider || 'openai';
+      const useLocal = process.env.USE_LOCAL_EMBEDDINGS === 'true';
+
+      if (useLocal) {
+        console.log('📦 Provider: Local (random vectors)');
+      } else {
+        const providerName = embeddingProvider.toUpperCase();
+        console.log(`📦 Provider: ${providerName}`);
+
+        if (embeddingProvider === 'openai' && aiSettings?.openaiApiBase) {
+          console.log(`   Base URL: ${aiSettings.openaiApiBase}`);
+        } else if (embeddingProvider === 'google') {
+          console.log(`   Model: text-embedding-004`);
+        } else if (embeddingProvider === 'cohere') {
+          console.log(`   Model: embed-v3.0`);
+        } else if (embeddingProvider === 'voyage') {
+          console.log(`   Model: voyage-large-2`);
+        }
+      }
+    } catch (error) {
+      // Fallback to basic info
+      if (process.env.USE_LOCAL_EMBEDDINGS === 'true') {
+        console.log('📦 Provider: Local (random vectors)');
+      } else {
+        console.log('📦 Provider: OpenAI (default)');
+      }
+    }
+
+    // Initialize LightRAG service
+    console.log('\n🔍 LightRAG Status:');
     lightRAGService = new LightRAGService(pgPool, redis);
     await lightRAGService.initialize();
-    console.log('✅ LightRAG service pre-initialized');
 
     // Load migration progress from Redis
-    console.log('🔄 Loading migration progress from Redis...');
+    console.log('\n📈 Migration Status:');
     await loadProgressFromRedis();
-    console.log('✅ Migration progress loaded');
 
-    // Also check for embedding progress for compatibility
-    console.log('🔄 Checking embedding progress from Redis...');
+    // Check embedding progress
     try {
       const embeddingProgress = await redis.get('embedding:progress');
       if (embeddingProgress) {
-        console.log('📊 Found embedding progress in Redis:', JSON.parse(embeddingProgress));
-      } else {
-        console.log('📊 No embedding progress found in Redis');
+        const progress = JSON.parse(embeddingProgress);
+        console.log(`📊 Migration Status: ${progress.status || 'unknown'}`);
+        if (progress.currentTable) {
+          console.log(`   Active Table: ${progress.currentTable}`);
+          console.log(`   Progress: ${progress.current || 0}/${progress.total || 0} records`);
+        }
       }
     } catch (error) {
-      console.error('⚠️ Error checking embedding progress:', error);
+      // Silently ignore
     }
 
     // Clean up stale embedding progress records
-    console.log('🧹 Cleaning up stale embedding progress records...');
     try {
       await pgPool.query(`
         UPDATE embedding_progress
@@ -278,13 +361,11 @@ httpServer.listen(PORT, async () => {
         WHERE status IN ('processing', 'paused')
         AND started_at < NOW() - INTERVAL '1 hour'
       `);
-      console.log('✅ Stale progress records cleaned up');
     } catch (cleanupError) {
-      console.error('⚠️ Failed to clean up stale progress records:', cleanupError);
+      // Silently ignore
     }
 
     // Check for existing embedding process on startup
-    console.log('🔍 Checking for existing embedding process...');
     try {
       const existingProcess = await pgPool.query(`
         SELECT * FROM embedding_progress
@@ -295,11 +376,10 @@ httpServer.listen(PORT, async () => {
 
       if (existingProcess.rows.length > 0) {
         const process = existingProcess.rows[0];
-        console.log(`Found existing process: status=${process.status}, table=${process.document_type}`);
 
         // If process was 'processing', mark it as 'paused' for safety
         if (process.status === 'processing') {
-          console.log('⚠️ Found orphaned processing process, marking as paused');
+          // Found orphaned processing process, marking as paused
           await pgPool.query(`
             UPDATE embedding_progress
             SET status = 'paused'
@@ -321,14 +401,20 @@ httpServer.listen(PORT, async () => {
             processedTables: process.document_type ? [process.document_type] : []
           };
           await redis.set('embedding:progress', JSON.stringify(progressData), 'EX', 7 * 24 * 60 * 60);
-          console.log('✅ Updated embedding:progress for paused process');
-          console.log('✅ Process marked as paused, user can resume manually');
+          // Process marked as paused, user can resume manually
         }
       }
     } catch (checkError) {
-      console.error('⚠️ Failed to check existing processes:', checkError);
+      // Silently ignore
     }
     
+    // Final startup status
+    console.log('\n🎉 Backend Initialization Complete!');
+    console.log('📡 WebSocket server ready');
+    console.log(`🌐 API available at: http://localhost:${PORT}`);
+    console.log('📖 Health check: GET /health');
+    console.log('🔗 API docs: GET /api/v2');
+
     // Publish startup event
     await redis.publish('asb:backend:status', JSON.stringify({
       event: 'startup',
@@ -343,15 +429,15 @@ httpServer.listen(PORT, async () => {
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  
+  console.log('Shutting down gracefully...');
+
   httpServer.close(() => {
-    console.log('HTTP server closed');
+    // HTTP server closed
   });
-  
+
   await pgPool.end();
   await redis.quit();
-  
+
   process.exit(0);
 });
 

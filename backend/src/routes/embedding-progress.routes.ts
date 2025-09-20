@@ -4,7 +4,7 @@ import { pgPool, redis } from '../server';
 const router = Router();
 
 // Get embedding progress
-router.get('/api/v2/embeddings/progress', async (req: Request, res: Response) => {
+router.get('/progress', async (req: Request, res: Response) => {
   try {
     // Check if table exists
     await pgPool.query(`
@@ -177,7 +177,7 @@ router.get('/api/v2/embeddings/progress', async (req: Request, res: Response) =>
 });
 
 // Get embedding progress from Redis (real-time data)
-router.get('/api/embeddings/progress', async (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     // Try to get progress from Redis first (check both keys for compatibility)
     let redisProgress = await redis.get('embedding:progress');
@@ -712,7 +712,7 @@ router.get('/api/embeddings/stats', async (req: Request, res: Response) => {
 });
 
 // Progress stream for SSE
-router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Response) => {
+router.get('/progress/stream', async (req: Request, res: Response) => {
   try {
     // Set headers for SSE
     res.writeHead(200, {
@@ -985,10 +985,11 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
     // Poll for actual progress updates
     const interval = setInterval(async () => {
       const progress = await getActualProgress();
-      
+
       if (!progress) {
         // Process completed or failed
         clearInterval(interval);
+        clearInterval(keepAliveInterval);
         const completedProgress = {
           ...initialProgress,
           status: 'completed',
@@ -998,20 +999,27 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
         res.end();
         return;
       }
-      
+
       res.write(`data: ${JSON.stringify(progress)}\n\n`);
-      
+
       // Stop when process is completed or failed
       if (progress.status === 'completed' || progress.status === 'failed') {
         clearInterval(interval);
+        clearInterval(keepAliveInterval);
         res.write(`data: ${JSON.stringify(progress)}\n\n`);
         res.end();
       }
     }, 1000);
+
+    // Send keep-alive comment every 10 seconds to prevent timeout
+    const keepAliveInterval = setInterval(() => {
+      res.write(':keepalive\n\n');
+    }, 10000);
     
     // Clean up on client disconnect
     req.on('close', () => {
       clearInterval(interval);
+      clearInterval(keepAliveInterval);
       console.log('SSE client disconnected');
     });
     

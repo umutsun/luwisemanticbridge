@@ -56,10 +56,10 @@ export default function VerticalProgressDisplay({
         setCurrentProgress(prev => {
           const target = progress.percentage || 0;
           const diff = target - prev;
-          if (Math.abs(diff) < 0.1) return target;
-          return prev + diff * 0.1;
+          if (Math.abs(diff) < 0.05) return target;
+          return prev + diff * 0.05; // Slower animation for smoother effect
         });
-      }, 100);
+      }, 50);
 
       return () => {
         clearInterval(progressInterval);
@@ -80,6 +80,20 @@ export default function VerticalProgressDisplay({
       return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeWithSeconds = (ms: number) => {
+    const hours = Math.floor(ms / 1000 / 60 / 60);
+    const minutes = Math.floor((ms / 1000 / 60) % 60);
+    const seconds = Math.floor((ms / 1000) % 60);
+
+    if (hours > 0) {
+      return `${hours}sa ${minutes}dk ${seconds}s`;
+    }
+    if (minutes > 0) {
+      return `${minutes}dk ${seconds}s`;
+    }
+    return `${seconds}s`;
   };
 
   const getElapsedTime = () => {
@@ -158,7 +172,7 @@ export default function VerticalProgressDisplay({
         <div className="bg-muted/50 rounded p-2 text-center">
           <div className="font-bold text-orange-600">
             {progress.estimatedTimeRemaining ?
-              formatTime(progress.estimatedTimeRemaining) : '--:--'
+              formatTimeWithSeconds(progress.estimatedTimeRemaining) : '--:--'
             }
           </div>
           <div className="text-muted-foreground">kalan süre</div>

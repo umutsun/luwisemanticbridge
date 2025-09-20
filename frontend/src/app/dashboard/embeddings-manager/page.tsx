@@ -89,7 +89,7 @@ export default function EmbeddingsManagerPage() {
   const [embeddingHistory, setEmbeddingHistory] = useState<any[]>([]);
   const { toast } = useToast();
 
-  const API_BASE = '/api/embeddings';
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings';
 
   // Component cleanup - ensure state is properly reset when component unmounts
   useEffect(() => {
@@ -221,9 +221,10 @@ export default function EmbeddingsManagerPage() {
     const eventSourceRef = useRef<EventSource | null>(null);
 
     useEffect(() => {
-      // Only connect if there's an active process
-      if (progress?.status === 'processing' || progress?.status === 'paused') {
-        const eventSource = new EventSource('/api/v2/embeddings/progress/stream');
+      // Only connect if there's an active process AND no existing connection
+      if ((progress?.status === 'processing' || progress?.status === 'paused') && !eventSourceRef.current) {
+        console.log('🔌 Opening SSE connection...');
+        const eventSource = new EventSource(process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings/progress/stream');
         eventSourceRef.current = eventSource;
 
         eventSource.onmessage = (event) => {
@@ -232,26 +233,37 @@ export default function EmbeddingsManagerPage() {
             console.log('📡 SSE Progress update:', data);
 
             if (data.status && data.status !== 'idle') {
+              // Update progress for internal state
               setProgress(prev => {
                 if (!prev) return data;
                 // If status changed, always update
                 if (prev.status !== data.status) return data;
                 // If current table changed, always update
                 if (prev.currentTable !== data.currentTable) return data;
-                // If percentage changed by more than 1%, update
+                // If percentage changed by more than 0.1%, update
                 const prevPercentage = prev.percentage || 0;
                 const newPercentage = data.percentage || 0;
-                if (Math.abs(newPercentage - prevPercentage) > 1) return data;
-                // If count changed significantly, update
+                if (Math.abs(newPercentage - prevPercentage) > 0.1) return data;
+                // If count changed, update
                 const prevCurrent = prev.current || 0;
                 const newCurrent = data.current || 0;
-                if (Math.abs(newCurrent - prevCurrent) > 10) return data;
+                if (newCurrent !== prevCurrent) return data;
                 // Otherwise, keep previous state to prevent unnecessary re-renders
                 return prev;
               });
 
-              // Update display progress for vertical display
-              setDisplayProgress(data);
+              // Update display progress for vertical display (with throttling)
+              setDisplayProgress(prev => {
+                if (!prev) return data;
+                // Only update if significant change to prevent UI flicker
+                if (prev.current !== data.current ||
+                    prev.status !== data.status ||
+                    prev.currentTable !== data.currentTable ||
+                    Math.abs((prev.percentage || 0) - (data.percentage || 0)) > 0.5) {
+                  return data;
+                }
+                return prev;
+              });
 
               // Update progress and potentially refresh tables
               if (data.status === 'processing') {
@@ -295,17 +307,32 @@ export default function EmbeddingsManagerPage() {
 
         eventSource.onerror = (error) => {
           console.error('SSE connection error:', error);
-          // Fallback to polling if SSE fails
+          // Close the current connection
           eventSource.close();
           eventSourceRef.current = null;
+
+          // Try to reconnect after 2 seconds if still processing
+          if (progress?.status === 'processing' || progress?.status === 'paused') {
+            setTimeout(() => {
+              console.log('Attempting to reconnect SSE...');
+              if (progress?.status === 'processing' || progress?.status === 'paused') {
+                const newEventSource = new EventSource(process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings/progress/stream');
+                eventSourceRef.current = newEventSource;
+
+                newEventSource.onmessage = eventSource.onmessage;
+                newEventSource.onerror = eventSource.onerror;
+              }
+            }, 2000);
+          }
         };
 
         return () => {
+          console.log('🔌 Closing SSE connection...');
           eventSource.close();
           eventSourceRef.current = null;
         };
       }
-    }, [progress?.status, progressUpdateCount]);
+    }, [progress?.status]);
   };
 
   // Use the SSE hook
@@ -327,6 +354,7 @@ export default function EmbeddingsManagerPage() {
             if (data.status === 'paused') {
               // Use processedTables as the selected tables for resume
               const tablesToRestore = data.tables || data.processedTables || [];
+              console.log('Restoring tables for paused migration:', tablesToRestore);
               if (tablesToRestore.length > 0) {
                 setSelectedTables(tablesToRestore);
                 setMigrationTables(tablesToRestore);
@@ -365,17 +393,30 @@ export default function EmbeddingsManagerPage() {
               // If current table changed, always update
               if (prev.currentTable !== data.currentTable) return data;
 
-              // If percentage changed by more than 1%, update
+              // If percentage changed by more than 0.1%, update
               const prevPercentage = prev.percentage || 0;
               const newPercentage = data.percentage || 0;
-              if (Math.abs(newPercentage - prevPercentage) > 1) return data;
+              if (Math.abs(newPercentage - prevPercentage) > 0.1) return data;
 
-              // If count changed significantly, update
+              // If count changed, update
               const prevCurrent = prev.current || 0;
               const newCurrent = data.current || 0;
-              if (Math.abs(newCurrent - prevCurrent) > 10) return data;
+              if (newCurrent !== prevCurrent) return data;
 
               // Otherwise, keep previous state to prevent unnecessary re-renders
+              return prev;
+            });
+
+            // Update display progress for vertical display (with throttling)
+            setDisplayProgress(prev => {
+              if (!prev) return data;
+              // Only update if significant change to prevent UI flicker
+              if (prev.current !== data.current ||
+                  prev.status !== data.status ||
+                  prev.currentTable !== data.currentTable ||
+                  Math.abs((prev.percentage || 0) - (data.percentage || 0)) > 0.5) {
+                return data;
+              }
               return prev;
             });
 
@@ -458,7 +499,8 @@ export default function EmbeddingsManagerPage() {
   }, [progress?.status, progressUpdateCount]);
 
   const startMigration = async (resume = false) => {
-    if (selectedTables.length === 0) {
+    console.log('Starting migration:', { resume, selectedTables, migrationTables });
+    if (selectedTables.length === 0 && !resume) {
         setError('Please select at least one table.');
         toast({
           title: "Hata",
@@ -467,6 +509,10 @@ export default function EmbeddingsManagerPage() {
         });
         return;
     }
+
+    // If resuming, use migrationTables instead of selectedTables
+    const tablesToUse = resume ? migrationTables : selectedTables;
+    console.log('Tables to use:', tablesToUse);
     setError('');
     setSuccess('');
     setIsStartingMigration(true);
@@ -475,14 +521,14 @@ export default function EmbeddingsManagerPage() {
     setCurrentEmbeddingMethod(embeddingMethod);
     setCurrentBatchSize(batchSize);
     setCurrentWorkerCount(workerCount);
-    setMigrationTables(selectedTables);
+    setMigrationTables(tablesToUse);
 
     try {
       const response = await fetch(`${API_BASE}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tables: selectedTables,
+          tables: tablesToUse,
           batchSize,
           workerCount,
           resume,
@@ -1073,7 +1119,7 @@ export default function EmbeddingsManagerPage() {
                           setSelectedTables(availableTables.map(t => t.name));
                         }
                       }}
-                      disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                      disabled={progress?.status === 'processing'}
                     >
                       {selectedTables.length === availableTables.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
                     </Button>
@@ -1095,7 +1141,7 @@ export default function EmbeddingsManagerPage() {
                               setSelectedTables(selectedTables.filter(t => t !== table.name));
                             }
                           }}
-                          disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                          disabled={progress?.status === 'processing'}
                           className="mt-1 rounded"
                         />
                         <label htmlFor={`table-${table.name}`} className="text-sm cursor-pointer flex-1">
