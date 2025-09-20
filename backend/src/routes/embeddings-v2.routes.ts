@@ -39,7 +39,17 @@ const redis = new Redis({
   db: parseInt(process.env.REDIS_DB || '0')
 });
 
-// Source database (rag_chatbot) - where we read data from
+// Get source database name from settings
+async function getSourceDatabaseName(): Promise<string> {
+  try {
+    const settings = await getDatabaseSettings();
+    return settings.sourceDatabase || 'rag_chatbot';
+  } catch (error) {
+    return 'rag_chatbot'; // fallback
+  }
+}
+
+// Source database - where we read data from
 const sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
   new Pool({
     connectionString: process.env.RAG_CHATBOT_DATABASE_URL
@@ -47,7 +57,7 @@ const sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
   new Pool({
     host: process.env.POSTGRES_HOST || 'localhost',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: 'rag_chatbot',
+    database: process.env.RAG_CHATBOT_DATABASE || 'rag_chatbot',
     user: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres'
   });
@@ -256,84 +266,66 @@ router.get('/tables', async (req: Request, res: Response) => {
   try {
     const tablesWithMeta = [];
 
-    // Get target tables from settings
-    let targetTables = [
-      { name: 'ozelgeler', displayName: 'Özelgeler' },
-      { name: 'makaleler', displayName: 'Makaleler' },
-      { name: 'sorucevap', displayName: 'Soru-Cevap' },
-      { name: 'danistaykararlari', displayName: 'Danıştay Kararları' },
-      { name: 'chat_history', displayName: 'Sohbet Geçmişi' }
-    ];
+    // Get source database name
+    const databaseName = await getSourceDatabaseName();
 
-    let databaseName = 'rag_chatbot';
+    // Get all tables from source database (exclude system tables)
+    const tablesQuery = await sourcePool.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name NOT IN ('embedding_progress', 'embedding_history', 'unified_embeddings', 'spatial_ref_sys', 'geometry_columns')
+      ORDER BY table_name
+    `);
 
-    for (const table of targetTables) {
-      const tableName = table.name;
-      const displayName = table.displayName;
+    // Get display names from settings or generate from table name
+    const settings = await getDatabaseSettings();
+    const tableDisplayNames = settings.tableDisplayNames || {};
+
+    // Process each table from the database
+    for (const tableRow of tablesQuery.rows) {
+      const tableName = tableRow.table_name;
+
+      // Get display name from settings or generate from table name
+      const displayName = tableDisplayNames[tableName] ||
+                         tableName.charAt(0).toUpperCase() + tableName.slice(1);
 
       try {
-        // Check if table exists in SOURCE database
-        const tableCheck = await sourcePool.query(
-          `SELECT EXISTS (
-            SELECT FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_name = $1
-          )`,
-          [tableName]
-        );
+        // Get total records count
+        const countResult = await sourcePool.query(`
+          SELECT COUNT(*) as total
+          FROM public."${tableName}"
+        `);
+        const totalRecords = parseInt(countResult.rows[0].total);
 
-        if (!tableCheck.rows[0].exists) continue;
+        // Get embedded records count from unified_embeddings
+        const embeddedResult = await asembPool.query(`
+          SELECT COUNT(*) as embedded
+          FROM unified_embeddings
+          WHERE source_table = $1
+          AND source_type = 'database'
+        `, [displayName]);
+        const embeddedRecords = parseInt(embeddedResult.rows[0].embedded) || 0;
 
-        // Get count from SOURCE database
-        const countResult = await sourcePool.query(
-          `SELECT COUNT(*) as count FROM public."${tableName}"`
-        );
-        const count = parseInt(countResult.rows[0].count);
+        // Check if table is currently being processed
+        const progressResult = await asembPool.query(`
+          SELECT status
+          FROM embedding_progress
+          WHERE table_name = $1
+          ORDER BY created_at DESC
+          LIMIT 1
+        `, [tableName]);
 
-        if (count === 0) continue;
-
-        // Get embedded count from unified_embeddings table
-        let embeddedCount = 0;
-        try {
-          const displayNames: { [key: string]: string } = {
-            'ozelgeler': 'Özelgeler',
-            'makaleler': 'Makaleler',
-            'sorucevap': 'Soru-Cevap',
-            'danistaykararlari': 'Danıştay Kararları',
-            'chat_history': 'Sohbet Geçmişi'
-          };
-
-          const sourceTableName = displayNames[tableName] || tableName;
-
-          const embeddingResult = await targetPool.query(
-            `SELECT COUNT(DISTINCT source_id) as count
-             FROM unified_embeddings
-             WHERE source_table = $1 AND source_type = 'database'`,
-            [sourceTableName]);
-
-          embeddedCount = parseInt(embeddingResult.rows[0].count) || 0;
-        } catch (err) {
-          console.error(`Error getting embedded count for ${tableName}:`, err);
-        }
-
-        // Get text columns count
-        const columnsResult = await sourcePool.query(
-          `SELECT COUNT(*) as count
-           FROM information_schema.columns
-           WHERE table_name = $1
-           AND table_schema = 'public'
-           AND data_type IN ('text', 'character varying', 'varchar')`,
-          [tableName]
-        );
+        const status = progressResult.rows[0]?.status || 'pending';
 
         tablesWithMeta.push({
           name: tableName,
-          displayName: displayName,
-          database: databaseName,
-          schema: 'public',
-          totalRecords: count,
-          embeddedRecords: embeddedCount,
-          textColumns: parseInt(columnsResult.rows[0].count)
+          displayName,
+          totalRecords,
+          embeddedRecords,
+          status,
+          progress: totalRecords > 0 ? Math.round((embeddedRecords / totalRecords) * 100) : 0
         });
       } catch (err) {
         console.error(`Error processing table ${tableName}:`, err);
@@ -342,7 +334,7 @@ router.get('/tables', async (req: Request, res: Response) => {
 
     res.json({
       tables: tablesWithMeta,
-      databaseName: databaseName
+      databaseName
     });
   } catch (error) {
     console.error('Tables fetch error:', error);
@@ -1259,16 +1251,12 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 }
 
 // Save embedding to database
-async function saveEmbedding(table: string, row: any, id: any, text: string, embedding: number[], model: string) {
+async function saveEmbedding(table: string, row: any, id: any, text: string, embedding: number[], model: string, sourceDbName?: string) {
   try {
-    // Saving embedding
-    const displayNames: { [key: string]: string } = {
-      'ozelgeler': 'Özelgeler',
-      'makaleler': 'Makaleler',
-      'sorucevap': 'Soru-Cevap',
-      'danistaykararlari': 'Danıştay Kararları',
-      'chat_history': 'Sohbet Geçmişi'
-    };
+    // Get display name from settings
+    const settings = await getDatabaseSettings();
+    const tableDisplayNames = settings.tableDisplayNames || {};
+    const displayName = tableDisplayNames[table] || table.charAt(0).toUpperCase() + table.slice(1);
 
     // Convert id to integer, but handle invalid ids
     const numericId = parseInt(id);
@@ -1276,34 +1264,57 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
       throw new Error(`Invalid ID for ${table}: ${id} is not a valid integer`);
     }
 
-    const result = await targetPool.query(
-      `INSERT INTO unified_embeddings (
-        source_type, source_name, source_table, source_id,
-        content, embedding, metadata, tokens_used, model_used
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (source_table, source_id)
-      DO UPDATE SET
-        embedding = $6,
-        content = $5,
-        tokens_used = $8,
-        model_used = $9,
-        updated_at = NOW()
-      RETURNING id`,
-      [
-        'database',
-        'rag_chatbot',
-        displayNames[table] || table,
-        numericId,
-        text,
-        `[${embedding.join(',')}]`,
-        JSON.stringify({ table, id }),
-        150,
-        model
-      ]
+    // First try to check if record exists
+    const existingRecord = await targetPool.query(
+      `SELECT id FROM unified_embeddings
+       WHERE source_table = $1 AND source_id = $2`,
+      [displayNames[table] || table, numericId]
     );
 
-    // Saved embedding
-  } catch (err) {
+    let result;
+    if (existingRecord.rows.length > 0) {
+      // Update existing record
+      result = await targetPool.query(
+        `UPDATE unified_embeddings SET
+          embedding = $1,
+          content = $2,
+          tokens_used = $3,
+          model_used = $4,
+          updated_at = NOW()
+        WHERE source_table = $5 AND source_id = $6
+        RETURNING id`,
+        [
+          `[${embedding.join(',')}]`,
+          text,
+          150,
+          model,
+          displayName,
+          numericId
+        ]
+      );
+    } else {
+      // Insert new record
+      result = await targetPool.query(
+        `INSERT INTO unified_embeddings (
+          source_type, source_name, source_table, source_id,
+          content, embedding, metadata, tokens_used, model_used
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING id`,
+        [
+          'database',
+          sourceDbName || (settings.sourceDatabase || 'rag_chatbot'),
+          displayName,
+          numericId,
+          text,
+          `[${embedding.join(',')}]`,
+          JSON.stringify({ table, id }),
+          150,
+          model
+        ]
+      );
+
+      // Saved embedding
+    } catch (err) {
     console.error('❌ Error saving embedding:', err);
     console.error('Table:', table, 'ID:', id);
     throw err; // Re-throw to stop processing
@@ -1513,6 +1524,63 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Tables error:', error);
     res.status(500).json({ error: 'Failed to fetch tables' });
+  }
+});
+
+// Reset migration progress endpoint
+router.post('/reset', async (req: Request, res: Response) => {
+  try {
+    console.log('🔄 Resetting migration progress...');
+
+    // Clear Redis progress data
+    await redis.del('embedding:progress');
+    await redis.del('embedding:status');
+    await redis.del('embedding:startTime');
+    await redis.del('embedding:lastUpdate');
+
+    // Clear any stuck processes in database
+    await asembPool.query(`
+      UPDATE embedding_progress
+      SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+      WHERE status IN ('processing', 'paused')
+    `);
+
+    // Reset migration progress object
+    migrationProgress = {
+      status: 'idle',
+      current: 0,
+      total: 0,
+      percentage: 0,
+      currentTable: '',
+      error: '',
+      tokensUsed: 0,
+      estimatedCost: 0,
+      startTime: null,
+      estimatedTimeRemaining: null,
+      processedTables: [],
+      currentBatch: 0,
+      totalBatches: 0,
+      tableProgress: {},
+      embeddingMethod: '',
+      tables: [],
+      newlyEmbedded: 0,
+      errorCount: 0,
+      processingSpeed: 0,
+      lastUpdate: Date.now()
+    };
+
+    console.log('✅ Migration progress reset successfully');
+    res.json({
+      success: true,
+      message: 'Migration progress has been reset',
+      status: 'idle'
+    });
+  } catch (error) {
+    console.error('❌ Error resetting migration:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset migration progress'
+    });
   }
 });
 

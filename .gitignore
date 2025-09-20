@@ -310,3 +310,6 @@ scripts/legacy/
 scripts/maintenance/
 backend/*.js
 backend/nul
+
+# Submodules / Test Directories
+awesome-claude-code-agents/

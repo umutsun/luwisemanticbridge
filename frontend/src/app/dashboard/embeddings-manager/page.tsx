@@ -25,7 +25,8 @@ import {
   Loader2,
   Settings,
   AlertTriangle,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -214,6 +215,38 @@ export default function EmbeddingsManagerPage() {
     setCurrentWorkerCount(null);
     setProgressUpdateCount(0);
     // Note: Not refreshing tables here to avoid unnecessary API calls
+  };
+
+  const resetMigration = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/reset`, { method: 'POST' });
+      if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to reset migration.');
+        toast({
+          title: "Hata",
+          description: errorData.error || 'Migration sıfırlanamadı.',
+          variant: "destructive",
+        });
+      } else {
+        // Clear frontend state
+        cleanupMigrationState();
+        setProgress(null);
+        setDisplayProgress(null);
+
+        toast({
+          title: "Sıfırlandı",
+          description: "Migration durumu tamamen sıfırlandı.",
+        });
+      }
+    } catch (error) {
+      setError('An error occurred while resetting the migration.');
+      toast({
+        title: "Hata",
+        description: "Migration sıfırlanırken bir hata oluştu.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Custom hook for SSE progress updates
@@ -1051,12 +1084,17 @@ export default function EmbeddingsManagerPage() {
                       )}
                     </div> :
                   progress?.status === 'paused' ?
-                    <div className="flex gap-2">
-                      <Button onClick={() => startMigration(true)} className="flex-1">
-                        <Play className="w-4 h-4 mr-2" />Devam Et
-                      </Button>
-                      <Button onClick={abortMigration} variant="destructive" className="flex-1">
-                        <X className="w-4 h-4 mr-2" />İptal Et
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Button onClick={() => startMigration(true)} className="flex-1">
+                          <Play className="w-4 h-4 mr-2" />Devam Et
+                        </Button>
+                        <Button onClick={abortMigration} variant="destructive" className="flex-1">
+                          <X className="w-4 h-4 mr-2" />İptal Et
+                        </Button>
+                      </div>
+                      <Button onClick={resetMigration} variant="outline" className="w-full">
+                        <RotateCcw className="w-4 h-4 mr-2" />Sıfırla
                       </Button>
                     </div> :
                   progress?.status === 'processing' ?
