@@ -135,7 +135,8 @@ export default function VerticalProgressDisplay({
       // Smooth progress animation only
       const progressInterval = setInterval(() => {
         setCurrentProgress(prev => {
-          const target = progress.percentage || 0;
+          // Calculate percentage from current/total instead of using progress.percentage
+          const target = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
           const diff = target - prev;
           if (Math.abs(diff) < 0.05) return target;
           return prev + diff * 0.05; // Slower animation for smoother effect

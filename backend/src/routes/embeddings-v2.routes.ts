@@ -808,9 +808,11 @@ router.post('/generate', async (req: Request, res: Response) => {
       migrationProgress.status = 'processing';
       migrationProgress.lastHeartbeat = Date.now(); // Initialize heartbeat
       migrationProgress.workerCount = workerCount; // Update worker count when resuming
+      migrationProgress.currentTable = remainingTables[0] || tables[0]; // Set current table
 
       // Clear any paused status in Redis
       await redis.set('embedding:status', 'processing');
+      await saveProgressToRedis(); // Save before starting workers
       console.log('Continuing existing migration from progress:', {
         current: migrationProgress.current,
         total: migrationProgress.total
@@ -2468,6 +2470,10 @@ router.post('/resume', async (req: Request, res: Response) => {
         remainingTables.push(tableName);
       }
     }
+
+    // Set current table for progress tracking
+    migrationProgress.currentTable = remainingTables[0] || migrationProgress.tables?.[0] || '';
+    await saveProgressToRedis();
 
     // Get settings from the saved progress (define operationId early for logging)
     const batchSize = migrationProgress.batchSize || 100;

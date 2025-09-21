@@ -1349,20 +1349,20 @@ export default function EmbeddingsManagerPage() {
                                 {expandedTables.has(table.name) && (
                                     <div className="mt-4 pt-4 border-t">
                                         {loadingRecentRecords.has(table.name) ? (
-                                            <div className="text-center py-4">
-                                                <Loader2 className="h-4 w-4 animate-spin inline" />
-                                                <span className="text-sm text-muted-foreground ml-2">Loading recent records...</span>
+                                            <div className="text-center py-8">
+                                                <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+                                                <p className="text-sm text-muted-foreground">Loading recent records...</p>
                                             </div>
                                         ) : recentRecords[table.name] && recentRecords[table.name].length > 0 ? (
                                             <div>
-                                                <h4 className="text-sm font-medium mb-2">Recent 20 Records</h4>
-                                                <div className="overflow-x-auto">
+                                                <h4 className="text-sm font-medium mb-3">Recent 20 Records</h4>
+                                                <div className="border rounded-lg">
                                                     <Table>
                                                         <TableHeader>
-                                                            <TableRow>
-                                                                <TableHead className="w-16">ID</TableHead>
-                                                                <TableHead>Status</TableHead>
-                                                                <TableHead>Content Preview</TableHead>
+                                                            <TableRow className="bg-muted/50">
+                                                                <TableHead className="w-16 text-xs font-medium text-muted-foreground">ID</TableHead>
+                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Status</TableHead>
+                                                                <TableHead className="text-xs font-medium text-muted-foreground">Content Preview</TableHead>
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
@@ -1412,26 +1412,26 @@ export default function EmbeddingsManagerPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left p-2">Tarih</th>
-                          <th className="text-left p-2">Model</th>
-                          <th className="text-left p-2">Tablolar</th>
-                          <th className="text-right p-2">İşlenen</th>
-                          <th className="text-right p-2">Başarılı / Hatalı</th>
-                          <th className="text-right p-2">Batch / Worker</th>
-                          <th className="text-center p-2">Durum</th>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">Tarih</th>
+                          <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">Model</th>
+                          <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">Tablolar</th>
+                          <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">İşlenen</th>
+                          <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">Başarılı / Hatalı</th>
+                          <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">Batch / Worker</th>
+                          <th className="text-center px-3 py-2.5 text-xs font-medium text-muted-foreground">Durum</th>
                         </tr>
                       </thead>
                       <tbody>
                         {embeddingHistory.map((record: any, index: number) => (
                           <tr key={record.id || index} className="border-b hover:bg-muted/50">
-                            <td className="p-2">
+                            <td className="px-3 py-3">
                               {new Date(record.started_at || record.created_at).toLocaleString('tr-TR')}
                             </td>
-                            <td className="p-2 font-mono text-xs">
+                            <td className="px-3 py-3 font-mono text-xs">
                               {record.embedding_model || '-'}
                             </td>
-                            <td className="p-2">
+                            <td className="px-3 py-3">
                               <div className="flex flex-wrap gap-1">
                                 {record.source_table?.map((table: string, i: number) => (
                                   <Badge key={i} variant="outline" className="text-xs">
@@ -1440,16 +1440,16 @@ export default function EmbeddingsManagerPage() {
                                 ))}
                               </div>
                             </td>
-                            <td className="p-2 text-right">
+                            <td className="px-3 py-3 text-right">
                               {record.records_processed?.toLocaleString('tr-TR') || '0'}
                             </td>
-                            <td className="p-2 text-right">
+                            <td className="px-3 py-3 text-right">
                               {record.records_success?.toLocaleString('tr-TR') || '0'} / {record.records_failed?.toLocaleString('tr-TR') || '0'}
                             </td>
-                            <td className="p-2 text-right">
+                            <td className="px-3 py-3 text-right">
                               {record.batch_size || '-'} / {record.worker_count || '-'}
                             </td>
-                            <td className="p-2 text-center">
+                            <td className="px-3 py-3 text-center">
                               <Badge variant={
                                 record.status === 'completed' ? 'default' :
                                 record.status === 'error' ? 'destructive' :
@@ -1482,10 +1482,10 @@ export default function EmbeddingsManagerPage() {
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
             <div className="xl:col-span-1 space-y-6">
               <Card>
-                <CardHeader><CardTitle>İşlem Ayarları</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Embedding Provider</Label>
+                <CardHeader className="pb-4"><CardTitle>İşlem Ayarları</CardTitle></CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Embedding Provider</Label>
                     {progress?.status === 'processing' || progress?.status === 'paused' ? (
                       <div className="p-2 border rounded-md bg-muted">
                         {currentEmbeddingMethod === 'e5-mistral' && 'E5-Mistral-7B (HuggingFace - Ücretsiz)'}
@@ -1540,56 +1540,46 @@ export default function EmbeddingsManagerPage() {
                     )}
                   </div>
 
-                  <div>
-                    <Label>Batch Size</Label>
-                    {progress?.status === 'processing' ? (
-                      <div className="p-2 border rounded-md bg-muted">
-                        {currentBatchSize || batchSize}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Batch Size</Label>
+                    <div className="space-y-1">
+                      <input
+                        type="range"
+                        min="5"
+                        max="200"
+                        step="5"
+                        value={currentBatchSize || batchSize}
+                        onChange={(e) => setBatchSize(parseInt(e.target.value))}
+                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary disabled:[&::-webkit-slider-thumb]:bg-muted-foreground/50"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>5</span>
+                        <span className="font-mono text-foreground">{currentBatchSize || batchSize}</span>
+                        <span>200</span>
                       </div>
-                    ) : (
-                      <Select
-                        value={batchSize.toString()}
-                        onValueChange={(v) => setBatchSize(parseInt(v))}
-                        disabled={progress?.status === 'processing'}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="5">5</SelectItem>
-                          <SelectItem value="10">10</SelectItem>
-                          <SelectItem value="20">20</SelectItem>
-                          <SelectItem value="30">30</SelectItem>
-                          <SelectItem value="40">40</SelectItem>
-                          <SelectItem value="50">50</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
+                    </div>
                   </div>
-                  <div>
-                    <Label>Paralel Embedder</Label>
-                    {progress?.status === 'processing' ? (
-                      <div className="p-2 border rounded-md bg-muted">
-                        {currentWorkerCount || workerCount}
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Paralel Embedder</Label>
+                    <div className="space-y-1">
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        step="1"
+                        value={currentWorkerCount || workerCount}
+                        onChange={(e) => setWorkerCount(parseInt(e.target.value))}
+                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary disabled:[&::-webkit-slider-thumb]:bg-muted-foreground/50"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>1</span>
+                        <span className="font-mono text-foreground">{currentWorkerCount || workerCount}</span>
+                        <span>20</span>
                       </div>
-                    ) : (
-                      <Select
-                        value={workerCount.toString()}
-                        onValueChange={(v) => setWorkerCount(parseInt(v))}
-                        disabled={progress?.status === 'processing'}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1</SelectItem>
-                          <SelectItem value="2">2</SelectItem>
-                          <SelectItem value="3">3</SelectItem>
-                          <SelectItem value="4">4</SelectItem>
-                          <SelectItem value="5">5</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
+                    </div>
                   </div>
                   {!progress || progress?.status === 'idle' || progress?.status === 'completed' ?
                     <div className="space-y-2">
