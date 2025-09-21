@@ -1,7 +1,8 @@
 import { OpenAI } from 'openai';
 import { v4 as uuidv4 } from 'uuid';
-import { semanticSearch } from './semantic-search.service';
+import { semanticSearch, SemanticSearchService } from './semantic-search.service';
 import claudeService from './claude.service';
+import geminiService from './gemini.service';
 import pool from '../config/database';
 import dotenv from 'dotenv';
 
@@ -27,15 +28,14 @@ export class RAGChatService {
   private pool = pool;
   private openai: OpenAI | null = null;
   private useOpenAI: boolean = false;
-  private aiProvider: string;
+  private aiProviderPriority: string[] = ['gemini', 'claude', 'openai', 'fallback'];
   private fallbackEnabled: boolean;
 
   constructor() {
-    
-    // Get AI provider settings
-    this.aiProvider = process.env.AI_PROVIDER || 'fallback';
-    this.fallbackEnabled = process.env.AI_FALLBACK_ENABLED === 'true';
-    
+
+    // Set default values
+    this.fallbackEnabled = process.env.AI_FALLBACK_ENABLED !== 'false'; // Default to true
+
     // Initialize OpenAI only if API key is available
     if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'sk-proj-YOUR_OPENAI_API_KEY_HERE') {
       this.openai = new OpenAI({
@@ -46,8 +46,44 @@ export class RAGChatService {
     } else {
       console.log('⚠️  OpenAI API key not configured');
     }
-    
-    console.log(`🤖 AI Provider: ${this.aiProvider}, Fallback: ${this.fallbackEnabled}`);
+
+    console.log(`🤖 AI Provider Priority: ${this.aiProviderPriority.join(', ')}, Fallback: ${this.fallbackEnabled}`);
+
+    // Load priority asynchronously
+    this.loadPriority();
+  }
+
+  private async loadPriority() {
+    try {
+      this.aiProviderPriority = await this.getProviderPriority();
+      console.log(`🔄 Updated AI Provider Priority: ${this.aiProviderPriority.join(', ')}`);
+    } catch (error) {
+      // Keep default priority
+    }
+  }
+
+  private async getProviderPriority(): Promise<string[]> {
+    try {
+      // Try to get from database first
+      const result = await pool.query(
+        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'ai_provider_priority'"
+      );
+
+      if (result.rows[0]?.setting_value) {
+        return JSON.parse(result.rows[0].setting_value);
+      }
+    } catch (error) {
+      // Database might not be ready yet
+    }
+
+    // Fallback to environment variable or default
+    const envPriority = process.env.AI_PROVIDER_PRIORITY;
+    if (envPriority) {
+      return envPriority.split(',').map(p => p.trim());
+    }
+
+    // Default priority
+    return ['gemini', 'claude', 'openai', 'fallback'];
   }
 
   /**
@@ -64,10 +100,30 @@ export class RAGChatService {
       const convId = conversationId || uuidv4();
       await this.ensureConversation(convId, userId, message);
 
-      // 2. Search for relevant documents from rag_data using pgvector
-      console.log('Searching rag_data.documents with pgvector...');
-      // Get only highly relevant sources
-      const allResults = await semanticSearch.hybridSearch(message, 20); // Reduced from 50 to 20
+      // 2. Search for relevant documents using configured source
+      // Check environment variable first, then database setting
+      let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+
+      // If not set in environment, check database
+      if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
+        try {
+          const result = await pool.query(
+            "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
+          );
+          useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
+        } catch (error) {
+          // Use default (false) if database check fails
+        }
+      }
+
+      console.log(`Searching in ${useUnifiedEmbeddings ? 'unified_embeddings' : 'rag_data.documents'} with pgvector...`);
+
+      let allResults = [];
+      if (useUnifiedEmbeddings) {
+        allResults = await semanticSearch.unifiedSemanticSearch(message, 20);
+      } else {
+        allResults = await semanticSearch.hybridSearch(message, 20);
+      }
       
       // Filter sources with relevance above 60% for better quality
       let searchResults = allResults.filter(result => {
@@ -298,64 +354,62 @@ export class RAGChatService {
   ) {
     let response = null;
     let lastError = null;
+    let successfulProvider = null;
 
-    // Try primary provider
-    try {
-      switch (this.aiProvider) {
-        case 'claude':
-          if (claudeService.isAvailable()) {
-            response = await claudeService.generateResponse(query, context, history);
-          } else {
-            throw new Error('Claude API not available');
-          }
-          break;
-          
-        case 'openai':
-          if (this.useOpenAI && this.openai) {
-            response = await this.generateOpenAIResponse(query, context, history, temperature, searchResults);
-          } else {
-            throw new Error('OpenAI API not available');
-          }
-          break;
-          
-        case 'fallback':
-        default:
-          response = this.generateDemoResponse(query, context);
-          break;
-      }
-    } catch (error: any) {
-      console.error(`${this.aiProvider} API error:`, error);
-      lastError = error;
-    }
+    // Get fresh priority settings for each request
+    const providerPriority = await this.getProviderPriority();
 
-    // Try fallback if enabled and primary failed
-    if (!response && this.fallbackEnabled) {
-      console.log('🔄 Trying fallback providers...');
-      
-      // Try OpenAI if not already tried
-      if (this.aiProvider !== 'openai' && this.useOpenAI && this.openai) {
-        try {
-          response = await this.generateOpenAIResponse(query, context, history, temperature, searchResults);
-          console.log('✅ OpenAI fallback successful');
-        } catch (error) {
-          console.error('OpenAI fallback error:', error);
+    // Try providers in priority order
+    for (const provider of providerPriority) {
+      if (response) break; // Stop if we got a response
+
+      console.log(`🤖 Trying ${provider}...`);
+
+      try {
+        switch (provider) {
+          case 'gemini':
+            if (geminiService.isAvailable()) {
+              response = await geminiService.generateResponse(query, context, history, temperature);
+              successfulProvider = 'Gemini';
+              console.log('✅ Gemini successful');
+            } else {
+              throw new Error('Gemini API not available');
+            }
+            break;
+
+          case 'claude':
+            if (claudeService.isAvailable()) {
+              response = await claudeService.generateResponse(query, context, history);
+              successfulProvider = 'Claude';
+              console.log('✅ Claude successful');
+            } else {
+              throw new Error('Claude API not available');
+            }
+            break;
+
+          case 'openai':
+            if (this.useOpenAI && this.openai) {
+              response = await this.generateOpenAIResponse(query, context, history, temperature, searchResults);
+              successfulProvider = 'OpenAI';
+              console.log('✅ OpenAI successful');
+            } else {
+              throw new Error('OpenAI API not available');
+            }
+            break;
+
+          case 'fallback':
+            response = this.generateDemoResponse(query, context);
+            successfulProvider = 'Demo';
+            console.log('✅ Demo response generated');
+            break;
+
+          default:
+            console.warn(`Unknown provider: ${provider}`);
+            break;
         }
-      }
-      
-      // Try Claude if not already tried
-      if (!response && this.aiProvider !== 'claude' && claudeService.isAvailable()) {
-        try {
-          response = await claudeService.generateResponse(query, context, history);
-          console.log('✅ Claude fallback successful');
-        } catch (error) {
-          console.error('Claude fallback error:', error);
-        }
-      }
-      
-      // Final fallback to demo response
-      if (!response) {
-        console.log('📝 Using demo response as final fallback');
-        response = this.generateDemoResponse(query, context);
+      } catch (error: any) {
+        console.error(`${provider} API error:`, error.message);
+        lastError = error;
       }
     }
 
@@ -363,7 +417,11 @@ export class RAGChatService {
       throw lastError || new Error('All AI providers failed');
     }
 
-    return response;
+    // Add provider info to response
+    return {
+      ...response,
+      provider: successfulProvider
+    };
   }
 
   /**

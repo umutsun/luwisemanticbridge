@@ -89,7 +89,7 @@ export default function EmbeddingsManagerPage() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [embeddingStats, setEmbeddingStats] = useState<any>(null);
-  const [batchSize, setBatchSize] = useState(50);
+  const [batchSize, setBatchSize] = useState(100);
   const [workerCount, setWorkerCount] = useState(2);
   const [embeddingMethod, setEmbeddingMethod] = useState('google-text-embedding-004');
   const [currentEmbeddingMethod, setCurrentEmbeddingMethod] = useState<string | null>(null);
@@ -107,12 +107,53 @@ export default function EmbeddingsManagerPage() {
   const [cleanupRecommendations, setCleanupRecommendations] = useState<string[]>([]);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const { toast } = useToast();
+  const userPausedRef = useRef(false);
+  const lastAutoResumeRef = useRef(0); // Track last auto-resume timestamp
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [recoverMessage, setRecoverMessage] = useState('');
+
+  // Load saved settings from localStorage
+  useEffect(() => {
+    const savedBatchSize = localStorage.getItem('embeddingBatchSize');
+    const savedWorkerCount = localStorage.getItem('embeddingWorkerCount');
+    const savedEmbeddingMethod = localStorage.getItem('embeddingEmbeddingMethod');
+
+    if (savedBatchSize) {
+      setBatchSize(parseInt(savedBatchSize));
+    }
+    if (savedWorkerCount) {
+      setWorkerCount(parseInt(savedWorkerCount));
+    }
+    if (savedEmbeddingMethod) {
+      setEmbeddingMethod(savedEmbeddingMethod);
+    }
+  }, []);
+
+  // Save settings to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('embeddingBatchSize', batchSize.toString());
+  }, [batchSize]);
+
+  useEffect(() => {
+    localStorage.setItem('embeddingWorkerCount', workerCount.toString());
+  }, [workerCount]);
+
+  useEffect(() => {
+    localStorage.setItem('embeddingEmbeddingMethod', embeddingMethod);
+  }, [embeddingMethod]);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings';
 
   // Check and recover from stuck process
   const checkAndRecoverStuckProcess = async () => {
     if (!progress || progress.status !== 'processing') return;
+
+    // Check if we're in cooldown period (5 minutes since last auto-resume)
+    const now = Date.now();
+    if (now - lastAutoResumeRef.current < 300000) { // 5 minutes cooldown
+      console.log('Skipping stuck check - in cooldown period');
+      return;
+    }
 
     try {
       const response = await fetch(`${API_BASE}/recover`, {
@@ -124,15 +165,53 @@ export default function EmbeddingsManagerPage() {
 
         if (data.action === 'paused') {
           // Process was stuck and has been paused
+          console.log('Process was stuck, pausing and will auto-resume...');
+
+          // Check if progress data is valid (total should not be 0)
+          if (data.progress?.total === 0) {
+            console.warn('Invalid progress data detected (total: 0), skipping auto-resume');
+            toast({
+              title: "Hata",
+              description: "İşlem verileri hatalı. Lütfen işlemi yeniden başlatın.",
+              variant: "destructive",
+            });
+            return;
+          }
+
           toast({
             title: "İşlem Duraklatıldı",
-            description: "Embedding işlemi aktif değil olduğu için otomatik olarak duraklatıldı.",
+            description: "Embedding işlemi aktif değil olduğu için otomatik olarak duraklatıldı. Otomatik devam ediliyor...",
             variant: "default",
           });
 
           // Update progress to reflect paused state
           setProgress(data.progress);
           setDisplayProgress(data.progress);
+
+          // Auto-resume after a short delay
+          setTimeout(async () => {
+            try {
+              const resumeResponse = await fetch(`${API_BASE}/resume`, {
+                method: 'POST'
+              });
+
+              if (resumeResponse.ok) {
+                lastAutoResumeRef.current = Date.now(); // Update last auto-resume timestamp
+                toast({
+                  title: "Otomatik Devam Edildi",
+                  description: "Embedding işlemi otomatik olarak devam ettirildi.",
+                  variant: "default",
+                });
+              }
+            } catch (error) {
+              console.error('Auto-resume failed:', error);
+              toast({
+                title: "Otomatik Devam Başarısız",
+                description: "İşlemi manuel olarak devam ettirmeniz gerekebilir.",
+                variant: "destructive",
+              });
+            }
+          }, 5000); // Wait 5 seconds before resuming (increased from 2)
         }
       }
     } catch (error) {
@@ -240,8 +319,17 @@ export default function EmbeddingsManagerPage() {
       return;
     }
 
+    // Fix total value if it's 0 but tableProgress has values
+    let fixedProgress = { ...progress };
+    if (progress.total === 0 && progress.tableProgress && progress.currentTable) {
+      const tableInfo = progress.tableProgress[progress.currentTable];
+      if (tableInfo && tableInfo.total > 0) {
+        fixedProgress.total = tableInfo.total;
+      }
+    }
+
     // Update display progress directly for immediate UI feedback
-    setDisplayProgress(progress);
+    setDisplayProgress(fixedProgress);
   }, [progress]);
 
   const fetchAvailableTablesAndStats = async () => {
@@ -541,7 +629,7 @@ export default function EmbeddingsManagerPage() {
         if (response.ok) {
           const data = await response.json();
           if (data.status === 'processing' || data.status === 'paused') {
-            console.log('Found active process, updating progress:', data);
+            console.log('Found active process, updating progress:', JSON.stringify(data, null, 2));
             setProgress(data);
             setDisplayProgress(data);
           }
@@ -576,6 +664,65 @@ export default function EmbeddingsManagerPage() {
     }
   }, [progress?.status, progress?.tables, progress?.currentTable]);
 
+  // Auto-recovery effect for paused processes
+  useEffect(() => {
+    if (progress?.status === 'paused' && !userPausedRef.current) {
+      console.log('🔄 Auto-recovering paused process...');
+
+      // Show recovering state
+      setIsRecovering(true);
+      setRecoverMessage('Sistem kontrol ediliyor...');
+
+      // Attempt to recover after a short delay
+      const recoverTimer = setTimeout(async () => {
+        try {
+          setRecoverMessage('Otomatik devam ettiriliyor...');
+          const response = await fetch(`${API_BASE}/recover`, { method: 'POST' });
+          const data = await response.json();
+
+          if (data.success && data.action === 'paused') {
+            // Show notification that process was paused due to inactivity
+            toast({
+              title: "Otomatik Duraklatma",
+              description: "İşlem aktivite olmaması nedeniyle duraklatıldı. Devam etmek için butona basın.",
+              duration: 5000,
+            });
+            setIsRecovering(false);
+            setRecoverMessage('');
+          } else if (data.success && data.action === 'resumed') {
+            // Successfully resumed
+            toast({
+              title: "Otomatik Devam Etme",
+              description: "İşlem otomatik olarak devam ettiriliyor.",
+              duration: 3000,
+            });
+            setIsRecovering(false);
+            setRecoverMessage('');
+          }
+        } catch (error) {
+          console.error('Auto-recovery failed:', error);
+          // Reset UI state on error
+          setIsRecovering(false);
+          setRecoverMessage('');
+        } finally {
+          // Always reset UI state after attempt
+          setIsRecovering(false);
+          setRecoverMessage('');
+        }
+      }, 5000); // Increased delay to prevent rapid loops
+
+      return () => clearTimeout(recoverTimer);
+    }
+  }, [progress?.status]);
+
+  // Reset recovering state when status changes
+  useEffect(() => {
+    if (progress?.status === 'processing' || progress?.status === 'error') {
+      setIsRecovering(false);
+      setRecoverMessage('');
+    }
+  }, [progress?.status]);
+
   useEffect(() => {
     fetchAvailableTablesAndStats();
 
@@ -602,6 +749,12 @@ export default function EmbeddingsManagerPage() {
               if (tablesToRestore.length > 0) {
                 setSelectedTables(tablesToRestore);
                 setMigrationTables(tablesToRestore);
+              }
+
+              // Restore worker count if available
+              if (data.workerCount) {
+                setCurrentWorkerCount(data.workerCount);
+                setWorkerCount(data.workerCount);
               }
             }
           }
@@ -718,12 +871,12 @@ export default function EmbeddingsManagerPage() {
       // Check more frequently when process might be stuck
       stuckCheckInterval = setInterval(async () => {
         await checkAndRecoverStuckProcess();
-      }, 10000); // Check every 10 seconds when might be stuck
+      }, 60000); // Check every 60 seconds when might be stuck
     } else if (progress?.status === 'processing') {
-      // Regular check when processing
+      // Regular check when processing - make it less frequent to avoid rapid cycles
       stuckCheckInterval = setInterval(async () => {
         await checkAndRecoverStuckProcess();
-      }, 30000); // Check every 30 seconds
+      }, 120000); // Check every 2 minutes (matching backend threshold)
     }
 
     return () => {
@@ -735,6 +888,7 @@ export default function EmbeddingsManagerPage() {
 
   const startMigration = async (resume = false) => {
     console.log('Starting migration:', { resume, selectedTables, migrationTables });
+    userPausedRef.current = false; // Reset user pause flag when starting migration
     if (selectedTables.length === 0 && !resume) {
         setError('Please select at least one table.');
         toast({
@@ -910,6 +1064,7 @@ export default function EmbeddingsManagerPage() {
           variant: "destructive",
         });
       } else {
+        userPausedRef.current = true; // Track that user manually paused
         toast({
           title: "Paused",
           description: "Embedding process has been paused.",
@@ -928,6 +1083,37 @@ export default function EmbeddingsManagerPage() {
       toast({
         title: "Error",
         description: "An error occurred while pausing the migration.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/resume`, { method: 'POST' });
+      if (!response.ok) {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to resume migration.');
+        toast({
+          title: "Error",
+          description: errorData.error || 'Migration could not be resumed.',
+          variant: "destructive",
+        });
+      } else {
+        userPausedRef.current = false; // Reset user pause flag
+        toast({
+          title: "Resumed",
+          description: "Embedding process has been resumed.",
+        });
+
+        // The SSE connection will automatically reconnect when status changes to processing
+        // through the useProgressStream hook's effect dependency on progress.status
+      }
+    } catch (error) {
+      setError('An error occurred while resuming the migration.');
+      toast({
+        title: "Error",
+        description: "An error occurred while resuming the migration.",
         variant: "destructive",
       });
     }
@@ -1331,7 +1517,7 @@ export default function EmbeddingsManagerPage() {
                       <Select
                         value={embeddingMethod}
                         onValueChange={setEmbeddingMethod}
-                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                        disabled={progress?.status === 'processing'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1364,7 +1550,7 @@ export default function EmbeddingsManagerPage() {
                       <Select
                         value={batchSize.toString()}
                         onValueChange={(v) => setBatchSize(parseInt(v))}
-                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                        disabled={progress?.status === 'processing'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1390,7 +1576,7 @@ export default function EmbeddingsManagerPage() {
                       <Select
                         value={workerCount.toString()}
                         onValueChange={(v) => setWorkerCount(parseInt(v))}
-                        disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                        disabled={progress?.status === 'processing'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -1405,7 +1591,7 @@ export default function EmbeddingsManagerPage() {
                       </Select>
                     )}
                   </div>
-                  {!progress || progress?.status === 'idle' || progress?.status === 'completed' || progress?.status === 'error' ?
+                  {!progress || progress?.status === 'idle' || progress?.status === 'completed' ?
                     <div className="space-y-2">
                       <Button
                         onClick={() => startMigration(false)}
@@ -1425,11 +1611,54 @@ export default function EmbeddingsManagerPage() {
                         </p>
                       )}
                     </div> :
+                  progress?.status === 'error' ?
+                    <div className="space-y-2">
+                      <div className="space-y-2">
+                        <Button onClick={async () => {
+                          try {
+                            const response = await fetch(`${API_BASE}/reset`, {
+                              method: 'POST'
+                            });
+                            if (response.ok) {
+                              toast({
+                                title: "Success",
+                                description: "Embedding progress reset successfully",
+                              });
+                              resetMigration();
+                            }
+                          } catch (error) {
+                            toast({
+                              title: "Error",
+                              description: "Failed to reset progress",
+                              variant: "destructive",
+                            });
+                          }
+                        }} variant="outline" className="w-full">
+                          <RotateCcw className="w-4 h-4 mr-2" />Sıfırla
+                        </Button>
+                        <p className="text-xs text-muted-foreground text-center">
+                          {progress.error || "İşlemde hata oluştu"}
+                        </p>
+                      </div>
+                    </div> :
                   progress?.status === 'paused' ?
                     <div className="space-y-2">
                       <div className="space-y-2">
-                        <Button onClick={() => startMigration(true)} className="w-full">
-                          <Play className="w-4 h-4 mr-2" />Devam Et
+                        <Button
+                          onClick={handleResume}
+                          className="w-full"
+                          disabled={isRecovering}
+                        >
+                          {isRecovering ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              {recoverMessage || 'Devam Ediliyor...'}
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 mr-2" />Devam Et
+                            </>
+                          )}
                         </Button>
                         <Button onClick={() => { abortMigration(); resetMigration(); }} variant="destructive" className="w-full">
                           <X className="w-4 h-4 mr-2" />İptal Et
@@ -1440,38 +1669,28 @@ export default function EmbeddingsManagerPage() {
                       </div>
                     </div> :
                   progress?.status === 'processing' ?
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       <Button onClick={pauseMigration} variant="secondary" className="w-full">
                         <Pause className="w-4 h-4 mr-2" />Duraklat
                       </Button>
                       <Button onClick={() => { abortMigration(); resetMigration(); }} variant="destructive" className="w-full">
                         <X className="w-4 h-4 mr-2" />İptal Et
                       </Button>
-                      <p className="text-xs text-muted-foreground text-center">
-                        {progress.currentTable ? `${progress.currentTable} işleniyor...` : "İşlem devam ediyor..."}
-                      </p>
+                      {displayProgress && (displayProgress.status === 'processing' || displayProgress.status === 'paused') && (
+                        <div className="pt-4 border-t">
+                          <VerticalProgressDisplay
+                            progress={displayProgress}
+                            getCurrentTableInfo={getCurrentTableInfo}
+                            migrationTables={migrationTables}
+                          />
+                        </div>
+                      )}
                     </div> :
                   null
                   }
                 </CardContent>
               </Card>
-              {displayProgress && (displayProgress.status === 'processing' || displayProgress.status === 'paused') && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">
-                      {displayProgress.status === 'processing' ? 'Aktif Embedding İşlemi' : 'Duraklatılmış Embedding İşlemi'}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <VerticalProgressDisplay
-                      progress={displayProgress}
-                      getCurrentTableInfo={getCurrentTableInfo}
-                      migrationTables={migrationTables}
-                    />
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+              </div>
             <div className="xl:col-span-3">
               <Card>
                 <CardHeader>
@@ -1491,58 +1710,108 @@ export default function EmbeddingsManagerPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        if (selectedTables.length === availableTables.length) {
+                        const tablesToSelect = availableTables.filter(t =>
+                          t.name !== 'migration_history' && // Exclude system tables
+                          !(t.totalRecords > 0 && t.embeddedRecords === t.totalRecords)
+                        );
+                        const tablesToSelectNames = tablesToSelect.map(t => t.name);
+
+                        if (selectedTables.length === tablesToSelectNames.length) {
                           setSelectedTables([]);
                         } else {
-                          setSelectedTables(availableTables.map(t => t.name));
+                          setSelectedTables(tablesToSelectNames);
                         }
                       }}
-                      disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                      disabled={progress?.status === 'processing'}
                     >
-                      {selectedTables.length === availableTables.length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
+                      {selectedTables.length === availableTables.filter(t =>
+                        t.name !== 'migration_history' &&
+                        !(t.totalRecords > 0 && t.embeddedRecords === t.totalRecords)
+                      ).length ? 'Tümünü Kaldır' : 'Tümünü Seç'}
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
                   {isLoadingTables ? <div className="text-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> :
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    {availableTables.map((table) => (
-                      <div key={table.name} className="flex items-start space-x-2 p-3 border rounded-lg hover:bg-accent/50 transition-colors">
-                        <input
-                          type="checkbox"
-                          id={`table-${table.name}`}
-                          checked={selectedTables.includes(table.name)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedTables([...selectedTables, table.name]);
-                            } else {
-                              setSelectedTables(selectedTables.filter(t => t !== table.name));
+                    {availableTables.map((table) => {
+                      // Skip system tables like migration_history
+                      const isSystemTable = table.name === 'migration_history';
+                      const isFullyEmbedded = table.totalRecords > 0 &&
+                                             table.embeddedRecords === table.totalRecords;
+                      const completionPercentage = table.totalRecords > 0 ?
+                                              Math.round((table.embeddedRecords / table.totalRecords) * 100) : 0;
+
+                      // Don't show system tables
+                      if (isSystemTable) {
+                        return null;
+                      }
+
+                      return (
+                        <div
+                          key={table.name}
+                          className={`flex items-start space-x-2 p-3 border rounded-lg transition-colors ${
+                            isFullyEmbedded
+                              ? 'bg-gray-100 dark:bg-gray-800/50 opacity-75'
+                              : 'hover:bg-accent/50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            id={`table-${table.name}`}
+                            checked={selectedTables.includes(table.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTables([...selectedTables, table.name]);
+                              } else {
+                                setSelectedTables(selectedTables.filter(t => t !== table.name));
+                              }
+                            }}
+                            disabled={
+                              progress?.status === 'processing' ||
+                              progress?.status === 'paused' ||
+                              isFullyEmbedded
                             }
-                          }}
-                          disabled={progress?.status === 'processing' || progress?.status === 'paused'}
-                          className="mt-1 rounded"
-                        />
-                        <label htmlFor={`table-${table.name}`} className="text-sm cursor-pointer flex-1">
-                          <div className="font-medium">
-                            {table.displayName}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {table.totalRecords?.toLocaleString('tr-TR') || '0'} kayıt
-                            {table.embeddedRecords > 0 && (
-                              <span className="text-green-600 dark:text-green-400">
-                                {' • '}{table.embeddedRecords?.toLocaleString('tr-TR') || '0'} embed edilmiş
-                                ({Math.round((table.embeddedRecords / table.totalRecords) * 100)}%)
-                              </span>
-                            )}
-                            {table.pendingRecords > 0 && (
-                              <span className="text-orange-600 dark:text-orange-400">
-                                {' • '}{table.pendingRecords?.toLocaleString('tr-TR') || '0'} bekliyor
-                              </span>
-                            )}
-                          </div>
-                        </label>
-                      </div>
-                    ))}
+                            className="mt-1 rounded"
+                          />
+                          <label
+                            htmlFor={`table-${table.name}`}
+                            className={`text-sm cursor-pointer flex-1 ${
+                              isFullyEmbedded ? 'cursor-default' : ''
+                            }`}
+                          >
+                            <div className="font-medium flex items-center gap-2">
+                              {table.displayName}
+                              {isFullyEmbedded && (
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              {table.totalRecords?.toLocaleString('tr-TR') || '0'} kayıt
+                              {table.embeddedRecords > 0 && (
+                                <span className={isFullyEmbedded
+                                  ? 'text-green-700 dark:text-green-400 font-medium'
+                                  : 'text-green-600 dark:text-green-400'
+                                }>
+                                  {' • '}{table.embeddedRecords?.toLocaleString('tr-TR') || '0'} embed edilmiş
+                                  ({completionPercentage}%)
+                                </span>
+                              )}
+                              {table.pendingRecords > 0 && !isFullyEmbedded && (
+                                <span className="text-orange-600 dark:text-orange-400">
+                                  {' • '}{table.pendingRecords?.toLocaleString('tr-TR') || '0'} bekliyor
+                                </span>
+                              )}
+                              {isFullyEmbedded && (
+                                <span className="text-green-600 dark:text-green-400 font-medium">
+                                  {' • Tamamlandı'}
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        </div>
+                      );
+                    })}
                   </div>}
                 </CardContent>
               </Card>

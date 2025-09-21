@@ -323,6 +323,14 @@ export default function SettingsPage() {
   });
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [savingChatbot, setSavingChatbot] = useState(false);
+
+  // AI Provider Priority state
+  const [aiProviderPriority, setAiProviderPriority] = useState<string[]>(['gemini', 'claude', 'openai', 'fallback']);
+  const [savingAiProvider, setSavingAiProvider] = useState(false);
+
+  // Gemini model state
+  const [geminiModel, setGeminiModel] = useState('gemini-1.5-flash');
+  const [savingGeminiModel, setSavingGeminiModel] = useState(false);
   
   const defaultPrompt = `You are an expert assistant.
     
@@ -548,6 +556,119 @@ TASK:
       });
     } finally {
       setSavingChatbot(false);
+    }
+  };
+
+  // AI Provider Priority handlers
+  const moveProviderUp = (index: number) => {
+    if (index === 0) return;
+    const newPriority = [...aiProviderPriority];
+    [newPriority[index - 1], newPriority[index]] = [newPriority[index], newPriority[index - 1]];
+    setAiProviderPriority(newPriority);
+  };
+
+  const moveProviderDown = (index: number) => {
+    if (index === aiProviderPriority.length - 1) return;
+    const newPriority = [...aiProviderPriority];
+    [newPriority[index], newPriority[index + 1]] = [newPriority[index + 1], newPriority[index]];
+    setAiProviderPriority(newPriority);
+  };
+
+  const handleSaveAiProviderPriority = async () => {
+    setSavingAiProvider(true);
+    try {
+      const response = await fetch('http://localhost:8083/api/v2/settings/ai-provider-priority', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priority: aiProviderPriority
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'AI provider priority saved successfully',
+        });
+      } else {
+        throw new Error('Failed to save AI provider priority');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save AI provider priority',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingAiProvider(false);
+    }
+  };
+
+  // Load AI provider priority on mount
+  useEffect(() => {
+    const loadAiProviderPriority = async () => {
+      try {
+        const response = await fetch('http://localhost:8083/api/v2/settings/ai-provider-priority');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.priority) {
+            setAiProviderPriority(data.priority);
+          }
+        }
+      } catch (error) {
+        // Use default priority
+      }
+    };
+
+    loadAiProviderPriority();
+  }, []);
+
+  // Load Gemini model on mount
+  useEffect(() => {
+    const loadGeminiModel = async () => {
+      try {
+        const response = await fetch('http://localhost:8083/api/v2/settings/gemini-model');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.model) {
+            setGeminiModel(data.model);
+          }
+        }
+      } catch (error) {
+        // Use default model
+      }
+    };
+
+    loadGeminiModel();
+  }, []);
+
+  const handleSaveGeminiModel = async () => {
+    setSavingGeminiModel(true);
+    try {
+      const response = await fetch('http://localhost:8083/api/v2/settings/gemini-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: geminiModel
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: 'Gemini model saved successfully',
+        });
+      } else {
+        throw new Error('Failed to save Gemini model');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save Gemini model',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingGeminiModel(false);
     }
   };
 
@@ -2451,6 +2572,111 @@ TASK:
                     <Save className="mr-2 h-4 w-4" />
                     {savingChatbot ? 'Saving...' : 'Save Chatbot Settings'}
                   </Button>
+                </CardContent>
+              </Card>
+
+              {/* AI Provider Priority */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    AI Provider Priority
+                  </CardTitle>
+                  <CardDescription>
+                    Choose which AI providers to use for chat responses and their priority order
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-sm text-muted-foreground mb-4">
+                    Drag and drop to reorder priority. The system will try providers in order from top to bottom.
+                  </div>
+
+                  <div className="space-y-2">
+                    {aiProviderPriority.map((provider, index) => (
+                      <div
+                        key={provider}
+                        className="flex items-center gap-3 p-3 border rounded-lg bg-background"
+                      >
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-sm font-medium w-20">
+                            {provider === 'gemini' && 'Gemini'}
+                            {provider === 'claude' && 'Claude'}
+                            {provider === 'openai' && 'OpenAI'}
+                            {provider === 'fallback' && 'Demo'}
+                          </span>
+                          <Badge variant="outline" className="text-xs">
+                            {index + 1}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => moveProviderUp(index)}
+                            disabled={index === 0}
+                          >
+                            ↑
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => moveProviderDown(index)}
+                            disabled={index === aiProviderPriority.length - 1}
+                          >
+                            ↓
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-2">
+                    <Button onClick={handleSaveAiProviderPriority} disabled={savingAiProvider}>
+                      <Save className="mr-2 h-4 w-4" />
+                      {savingAiProvider ? 'Saving...' : 'Save Priority'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Gemini Model Selection */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Gemini Model Settings
+                  </CardTitle>
+                  <CardDescription>
+                    Choose which Gemini model to use for chat responses
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label> Gemini Model</Label>
+                    <Select
+                      value={geminiModel}
+                      onValueChange={setGeminiModel}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select Gemini model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash (Fast)</SelectItem>
+                        <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro (Powerful)</SelectItem>
+                        <SelectItem value="gemini-pro">Gemini Pro (Legacy)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Flash is faster and good for most use cases, Pro is more capable
+                    </p>
+                  </div>
+
+                  <div>
+                    <Button onClick={handleSaveGeminiModel} disabled={savingGeminiModel}>
+                      <Save className="mr-2 h-4 w-4" />
+                      {savingGeminiModel ? 'Saving...' : 'Save Model'}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 

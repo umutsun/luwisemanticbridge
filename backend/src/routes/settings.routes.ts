@@ -751,4 +751,133 @@ router.get('/gemini-api-key', async (req: Request, res: Response) => {
   }
 });
 
+// AI Provider Priority endpoints
+router.get('/ai-provider-priority', async (req: Request, res: Response) => {
+  try {
+    const result = await pgPool.query(
+      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+      ['ai_provider_priority']
+    );
+
+    if (result.rows.length === 0) {
+      // Return default priority
+      return res.json({
+        priority: ['gemini', 'claude', 'openai', 'fallback']
+      });
+    }
+
+    res.json({
+      priority: JSON.parse(result.rows[0].setting_value)
+    });
+  } catch (error) {
+    console.error('Error fetching AI provider priority:', error);
+    res.status(500).json({ error: 'Failed to fetch AI provider priority' });
+  }
+});
+
+router.post('/ai-provider-priority', async (req: Request, res: Response) => {
+  try {
+    const { priority } = req.body;
+
+    // Validate priority array
+    if (!Array.isArray(priority) || priority.length === 0) {
+      return res.status(400).json({ error: 'Invalid priority array' });
+    }
+
+    // Check if setting exists
+    const checkResult = await pgPool.query(
+      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+      ['ai_provider_priority']
+    );
+
+    if (checkResult.rows.length === 0) {
+      // Insert new setting
+      await pgPool.query(
+        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+        ['ai_provider_priority', JSON.stringify(priority)]
+      );
+    } else {
+      // Update existing setting
+      await pgPool.query(
+        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+        [JSON.stringify(priority), 'ai_provider_priority']
+      );
+    }
+
+    res.json({
+      success: true,
+      priority,
+      message: 'AI provider priority updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating AI provider priority:', error);
+    res.status(500).json({ error: 'Failed to update AI provider priority' });
+  }
+});
+
+// Gemini model endpoints
+router.get('/gemini-model', async (req: Request, res: Response) => {
+  try {
+    const result = await pgPool.query(
+      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+      ['gemini_model']
+    );
+
+    if (result.rows.length === 0) {
+      // Return default model
+      return res.json({
+        model: 'gemini-1.5-flash'
+      });
+    }
+
+    res.json({
+      model: result.rows[0].setting_value
+    });
+  } catch (error) {
+    console.error('Error fetching Gemini model:', error);
+    res.status(500).json({ error: 'Failed to fetch Gemini model' });
+  }
+});
+
+router.post('/gemini-model', async (req: Request, res: Response) => {
+  try {
+    const { model } = req.body;
+
+    // Validate model
+    const validModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+    if (!validModels.includes(model)) {
+      return res.status(400).json({ error: 'Invalid Gemini model' });
+    }
+
+    // Check if setting exists
+    const checkResult = await pgPool.query(
+      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+      ['gemini_model']
+    );
+
+    if (checkResult.rows.length === 0) {
+      // Insert new setting
+      await pgPool.query(
+        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+        ['gemini_model', model]
+      );
+    } else {
+      // Update existing setting
+      await pgPool.query(
+        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+        [model, 'gemini_model']
+      );
+    }
+
+    res.json({
+      success: true,
+      model,
+      message: 'Gemini model updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating Gemini model:', error);
+    res.status(500).json({ error: 'Failed to update Gemini model' });
+  }
+});
+
 export default router;

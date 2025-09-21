@@ -1,0 +1,193 @@
+{
+  "name": "gemini-backend-sandbox",
+  "version": "1.0.0",
+  "type": "backend",
+  "description": "Gemini Backend Development Sandbox for ASB API v2",
+  "environment": {
+    "NODE_ENV": "development",
+    "SANDBOX_MODE": "true",
+    "AGENT_NAME": "gemini",
+    "AGENT_ROLE": "backend",
+    "PORT": 8080,
+    "WS_PORT": 8081
+  },
+  "workspace": {
+    "root": "./backend",
+    "src": "./backend/src",
+    "tests": "./backend/tests",
+    "controllers": "./backend/src/controllers",
+    "services": "./backend/src/services",
+    "models": "./backend/src/models",
+    "middleware": "./backend/src/middleware",
+    "routes": "./backend/src/routes",
+    "utils": "./backend/src/utils",
+    "websocket": "./backend/src/websocket"
+  },
+  "permissions": {
+    "fileSystem": {
+      "read": ["./backend/**", "./shared/**", "./.gemini/**", "./node_modules/**"],
+      "write": ["./backend/**", "./.gemini/logs/**", "./backend/uploads/**"],
+      "execute": ["node", "npm", "npx", "tsc", "nodemon", "jest"]
+    },
+    "network": {
+      "allowed": [
+        "localhost:8080",
+        "localhost:8081",
+        "localhost:6379",
+        "91.99.229.96:5432",
+        "localhost:3000"
+      ],
+      "apis": {
+        "openai": "https://api.openai.com",
+        "n8n": "http://localhost:5678"
+      }
+    },
+    "processes": {
+      "maxConcurrent": 10,
+      "allowedCommands": [
+        "npm install",
+        "npm run dev",
+        "npm run build",
+        "npm run test",
+        "npm run migrate",
+        "npx prisma",
+        "npx ts-node",
+        "npx nodemon"
+      ]
+    }
+  },
+  "resources": {
+    "memory": "3GB",
+    "cpu": "3 cores",
+    "storage": "10GB",
+    "timeout": 7200,
+    "maxRequestSize": "50MB",
+    "rateLimit": {
+      "windowMs": 60000,
+      "max": 100
+    }
+  },
+  "dependencies": {
+    "required": [
+      "node@>=18.0.0",
+      "npm@>=9.0.0",
+      "postgresql@>=14.0"
+    ],
+    "auto-install": [
+      "express@4",
+      "typescript@5",
+      "@types/express",
+      "@types/node",
+      "cors",
+      "helmet",
+      "socket.io",
+      "ioredis",
+      "pg",
+      "pgvector",
+      "dotenv",
+      "joi",
+      "winston",
+      "bull",
+      "jsonwebtoken",
+      "bcryptjs"
+    ]
+  },
+  "database": {
+    "postgres": {
+      "host": "91.99.229.96",
+      "port": 5432,
+      "database": "postgres",
+      "poolSize": 20,
+      "idleTimeout": 10000,
+      "connectionTimeout": 3000
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 2,
+      "keyPrefix": "asb:gemini:"
+    }
+  },
+  "api": {
+    "version": "v2",
+    "prefix": "/api/v2",
+    "documentation": "/api/v2/docs",
+    "endpoints": {
+      "dashboard": "/dashboard",
+      "nodes": "/nodes",
+      "workflows": "/workflows",
+      "search": "/search",
+      "agents": "/agents",
+      "embeddings": "/embeddings",
+      "webscrape": "/webscrape"
+    }
+  },
+  "websocket": {
+    "namespaces": {
+      "dashboard": "/dashboard",
+      "agents": "/agents",
+      "workflows": "/workflows",
+      "notifications": "/notifications"
+    },
+    "events": {
+      "agentUpdate": "agent:update",
+      "workflowStatus": "workflow:status",
+      "searchResults": "search:results",
+      "error": "error"
+    }
+  },
+  "scripts": {
+    "init": "npm init -y && npm install express typescript @types/node @types/express nodemon ts-node",
+    "dev": "nodemon --watch src --ext ts --exec 'ts-node' src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "jest",
+    "migrate": "npx prisma migrate dev"
+  },
+  "sharedMemory": {
+    "redis": {
+      "channels": [
+        "asb:agents:updates",
+        "asb:backend:events",
+        "asb:api:requests",
+        "asb:websocket:broadcast"
+      ]
+    }
+  },
+  "communication": {
+    "withClaude": {
+      "frontend": "http://localhost:3000",
+      "components": "asb:ui:components"
+    },
+    "withCodex": {
+      "testRequests": "asb:tests:api",
+      "deploymentStatus": "asb:deploy:status"
+    }
+  },
+  "security": {
+    "cors": {
+      "origin": ["http://localhost:3000", "http://localhost:3001"],
+      "credentials": true
+    },
+    "helmet": {
+      "contentSecurityPolicy": false
+    },
+    "jwt": {
+      "expiresIn": "24h",
+      "refreshExpiresIn": "7d"
+    },
+    "rateLimit": {
+      "api": "100 requests per minute",
+      "websocket": "1000 messages per minute"
+    }
+  },
+  "monitoring": {
+    "healthCheck": "/health",
+    "metrics": "/metrics",
+    "logs": {
+      "level": "debug",
+      "format": "json",
+      "directory": "./.gemini/logs"
+    }
+  }
+}

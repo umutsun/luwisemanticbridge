@@ -1,0 +1,245 @@
+{
+  "agent": "gemini",
+  "role": "Backend API Lead",
+  "priority": "CRITICAL",
+  "project": "ASB Backend API v2 - RAG System",
+  "deadline": "2025-09-10",
+  "tasks": [
+    {
+      "id": "API-CHAT-001",
+      "title": "RAG Chat API Implementation",
+      "description": "Build chat endpoints with pgvector semantic search",
+      "status": "urgent",
+      "deadline": "2025-09-05",
+      "subtasks": [
+        {
+          "id": "API-CHAT-001-1",
+          "title": "Core chat endpoint setup",
+          "completed": false,
+          "checklist": [
+            "POST /api/v2/chat endpoint",
+            "Conversation management",
+            "Message history storage",
+            "Context window handling",
+            "Streaming response support"
+          ]
+        },
+        {
+          "id": "API-CHAT-001-2",
+          "title": "RAG pipeline integration",
+          "completed": false,
+          "checklist": [
+            "Query embedding generation",
+            "pgvector similarity search",
+            "Context retrieval from chunks",
+            "Source tracking & citations",
+            "Relevance scoring"
+          ]
+        },
+        {
+          "id": "API-CHAT-001-3",
+          "title": "OpenAI integration",
+          "completed": false,
+          "checklist": [
+            "GPT-3.5/4 API client",
+            "Prompt engineering for legal docs",
+            "Token management",
+            "Error handling & fallbacks",
+            "Response formatting"
+          ]
+        },
+        {
+          "id": "API-CHAT-001-4",
+          "title": "WebSocket real-time features",
+          "completed": false,
+          "checklist": [
+            "Socket.io server setup",
+            "Chat namespace configuration",
+            "Message broadcasting",
+            "Typing indicators",
+            "Connection management"
+          ]
+        },
+        {
+          "id": "API-CHAT-001-5",
+          "title": "Performance optimization",
+          "completed": false,
+          "checklist": [
+            "Redis caching layer",
+            "Query result caching",
+            "Embedding cache",
+            "Connection pooling",
+            "Response compression"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "API-SEARCH-002",
+      "title": "Semantic Search API",
+      "description": "Advanced search with filters and pgvector",
+      "status": "high",
+      "deadline": "2025-09-06",
+      "subtasks": [
+        {
+          "id": "API-SEARCH-002-1",
+          "title": "Search endpoints",
+          "completed": false,
+          "checklist": [
+            "POST /api/v2/search/semantic",
+            "POST /api/v2/search/hybrid",
+            "GET /api/v2/search/suggestions",
+            "Faceted search support",
+            "Pagination & sorting"
+          ]
+        },
+        {
+          "id": "API-SEARCH-002-2",
+          "title": "Vector search optimization",
+          "completed": false,
+          "checklist": [
+            "pgvector index optimization",
+            "Cosine similarity search",
+            "k-NN search implementation",
+            "Threshold filtering",
+            "Multi-vector search"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "API-DOC-003",
+      "title": "Document Processing API",
+      "description": "Handle document upload and embedding generation",
+      "status": "high",
+      "deadline": "2025-09-07",
+      "subtasks": [
+        {
+          "id": "API-DOC-003-1",
+          "title": "Upload & processing",
+          "completed": false,
+          "checklist": [
+            "POST /api/v2/documents/upload",
+            "PDF text extraction",
+            "Text chunking strategy",
+            "Metadata extraction",
+            "Batch processing queue"
+          ]
+        },
+        {
+          "id": "API-DOC-003-2",
+          "title": "Embedding generation",
+          "completed": false,
+          "checklist": [
+            "OpenAI embeddings API",
+            "Batch embedding generation",
+            "pgvector storage",
+            "Progress tracking",
+            "Error recovery"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "API-AUTH-004",
+      "title": "Authentication & Security",
+      "description": "JWT auth and API security",
+      "status": "medium",
+      "deadline": "2025-09-08",
+      "subtasks": [
+        {
+          "id": "API-AUTH-004-1",
+          "title": "JWT implementation",
+          "completed": false,
+          "checklist": [
+            "Login/Register endpoints",
+            "JWT token generation",
+            "Refresh token flow",
+            "Middleware protection",
+            "Role-based access"
+          ]
+        }
+      ]
+    }
+  ],
+  "currentFocus": {
+    "task": "API-CHAT-001",
+    "subtask": "API-CHAT-001-1",
+    "workingOn": "Setting up Express routes for chat API"
+  },
+  "techStack": {
+    "runtime": "Node.js 18+",
+    "framework": "Express.js",
+    "language": "TypeScript",
+    "database": {
+      "main": "PostgreSQL 15+",
+      "vector": "pgvector extension",
+      "cache": "Redis 7+"
+    },
+    "ai": {
+      "llm": "OpenAI GPT-3.5/4",
+      "embeddings": "text-embedding-ada-002",
+      "framework": "LangChain.js"
+    },
+    "realtime": "Socket.io",
+    "queue": "Bull (Redis-based)",
+    "auth": "JWT + bcrypt",
+    "validation": "Joi + express-validator",
+    "logging": "Winston + Morgan",
+    "testing": "Jest + Supertest"
+  },
+  "apiEndpoints": {
+    "chat": {
+      "POST /api/v2/chat": "Send message and get RAG response",
+      "GET /api/v2/chat/history/:conversationId": "Get chat history",
+      "DELETE /api/v2/chat/:conversationId": "Delete conversation",
+      "WS /chat": "WebSocket namespace for real-time"
+    },
+    "search": {
+      "POST /api/v2/search": "Basic search",
+      "POST /api/v2/search/semantic": "Vector similarity search",
+      "POST /api/v2/search/hybrid": "Combined keyword + vector",
+      "GET /api/v2/search/filters": "Get available filters"
+    },
+    "documents": {
+      "POST /api/v2/documents/upload": "Upload document",
+      "GET /api/v2/documents/:id": "Get document details",
+      "DELETE /api/v2/documents/:id": "Delete document",
+      "GET /api/v2/documents/:id/chunks": "Get document chunks"
+    },
+    "embeddings": {
+      "POST /api/v2/embeddings/generate": "Generate embeddings",
+      "POST /api/v2/embeddings/batch": "Batch generation",
+      "GET /api/v2/embeddings/status/:jobId": "Check job status"
+    }
+  },
+  "databaseSchema": {
+    "tables": {
+      "conversations": "id, user_id, title, created_at, updated_at",
+      "messages": "id, conversation_id, role, content, sources, created_at",
+      "documents": "id, title, type, metadata, created_at, processed",
+      "chunks": "id, document_id, content, chunk_index, metadata",
+      "embeddings": "id, chunk_id, embedding (vector), model, created_at"
+    },
+    "indexes": [
+      "CREATE INDEX ON embeddings USING ivfflat (embedding vector_cosine_ops)",
+      "CREATE INDEX ON chunks (document_id)",
+      "CREATE INDEX ON messages (conversation_id)"
+    ]
+  },
+  "immediate_actions": [
+    "Create backend/src folder structure",
+    "Setup Express server with TypeScript",
+    "Configure PostgreSQL connection pool",
+    "Create chat API endpoint",
+    "Setup Socket.io server",
+    "Implement basic RAG pipeline"
+  ],
+  "criticalPath": [
+    "1. Basic chat endpoint (1 day)",
+    "2. pgvector integration (1 day)",
+    "3. OpenAI integration (0.5 day)",
+    "4. WebSocket setup (0.5 day)",
+    "5. Testing & optimization (1 day)"
+  ]
+}

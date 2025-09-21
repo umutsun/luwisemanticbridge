@@ -88,6 +88,10 @@ alice-semantic-bridge/
 - `tests/**/*`
 - `jest.config.ts`
 
+## 📜 Development Principles
+- **Database Migration (Target):** The database to be migrated cannot have any hardcoded values. All configuration must be dynamic.
+- **Database Migration (Source):** The source database configuration must also be free of any hardcoded values.
+
 ## 📡 ASB CLI Coordination Protocol
 
 ### 1️⃣ Starting a Task

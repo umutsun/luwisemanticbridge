@@ -231,6 +231,7 @@ export let lightRAGService: LightRAGService | null = null;
 
 // Import embeddings progress loader
 import { loadProgressFromRedis } from './routes/embeddings.routes';
+import { loadProgressFromRedis as loadV2ProgressFromRedis } from './routes/embeddings-v2.routes';
 
 // Start server
 const PORT = parseInt(process.env.PORT || '8083');
@@ -339,6 +340,27 @@ httpServer.listen(PORT, async () => {
     // Load migration progress from Redis
     console.log('\n📈 Migration Status:');
     await loadProgressFromRedis();
+
+    // Also check v2 embedding progress
+    const v2ProgressLoaded = await loadV2ProgressFromRedis();
+    if (v2ProgressLoaded) {
+      console.log('🔄 Found active v2 embedding process');
+
+      // If process was paused, auto-resume it after backend restart
+      const embeddingStatus = await redis.get('embedding:status');
+      if (embeddingStatus === 'paused') {
+        console.log('🔄 Auto-resuming paused embedding process...');
+        try {
+          // Internal auto-resume - don't log this as user operation
+          await fetch(`http://localhost:${PORT}/api/v2/embeddings/auto-resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (autoResumeError) {
+          console.log('⚠️ Auto-resume failed, user can resume manually:', autoResumeError.message);
+        }
+      }
+    }
 
     // Check embedding progress
     try {

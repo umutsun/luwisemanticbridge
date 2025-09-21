@@ -14,7 +14,9 @@ import {
   Database,
   Activity,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Cpu,
+  Timer
 } from 'lucide-react';
 
 interface EmbeddingProgress {
@@ -44,6 +46,78 @@ interface VerticalProgressDisplayProps {
   migrationTables?: string[];
 }
 
+// Circular Progress Component
+const CircularProgress = ({ percentage, size = 120, strokeWidth = 2, className = "" }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDasharray = circumference;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className={`relative ${className}`}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          fill="none"
+          className="text-gray-200 dark:text-gray-800"
+        />
+        {/* Progress circle with gradient */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="url(#gradient)"
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={strokeDasharray}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          className="transition-all duration-1000 ease-out"
+        />
+        <defs>
+          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#8B5CF6" />
+          </linearGradient>
+        </defs>
+      </svg>
+      {/* Center content */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-3xl font-light tracking-tight">
+          {percentage.toFixed(1)}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+// Mini Sparkline for token usage
+const MiniSparkline = ({ values, width = 60, height = 20 }) => {
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => {
+    const x = (index / (values.length - 1)) * width;
+    const y = height - (value / max) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <polyline
+        points={points}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        className="text-purple-500 opacity-60"
+      />
+    </svg>
+  );
+};
+
 export default function VerticalProgressDisplay({
   progress,
   getCurrentTableInfo,
@@ -51,6 +125,10 @@ export default function VerticalProgressDisplay({
 }: VerticalProgressDisplayProps) {
   const [pulse, setPulse] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(0);
+  const [animatedCurrent, setAnimatedCurrent] = useState(0);
+  const [displaySpeed, setDisplaySpeed] = useState(0);
+  const [tokenHistory, setTokenHistory] = useState<number[]>([]);
+  const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
 
   useEffect(() => {
     if (progress.status === 'processing') {
@@ -64,11 +142,48 @@ export default function VerticalProgressDisplay({
         });
       }, 50);
 
+      // Animate current counter
+      const counterInterval = setInterval(() => {
+        setAnimatedCurrent(prev => {
+          const target = progress.current || 0;
+          const diff = target - prev;
+          if (Math.abs(diff) < 1) return target;
+
+          // Add some randomness for monitoring feel
+          const randomFactor = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
+          const increment = diff * 0.1 * randomFactor;
+
+          return prev + increment;
+        });
+      }, 100);
+
+      // Smooth speed animation
+      const speedInterval = setInterval(() => {
+        setDisplaySpeed(prev => {
+          const target = progress.processingSpeed || 0;
+          const diff = target - prev;
+          if (Math.abs(diff) < 0.5) return target;
+          return prev + diff * 0.1;
+        });
+      }, 200);
+
       return () => {
         clearInterval(progressInterval);
+        clearInterval(counterInterval);
+        clearInterval(speedInterval);
       };
     }
-  }, [progress.status, progress.percentage]);
+  }, [progress.status, progress.percentage, progress.current, progress.processingSpeed]);
+
+  // Track token history for sparkline
+  useEffect(() => {
+    if (progress.tokensThisSession !== undefined) {
+      setTokenHistory(prev => {
+        const newHistory = [...prev, progress.tokensThisSession];
+        return newHistory.slice(-20); // Keep last 20 values
+      });
+    }
+  }, [progress.tokensThisSession]);
 
   if (!progress || progress.status === 'idle' || progress.status === 'completed' || progress.status === 'error') {
     return null;
@@ -113,175 +228,107 @@ export default function VerticalProgressDisplay({
   };
 
   return (
-    <div className="space-y-3 w-full max-w-sm">
-      {/* Status Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Durum</span>
-        <div className="flex items-center gap-2">
-          {progress.fallbackMode && (
-            <Badge variant="destructive" className="text-xs">
-              <AlertTriangle className="w-3 h-3 mr-1" />
-              Fallback
-            </Badge>
-          )}
-          <Badge variant={
-            progress.status === 'processing' ? 'default' :
-            progress.status === 'completed' ? 'default' :
-            progress.status === 'paused' ? 'secondary' :
-            'destructive'
-          }>
-            {progress.status === 'processing' && (
-              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-            )}
-            {progress.status === 'processing' ? 'İşleniyor' :
-             progress.status === 'completed' ? 'Tamamlandı' :
-             progress.status === 'paused' ? 'Duraklatıldı' :
-             progress.status === 'error' ? 'Hata' : 'Bekleniyor'}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Stuck Process Warning */}
-      {progress.mightBeStuck && (
-        <Alert className="py-2 border-orange-200 bg-orange-50 dark:bg-orange-950/20">
-          <Clock className="h-3 w-3" />
-          <AlertDescription className="text-xs">
-            İşlem yanıt vermiyor. Lütfen bekleyin veya işlemi duraklatıp tekrar başlatın.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Progress Bar */}
-      <div className="space-y-1">
-        <div className="flex justify-between text-xs">
-          <span>{(progress.current || 0).toLocaleString('tr-TR')}</span>
-          <span>{(progress.total || 0).toLocaleString('tr-TR')}</span>
-        </div>
-        <Progress
-          value={currentProgress}
-          className="h-2 transition-all duration-300"
-        />
-        <div className="flex items-center justify-center gap-2">
-          <span className="text-xs font-mono bg-primary/10 px-2 py-0.5 rounded text-primary">
-            {(progress.percentage || 0).toFixed(1)}%
-          </span>
+    <div className="p-6 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 max-w-sm mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${
+            progress.status === 'processing' ? 'bg-green-500 animate-pulse' :
+            progress.status === 'paused' ? 'bg-yellow-500' :
+            progress.status === 'error' ? 'bg-red-500 animate-pulse' :
+            'bg-gray-400'
+          }`} />
           {progress.currentTable && (
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
               {getCurrentTableInfo()?.displayName || progress.currentTable}
             </span>
           )}
         </div>
+        {progress.fallbackMode && (
+          <span className="text-xs px-2 py-1 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-full">
+            Fallback
+          </span>
+        )}
       </div>
 
-      
+      {/* Circular Progress Center */}
+      <div className="flex justify-center mb-8">
+        <CircularProgress percentage={currentProgress} size={140} strokeWidth={2} />
+      </div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-muted/50 rounded p-2 text-center">
-          <div className="font-bold text-blue-600">
-            {((progress.processingSpeed || 0) * 60).toFixed(1)}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="text-center">
+          <div className="text-lg font-light text-blue-600">
+            {Math.round(animatedCurrent).toLocaleString('tr-TR')}
           </div>
-          <div className="text-muted-foreground">kayıt/dk</div>
+          <div className="text-xs text-gray-500">processed</div>
         </div>
-        <div className="bg-muted/50 rounded p-2 text-center">
-          <div className="font-bold text-orange-600">
+        <div className="text-center">
+          <div className="text-lg font-light text-orange-600">
+            {displaySpeed.toFixed(1)}
+          </div>
+          <div className="text-xs text-gray-500">kayıt/dk</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-light text-purple-600">
+            {progress.workerCount || 1}
+          </div>
+          <div className="text-xs text-gray-500">workers</div>
+        </div>
+      </div>
+
+      {/* Token Usage with Sparkline */}
+      {progress.tokensThisSession !== undefined && progress.tokensThisSession > 0 && (
+        <div className="border-t border-gray-200 dark:border-gray-800 pt-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Tokens</span>
+              <MiniSparkline values={tokenHistory} />
+            </div>
+            <span className="text-xs font-mono text-gray-700 dark:text-gray-300">
+              {progress.tokensThisSession.toLocaleString('tr-TR')}
+            </span>
+          </div>
+          <div className="relative">
+            <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-1000"
+                style={{
+                  width: `${Math.min(100, (progress.tokensThisSession / 2000000) * 25)}%`
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="border-t border-gray-200 dark:border-gray-800 pt-4 mt-4">
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center gap-1">
+            <Timer className="w-3 h-3" />
             {progress.estimatedTimeRemaining ?
               formatTimeWithSeconds(progress.estimatedTimeRemaining) : '--:--'
             }
           </div>
-          <div className="text-muted-foreground">kalan süre</div>
-        </div>
-      </div>
-
-      {/* Token Usage */}
-      {(progress.tokensThisSession !== undefined || progress.estimatedTotalTokens !== undefined) && (
-        <div className="bg-muted/30 rounded-lg p-3 space-y-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              Token Kullanımı
-            </span>
-            {progress.estimatedTotalTokens && (
-              <span className="text-xs text-muted-foreground">
-                Tahmini Toplam: {progress.estimatedTotalTokens.toLocaleString('tr-TR')}
-              </span>
-            )}
-          </div>
-
-          {progress.tokensThisSession !== undefined && (
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span>Bu Oturum:</span>
-                <span className="font-mono font-bold text-blue-600">
-                  {progress.tokensThisSession.toLocaleString('tr-TR')}
-                </span>
-              </div>
-              {progress.estimatedTotalTokens && (
-                <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="bg-blue-500 h-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, (progress.tokensThisSession / progress.estimatedTotalTokens) * 100)}%`
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {progress.tokensUsed !== undefined && progress.tokensUsed > 0 && (
-            <div className="flex justify-between text-xs pt-1 border-t border-muted-foreground/20">
-              <span className="text-muted-foreground">Toplam (tüm oturumlar):</span>
-              <span className="font-mono">
-                {progress.tokensUsed.toLocaleString('tr-TR')}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Time Info */}
-      <div className="text-xs space-y-1">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Başlangıç:</span>
-          <span>
-            {progress.startTime ?
+          <div>
+            {progress.startTime &&
               new Date(progress.startTime).toLocaleTimeString('tr-TR', {
                 hour: '2-digit',
                 minute: '2-digit'
-              }) : '-'
+              })
             }
-          </span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Geçen süre:</span>
-          <span>{getElapsedTime()}</span>
+          </div>
         </div>
       </div>
 
-      {/* Activity Indicators */}
-      {progress.newlyEmbedded !== undefined && (
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1 text-green-600">
-            <CheckCircle className="w-3 h-3" />
-            <span>+{progress.newlyEmbedded}</span>
-          </div>
-          {progress.errorCount > 0 && (
-            <div className="flex items-center gap-1 text-orange-600">
-              <AlertCircle className="w-3 h-3" />
-              <span>{progress.errorCount} hata</span>
-            </div>
-          )}
+      {/* Warning if stuck */}
+      {progress.mightBeStuck && (
+        <div className="mt-4 text-xs text-amber-600 dark:text-amber-400 text-center">
+          <Clock className="w-3 h-3 inline mr-1" />
+          Process might be stuck
         </div>
-      )}
-
-      {/* Fallback Warning */}
-      {progress.fallbackMode && (
-        <Alert className="py-2">
-          <AlertTriangle className="h-3 w-3" />
-          <AlertDescription className="text-xs">
-            {progress.fallbackReason || 'API hatası'} nedeniyle basit embedding kullanılıyor.
-          </AlertDescription>
-        </Alert>
       )}
     </div>
   );

@@ -1,0 +1,165 @@
+{
+  "folders": [
+    {
+      "name": "🔧 Gemini - Backend",
+      "path": "./backend"
+    },
+    {
+      "name": "📦 Shared Libraries",
+      "path": "./shared"
+    },
+    {
+      "name": "🔒 Gemini Config",
+      "path": "./.gemini"
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": true,
+      "source.organizeImports": true
+    },
+    "typescript.tsdk": "./backend/node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+    "files.exclude": {
+      "**/.git": true,
+      "**/.DS_Store": true,
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/*.log": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/logs": true
+    },
+    "[typescript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "rest-client.environmentVariables": {
+      "$shared": {
+        "baseUrl": "http://localhost:8080",
+        "apiVersion": "v2"
+      },
+      "development": {
+        "baseUrl": "http://localhost:8080",
+        "token": "dev-token"
+      }
+    }
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug Express Server",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder}/backend/node_modules/.bin/ts-node",
+        "args": ["${workspaceFolder}/backend/src/server.ts"],
+        "cwd": "${workspaceFolder}/backend",
+        "protocol": "inspector",
+        "env": {
+          "NODE_ENV": "development",
+          "PORT": "8080"
+        },
+        "console": "integratedTerminal",
+        "internalConsoleOptions": "neverOpen"
+      },
+      {
+        "name": "Debug Jest Tests",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder}/backend/node_modules/.bin/jest",
+        "args": [
+          "--runInBand",
+          "--watchAll=false"
+        ],
+        "cwd": "${workspaceFolder}/backend",
+        "console": "integratedTerminal",
+        "internalConsoleOptions": "neverOpen"
+      },
+      {
+        "name": "Attach to Node Process",
+        "type": "node",
+        "request": "attach",
+        "port": 9229,
+        "restart": true,
+        "protocol": "inspector"
+      }
+    ],
+    "compounds": [
+      {
+        "name": "Full Stack Debug",
+        "configurations": ["Debug Express Server"],
+        "stopAll": true
+      }
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "ms-vscode.vscode-typescript-tslint-plugin",
+      "humao.rest-client",
+      "prisma.prisma",
+      "christian-kohler.path-intellisense",
+      "mikestead.dotenv",
+      "orta.vscode-jest",
+      "firsttris.vscode-jest-runner",
+      "ms-azuretools.vscode-docker"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "🚀 Start Backend Dev",
+        "type": "shell",
+        "command": "npm run dev",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "problemMatcher": ["$tsc-watch"],
+        "isBackground": true,
+        "presentation": {
+          "reveal": "always",
+          "panel": "dedicated"
+        }
+      },
+      {
+        "label": "🏗️ Build Backend",
+        "type": "shell",
+        "command": "npm run build",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "problemMatcher": ["$tsc"]
+      },
+      {
+        "label": "🧪 Run API Tests",
+        "type": "shell",
+        "command": "npm test",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "🔄 Database Migration",
+        "type": "shell",
+        "command": "npm run migrate",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        }
+      },
+      {
+        "label": "📊 Generate API Docs",
+        "type": "shell",
+        "command": "npm run docs:generate",
+        "options": {
+          "cwd": "${workspaceFolder}/backend"
+        }
+      }
+    ]
+  }
+}

@@ -227,6 +227,81 @@ export class SemanticSearchService {
   }
 
   /**
+   * Perform semantic search using unified_embeddings table
+   */
+  async unifiedSemanticSearch(query: string, limit: number = 10) {
+    const embeddingId = `unifiedSemanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
+    const queryId = `unifiedSemanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
+
+    try {
+      // Check if unified_embeddings exists and has data
+      const embeddingCheck = await this.pool.query(`
+        SELECT COUNT(*) as count
+        FROM unified_embeddings
+        WHERE embedding IS NOT NULL
+      `);
+      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count) > 0;
+
+      if (!hasEmbeddings) {
+        console.log('No embeddings in unified_embeddings, falling back to keyword search');
+        return this.keywordSearch(query, limit);
+      }
+
+      // Generate embedding for query
+      console.time(embeddingId);
+      const queryEmbedding = await this.generateEmbedding(query);
+      console.timeEnd(embeddingId);
+
+      // Search in unified_embeddings table
+      const searchQuery = `
+        SELECT
+          ue.id::text as id,
+          ue.content as excerpt,
+          ue.metadata->>'table' as source_table,
+          ue.source_id,
+          1 - (ue.embedding <=> $1::vector) as similarity_score,
+          CASE
+            WHEN ue.content ILIKE $3 THEN 0.3
+            WHEN ue.metadata->>'table' ILIKE $3 THEN 0.2
+            ELSE 0
+          END as keyword_boost
+        FROM unified_embeddings ue
+        WHERE ue.embedding IS NOT NULL
+          AND ue.source_type = 'database'
+        ORDER BY
+          similarity_score +
+          CASE
+            WHEN ue.content ILIKE $3 THEN 0.3
+            WHEN ue.metadata->>'table' ILIKE $3 THEN 0.2
+            ELSE 0
+          END DESC
+        LIMIT $2
+      `;
+
+      console.time(queryId);
+      const result = await this.pool.query(searchQuery, [
+        JSON.stringify(queryEmbedding),
+        limit,
+        `%${query}%`
+      ]);
+      console.timeEnd(queryId);
+
+      return result.rows.map(row => ({
+        ...row,
+        title: `${row.source_table} - ID: ${row.source_id}`,
+        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 100),
+        relevanceScore: parseFloat(row.similarity_score),
+        content: row.excerpt
+      }));
+    } catch (error) {
+      console.timeEnd(queryId);
+      console.error('Unified semantic search error:', error);
+      // Fallback to keyword search
+      return this.keywordSearch(query, limit);
+    }
+  }
+
+  /**
    * Perform hybrid search (keyword + semantic)
    */
   async hybridSearch(query: string, limit: number = 10) {

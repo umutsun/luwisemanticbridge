@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "asb-cli": {
+      "command": "node",
+      "args": [
+        "C:\\mcp-servers\\asb-cli\\index.js"
+      ]
+    }
+  }
+}

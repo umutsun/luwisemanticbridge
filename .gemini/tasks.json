@@ -1,0 +1,128 @@
+{
+  "agent": "gemini",
+  "role": "Backend API Lead",
+  "priority": "HIGH",
+  "tasks": [
+    {
+      "id": "API-001",
+      "title": "RESTful API v2",
+      "description": "Modern Express.js API with TypeScript",
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": "API-001-1",
+          "title": "OpenAPI 3.0 specification",
+          "completed": false
+        },
+        {
+          "id": "API-001-2",
+          "title": "JWT authentication middleware",
+          "completed": false
+        },
+        {
+          "id": "API-001-3",
+          "title": "Rate limiting & request validation",
+          "completed": false
+        },
+        {
+          "id": "API-001-4",
+          "title": "CORS configuration for Next.js",
+          "completed": false
+        },
+        {
+          "id": "API-001-5",
+          "title": "Error handling middleware",
+          "completed": false
+        }
+      ]
+    },
+    {
+      "id": "API-002",
+      "title": "Real-time Features",
+      "description": "WebSocket implementation with Socket.io",
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": "API-002-1",
+          "title": "Socket.io server setup",
+          "completed": false
+        },
+        {
+          "id": "API-002-2",
+          "title": "Redis pub/sub for live updates",
+          "completed": false
+        },
+        {
+          "id": "API-002-3",
+          "title": "Workflow execution status streaming",
+          "completed": false
+        },
+        {
+          "id": "API-002-4",
+          "title": "Agent communication channels",
+          "completed": false
+        },
+        {
+          "id": "API-002-5",
+          "title": "Performance metrics broadcasting",
+          "completed": false
+        }
+      ]
+    },
+    {
+      "id": "API-003",
+      "title": "Database Optimization",
+      "description": "PostgreSQL and Redis optimization",
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": "API-003-1",
+          "title": "Connection pooling optimization",
+          "completed": false
+        },
+        {
+          "id": "API-003-2",
+          "title": "Query performance monitoring",
+          "completed": false
+        },
+        {
+          "id": "API-003-3",
+          "title": "Caching strategy with Redis",
+          "completed": false
+        },
+        {
+          "id": "API-003-4",
+          "title": "Database migration scripts",
+          "completed": false
+        },
+        {
+          "id": "API-003-5",
+          "title": "Backup automation",
+          "completed": false
+        }
+      ]
+    }
+  ],
+  "endpoints": {
+    "dashboard": "/api/v2/dashboard/stats",
+    "nodes": "/api/v2/nodes",
+    "workflows": "/api/v2/workflows",
+    "search": "/api/v2/search",
+    "agents": "/api/v2/agents",
+    "embeddings": "/api/v2/embeddings",
+    "webscrape": "/api/v2/webscrape"
+  },
+  "techStack": {
+    "runtime": "Node.js 18+",
+    "framework": "Express.js",
+    "language": "TypeScript",
+    "database": "PostgreSQL with pgvector",
+    "cache": "Redis",
+    "realtime": "Socket.io",
+    "queue": "Bull",
+    "auth": "JWT + bcrypt",
+    "validation": "Joi + express-validator",
+    "logging": "Winston + Pino",
+    "testing": "Jest + Supertest"
+  }
+}
