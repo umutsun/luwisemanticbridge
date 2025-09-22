@@ -11,6 +11,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
 interface SystemPrompt {
   id: string;
@@ -37,6 +39,20 @@ interface Suggestion {
   icon: string;
   title: string;
   description: string;
+}
+
+interface LLMProvider {
+  id: string;
+  name: string;
+  available: boolean;
+  model?: string;
+}
+
+interface UnifiedEmbeddings {
+  enabled: boolean;
+  totalRecords: number;
+  embeddedRecords: number;
+  lastEmbedded?: string;
 }
 
 const defaultPrompt = `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
@@ -75,9 +91,26 @@ export default function PromptsPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [savingChatbot, setSavingChatbot] = useState(false);
 
+  // LLM Provider settings
+  const [llmProviders, setLlmProviders] = useState<LLMProvider[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState('gemini');
+  const [fallbackEnabled, setFallbackEnabled] = useState(true);
+  const [savingLlmSettings, setSavingLlmSettings] = useState(false);
+
+  // Unified embeddings settings
+  const [unifiedEmbeddings, setUnifiedEmbeddings] = useState<UnifiedEmbeddings>({
+    enabled: false,
+    totalRecords: 0,
+    embeddedRecords: 0
+  });
+  const [loadingEmbeddings, setLoadingEmbeddings] = useState(false);
+  const [togglingEmbeddings, setTogglingEmbeddings] = useState(false);
+
   useEffect(() => {
     fetchPrompts();
     fetchChatbotSettings();
+    fetchLlmProviders();
+    fetchUnifiedEmbeddings();
   }, []);
 
   const fetchPrompts = async () => {
@@ -125,6 +158,80 @@ export default function PromptsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch chatbot settings:', error);
+    }
+  };
+
+  const fetchLlmProviders = async () => {
+    try {
+      const response = await fetch('http://localhost:8083/api/v2/rag/config');
+      if (response.ok) {
+        const data = await response.json();
+        setLlmProviders([
+          { id: 'gemini', name: 'Google Gemini', available: data.apiKeys?.gemini || false },
+          { id: 'claude', name: 'Anthropic Claude', available: data.apiKeys?.claude || false },
+          { id: 'openai', name: 'OpenAI', available: data.apiKeys?.openai || false }
+        ]);
+        setSelectedProvider(data.aiProvider || 'gemini');
+        setFallbackEnabled(data.fallbackEnabled || false);
+      }
+    } catch (error) {
+      console.error('Failed to fetch LLM providers:', error);
+    }
+  };
+
+  const fetchUnifiedEmbeddings = async () => {
+    setLoadingEmbeddings(true);
+    try {
+      // Check if unified embeddings setting exists
+      const response = await fetch('http://localhost:8083/api/v2/chatbot/settings');
+      if (response.ok) {
+        const data = await response.json();
+
+        // Try to get unified embeddings stats from a specific endpoint
+        try {
+          const embedResponse = await fetch('http://localhost:8083/api/v2/embeddings/stats');
+          if (embedResponse.ok) {
+            const embedData = await embedResponse.json();
+            setUnifiedEmbeddings({
+              enabled: data.useUnifiedEmbeddings || false,
+              totalRecords: embedData.totalRecords || 0,
+              embeddedRecords: embedData.embeddedRecords || 0,
+              lastEmbedded: embedData.lastEmbedded
+            });
+          } else {
+            // Fallback to RAG config
+            const ragResponse = await fetch('http://localhost:8083/api/v2/rag/config');
+            if (ragResponse.ok) {
+              const ragData = await ragResponse.json();
+              const tableStats = ragData.tables || [];
+              const unifiedTable = tableStats.find((t: any) => t.tableName === 'unified_embeddings');
+
+              setUnifiedEmbeddings({
+                enabled: data.useUnifiedEmbeddings || false,
+                totalRecords: unifiedTable?.totalRecords || 0,
+                embeddedRecords: unifiedTable?.embeddedRecords || 0,
+                lastEmbedded: unifiedTable?.lastEmbedded
+              });
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to fetch embeddings stats, using defaults:', error);
+          setUnifiedEmbeddings({
+            enabled: data.useUnifiedEmbeddings || false,
+            totalRecords: 0,
+            embeddedRecords: 0
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch unified embeddings:', error);
+      setUnifiedEmbeddings({
+        enabled: false,
+        totalRecords: 0,
+        embeddedRecords: 0
+      });
+    } finally {
+      setLoadingEmbeddings(false);
     }
   };
 
@@ -186,6 +293,78 @@ export default function PromptsPage() {
       setError(t('prompts.settingsSaveFailed'));
     } finally {
       setSavingChatbot(false);
+    }
+  };
+
+  const handleSaveLlmProvider = async () => {
+    setSavingLlmSettings(true);
+    const originalProvider = selectedProvider;
+    const originalFallback = fallbackEnabled;
+
+    try {
+      const response = await fetch('http://localhost:8083/api/v2/rag/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aiProvider: selectedProvider,
+          fallbackEnabled
+        })
+      });
+
+      if (response.ok) {
+        setSuccess('LLM provider settings saved');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setError(errorData.message || 'Failed to save LLM provider settings');
+      }
+    } catch (error) {
+      console.error('Failed to save LLM provider:', error);
+      setError('Network error while saving LLM provider settings');
+    } finally {
+      setSavingLlmSettings(false);
+    }
+  };
+
+  const handleToggleUnifiedEmbeddings = async () => {
+    const newEnabled = !unifiedEmbeddings.enabled;
+    const originalEnabled = unifiedEmbeddings.enabled;
+
+    setTogglingEmbeddings(true);
+    // Optimistic update
+    setUnifiedEmbeddings({ ...unifiedEmbeddings, enabled: newEnabled });
+
+    try {
+      const response = await fetch('http://localhost:8083/api/v2/chatbot/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...chatbotSettings,
+          useUnifiedEmbeddings: newEnabled,
+          suggestions: JSON.stringify(suggestions)
+        })
+      });
+
+      if (response.ok) {
+        setSuccess(`Unified embeddings ${newEnabled ? 'enabled' : 'disabled'}`);
+        setTimeout(() => setSuccess(''), 3000);
+
+        // Refresh embeddings data after enabling
+        if (newEnabled) {
+          fetchUnifiedEmbeddings();
+        }
+      } else {
+        // Revert on error
+        setUnifiedEmbeddings({ ...unifiedEmbeddings, enabled: originalEnabled });
+        setError('Failed to update unified embeddings setting');
+      }
+    } catch (error) {
+      console.error('Failed to toggle unified embeddings:', error);
+      // Revert on error
+      setUnifiedEmbeddings({ ...unifiedEmbeddings, enabled: originalEnabled });
+      setError('Network error while updating unified embeddings setting');
+    } finally {
+      setTogglingEmbeddings(false);
     }
   };
 
@@ -260,7 +439,7 @@ export default function PromptsPage() {
     <div className="p-6 lg:p-8 container mx-auto p-6 max-w-7xl space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-xl font-semibold">{t('prompts.title')}</h1>
-        <Button onClick={() => { fetchPrompts(); fetchChatbotSettings(); }} variant="outline" size="sm">
+        <Button onClick={() => { fetchPrompts(); fetchChatbotSettings(); fetchLlmProviders(); fetchUnifiedEmbeddings(); }} variant="outline" size="sm">
           <RotateCcw className="w-4 h-4 mr-2" />
           {t('prompts.refreshButton')}
         </Button>
@@ -281,7 +460,7 @@ export default function PromptsPage() {
       )}
 
       <Tabs defaultValue="chatbot" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 max-w-xl">
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl">
           <TabsTrigger value="chatbot">
             <Bot className="w-4 h-4 mr-2" />
             {t('prompts.chatbotTab')}
@@ -289,6 +468,10 @@ export default function PromptsPage() {
           <TabsTrigger value="prompt">
             <Settings className="w-4 h-4 mr-2" />
             {t('prompts.promptTab')}
+          </TabsTrigger>
+          <TabsTrigger value="ai">
+            <Brain className="w-4 h-4 mr-2" />
+            AI Settings
           </TabsTrigger>
         </TabsList>
 
@@ -666,6 +849,225 @@ export default function PromptsPage() {
                   </CardContent>
                 </Card>
               )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="ai" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              {/* LLM Provider Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="w-5 h-5" />
+                    LLM Provider Settings
+                  </CardTitle>
+                  <CardDescription>
+                    Select and configure the AI provider for chatbot responses
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="provider">Primary AI Provider</Label>
+                    <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {llmProviders.map((provider) => (
+                          <SelectItem
+                            key={provider.id}
+                            value={provider.id}
+                            disabled={!provider.available}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${provider.available ? 'bg-green-500' : 'bg-red-500'}`} />
+                              {provider.name}
+                              {!provider.available && <span className="text-xs text-muted-foreground">(Not configured)</span>}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Enable Fallback Providers</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically use other providers if primary fails
+                      </p>
+                    </div>
+                    <Switch
+                      checked={fallbackEnabled}
+                      onCheckedChange={setFallbackEnabled}
+                    />
+                  </div>
+
+                  <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Provider Priority
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                      1. {selectedProvider} (Primary){'\n'}
+                      {fallbackEnabled && (
+                        <>
+                          2. {llmProviders.find(p => p.id !== selectedProvider && p.available)?.name || 'Other'} (Fallback){'\n'}
+                          3. {llmProviders.find(p => p.id !== selectedProvider && p.id !== llmProviders.find(p2 => p2.id !== selectedProvider && p2.available)?.id && p.available)?.name || 'Remaining'} (Last Resort)
+                        </>
+                      )}
+                    </p>
+                  </div>
+
+                  <Button onClick={handleSaveLlmProvider} disabled={savingLlmSettings}>
+                    {savingLlmSettings ? (
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Save Provider Settings
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Unified Embeddings Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Database className="w-5 h-5" />
+                    Unified Embeddings
+                  </CardTitle>
+                  <CardDescription>
+                    Configure semantic search using unified embeddings table
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Use Unified Embeddings</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Enable semantic search from unified_embeddings table
+                      </p>
+                    </div>
+                    <Switch
+                      checked={unifiedEmbeddings.enabled}
+                      onCheckedChange={handleToggleUnifiedEmbeddings}
+                      disabled={loadingEmbeddings || togglingEmbeddings}
+                    />
+                  </div>
+
+                  {unifiedEmbeddings.enabled && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
+                          <p className="text-2xl font-bold">{unifiedEmbeddings.embeddedRecords.toLocaleString()}</p>
+                          <p className="text-sm text-muted-foreground">Embedded Records</p>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
+                          <p className="text-2xl font-bold">{unifiedEmbeddings.totalRecords.toLocaleString()}</p>
+                          <p className="text-sm text-muted-foreground">Total Records</p>
+                        </div>
+                      </div>
+
+                      {unifiedEmbeddings.lastEmbedded && (
+                        <p className="text-xs text-muted-foreground">
+                          Last embedded: {new Date(unifiedEmbeddings.lastEmbedded).toLocaleString()}
+                        </p>
+                      )}
+
+                      {unifiedEmbeddings.embeddedRecords > 0 ? (
+                        <div className="bg-green-50 dark:bg-green-950 p-4 rounded-lg">
+                          <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                            ✓ Semantic search is active
+                          </p>
+                          <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                            The chatbot will perform vector similarity search to find relevant documents before generating responses.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg">
+                          <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                            ⚠ No embedded documents found
+                          </p>
+                          <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                            Unified embeddings is enabled but no documents have been embedded yet. Run the embedding process to populate the knowledge base.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!unifiedEmbeddings.enabled && (
+                    <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg">
+                      <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                        Semantic search is disabled
+                      </p>
+                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                        Enable unified embeddings to allow the chatbot to find and reference relevant documents from the knowledge base.
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-6">
+              {/* AI Provider Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Provider Status</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {llmProviders.map((provider) => (
+                    <div key={provider.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${provider.available ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div>
+                          <p className="font-medium">{provider.name}</p>
+                          <p className="text-xs text-muted-foreground">{provider.id}</p>
+                        </div>
+                      </div>
+                      <Badge variant={provider.available ? 'default' : 'secondary'}>
+                        {provider.available ? 'Available' : 'Not Configured'}
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Semantic Search Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>How Semantic Search Works</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold">1</span>
+                    </div>
+                    <p>User question is converted to vector embedding</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold">2</span>
+                    </div>
+                    <p>System finds similar documents using vector similarity</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold">3</span>
+                    </div>
+                    <p>Relevant sources are added to the context</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="w-6 h-6 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold">4</span>
+                    </div>
+                    <p>LLM generates response using the context</p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </TabsContent>

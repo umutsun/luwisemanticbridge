@@ -64,6 +64,7 @@ const getTableDisplayName = (tableName: string): string => {
     'MAKALELER': 'Makaleler',
     'DOKUMAN': 'Dokümanlar',
     'MEVZUAT': 'Mevzuat',
+    'sorucevap': 'Soru-Cevap',
     'documents': 'Dokümanlar',
     'conversations': 'Sohbetler',
     'messages': 'Mesajlar'
@@ -306,13 +307,59 @@ export default function ChatInterface() {
   };
 
   const handleSourceClick = async (source: any) => {
-    // Create a search query based on the source title
-    const searchQuery = `${source.title} ile ilgili benzer kayıtları bul`;
+    // Create a more intelligent search query based on the source
+    const cleanTitle = (source.title || '').replace(/ - ID: \d+/g, '').replace(/ \(Part \d+\/\d+\)/g, '').replace(/^sorucevap -\s*/, '').replace(/^ozelgeler -\s*/, '').trim();
+    const sourceType = getTableDisplayName(source.sourceTable || (source.databaseInfo && source.databaseInfo.table));
+    const category = source.category || '';
+    const excerpt = source.excerpt || source.content || '';
+
+    // Create a context-aware search query
+    let searchQuery = '';
+
+    // Content analysis for better question generation
+    const hasQuestionWords = /(?:nedir|nasıl|neden|hangi|kim|ne zaman|kaç|nerede|ne|mi|mu|mü|mı)/i.test(excerpt);
+    const hasLegalTerms = /(?:tevkiğ|kararı|kanunu|tüzüğü|yönetmeliği|tebliği|genelge|sirküler)/i.test(cleanTitle);
+    const hasTaxTerms = /(?:vergi|stopaj|kdv|ötv|gv|kv|kurumlar|damga|harç)/i.test(cleanTitle);
+    const isAboutProcedure = /(?:prosedür|süreç|uygulama|başvuru|talep)/i.test(cleanTitle);
+    const isAboutDefinition = /(?:tanımı|kapsamı|unsurları|özellikleri)/i.test(cleanTitle);
+
+    // Extract key topic from the title (remove table prefixes and IDs)
+    const topic = cleanTitle.length > 50 ? cleanTitle.substring(0, 50) + '...' : cleanTitle;
+
+    // Enhanced question patterns based on content type and context
+    if (sourceType === 'Soru-Cevap' && (excerpt.includes('Cevap:') || excerpt.includes('Yanıt:'))) {
+      searchQuery = `"${topic}" konusunda bana detaylı bilgi ve örnekler verebilir misin? Bu konuda sıkça sorulan soruları da açıklar mısın?`;
+    } else if (category === 'Mevzuat' && hasLegalTerms) {
+      searchQuery = `"${topic}" ile ilgili bilmeniz gereken en önemli bilgileri anlatabilir misin? Kimleri kapsar, nasıl uygulanır?`;
+    } else if (category === 'Mevzuat' && hasTaxTerms) {
+      searchQuery = `"${topic}" hakkında detaylı bilgi alabilir miyim? Oranı, kimleri etkilediği ve istisnaları nelerdir?`;
+    } else if (sourceType === 'Danıştay' || category === 'İçtihat') {
+      searchQuery = `"${topic}" kararının içtihat değeri nedir? Bu kararın pratikteki sonuçları ve emsal oluşturup oluşturmadığını açıklar mısın?`;
+    } else if (isAboutProcedure) {
+      searchQuery = `"${topic}" sürecini adım adım anlatabilir misin? Başvuru için gerekli belgeler ve dikkat edilmesi gerekenler nelerdir?`;
+    } else if (isAboutDefinition) {
+      searchQuery = `"${topic}" nedir ve nasıl uygulanır? Kapsamına giren durumlar ve istisnaları hakkında bilgi verir misin?`;
+    } else if (cleanTitle.includes('istisna')) {
+      searchQuery = `"${topic}" hangi durumlarda uygulanır? Kimler bu istisnadan yararlanabilir ve şartları nelerdir?`;
+    } else if (cleanTitle.includes('defter') || cleanTitle.includes('elektronik')) {
+      searchQuery = `"${topic}" ile ilgili uygulama usulünü, süresini ve yükümlülükleri detaylı olarak açıklar mısın?`;
+    } else if (hasQuestionWords) {
+      searchQuery = `"${topic}" konusundaki bu sorunun cevabını detaylandırır mısın? Benzer durumlar için de bilgi verir misin?`;
+    } else {
+      // More natural and conversational generic questions
+      const questionPatterns = [
+        `"${topic}" hakkında bana kapsamlı bilgi verebilir misin?`,
+        `"${topic}" konusunda ne gibi bilgiler paylaşabilirsin? Detaylı açıklama yapar mısın?`,
+        `"${topic}" ile ilgili en önemli noktaları anlatabilir misin? Pratik örnekler verirsen çok sevinirim.`,
+        `"${topic}" konusunu baştan sona açıklayabilir misin? Kimleri etkiler ve nasıl uygulanır?`
+      ];
+      searchQuery = questionPatterns[Math.floor(Math.random() * questionPatterns.length)];
+    }
+
     setInputText(searchQuery);
-    // Automatically send the message with fromSource flag
-    setTimeout(() => {
-      handleSendMessage(true);
-    }, 100);
+    textareaRef.current?.focus();
+
+    // Don't automatically send, let the user review and edit
   };
 
   const clearChat = () => {
@@ -489,10 +536,11 @@ export default function ChatInterface() {
                                       </div>
                                       <div className="space-y-2">
                                         {visibleSources.map((source, idx) => (
-                                    <div 
-                                      key={idx} 
+                                    <div
+                                      key={idx}
                                       className="relative p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
                                       onClick={() => handleSourceClick(source)}
+                                      title="Bu kaynakla ilgili detaylı araştırma yap"
                                     >
                                       <div className="flex items-start gap-3">
                                         <div className="flex-shrink-0">
@@ -505,7 +553,16 @@ export default function ChatInterface() {
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-start justify-between gap-2">
                                             <h4 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
-                                              {source.title?.replace(/ \(Part \d+\/\d+\)/g, '') || source.citation || `Kaynak ${idx + 1}`}
+                                              {(() => {
+                                                let title = source.title?.replace(/ - ID: \d+/g, '')?.replace(/ \(Part \d+\/\d+\)/g, '')?.replace(/^sorucevap -\s*/, '')?.replace(/^ozelgeler -\s*/, '')?.trim() || source.citation || `Kaynak ${idx + 1}`;
+
+                                                // Add category if available
+                                                if (source.category && source.category !== 'Kaynak') {
+                                                  title += ` (${source.category})`;
+                                                }
+
+                                                return title;
+                                              })()}
                                             </h4>
                                             {source.score && (
                                               <div className="flex items-center gap-1 flex-shrink-0">
@@ -523,7 +580,21 @@ export default function ChatInterface() {
                                           </div>
                                           {source.excerpt && (
                                             <p className="text-xs text-muted-foreground line-clamp-3 mt-1.5 pl-0.5">
-                                              {source.excerpt.substring(0, 200)}...
+                                              {(() => {
+                                                let excerpt = source.excerpt;
+
+                                                // Remove "Cevap:" prefix and clean up
+                                                excerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
+
+                                                // Limit to 150 characters and break at word boundary
+                                                if (excerpt.length > 150) {
+                                                  const truncated = excerpt.substring(0, 150);
+                                                  const lastSpace = truncated.lastIndexOf(' ');
+                                                  excerpt = lastSpace > 50 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+                                                }
+
+                                                return excerpt;
+                                              })()}
                                             </p>
                                           )}
                                           <div className="flex items-center gap-2 mt-2 flex-wrap">

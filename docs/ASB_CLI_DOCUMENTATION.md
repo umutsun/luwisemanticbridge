@@ -4,6 +4,64 @@
 
 ASB CLI (Alice Semantic Bridge Command Line Interface) is a Redis-backed shared memory system that enables real-time communication and context sharing between multiple AI agents (Claude, Gemini, Codex) working on the same project.
 
+## 🔀 Git Worktree Integration
+
+ASB CLI seamlessly integrates with Git worktree to enable parallel development sessions:
+
+### Worktree Structure
+```
+alice-semantic-bridge/          # Main project (main branch)
+├── .git/
+├── docs/
+├── backend/
+├── frontend/
+└── ...
+
+alice-semantic-bridge-asemb/    # Worktree (asemb branch)
+├── .git (symlink)
+├── config/asb-config.json      # Worktree-specific ASB config
+├── scripts/worktree-manager.sh # Worktree management tool
+└── ... (same structure as main)
+```
+
+### Managing Worktrees with ASB CLI
+
+1. **Create Worktree**:
+```bash
+./scripts/worktree-manager.sh create asemb
+```
+
+2. **Setup ASB in Worktree**:
+```bash
+./scripts/worktree-manager.sh setup-asb
+```
+
+3. **Switch Between Worktrees**:
+```bash
+# Navigate to worktree
+cd ../alice-semantic-bridge-asemb
+
+# Or use the manager
+./scripts/worktree-manager.sh switch asemb
+```
+
+### Context Sharing Between Worktrees
+
+ASB CLI enables agents in different worktrees to share context:
+
+```javascript
+// In main project
+await asb.contextPush('feature-progress', {
+  branch: 'main',
+  status: 'implementing-core',
+  timestamp: Date.now()
+});
+
+// In asemb worktree
+const progress = await asb.contextGet('feature-progress');
+console.log(progress); // Shared context from main
+```
+
 ## 🏗️ Architecture
 
 ```

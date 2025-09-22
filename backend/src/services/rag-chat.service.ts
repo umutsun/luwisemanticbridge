@@ -30,11 +30,17 @@ export class RAGChatService {
   private useOpenAI: boolean = false;
   private aiProviderPriority: string[] = ['gemini', 'claude', 'openai', 'fallback'];
   private fallbackEnabled: boolean;
+  private defaultTemperature: number = 0.1;
+  private defaultMaxTokens: number = 2048;
+  private defaultGeminiModel: string = 'gemini-1.5-flash';
 
   constructor() {
 
     // Set default values
     this.fallbackEnabled = process.env.AI_FALLBACK_ENABLED !== 'false'; // Default to true
+
+    // Try to load AI provider from database
+    this.loadAISettings().catch(console.error);
 
     // Initialize OpenAI only if API key is available
     if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'sk-proj-YOUR_OPENAI_API_KEY_HERE') {
@@ -87,10 +93,89 @@ export class RAGChatService {
   }
 
   /**
+   * Load AI settings from database
+   */
+  private async loadAISettings() {
+    try {
+      const result = await pool.query(
+        "SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ('ai_provider', 'fallback_enabled', 'temperature', 'max_tokens', 'gemini_model')"
+      );
+
+      for (const row of result.rows) {
+        if (row.setting_key === 'ai_provider') {
+          // Update provider priority based on database setting
+          const provider = row.setting_value;
+          this.aiProviderPriority = [provider, ...this.aiProviderPriority.filter(p => p !== provider)];
+          console.log(`📝 AI Provider loaded from database: ${provider}`);
+        } else if (row.setting_key === 'fallback_enabled') {
+          this.fallbackEnabled = row.setting_value === 'true';
+          console.log(`📝 Fallback enabled loaded from database: ${this.fallbackEnabled}`);
+        } else if (row.setting_key === 'temperature') {
+          this.defaultTemperature = parseFloat(row.setting_value) || 0.1;
+          console.log(`📝 Temperature loaded from database: ${this.defaultTemperature}`);
+        } else if (row.setting_key === 'max_tokens') {
+          this.defaultMaxTokens = parseInt(row.setting_value) || 2048;
+          console.log(`📝 Max tokens loaded from database: ${this.defaultMaxTokens}`);
+        } else if (row.setting_key === 'gemini_model') {
+          this.defaultGeminiModel = row.setting_value || 'gemini-1.5-flash';
+          console.log(`📝 Gemini model loaded from database: ${this.defaultGeminiModel}`);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load AI settings from database:', error);
+    }
+  }
+
+  /**
+   * Get system prompt from database
+   */
+  private async getSystemPrompt(): Promise<string> {
+    try {
+      const result = await pool.query(
+        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'system_prompt'"
+      );
+
+      if (result.rows[0]?.setting_value) {
+        return result.rows[0].setting_value;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch system prompt from database:', error);
+    }
+
+    // Default system prompt
+    return `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
+
+GÖREV:
+- Aşağıdaki bağlamda verilen bilgilere dayanarak ANLAMLI ve AKICI bir metin oluştur
+- Cevabını 2-3 paragraf halinde organize et:
+  • İlk paragraf: Konunun genel çerçevesi ve temel bilgiler
+  • İkinci paragraf: Detaylar, örnekler ve uygulamalar
+  • Üçüncü paragraf (gerekirse): Önemli noktalar, istisnalar veya dikkat edilmesi gerekenler
+
+- DİL ve ÜSLUP:
+  • Profesyonel ama anlaşılır bir dil kullan
+  • Teknik terimleri açıklayarak kullan
+  • Madde madde sıralama yerine akıcı paragraflar oluştur
+  • "Buna göre", "Bu kapsamda", "Öte yandan" gibi bağlaçlarla metni akıcı hale getir
+  • KAYNAK BELİRTME: Metin içinde kaynak numarası belirtme (Kaynak 1, Kaynak 2 gibi yazma)
+
+- KAYNAK YETERSİZLİĞİ DURUMU:
+  • Eğer bağlamda direkt cevap bulamazsan ama ilgili kaynaklar varsa: "Bu konuda direkt bilgi bulamadım ama şunlar ilgili olabilir:" diye BAŞLA
+  • İlk 3-5 en yüksek skorlu kaynağı kendi cümlelerinle ÖZETLE (sadece kaynakları listeleme!)
+  • Özeti şu şekilde yap: "Bulduğum ilgili bilgiler arasında: [kaynak1 özeti]. Ayrıca: [kaynak2 özeti]. Konuyla ilgili olarak şunlar da dikkat çekici: [kaynak3 özeti]"
+  • Skorları yüksek olan kaynaklara daha çok ağırlık ver
+  • Sadece tamamen alakasız veya boş sonuçlar geldiğinde "Bu konuda veritabanımda bilgi bulunmuyor" de
+
+- Tahmin yapma, sadece verilen bağlamdaki bilgileri kullan
+
+Bağlam (en ilgiliden başlayarak sıralı):`;
+  }
+
+  /**
    * Process a chat message with RAG
    */
   async processMessage(
-    message: string, 
+    message: string,
     conversationId?: string,
     userId: string = 'demo-user',
     options: ChatOptions = {}
@@ -99,6 +184,9 @@ export class RAGChatService {
       // 1. Create or get conversation
       const convId = conversationId || uuidv4();
       await this.ensureConversation(convId, userId, message);
+
+      // Get system prompt from database or use default
+      const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
 
       // 2. Search for relevant documents using configured source
       // Check environment variable first, then database setting
@@ -124,49 +212,64 @@ export class RAGChatService {
       } else {
         allResults = await semanticSearch.hybridSearch(message, 20);
       }
-      
-      // Filter sources with relevance above 60% for better quality
-      let searchResults = allResults.filter(result => {
+
+      // Adaptive filtering based on query complexity and results distribution
+      let searchResults = allResults;
+      const avgScore = allResults.reduce((sum, r) => sum + (r.score || (r.similarity_score * 100) || 0), 0) / allResults.length;
+      const maxScore = Math.max(...allResults.map(r => r.score || (r.similarity_score * 100) || 0));
+
+      // Dynamic threshold based on results quality
+      let threshold = 50; // Base threshold
+      if (maxScore > 80) threshold = 60; // High quality results available
+      if (maxScore < 50) threshold = 30; // Low quality results, be more lenient
+      if (allResults.length < 5) threshold = Math.min(threshold, 40); // Few results, be more inclusive
+
+      searchResults = allResults.filter(result => {
         const score = result.score || (result.similarity_score * 100) || 0;
-        return score >= 60; // Increased from 40% to 60%
+        return score >= threshold;
       });
-      
-      console.log(`Filtered ${searchResults.length} sources from ${allResults.length} (>60% relevance)`);
-      
-      // If no high-quality results, take top 5 best matches
+
+      console.log(`Filtered ${searchResults.length} sources from ${allResults.length} (>${threshold}% relevance, avg: ${avgScore.toFixed(1)}%, max: ${maxScore}%)`);
+
+      // Ensure we have at least some results
       if (searchResults.length === 0 && allResults.length > 0) {
-        console.log('No sources above 60%, taking top 5 best matches');
-        searchResults = allResults.slice(0, 5); // Reduced from 10 to 5
+        console.log('No sources above threshold, taking top matches');
+        searchResults = allResults.slice(0, Math.min(10, allResults.length));
       }
-      
+
       // Kaynakları score'a göre sırala (yüksek score önce)
       searchResults.sort((a, b) => {
         const scoreA = a.score || (a.similarity_score * 100) || 0;
         const scoreB = b.score || (b.similarity_score * 100) || 0;
         return scoreB - scoreA;
       });
-      
+
       // 3. Prepare context from search results
       const context = this.prepareEnhancedContext(searchResults);
-      
+
       // 4. Get conversation history
       const history = await this.getConversationHistory(convId, 5);
-      
-      // 5. Generate response with temperature from options
-      const temperature = options.temperature !== undefined ? options.temperature : 0.1;
-      console.log(`Using temperature: ${temperature}`);
-      const response = await this.generateResponse(message, context, history, temperature, options, searchResults);
-      
+
+      // 5. Generate response with settings from database and options
+      const temperature = options.temperature !== undefined ? options.temperature : this.defaultTemperature;
+      const maxTokens = options.maxTokens !== undefined ? options.maxTokens : this.defaultMaxTokens;
+      console.log(`Using temperature: ${temperature}, maxTokens: ${maxTokens}`);
+      const response = await this.generateResponse(message, context, history, temperature, options, searchResults, maxTokens);
+
       // 6. Save messages to database
       await this.saveMessage(convId, 'user', message);
       await this.saveMessage(convId, 'assistant', response.content, searchResults);
-      
+
       // 7. Format sources for frontend
       const formattedSources = this.formatSources(searchResults);
-      
+
+      // 8. Get related topics (different from sources used in response)
+      const relatedTopics = await this.getRelatedTopics(message, searchResults, 7);
+
       return {
         response: response.content,
         sources: formattedSources,
+        relatedTopics: relatedTopics,
         conversationId: convId
       };
     } catch (error) {
@@ -191,29 +294,66 @@ export class RAGChatService {
       return scoreB - scoreA;
     });
 
-    let context = 'Veritabanında bulunan ilgili bilgiler (en ilgiliden başlayarak):\n\n';
-    
-    sortedResults.forEach((result, idx) => {
-      const sourceNum = idx + 1;
-      const title = result.title || 'Belge';
-      const excerpt = this.truncateExcerpt(result.excerpt || result.content || '', 500); // Daha fazla içerik
-      
-      // Add metadata info if available
-      let metaInfo = '';
-      if (result.metadata) {
-        if (result.metadata.tarih) metaInfo += ` (Tarih: ${result.metadata.tarih})`;
-        if (result.metadata.sayiNo) metaInfo += ` (Sayı: ${result.metadata.sayiNo})`;
-        if (result.metadata.kararNo) metaInfo += ` (Karar No: ${result.metadata.kararNo})`;
-      }
-      
-      // Excerpt boşsa content'ten al
-      const contentToShow = excerpt || (result.content ? this.truncateExcerpt(result.content, 500) : 'İçerik mevcut değil');
-      
-      context += `${title}${metaInfo}:\n${contentToShow}\n\n`;
+    let context = 'VERİTABANINDAN BULUNAN İLGİLİ BİLGİLER (en yüksek skor dan başlayarak):\n\n';
+
+    // Grupları oluştur - yüksek skorlu kaynakları öne çıkar
+    const highScoreSources = sortedResults.filter(r => (r.score || (r.similarity_score * 100) || 0) >= 75);
+    const mediumScoreSources = sortedResults.filter(r => {
+      const score = r.score || (r.similarity_score * 100) || 0;
+      return score >= 50 && score < 75;
     });
-    
-    console.log(`Context prepared with ${searchResults.length} sources, total length: ${context.length}`);
+    const lowScoreSources = sortedResults.filter(r => (r.score || (r.similarity_score * 100) || 0) < 50);
+
+    // En yüksek skorlu kaynakları başa ekle
+    if (highScoreSources.length > 0) {
+      context += '🎯 YÜSEK EŞLEŞME SONUÇLARI:\n';
+      highScoreSources.forEach((result, idx) => {
+        context += this.formatSourceForContext(result, idx + 1);
+      });
+      context += '\n';
+    }
+
+    // Orta skorlu kaynakları ekle
+    if (mediumScoreSources.length > 0) {
+      context += '📊 ORTA EŞLEŞME SONUÇLARI:\n';
+      mediumScoreSources.forEach((result, idx) => {
+        context += this.formatSourceForContext(result, idx + highScoreSources.length + 1);
+      });
+      context += '\n';
+    }
+
+    // Düşük skorlu kaynakları sona ekle (sadece az sonuç varsa)
+    if (lowScoreSources.length > 0 && sortedResults.length < 10) {
+      context += '📝 DİĞER İLGİLİ BİLGİLER:\n';
+      lowScoreSources.forEach((result, idx) => {
+        context += this.formatSourceForContext(result, idx + highScoreSources.length + mediumScoreSources.length + 1);
+      });
+    }
+
+    console.log(`Context prepared with ${searchResults.length} sources (${highScoreSources.length} high, ${mediumScoreSources.length} medium, ${lowScoreSources.length} low), total length: ${context.length}`);
     return context;
+  }
+
+  /**
+   * Format a single source for context
+   */
+  private formatSourceForContext(result: any, index: number): string {
+    const score = result.score || (result.similarity_score * 100) || 0;
+    const title = result.title || 'Belge';
+    const excerpt = this.truncateExcerpt(result.excerpt || result.content || '', 400);
+
+    // Add metadata info if available
+    let metaInfo = '';
+    if (result.metadata) {
+      if (result.metadata.tarih) metaInfo += ` (Tarih: ${result.metadata.tarih})`;
+      if (result.metadata.sayiNo) metaInfo += ` (Sayı: ${result.metadata.sayiNo})`;
+      if (result.metadata.kararNo) metaInfo += ` (Karar No: ${result.metadata.kararNo})`;
+    }
+
+    // Skor bilgisini ekle
+    const scoreInfo = `[Skor: ${score}%] `;
+
+    return `${index}. ${scoreInfo}${title}${metaInfo}:\n${excerpt}\n\n`;
   }
 
   /**
@@ -345,12 +485,13 @@ export class RAGChatService {
    * Generate response using selected AI provider
    */
   private async generateResponse(
-    query: string, 
-    context: string, 
+    query: string,
+    context: string,
     history: ChatMessage[],
     temperature: number = 0.1,
     options: ChatOptions = {},
-    searchResults?: any[]
+    searchResults?: any[],
+    maxTokens: number = 2048
   ) {
     let response = null;
     let lastError = null;
@@ -369,7 +510,7 @@ export class RAGChatService {
         switch (provider) {
           case 'gemini':
             if (geminiService.isAvailable()) {
-              response = await geminiService.generateResponse(query, context, history, temperature);
+              response = await geminiService.generateResponse(query, context, history, temperature, options.systemPrompt, maxTokens);
               successfulProvider = 'Gemini';
               console.log('✅ Gemini successful');
             } else {
@@ -379,7 +520,7 @@ export class RAGChatService {
 
           case 'claude':
             if (claudeService.isAvailable()) {
-              response = await claudeService.generateResponse(query, context, history);
+              response = await claudeService.generateResponse(query, context, history, temperature, options.systemPrompt, maxTokens);
               successfulProvider = 'Claude';
               console.log('✅ Claude successful');
             } else {
@@ -389,7 +530,7 @@ export class RAGChatService {
 
           case 'openai':
             if (this.useOpenAI && this.openai) {
-              response = await this.generateOpenAIResponse(query, context, history, temperature, searchResults);
+              response = await this.generateOpenAIResponse(query, context, history, temperature, searchResults, options.systemPrompt, maxTokens);
               successfulProvider = 'OpenAI';
               console.log('✅ OpenAI successful');
             } else {
@@ -432,9 +573,24 @@ export class RAGChatService {
     context: string,
     history: ChatMessage[],
     temperature: number = 0.1,
-    searchResults?: any[]
+    searchResults?: any[],
+    systemPrompt?: string,
+    maxTokens: number = 2048
   ) {
     if (!this.openai) throw new Error('OpenAI not initialized');
+
+    // Get OpenAI model from settings
+    let openaiModel = 'gpt-3.5-turbo';
+    try {
+      const modelResult = await pool.query(
+        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'openai_model'"
+      );
+      if (modelResult.rows[0]?.setting_value) {
+        openaiModel = modelResult.rows[0].setting_value;
+      }
+    } catch (error) {
+      // Use default model
+    }
 
     // Check if we have sources but no good context
     const hasSourcesButNoContext = searchResults && searchResults.length > 0 && (!context || context.length < 100);
@@ -453,43 +609,47 @@ export class RAGChatService {
       });
     }
     
-    let systemPrompt = `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
-    
+    const defaultSystemPrompt = `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
+
 GÖREV:
 - Aşağıdaki bağlamda verilen bilgilere dayanarak ANLAMLI ve AKICI bir metin oluştur
 - Cevabını 2-3 paragraf halinde organize et:
   • İlk paragraf: Konunun genel çerçevesi ve temel bilgiler
   • İkinci paragraf: Detaylar, örnekler ve uygulamalar
   • Üçüncü paragraf (gerekirse): Önemli noktalar, istisnalar veya dikkat edilmesi gerekenler
-  
+
 - DİL ve ÜSLUP:
   • Profesyonel ama anlaşılır bir dil kullan
   • Teknik terimleri açıklayarak kullan
   • Madde madde sıralama yerine akıcı paragraflar oluştur
   • "Buna göre", "Bu kapsamda", "Öte yandan" gibi bağlaçlarla metni akıcı hale getir
   • KAYNAK BELİRTME: Metin içinde kaynak numarası belirtme (Kaynak 1, Kaynak 2 gibi yazma)
-  
+
 - KAYNAK YETERSİZLİĞİ DURUMU:
-  • Eğer bağlam yetersizse ama kaynaklar varsa: "Bu konuda veritabanımda sınırlı bilgi bulunuyor. Aşağıdaki kaynaklarda ilgili bilgiler yer alıyor:"
-  • Ardından en yüksek ilgi düzeyine sahip ilk 7 kaynağın kısa özetini ver (%ilgi düzeyi ile birlikte)
-  • Eğer hiç kaynak yoksa: "Bu konuda veritabanımda bilgi bulunmuyor"
-  
+  • Eğer bağlamda direkt cevap bulamazsan ama ilgili kaynaklar varsa: "Bu konuda direkt bilgi bulamadım ama şunlar ilgili olabilir:" diye BAŞLA
+  • İlk 3-5 en yüksek skorlu kaynağı kendi cümlelerinle ÖZETLE (sadece kaynakları listeleme!)
+  • Özeti şu şekilde yap: "Bulduğum ilgili bilgiler arasında: [kaynak1 özeti]. Ayrıca: [kaynak2 özeti]. Konuyla ilgili olarak şunlar da dikkat çekici: [kaynak3 özeti]"
+  • Skorları yüksek olan kaynaklara daha çok ağırlık ver
+  • Sadece tamamen alakasız veya boş sonuçlar geldiğinde "Bu konuda veritabanımda bilgi bulunmuyor" de
+
 - Tahmin yapma, sadece verilen bağlamdaki bilgileri kullan
-      
+
 Bağlam (en ilgiliden başlayarak sıralı):
 ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili spesifik bilgi bulunamadı.'}${sourcesSummary}`;
 
+    const finalSystemPrompt = systemPrompt || defaultSystemPrompt;
+
     const messages: any[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: finalSystemPrompt },
       ...history.map(h => ({ role: h.role, content: h.content })),
       { role: 'user', content: query }
     ];
 
     const completion = await this.openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: openaiModel,
       messages,
       temperature: temperature,
-      max_tokens: 800
+      max_tokens: Math.min(maxTokens, 4000) // OpenAI has different max token limits
     });
 
     return {
@@ -649,6 +809,120 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
       ...convResult.rows[0],
       messages: msgResult.rows
     };
+  }
+
+  /**
+   * Get related topics based on user query, excluding sources used in response
+   */
+  async getRelatedTopics(query: string, usedSources: any[], limit: number = 7): Promise<any[]> {
+    try {
+      console.log(`🔍 Searching for related topics: "${query}" (limit: ${limit}, excluding ${usedSources.length} sources)`);
+
+      // Get IDs of sources already used in response to avoid duplicates
+      const excludeIds = usedSources.map(source => source.id?.toString() || source.sourceId?.toString()).filter(Boolean);
+
+      // Check if we should use unified embeddings or rag_data
+      let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+
+      // Check database setting if not set in environment
+      if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
+        try {
+          const result = await pool.query(
+            "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
+          );
+          useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
+        } catch (error) {
+          // Default to false if setting not found
+        }
+      }
+
+      let searchResults = [];
+      if (useUnifiedEmbeddings) {
+        searchResults = await semanticSearch.unifiedSemanticSearch(query, limit + 10); // Get more to filter
+      } else {
+        searchResults = await semanticSearch.hybridSearch(query, limit + 10); // Get more to filter
+      }
+
+      console.log(`Found ${searchResults.length} raw results for related topics`);
+
+      // Filter out used sources and low-relevance results
+      const filteredResults = searchResults.filter(result => {
+        const score = result.score || (result.similarity_score * 100) || 0;
+        const resultId = result.id || result.source_id;
+
+        // Exclude used IDs and apply relevance threshold
+        return score >= 35 && !excludeIds.includes(resultId?.toString());
+      });
+
+      // Sort by relevance score and limit results
+      const sortedResults = filteredResults
+        .sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
+          return scoreB - scoreA;
+        })
+        .slice(0, limit);
+
+      console.log(`Filtered to ${sortedResults.length} related topics (score >= 35%, excluded ${excludeIds.length} items)`);
+
+      // Format results for frontend
+      const formattedResults = sortedResults.map((result, index) => {
+        const score = result.score || (result.similarity_score * 100) || 0;
+        const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
+
+        // Determine category based on source table and content
+        let category = 'Genel';
+        if (sourceTable.toUpperCase().includes('OZELGE')) category = 'Özelge';
+        else if (sourceTable.toUpperCase().includes('DANISTAY')) category = 'Danıştay Kararı';
+        else if (sourceTable.toUpperCase().includes('MAKALE')) category = 'Makale';
+        else if (sourceTable.toUpperCase().includes('SORUCEVAP')) category = 'Soru-Cevap';
+        else if (sourceTable.toUpperCase().includes('MEVZUAT')) category = 'Mevzuat';
+
+        // Generate a meaningful title
+        let title = result.title || `${category} - Kaynak ${index + 1}`;
+
+        // Clean up title prefixes
+        title = title
+          .replace(/^sorucevap -\s*/i, '')
+          .replace(/^ozelgeler -\s*/i, '')
+          .replace(/^danistaykararlari -\s*/i, '')
+          .replace(/^makaleler -\s*/i, '')
+          .replace(/ - ID: \d+/g, '')
+          .replace(/ \(Part \d+\/\d+\)/g, '')
+          .trim();
+
+        // Truncate long titles
+        if (title.length > 80) {
+          title = title.substring(0, 77) + '...';
+        }
+
+        return {
+          id: result.id || result.source_id || `related-${Date.now()}-${index}`,
+          title: title,
+          excerpt: result.excerpt || result.content || '',
+          category: category,
+          sourceTable: sourceTable,
+          score: Math.round(score),
+          relevanceScore: score,
+          sourceId: result.source_id,
+          metadata: result.metadata || {},
+          databaseInfo: {
+            table: sourceTable,
+            id: result.source_id,
+            hasMetadata: !!result.metadata
+          },
+          priority: index + 1,
+          hasContent: !!(result.content || result.excerpt),
+          contentLength: (result.content || result.excerpt || '').length
+        };
+      });
+
+      return formattedResults;
+    } catch (error) {
+      console.error('Error getting related topics:', error);
+      // Return empty array on error
+      return [];
+    }
   }
 
   /**

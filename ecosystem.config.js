@@ -3,11 +3,24 @@ module.exports = {
     {
       name: 'asb-backend',
       script: './backend/dist/server.js',
-      instances: 'max',
+      instances: 1,
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3001
+        PORT: 8083,
+        DATABASE_URL: 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb',
+        ASEMB_DB_HOST: '91.99.229.96',
+        ASEMB_DB_PORT: '5432',
+        ASEMB_DB_NAME: 'asemb',
+        ASEMB_DB_USER: 'postgres',
+        ASEMB_DB_PASSWORD: 'Semsiye!22',
+        REDIS_HOST: '127.0.0.1',
+        REDIS_PORT: '6379',
+        REDIS_DB: '2',
+        CORS_ORIGIN: 'https://your-domain.com',
+        OPENAI_API_KEY: 'your-openai-key',
+        CLAUDE_API_KEY: 'your-claude-key',
+        GEMINI_API_KEY: 'your-gemini-key'
       },
       error_file: './logs/backend-error.log',
       out_file: './logs/backend-out.log',
@@ -24,7 +37,9 @@ module.exports = {
       cwd: './frontend',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3001,
+        NEXT_PUBLIC_API_URL: 'https://your-domain.com',
+        NEXT_PUBLIC_WS_URL: 'wss://your-domain.com'
       },
       error_file: './logs/frontend-error.log',
       out_file: './logs/frontend-out.log',

@@ -46,11 +46,10 @@ export async function POST(request: NextRequest) {
       message: message,
       conversationId: finalConversationId,
       userId: 'demo-user',
-      // Add config settings if available
+      // Add config settings if available (but not systemPrompt - let backend use database)
       ...(config && {
         temperature: config.llmSettings?.temperature || 0.1,
         model: config.llmSettings?.activeChatModel || 'anthropic/claude-3-sonnet',
-        systemPrompt: config.llmSettings?.systemPrompt || "Sen bir RAG asistanısın. MUTLAKA SADECE verilen context'ten cevap ver. Context'te olmayan hiçbir bilgi verme. Eğer context'te bilgi yoksa 'Bu konuda veritabanımda bilgi bulunmuyor' de.",
         ragWeight: config.llmSettings?.ragWeight || 100,
         llmKnowledgeWeight: config.llmSettings?.llmKnowledgeWeight || 0,
         useLocalDb: config.dataSource?.useLocalDb !== false,
@@ -132,6 +131,23 @@ export async function POST(request: NextRequest) {
         priority: source.priority || source.index || idx + 1,
         hasContent: source.hasContent,
         contentLength: source.contentLength,
+      })) || [],
+      relatedTopics: data.relatedTopics?.map((topic: any, idx: number) => ({
+        id: topic.id || `topic-${Date.now()}-${idx}`,
+        title: topic.title || 'İlgili Konu',
+        excerpt: topic.excerpt || topic.content || '',
+        relevanceScore: topic.relevanceScore || topic.score || 0,
+        score: topic.relevanceScore || topic.score || 0,
+        relevance: topic.relevanceScore || topic.score || 0,
+        sourceTable: topic.sourceTable,
+        category: topic.category || 'Genel',
+        citation: topic.title,
+        metadata: topic.metadata || {},
+        priority: topic.priority || idx + 1,
+        hasContent: topic.hasContent,
+        contentLength: topic.contentLength,
+        sourceId: topic.sourceId,
+        databaseInfo: topic.databaseInfo,
       })) || [],
       conversationId: data.conversationId || finalConversationId,
     };

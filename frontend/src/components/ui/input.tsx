@@ -7,9 +7,9 @@ export interface InputProps
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
-    // Prevent React controlled/uncontrolled warnings by normalizing `value`
-    // If a `value` prop is provided but is `undefined` or `null`, coerce to ''
-    const { value, defaultValue, ...rest } = props as any
+    // Always use uncontrolled mode with defaultValue to avoid React warnings
+    // This is the simplest solution to prevent the controlled component warning
+    const { value, defaultValue, onChange, ...rest } = props;
 
     const normalizedProps: React.InputHTMLAttributes<HTMLInputElement> = {
       type,
@@ -18,21 +18,29 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         className
       ),
       ref: ref as any,
-      ...(rest as object),
+      ...rest,
     }
 
-    if (value !== undefined) {
-      // Explicit controlled input
-      ;(normalizedProps as any).value = value ?? ""
-    } else if (defaultValue !== undefined) {
-      // Uncontrolled with defaultValue
-      ;(normalizedProps as any).defaultValue = defaultValue
-    } else {
-      // Neither value nor defaultValue provided -> keep controlled with empty string
-      ;(normalizedProps as any).value = ""
+    // If value is provided with onChange, use controlled mode
+    if (value !== undefined && onChange !== undefined) {
+      normalizedProps.value = value
+      normalizedProps.onChange = onChange
+    }
+    // If defaultValue is provided, use uncontrolled mode
+    else if (defaultValue !== undefined) {
+      normalizedProps.defaultValue = defaultValue
+    }
+    // If value is provided without onChange, make it read-only
+    else if (value !== undefined) {
+      normalizedProps.defaultValue = value
+      normalizedProps.readOnly = true
+    }
+    // Default case - empty uncontrolled input
+    else {
+      normalizedProps.defaultValue = ""
     }
 
-    return <input {...(normalizedProps as any)} />
+    return <input {...normalizedProps} />
   }
 )
 Input.displayName = "Input"

@@ -14,48 +14,55 @@ export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private model: string = 'gemini-1.5-flash'; // Default to Flash for speed
   private initialized: boolean = false;
+  private defaultMaxTokens: number = 2048;
+  private apiKey: string | null = null;
 
   constructor() {
-    this.initialize();
+    this.loadSettings().then(() => {
+      this.initialize();
+    });
   }
 
-  private async initialize() {
+  private async loadSettings() {
     try {
-      // Try to get API key from database first, then fallback to environment
+      // Try to get API key and settings from database first
       let apiKey = process.env.GOOGLE_API_KEY;
+      let maxTokens = 2048;
 
+      const result = await pool.query(
+        "SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ('google_api_key', 'gemini_model', 'max_tokens')"
+      );
+
+      for (const row of result.rows) {
+        if (row.setting_key === 'google_api_key') {
+          apiKey = row.setting_value;
+        } else if (row.setting_key === 'gemini_model') {
+          this.model = row.setting_value;
+        } else if (row.setting_key === 'max_tokens') {
+          maxTokens = parseInt(row.setting_value) || 2048;
+        }
+      }
+
+      // Fallback to environment if not in database
       if (!apiKey) {
-        try {
-          const result = await pool.query(
-            "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'google_api_key'"
-          );
-          apiKey = result.rows[0]?.setting_value;
-        } catch (error) {
-          console.log('Database not available for API key, using environment');
-        }
+        apiKey = process.env.GOOGLE_API_KEY;
       }
 
-      // Get model from settings
-      try {
-        const modelResult = await pool.query(
-          "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'gemini_model'"
-        );
-        if (modelResult.rows[0]?.setting_value) {
-          this.model = modelResult.rows[0].setting_value;
-        }
-      } catch (error) {
-        // Use default model
-      }
-
-      if (apiKey && apiKey !== 'your-google-api-key-here') {
-        this.genAI = new GoogleGenerativeAI(apiKey);
-        this.initialized = true;
-        console.log(`✅ Gemini API initialized with model: ${this.model}`);
-      } else {
-        console.log('⚠️  Gemini API key not configured');
-      }
+      this.apiKey = apiKey;
+      this.defaultMaxTokens = maxTokens;
     } catch (error) {
-      console.error('Gemini initialization error:', error);
+      console.warn('Failed to load Gemini settings from database:', error);
+      this.apiKey = process.env.GOOGLE_API_KEY;
+    }
+  }
+
+  private initialize() {
+    if (this.apiKey && this.apiKey !== 'your-google-api-key-here') {
+      this.genAI = new GoogleGenerativeAI(this.apiKey);
+      this.initialized = true;
+      console.log(`✅ Gemini API initialized with model: ${this.model}`);
+    } else {
+      console.log('⚠️  Gemini API key not configured');
     }
   }
 
@@ -70,7 +77,9 @@ export class GeminiService {
     query: string,
     context: string,
     history: ChatMessage[],
-    temperature: number = 0.1
+    temperature: number = 0.1,
+    systemPrompt?: string,
+    maxTokens?: number
   ) {
     if (!this.isAvailable()) {
       throw new Error('Gemini API not available');
@@ -84,7 +93,7 @@ export class GeminiService {
           temperature: temperature,
           topP: 0.8,
           topK: 40,
-          maxOutputTokens: 2048,
+          maxOutputTokens: maxTokens || this.defaultMaxTokens,
         }
       });
 
@@ -97,8 +106,8 @@ export class GeminiService {
       });
 
       // Create the prompt with context
-      const systemPrompt = this.createSystemPrompt(context);
-      const fullPrompt = `${systemPrompt}\n\nKullanıcı Sorusu: ${query}`;
+      const finalSystemPrompt = this.createSystemPrompt(context, systemPrompt);
+      const fullPrompt = `${finalSystemPrompt}\n\nKullanıcı Sorusu: ${query}`;
 
       // Generate response
       const result = await chat.sendMessage(fullPrompt);
@@ -167,21 +176,35 @@ export class GeminiService {
   /**
    * Create system prompt with context
    */
-  private createSystemPrompt(context: string): string {
-    const systemPrompt = `Sen verilen bağlamı kullanarak soruları yanıtlayan bir yapay zeka asistanısın.
+  private createSystemPrompt(context: string, systemPrompt?: string): string {
+    // If systemPrompt is provided, use it directly with context
+    return `${systemPrompt || `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
 
-KURALLAR:
-1. Sadece verilen bağlamdaki bilgilere dayanarak yanıt ver
-2. Bağlamda bilgi yoksa "Verilen bağlamda bu konu hakkında bilgi bulunamadı" de
-3. Yanıtlarını Türkçe ver
-4. Resmi ve profesyonel bir dil kullan
-5. Kesin bilgi olmadan yorum yapma
-6. Kaynakları belirtmek gerekirse bağlamdaki bilgileri referans al
+GÖREV:
+- Aşağıdaki bağlamda verilen bilgilere dayanarak ANLAMLI ve AKICI bir metin oluştur
+- Cevabını 2-3 paragraf halinde organize et:
+  • İlk paragraf: Konunun genel çerçevesi ve temel bilgiler
+  • İkinci paragraf: Detaylar, örnekler ve uygulamalar
+  • Üçüncü paragraf (gerekirse): Önemli noktalar, istisnalar veya dikkat edilmesi gerekenler
 
-BAĞLAM:
+- DİL ve ÜSLUP:
+  • Profesyonel ama anlaşılır bir dil kullan
+  • Teknik terimleri açıklayarak kullan
+  • Madde madde sıralama yerine akıcı paragraflar oluştur
+  • "Buna göre", "Bu kapsamda", "Öte yandan" gibi bağlaçlarla metni akıcı hale getir
+  • KAYNAK BELİRTME: Metin içinde kaynak numarası belirtme (Kaynak 1, Kaynak 2 gibi yazma)
+
+- KAYNAK YETERSİZLİĞİ DURUMU:
+  • Eğer bağlamda direkt cevap bulamazsan ama ilgili kaynaklar varsa: "Bu konuda direkt bilgi bulamadım ama şunlar ilgili olabilir:" diye BAŞLA
+  • İlk 3-5 en yüksek skorlu kaynağı kendi cümlelerinle ÖZETLE (sadece kaynakları listeleme!)
+  • Özeti şu şekilde yap: "Bulduğum ilgili bilgiler arasında: [kaynak1 özeti]. Ayrıca: [kaynak2 özeti]. Konuyla ilgili olarak şunlar da dikkat çekici: [kaynak3 özeti]"
+  • Skorları yüksek olan kaynaklara daha çok ağırlık ver
+  • Sadece tamamen alakasız veya boş sonuçlar geldiğinde "Bu konuda veritabanımda bilgi bulunmuyor" de
+
+- Tahmin yapma, sadece verilen bağlamdaki bilgileri kullan
+
+BAĞLAM (en ilgiliden başlayarak sıralı):`}
 ${context}`;
-
-    return systemPrompt;
   }
 
   /**

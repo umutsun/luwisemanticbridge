@@ -8,7 +8,7 @@
     "servicesTab": "Servisler",
     "databaseTab": "Veritabanı",
     "aiServicesTab": "AI Servisleri",
-    "embeddingsTab": "Embeddings",
+    "embeddingsTab": "Vektörler",
     "integrationsTab": "Entegrasyon",
     "advancedTab": "Gelişmiş",
     "generalSettingsTitle": "Genel Ayarlar",
@@ -27,7 +27,7 @@
     }
   },
   "header": {
-    "dashboard": "Dashboard",
+    "dashboard": "Kontrol Paneli",
     "systemStatus": "Sistem Durumu",
     "overallStatus": "Genel Sistem Durumu",
     "connecting": "Bağlanıyor...",
@@ -46,9 +46,9 @@
     "login": "Giriş Yap",
     "menu": {
       "overview": "Genel Bakış",
-      "ragQuery": "LightRAG Sorgu",
+      "ragQuery": "LightRAG Sorgusu",
       "documents": "Dokümanlar",
-      "embeddingsManager": "Embeddings",
+      "embeddingsManager": "Vektörler",
       "scraper": "Web Kazıyıcı",
       "prompts": "Promptlar",
       "settings": "Ayarlar",
@@ -118,9 +118,9 @@
       "description": "AI'nın nasıl cevap vereceğini belirleyen ana talimatlar",
       "promptText": "Prompt Metni",
       "characters": "karakter",
-      "temperature": "Temperature",
+      "temperature": "Sıcaklık",
       "tempDescription": "Düşük: Tutarlı, Yüksek: Yaratıcı",
-      "maxTokens": "Max Tokens",
+      "maxTokens": "Maksimum Token",
       "maxTokensDescription": "Maksimum cevap uzunluğu"
     },
     "templates": {
@@ -136,7 +136,7 @@
       "referencesDesc": "[Kaynak 1], [Kaynak 2] formatını kullanın",
       "context": "Bağlam Kullanımı",
       "contextDesc": "En ilgili kaynaklar başta gelir",
-      "temperature": "Temperature",
+      "temperature": "Sıcaklık",
       "temperatureDesc": "0.1: Tutarlı, 0.5: Dengeli, 0.9: Yaratıcı"
     },
     "activePrompt": {
@@ -147,14 +147,14 @@
     }
   },
   "scraper": {
-    "title": "Web Scraper",
+    "title": "Web Kazıyıcı",
     "description": "Web sayfalarından içerik çıkartın ve analiz edin",
     "refreshButton": "Yenile",
     "scraperTitle": "Web Kazıyıcı",
     "scraperDescription": "Web sayfalarından içerik çıkarın ve vektör veritabanında saklayın",
     "scrapeHistory": "Tarama Geçmişi",
     "historyDescription": "Gerçekleştirilen tüm web kazıma işlemlerinin kaydı",
-    "scraperTab": "Scraper",
+    "scraperTab": "Kazıyıcı",
     "historyTab": "Geçmiş",
     "totalPages": "Toplam Sayfa",
     "totalSize": "Toplam Boyut",
@@ -170,7 +170,7 @@
       "title": "Başlık",
       "url": "URL",
       "size": "Boyut",
-      "chunks": "Parça",
+      "chunks": "Parçalar",
       "mode": "Mod",
       "date": "Tarih",
       "actions": "Eylemler"
@@ -186,8 +186,8 @@
       "noHistory": "Henüz geçmiş kaydı yok",
       "success": "Başarılı",
       "failed": "Başarısız",
-      "embeddings": "Embeddings",
-      "noEmbeddings": "Embedding yok"
+      "embeddings": "Vektörler",
+      "noEmbeddings": "Vektör Yok"
     },
     "details": {
       "title": "Sayfa Detayları",
@@ -218,13 +218,13 @@
     }
   },
   "dashboard": {
-    "title": "Dashboard",
+    "title": "Kontrol Paneli",
     "loading": "Dashboard yükleniyor...",
     "loadError": "Dashboard verisi yüklenemedi",
     "documents": "Dokümanlar",
     "conversations": "Konuşmalar",
     "messages": "Mesajlar",
-    "embeddings": "Embeddings",
+    "embeddings": "Vektörler",
     "systemStatus": "Sistem Durumu",
     "recentActivity": "Son Aktiviteler",
     "statistics": "İstatistikler",

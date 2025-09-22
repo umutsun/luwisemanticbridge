@@ -21,9 +21,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { 
-  Brain, 
-  ChevronDown, 
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Brain,
+  ChevronDown,
   Home,
   Activity,
   Database,
@@ -38,9 +39,11 @@ import {
   FileText,
   Globe,
   Menu,
-  X
+  X,
+  Shield
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import NotificationCenter from '@/components/NotificationCenter';
 
 interface HeaderProps {
   user?: {
@@ -144,6 +147,12 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
   const menuItems = [
     { href: '/dashboard', label: t('header.menu.overview'), icon: Home },
+    { href: '/dashboard/system-monitor', label: 'Sistem Monitörü', icon: Activity },
+    { href: '/dashboard/audit-logs', label: 'Denetim Logları', icon: Shield },
+    ...(currentUser?.role === 'admin' ? [
+        { href: '/dashboard/audit-settings', label: 'Denetim Ayarları', icon: Settings2 },
+        { href: '/dashboard/rbac', label: 'Rol Yönetimi', icon: Shield }
+      ] : []),
     { href: '/dashboard/query', label: t('header.menu.ragQuery'), icon: Search },
     { href: '/dashboard/documents', label: t('header.menu.documents'), icon: FileText },
     { href: '/dashboard/embeddings-manager', label: t('header.menu.embeddingsManager'), icon: Cpu },
@@ -289,6 +298,9 @@ export default function Header({ user, onLogout }: HeaderProps) {
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
             <ThemeToggle />
+
+            {/* Notification Center */}
+            <NotificationCenter />
 
             {/* System Status - Hidden on mobile, shown in menu */}
             <div className="hidden sm:block">

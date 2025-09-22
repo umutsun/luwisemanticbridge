@@ -12,16 +12,166 @@ const pgPool = new Pool({
 router.get('/all', async (req: Request, res: Response) => {
   try {
     const result = await pgPool.query('SELECT setting_key, setting_value FROM chatbot_settings');
-    
+
     const settings: { [key: string]: string } = {};
     result.rows.forEach(row => {
       settings[row.setting_key] = row.setting_value;
     });
-    
+
     res.json(settings);
   } catch (error) {
     console.error('Error fetching settings:', error);
     res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Get configuration in nested format (for frontend)
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const result = await pgPool.query('SELECT setting_key, setting_value FROM chatbot_settings');
+
+    const config: any = {
+      app: {},
+      database: {},
+      redis: {},
+      openai: {},
+      anthropic: {},
+      deepseek: {},
+      ollama: {},
+      huggingface: {},
+      google: {},
+      jina: {},
+      n8n: {},
+      scraper: {},
+      embeddings: {},
+      dataSource: {},
+      llmSettings: {},
+      security: {},
+      logging: {}
+    };
+
+    // Initialize API key objects to ensure they exist
+    config.openai.apiKey = '';
+    config.google.apiKey = '';
+    config.anthropic.apiKey = '';
+    config.huggingface.apiKey = '';
+
+    result.rows.forEach(row => {
+      const key = row.setting_key;
+      const value = row.setting_value;
+
+      // Special handling for ai_settings
+      if (key === 'ai_settings') {
+        try {
+          const aiSettings = JSON.parse(value);
+          // Map to the expected structure
+          if (aiSettings.openaiApiKey) {
+            config.openai.apiKey = aiSettings.openaiApiKey;
+          }
+          if (aiSettings.openaiApiBase) {
+            // Store base URL if needed
+          }
+          if (aiSettings.embeddingProvider) {
+            config.llmSettings.embeddingProvider = aiSettings.embeddingProvider;
+          }
+          if (aiSettings.embeddingModel) {
+            config.llmSettings.embeddingModel = aiSettings.embeddingModel;
+          }
+        } catch (e) {
+          console.error('Error parsing ai_settings:', e);
+        }
+      }
+      // Handle regular nested keys
+      else if (key.includes('.')) {
+        const keys = key.split('.');
+        let current = config;
+
+        // Navigate to the correct nested level
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!current[keys[i]]) {
+            current[keys[i]] = {};
+          }
+          current = current[keys[i]];
+        }
+
+        // Set the value
+        const lastKey = keys[keys.length - 1];
+
+        // Try to parse as JSON, if fails keep as string
+        try {
+          current[lastKey] = JSON.parse(value);
+        } catch {
+          // Handle numeric values
+          if (!isNaN(Number(value)) && value !== '') {
+            current[lastKey] = Number(value);
+          } else if (value === 'true' || value === 'false') {
+            current[lastKey] = value === 'true';
+          } else {
+            current[lastKey] = value;
+          }
+        }
+      }
+      // Handle API keys - check both flat key format and nested format
+      else if (key === 'openai_api_key' || key === 'openai.apiKey') {
+        config.openai.apiKey = value;
+      } else if (key === 'google_api_key' || key === 'google.apiKey') {
+        config.google.apiKey = value;
+      } else if (key === 'anthropic_api_key' || key === 'anthropic.apiKey') {
+        config.anthropic.apiKey = value;
+      } else if (key === 'huggingface_api_key' || key === 'huggingface.apiKey') {
+        config.huggingface.apiKey = value;
+      }
+      // Handle migration settings
+      else if (key === 'migration_source_db') {
+        // Store in config if needed
+      }
+    });
+
+    res.json(config);
+  } catch (error) {
+    console.error('Error fetching configuration:', error);
+    res.status(500).json({ error: 'Failed to fetch configuration' });
+  }
+});
+
+// Save entire configuration
+router.put('/', async (req: Request, res: Response) => {
+  try {
+    const config = req.body;
+    const updates: { key: string; value: string }[] = [];
+
+    // Flatten the config object into key-value pairs
+    const flattenConfig = (obj: any, prefix = '') => {
+      Object.entries(obj).forEach(([key, value]) => {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          flattenConfig(value, fullKey);
+        } else {
+          updates.push({
+            key: fullKey,
+            value: typeof value === 'string' ? value : JSON.stringify(value)
+          });
+        }
+      });
+    };
+
+    flattenConfig(config);
+
+    // Save all settings
+    for (const update of updates) {
+      await pgPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value)
+         VALUES ($1, $2)
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $2`,
+        [update.key, update.value]
+      );
+    }
+
+    res.json({ success: true, message: 'Configuration saved successfully' });
+  } catch (error) {
+    console.error('Error saving configuration:', error);
+    res.status(500).json({ error: 'Failed to save configuration' });
   }
 });
 
@@ -877,6 +1027,218 @@ router.post('/gemini-model', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error updating Gemini model:', error);
     res.status(500).json({ error: 'Failed to update Gemini model' });
+  }
+});
+
+// Get all services status (for the dashboard services page)
+router.get('/services/status', async (req: Request, res: Response) => {
+  try {
+    const services: { [key: string]: any } = {};
+
+    // PostgreSQL status
+    try {
+      const start = Date.now();
+      await pgPool.query('SELECT 1');
+      services.postgres = {
+        status: 'connected',
+        responseTime: Date.now() - start,
+        maxConnections: pgPool.options.max || 20,
+        totalConnections: pgPool.totalCount,
+        idleConnections: pgPool.idleCount,
+        waitingConnections: pgPool.waitingCount
+      };
+    } catch (error: any) {
+      services.postgres = {
+        status: 'disconnected',
+        error: error.message
+      };
+    }
+
+    // Redis status
+    try {
+      const { redis } = require('../server');
+
+      if (redis && redis.status) {
+        const start = Date.now();
+        await redis.ping();
+        const responseTime = Date.now() - start;
+
+        const info = await redis.info('memory');
+        const usedMemory = info.match(/used_memory:(\d+)/);
+        const maxMemory = info.match(/maxmemory:(\d+)/);
+
+        services.redis = {
+          status: redis.status,
+          responseTime,
+          connected: redis.status === 'ready',
+          usedMemory: usedMemory ? parseInt(usedMemory[1]) : 0,
+          maxMemory: maxMemory ? parseInt(maxMemory[1]) : 0
+        };
+      } else {
+        services.redis = {
+          status: 'disconnected',
+          error: 'Redis client not initialized'
+        };
+      }
+    } catch (error: any) {
+      services.redis = {
+        status: 'disconnected',
+        error: error.message
+      };
+    }
+
+    // Check embedding service
+    try {
+      const embeddingResult = await pgPool.query(
+        'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+        ['embedding_provider']
+      );
+
+      const embeddingProvider = embeddingResult.rows[0]?.setting_value || 'openai';
+      services.embedding = {
+        status: 'configured',
+        provider: embeddingProvider
+      };
+    } catch (error) {
+      services.embedding = {
+        status: 'error',
+        error: 'Failed to fetch embedding settings'
+      };
+    }
+
+    // Check LLM services
+    try {
+      const llmResult = await pgPool.query(
+        'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ($1, $2, $3)',
+        ['openai_api_key', 'gemini_api_key', 'claude_api_key']
+      );
+
+      const llmServices: { [key: string]: boolean } = {};
+      llmResult.rows.forEach(row => {
+        llmServices[row.setting_key] = !!row.setting_value;
+      });
+
+      services.llm = {
+        status: 'configured',
+        providers: {
+          openai: !!llmServices.openai_api_key,
+          gemini: !!llmServices.gemini_api_key,
+          claude: !!llmServices.claude_api_key
+        }
+      };
+    } catch (error) {
+      services.llm = {
+        status: 'error',
+        error: 'Failed to fetch LLM settings'
+      };
+    }
+
+    res.json({
+      services,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching services status:', error);
+    res.status(500).json({ error: 'Failed to fetch services status' });
+  }
+});
+
+// Generic service action endpoint
+router.post('/services/:service/:action', async (req: Request, res: Response) => {
+  const { service, action } = req.params;
+
+  try {
+    switch(service) {
+      case 'redis':
+        const { redis } = require('../server');
+        if (action === 'restart') {
+          // Reconnect Redis
+          await redis.quit();
+          await redis.connect();
+          res.json({ success: true, message: 'Redis restarted successfully' });
+        } else {
+          res.status(400).json({ error: 'Invalid action for Redis' });
+        }
+        break;
+
+      case 'postgres':
+        if (action === 'test') {
+          await pgPool.query('SELECT 1');
+          res.json({ success: true, message: 'PostgreSQL connection test successful' });
+        } else {
+          res.status(400).json({ error: 'Invalid action for PostgreSQL' });
+        }
+        break;
+
+      default:
+        res.status(400).json({ error: `Unknown service: ${service}` });
+    }
+  } catch (error: any) {
+    console.error(`Service action error (${service}/${action}):`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Service action failed'
+    });
+  }
+});
+
+// Test connection endpoint (for individual services)
+router.get('/test/:service', async (req: Request, res: Response) => {
+  const { service } = req.params;
+
+  try {
+    switch(service) {
+      case 'postgres':
+        await pgPool.query('SELECT 1');
+        res.json({ success: true, message: 'PostgreSQL connection successful' });
+        break;
+
+      case 'redis':
+        const { redis } = require('../server');
+        await redis.ping();
+        res.json({ success: true, message: 'Redis connection successful' });
+        break;
+
+      case 'embedding':
+        // Test embedding service
+        const embeddingResult = await pgPool.query(
+          'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+          ['embedding_provider']
+        );
+
+        const provider = embeddingResult.rows[0]?.setting_value || 'openai';
+        res.json({ success: true, message: `Embedding service configured with: ${provider}` });
+        break;
+
+      case 'llm':
+        // Test LLM services
+        const llmResult = await pgPool.query(
+          'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ($1, $2, $3)',
+          ['openai_api_key', 'gemini_api_key', 'claude_api_key']
+        );
+
+        const providers: string[] = [];
+        llmResult.rows.forEach(row => {
+          if (row.setting_value) {
+            providers.push(row.setting_key.replace('_api_key', ''));
+          }
+        });
+
+        res.json({
+          success: true,
+          message: `LLM services configured: ${providers.join(', ') || 'none'}`
+        });
+        break;
+
+      default:
+        res.status(400).json({ error: `Unknown service: ${service}` });
+    }
+  } catch (error: any) {
+    console.error(`Test connection error (${service}):`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Connection test failed'
+    });
   }
 });
 

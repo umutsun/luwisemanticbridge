@@ -16,7 +16,7 @@ export interface Source {
   sourceTable?: string;
   category?: string;
   citation?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   confidence?: number;
   timestamp?: string;
 }
@@ -44,5 +44,6 @@ export interface SendMessageParams {
 export interface ChatResponse {
   message: Message;
   sources?: Source[];
+  relatedTopics?: Source[];
   conversationId: string;
 }

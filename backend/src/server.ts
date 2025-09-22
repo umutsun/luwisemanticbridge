@@ -135,6 +135,7 @@ app.use('/api/v2/migration', migrationRoutes);
 app.use('/api/v2/embeddings', embeddingsV2Routes);
 app.use('/api/v2/embeddings', embeddingProgressRoutes);
 app.use('/api/v2/settings', settingsRoutes);
+app.use('/api/v2/config', settingsRoutes);
 app.use('/api/v2/migration-check', migrationCheckRoutes);
 app.use('/api/v2/rag', ragConfigRoutes);
 app.use('/api/v2/activity', activityRoutes);

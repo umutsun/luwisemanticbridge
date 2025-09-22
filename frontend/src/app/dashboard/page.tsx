@@ -2,570 +2,419 @@
 
 import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '@/lib/config';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Legend
-} from 'recharts';
-import { 
-  Brain, 
-  Database, 
-  MessageSquare, 
-  Upload, 
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Brain,
+  Database,
+  MessageSquare,
+  Upload,
   Search,
   RefreshCw,
-  Trash2,
   Activity,
   FileText,
   Globe,
-  Zap,
-  HardDrive,
-  Settings,
-  Download,
+  Server,
   CheckCircle,
   AlertTriangle,
-  Info,
-  Loader2,
-  FolderOpen,
-  Link as LinkIcon,
-  Bot,
-  Code,
-  CloudUpload,
-  ArrowRight
+  Wifi,
+  WifiOff,
+  Settings,
+  Plus,
+  Zap,
+  FileDown,
+  Users,
+  Clock
 } from 'lucide-react';
 import Link from 'next/link';
 
-interface DashboardStats {
+interface ServiceStatus {
+  lightrag: boolean;
+  embedder: boolean;
+  fastapi: boolean;
+  streamlit: boolean;
+}
+
+interface DashboardData {
   database: {
     documents: number;
     conversations: number;
     messages: number;
     size: string;
-    embeddings?: number;
-    vectors?: number;
+    status: string;
   };
   redis: {
     connected: boolean;
     used_memory: string;
     total_commands_processed: number;
-    cached_embeddings?: number;
+    status: string;
   };
   lightrag: {
     initialized: boolean;
     documentCount: number;
+    vectorStoreSize: number;
     lastUpdate: string;
-    nodeCount?: number;
-    edgeCount?: number;
-    communities?: number;
+    provider: string;
+    status: string;
   };
-  rag: {
-    totalChunks?: number;
-    avgChunkSize?: number;
-    indexStatus?: string;
-    lastIndexTime?: string;
-  };
-  recentActivity: Array<{
+  services?: ServiceStatus;
+  recentActivity?: Array<{
     id: string;
-    title: string;
-    message_count: number;
-    created_at: string;
+    type: string;
+    action: string;
+    target: string;
+    status: string;
+    message: string;
+    timestamp: string;
   }>;
+  error?: string;
+  status?: string;
+  message?: string;
 }
 
-export default function EnhancedASBDashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+export default function Dashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch(getApiUrl('dashboard'));
+      if (response.ok) {
+        const jsonData = await response.json();
+        setData(jsonData);
+        setLastUpdated(new Date());
+      } else {
+        // Fallback data when backend is not available
+        setData({
+          database: {
+            documents: 0,
+            conversations: 0,
+            messages: 0,
+            size: '0 MB',
+            status: 'disconnected'
+          },
+          redis: {
+            connected: false,
+            used_memory: '0 B',
+            total_commands_processed: 0,
+            status: 'disconnected'
+          },
+          lightrag: {
+            initialized: false,
+            documentCount: 0,
+            vectorStoreSize: 0,
+            lastUpdate: new Date().toISOString(),
+            provider: 'offline',
+            status: 'stopped'
+          },
+          services: {
+            lightrag: false,
+            embedder: false,
+            fastapi: true,
+            streamlit: false
+          },
+          recentActivity: [{
+            id: '1',
+            type: 'system',
+            action: 'check',
+            target: 'services',
+            status: 'warning',
+            message: 'Backend services not running',
+            timestamp: new Date().toISOString()
+          }],
+          error: 'Backend service is unavailable',
+          status: 'warning',
+          message: 'Running in offline mode'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const eventSource = new EventSource(getApiUrl('dashboard') + '/stream');
-    setLoading(true);
-
-    eventSource.onmessage = (event) => {
-      if (event.data === ':heartbeat') {
-        return;
-      }
-      const data = JSON.parse(event.data);
-      setStats(data);
-      setLoading(false);
-    };
-
-    eventSource.onerror = (err) => {
-      console.error('EventSource failed:', err);
-      setError('Dashboard verisi yüklenemedi');
-      eventSource.close();
-      setLoading(false);
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
   }, []);
 
-  // Clear messages after 5 seconds
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => setSuccess(''), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [success]);
+  const StatusCard = ({ title, value, icon: Icon, status, description }: {
+    title: string;
+    value: string | number;
+    icon: any;
+    status?: 'online' | 'offline' | 'warning';
+    description?: string;
+  }) => (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold">{value}</p>
+            {description && (
+              <p className="text-xs text-muted-foreground mt-1">{description}</p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <Icon className="h-8 w-8 text-muted-foreground" />
+            {status && (
+              <div className={`w-2 h-2 rounded-full ${
+                status === 'online' ? 'bg-green-500' :
+                status === 'warning' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`} />
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const ServiceCard = ({ name, status, icon: Icon, onAction }: {
+    name: string;
+    status: boolean;
+    icon: any;
+    onAction?: () => void;
+  }) => (
+    <Card className={status ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Icon className="h-5 w-5" />
+            <div>
+              <h3 className="font-medium">{name}</h3>
+              <Badge variant={status ? 'default' : 'secondary'} className="mt-1">
+                {status ? 'Running' : 'Stopped'}
+              </Badge>
+            </div>
+          </div>
+          {onAction && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onAction}
+            >
+              {status ? 'Stop' : 'Start'}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-          <p className="text-muted-foreground">Dashboard yükleniyor...</p>
+      <div className="container mx-auto p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded"></div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  // Prepare chart data
-  const pieChartData = stats ? [
-    { name: 'Documents', value: stats.database.documents, color: '#3b82f6' },
-    { name: 'Conversations', value: stats.database.conversations, color: '#10b981' },
-    { name: 'Messages', value: stats.database.messages, color: '#f59e0b' }
-  ] : [];
-
-  const barChartData = stats ? [
-    { name: 'Dokümanlar', value: stats.database.documents },
-    { name: 'Konuşmalar', value: stats.database.conversations },
-    { name: 'Mesajlar', value: stats.database.messages },
-    { name: 'Embeddings', value: stats.database.embeddings || 0 }
-  ] : [];
-
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-        {/* Alerts */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        {success && (
-          <Alert className="bg-green-50 border-green-200">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">{success}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* System Status Table */}
-        <Card className="border-2 border-[#3b82f6]/20">
-          <CardHeader className="bg-[#3b82f6]/5">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <Activity className="h-5 w-5 text-[#3b82f6]" />
-              Sistem Durumu
-            </CardTitle>
-            <CardDescription>
-              Alice Semantic Bridge sistem genel durumu
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b bg-muted/50">
-                  <tr>
-                    <th className="text-left p-4 font-semibold">Hizmet</th>
-                    <th className="text-left p-4 font-semibold">Durum</th>
-                    <th className="text-left p-4 font-semibold">Miktar</th>
-                    <th className="text-left p-4 font-semibold">Detay</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b hover:bg-[#3b82f6]/5 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-[#3b82f6]" />
-                        <span className="font-medium">Dokümanlar</span>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <Badge className="bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20">
-                        Aktif
-                      </Badge>
-                    </td>
-                    <td className="p-4 font-semibold text-lg">
-                      {stats?.database.documents?.toLocaleString() || 0}
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">
-                      {stats?.database.embeddings || 0} embeddings
-                    </td>
-                  </tr>
-                  <tr className="border-b hover:bg-[#10b981]/5 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4 text-[#10b981]" />
-                        <span className="font-medium">Konuşmalar</span>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <Badge className="bg-[#10b981]/10 text-[#10b981] border-[#10b981]/20">
-                        Aktif
-                      </Badge>
-                    </td>
-                    <td className="p-4 font-semibold text-lg">
-                      {stats?.database.conversations || 0}
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">
-                      {stats?.database.messages || 0} mesaj
-                    </td>
-                  </tr>
-                  <tr className="border-b hover:bg-[#8b5cf6]/5 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <Brain className="h-4 w-4 text-[#8b5cf6]" />
-                        <span className="font-medium">LightRAG</span>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <Badge
-                        className={
-                          stats?.lightrag.initialized
-                            ? "bg-[#8b5cf6]/10 text-[#8b5cf6] border-[#8b5cf6]/20"
-                            : "bg-muted text-muted-foreground"
-                        }
-                      >
-                        {stats?.lightrag.initialized ? 'Aktif' : 'Pasif'}
-                      </Badge>
-                    </td>
-                    <td className="p-4 font-semibold text-lg">
-                      {stats?.lightrag.documentCount || 0}
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">
-                      {stats?.lightrag.nodeCount || 0} nodes
-                    </td>
-                  </tr>
-                  <tr className="border-b hover:bg-[#f59e0b]/5 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <Database className="h-4 w-4 text-[#f59e0b]" />
-                        <span className="font-medium">Redis Cache</span>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <Badge
-                        className={
-                          stats?.redis.connected
-                            ? "bg-[#f59e0b]/10 text-[#f59e0b] border-[#f59e0b]/20"
-                            : "bg-red-50 text-red-600 border-red-200"
-                        }
-                      >
-                        {stats?.redis.connected ? 'Bağlı' : 'Bağlı Değil'}
-                      </Badge>
-                    </td>
-                    <td className="p-4 font-semibold text-lg">
-                      {stats?.redis.cached_embeddings || 0}
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">
-                      {stats?.redis.used_memory || '0 MB'}
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-[#ec4899]/5 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <HardDrive className="h-4 w-4 text-[#ec4899]" />
-                        <span className="font-medium">Veritabanı</span>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <Badge className="bg-[#ec4899]/10 text-[#ec4899] border-[#ec4899]/20">
-                        Aktif
-                      </Badge>
-                    </td>
-                    <td className="p-4 font-semibold text-lg">
-                      {stats?.database.size || 'N/A'}
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">
-                      Toplam: {((stats?.database.documents || 0) +
-                              (stats?.database.conversations || 0) +
-                              (stats?.database.messages || 0)).toLocaleString()} kayıt
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Main Dashboard Content without tabs */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link href="/dashboard/query">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">LightRAG Sorgu</CardTitle>
-                    <Search className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">Anlamsal arama yapın</p>
-                  <ArrowRight className="h-4 w-4 mt-2 text-primary" />
-                </CardContent>
-              </Card>
-            </Link>
-
-            <Link href="/dashboard/documents">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Dokümanlar</CardTitle>
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">Doküman yönetimi</p>
-                  <ArrowRight className="h-4 w-4 mt-2 text-primary" />
-                </CardContent>
-              </Card>
-            </Link>
-
-            <Link href="/dashboard/embeddings-manager">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Embeddings</CardTitle>
-                    <Brain className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">Vektör yönetimi</p>
-                  <ArrowRight className="h-4 w-4 mt-2 text-primary" />
-                </CardContent>
-              </Card>
-            </Link>
-
-            <Link href="/dashboard/scraper">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Web Scraper</CardTitle>
-                    <Globe className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">Web içeriği çekin</p>
-                  <ArrowRight className="h-4 w-4 mt-2 text-primary" />
-                </CardContent>
-              </Card>
-            </Link>
-
-            <Link href="/dashboard/prompts">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">Sistem Prompt</CardTitle>
-                    <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">AI ayarlarını yönetin</p>
-                  <ArrowRight className="h-4 w-4 mt-2 text-primary" />
-                </CardContent>
-              </Card>
-            </Link>
-          </div>
-
-          {/* Recent Sessions & Most Searched Queries */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Recent Sessions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Son Oturumlar</CardTitle>
-                <CardDescription>En son RAG chatbot kullanımları</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {stats?.recentActivity?.slice(0, 5).map((activity) => (
-                    <div key={activity.id} className="flex items-center justify-between p-2 hover:bg-muted/50 rounded">
-                      <div className="flex items-center gap-3">
-                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">{activity.title}</p>
-                          <p className="text-xs text-muted-foreground">{activity.message_count} mesaj</p>
-                        </div>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(activity.created_at).toLocaleTimeString('tr-TR')}
-                      </span>
-                    </div>
-                  ))}
-                  {!stats?.recentActivity?.length && (
-                    <p className="text-sm text-muted-foreground text-center py-4">Henüz aktivite yok</p>
-                  )}
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Link href="/dashboard/activity" className="w-full">
-                  <Button variant="outline" className="w-full">
-                    Tüm Aktiviteleri Görüntüle
-                  </Button>
-                </Link>
-              </CardFooter>
-            </Card>
-
-            {/* Most Searched Queries */}
-            <Card>
-              <CardHeader>
-                <CardTitle>En Çok Arananlar</CardTitle>
-                <CardDescription>Popüler sorgu konuları</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    { query: 'İş hukuku danışmanlık', count: 234 },
-                    { query: 'Kira sözleşmesi', count: 189 },
-                    { query: 'Boşanma davası', count: 156 },
-                    { query: 'Tazminat hesaplama', count: 123 },
-                    { query: 'İcra takibi', count: 98 }
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Search className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">{item.query}</span>
-                      </div>
-                      <Badge variant="secondary">{item.count}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Veri Dağılımı</CardTitle>
-                <CardDescription>Sistemdeki veri dağılımı özeti</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={pieChartData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({name, value}) => `${name}: ${value}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {pieChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Sistem İstatistikleri</CardTitle>
-                <CardDescription>Detaylı sistem metrikleri</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={barChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* System Info */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Data Schema */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Veri Şeması</CardTitle>
-                <CardDescription>Tanımlı veri yapıları</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Legal Documents</span>
-                    <Badge variant="outline">324</Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Case Studies</span>
-                    <Badge variant="outline">156</Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Regulations</span>
-                    <Badge variant="outline">89</Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Client Data</span>
-                    <Badge variant="outline">412</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Hybrid System Info */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Hybrid RAG Bilgisi</CardTitle>
-                <CardDescription>Sistem entegrasyonu</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Vector Search</span>
-                      <span className="text-green-600">Aktif</span>
-                    </div>
-                    <Progress value={85} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Graph Relations</span>
-                      <span className="text-green-600">Aktif</span>
-                    </div>
-                    <Progress value={72} className="h-2" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Semantic Cache</span>
-                      <span className="text-green-600">Aktif</span>
-                    </div>
-                    <Progress value={93} className="h-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Son güncelleme: {lastUpdated.toLocaleTimeString('tr-TR')}
+          </p>
         </div>
+        <div className="flex gap-2">
+          <Button onClick={fetchData} variant="outline">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Yenile
+          </Button>
+          <Link href="/dashboard/settings">
+            <Button>
+              <Settings className="h-4 w-4 mr-2" />
+              Ayarlar
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Alert if backend is not available */}
+      {data?.error && (
+        <Alert>
+          <WifiOff className="h-4 w-4" />
+          <AlertDescription>
+            {data.message || 'Backend servislerine ulaşılamıyor. Bazı özellikler çalışmayabilir.'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatusCard
+          title="Dokümanlar"
+          value={data?.database.documents || 0}
+          icon={FileText}
+          status={data?.database.status === 'connected' ? 'online' : 'offline'}
+          description="Veritabanındaki toplam doküman"
+        />
+        <StatusCard
+          title="Konuşmalar"
+          value={data?.database.conversations || 0}
+          icon={MessageSquare}
+          description="Toplam konuşma sayısı"
+        />
+        <StatusCard
+          title="Vektörler"
+          value={data?.lightrag.vectorStoreSize || 0}
+          icon={Brain}
+          status={data?.lightrag.status === 'initialized' ? 'online' : 'offline'}
+          description="Embedding vektörleri"
+        />
+        <StatusCard
+          title="Cache"
+          value={data?.redis.connected ? 'Aktif' : 'Pasif'}
+          icon={Zap}
+          status={data?.redis.connected ? 'online' : 'offline'}
+          description={data?.redis.used_memory}
+        />
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Services Status */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5" />
+                Servis Durumu
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {data?.services && (
+                <>
+                  <ServiceCard
+                    name="LightRAG"
+                    status={data.services.lightrag}
+                    icon={Brain}
+                  />
+                  <ServiceCard
+                    name="Embedder"
+                    status={data.services.embedder}
+                    icon={Upload}
+                  />
+                  <ServiceCard
+                    name="FastAPI"
+                    status={data.services.fastapi}
+                    icon={Zap}
+                  />
+                  <ServiceCard
+                    name="Streamlit"
+                    status={data.services.streamlit}
+                    icon={Globe}
+                  />
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Hızlı İşlemler</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Link href="/dashboard/embeddings-manager">
+                <Button className="w-full justify-start" variant="outline">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Doküman Yükle
+                </Button>
+              </Link>
+              <Link href="/chat">
+                <Button className="w-full justify-start" variant="outline">
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Sohbet Başlat
+                </Button>
+              </Link>
+              <Link href="/dashboard/settings">
+                <Button className="w-full justify-start" variant="outline">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Ayarları Yapılandır
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Son Aktiviteler</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {data?.recentActivity && data.recentActivity.length > 0 ? (
+                <div className="space-y-3">
+                  {data.recentActivity.slice(0, 5).map((activity) => (
+                    <div key={activity.id} className="flex items-start gap-2 text-sm">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                        activity.status === 'success' ? 'bg-green-500' :
+                        activity.status === 'warning' ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`} />
+                      <div>
+                        <p className="font-medium">{activity.message}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(activity.timestamp).toLocaleTimeString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Henüz aktivite yok</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* System Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sistem Bilgisi</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="font-medium">Veritabanı Durumu</p>
+              <Badge variant={data?.database.status === 'connected' ? 'default' : 'secondary'}>
+                {data?.database.status === 'connected' ? 'Bağlı' : 'Bağlı Değil'}
+              </Badge>
+            </div>
+            <div>
+              <p className="font-medium">LightRAG Durumu</p>
+              <Badge variant={data?.lightrag.initialized ? 'default' : 'secondary'}>
+                {data?.lightrag.initialized ? 'Hazır' : 'Hazır Değil'}
+              </Badge>
+            </div>
+            <div>
+              <p className="font-medium">Redis Durumu</p>
+              <Badge variant={data?.redis.connected ? 'default' : 'secondary'}>
+                {data?.redis.connected ? 'Bağlı' : 'Bağlı Değil'}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

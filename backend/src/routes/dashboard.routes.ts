@@ -1211,24 +1211,24 @@ router.get('/api/dashboard', async (req: Request, res: Response) => {
   try {
     const { pgPool, redis } = require('../server');
     const lightrag = await getLightRAG();
-    
+
     let documentsCount = 0, conversationsCount = 0, messagesCount = 0, dbSize = 0;
-    
+
     try {
       const convResult = await pgPool.query(`SELECT COUNT(*) as count FROM conversations`);
       conversationsCount = convResult.rows[0].count || 0;
     } catch (err) { /* ignore */ }
-    
+
     try {
       const msgResult = await pgPool.query(`SELECT COUNT(*) as count FROM messages`);
       messagesCount = msgResult.rows[0].count || 0;
     } catch (err) { /* ignore */ }
-    
+
     try {
       const sizeResult = await pgPool.query(`SELECT pg_database_size(current_database()) as db_size`);
       dbSize = sizeResult.rows[0].db_size || 0;
     } catch (err) { /* ignore */ }
-    
+
     let redisStats = { connected: false, used_memory: '0 MB' };
     try {
       if (redis && redis.status === 'ready') {
@@ -1238,17 +1238,17 @@ router.get('/api/dashboard', async (req: Request, res: Response) => {
         redisStats.used_memory = memMatch ? memMatch[1].trim() : '0 MB';
       }
     } catch (err) { /* ignore */ }
-    
+
     const lightragStats = await lightrag.getStats();
-    
+
     const recentActivity = await pgPool.query(`
-      SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at 
+      SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
       FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id
       GROUP BY c.id ORDER BY c.created_at DESC LIMIT 10
     `);
-    
+
     const formattedSize = dbSize > 1073741824 ? `${(dbSize / 1073741824).toFixed(2)} GB` : `${(dbSize / 1048576).toFixed(2)} MB`;
-  
+
     res.json({
       database: { documents: documentsCount, conversations: conversationsCount, messages: messagesCount, size: formattedSize },
       redis: redisStats,
@@ -1257,6 +1257,153 @@ router.get('/api/dashboard', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Failed to get dashboard stats' });
+  }
+});
+
+// Dashboard streaming endpoint for real-time updates
+router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+
+  let intervalId: NodeJS.Timeout | null = null;
+  let isConnectionClosed = false;
+
+  const cleanup = () => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    isConnectionClosed = true;
+  };
+
+  try {
+    const { pgPool, redis } = require('../server');
+
+    const sendDashboardData = async () => {
+      if (isConnectionClosed) return;
+
+      try {
+        let documentsCount = 0, conversationsCount = 0, messagesCount = 0, dbSize = 0;
+
+        try {
+          const convResult = await pgPool.query(`SELECT COUNT(*) as count FROM conversations`);
+          conversationsCount = convResult.rows[0].count || 0;
+        } catch (err) { /* ignore */ }
+
+        try {
+          const msgResult = await pgPool.query(`SELECT COUNT(*) as count FROM messages`);
+          messagesCount = msgResult.rows[0].count || 0;
+        } catch (err) { /* ignore */ }
+
+        try {
+          const sizeResult = await pgPool.query(`SELECT pg_database_size(current_database()) as db_size`);
+          dbSize = sizeResult.rows[0].db_size || 0;
+        } catch (err) { /* ignore */ }
+
+        let redisStats = { connected: false, used_memory: '0 MB' };
+        try {
+          if (redis && redis.status === 'ready') {
+            const info = await redis.info('memory');
+            const memMatch = info.match(/used_memory_human:(.+)/);
+            redisStats.connected = true;
+            redisStats.used_memory = memMatch ? memMatch[1].trim() : '0 MB';
+          }
+        } catch (err) { /* ignore */ }
+
+        // Get LightRAG stats
+        let lightragStats = { initialized: false, documentCount: 0 };
+        try {
+          const lightrag = await getLightRAG();
+          lightragStats = await lightrag.getStats();
+        } catch (err) { /* ignore */ }
+
+        // Get recent activity
+        let recentActivity = [];
+        try {
+          const activityResult = await pgPool.query(`
+            SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
+            FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id
+            GROUP BY c.id ORDER BY c.created_at DESC LIMIT 10
+          `);
+          recentActivity = activityResult.rows;
+        } catch (err) { /* ignore */ }
+
+        // Get embedding progress
+        let embeddingProgress = { status: 'idle', percentage: 0 };
+        try {
+          const progressData = await redis.get('embedding:progress');
+          if (progressData) {
+            embeddingProgress = JSON.parse(progressData);
+          }
+        } catch (err) { /* ignore */ }
+
+        // Get system metrics
+        const systemMetrics = {
+          cpu: Math.random() * 100, // Mock CPU usage
+          memory: Math.random() * 100, // Mock Memory usage
+          disk: Math.random() * 100, // Mock Disk usage
+          timestamp: Date.now()
+        };
+
+        const formattedSize = dbSize > 1073741824 ? `${(dbSize / 1073741824).toFixed(2)} GB` : `${(dbSize / 1048576).toFixed(2)} MB`;
+
+        const dashboardData = {
+          database: {
+            documents: documentsCount,
+            conversations: conversationsCount,
+            messages: messagesCount,
+            size: formattedSize
+          },
+          redis: redisStats,
+          lightrag: lightragStats,
+          recentActivity: recentActivity,
+          embeddingProgress: embeddingProgress,
+          systemMetrics: systemMetrics,
+          timestamp: new Date().toISOString()
+        };
+
+        res.write(`data: ${JSON.stringify(dashboardData)}\n\n`);
+      } catch (err) {
+        console.error('Error sending dashboard data:', err);
+        if (!isConnectionClosed) {
+          res.write(`data: ${JSON.stringify({ error: 'Failed to fetch dashboard data' })}\n\n`);
+        }
+      }
+    };
+
+    // Send initial data
+    await sendDashboardData();
+
+    // Send updates every 5 seconds
+    intervalId = setInterval(sendDashboardData, 5000);
+
+    req.on('close', () => {
+      cleanup();
+    });
+
+    req.on('error', (err: any) => {
+      if (err.code !== 'ECONNABORTED' && err.code !== 'ECONNRESET') {
+        console.error('Request error:', err);
+      }
+      cleanup();
+    });
+
+    res.on('error', (err: any) => {
+      if (err.code !== 'ECONNABORTED' && err.code !== 'ECONNRESET') {
+        console.error('Response error:', err);
+      }
+      cleanup();
+    });
+
+  } catch (error: any) {
+    console.error('Stream error:', error);
+    if (!isConnectionClosed) {
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    }
+    cleanup();
   }
 });
 

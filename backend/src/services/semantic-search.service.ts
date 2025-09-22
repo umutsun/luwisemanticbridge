@@ -26,36 +26,58 @@ export class SemanticSearchService {
   }
 
   /**
-   * Generate embedding for a text using OpenAI
+   * Generate embedding for a text using Google or OpenAI
    */
   async generateEmbedding(text: string): Promise<number[]> {
-    if (!this.useOpenAI || !this.openai) {
-      return this.generateMockEmbedding(text);
+    // Try Google embeddings first if API key is available
+    if (process.env.GOOGLE_API_KEY) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${process.env.GOOGLE_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'models/text-embedding-004',
+            content: { parts: [{ text }] }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return data.embedding.values;
+        }
+      } catch (error) {
+        console.error('Google embedding generation failed:', error);
+      }
     }
 
-    try {
-      const response = await this.openai.embeddings.create({
-        model: 'text-embedding-ada-002',
-        input: text
-      });
-      return response.data[0].embedding;
-    } catch (error) {
-      console.error('Error generating embedding:', error);
-      return this.generateMockEmbedding(text);
+    // Fallback to OpenAI
+    if (this.useOpenAI && this.openai) {
+      try {
+        const response = await this.openai.embeddings.create({
+          model: 'text-embedding-ada-002',
+          input: text
+        });
+        return response.data[0].embedding;
+      } catch (error) {
+        console.error('OpenAI embedding generation failed:', error);
+      }
     }
+
+    // Final fallback to mock embedding
+    return this.generateMockEmbedding(text);
   }
 
   /**
    * Generate mock embedding for demo purposes
    */
   private generateMockEmbedding(text: string): number[] {
-    const embedding = new Array(1536).fill(0);
+    const embedding = new Array(768).fill(0);
     const hash = this.simpleHash(text);
-    
-    for (let i = 0; i < 1536; i++) {
+
+    for (let i = 0; i < 768; i++) {
       embedding[i] = Math.sin(hash * (i + 1)) * 0.5 + Math.random() * 0.1;
     }
-    
+
     return embedding;
   }
 
@@ -221,8 +243,8 @@ export class SemanticSearchService {
     } catch (error) {
       console.timeEnd(queryId); // Ensure timer ends on error
       console.error('Semantic search error:', error);
-      // Fallback to keyword search
-      return this.keywordSearch(query, limit);
+      // Fallback to unified semantic search
+      return this.unifiedSemanticSearch(query, limit);
     }
   }
 
@@ -269,7 +291,7 @@ export class SemanticSearchService {
         WHERE ue.embedding IS NOT NULL
           AND ue.source_type = 'database'
         ORDER BY
-          similarity_score +
+          (1 - (ue.embedding <=> $1::vector)) +
           CASE
             WHEN ue.content ILIKE $3 THEN 0.3
             WHEN ue.metadata->>'table' ILIKE $3 THEN 0.2
@@ -296,8 +318,8 @@ export class SemanticSearchService {
     } catch (error) {
       console.timeEnd(queryId);
       console.error('Unified semantic search error:', error);
-      // Fallback to keyword search
-      return this.keywordSearch(query, limit);
+      // Fallback to unified semantic search
+      return this.unifiedSemanticSearch(query, limit);
     }
   }
 
@@ -320,17 +342,16 @@ export class SemanticSearchService {
         }));
       }
       
-      // Fallback to keyword search if no semantic results
-      console.log('No semantic results, falling back to keyword search');
-      const keywordResults = await this.keywordSearch(query, limit);
-      
-      return keywordResults.map((result, index) => ({
+      // Fallback to unified semantic search if no rag_data results
+      console.log('No semantic results, falling back to unified semantic search');
+      const unifiedResults = await this.unifiedSemanticSearch(query, limit);
+
+      return unifiedResults.map((result, index) => ({
         ...result,
-        score: result.score || (100 - (index * 10)), // Preserve existing score or calculate based on index
-        keyword_score: 1 - (index * 0.1),
-        semantic_score: 0,
-        similarity_score: 0,
-        combined_score: 1 - (index * 0.1)
+        keyword_score: 0,
+        semantic_score: result.score / 100,
+        similarity_score: result.score / 100,
+        combined_score: result.score / 100
       }));
     } catch (error) {
       console.error('Hybrid search error:', error);
