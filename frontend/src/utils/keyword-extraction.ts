@@ -222,7 +222,7 @@ function extractProceduralKeywords(text: string, keywords: string[]): void {
 }
 
 /**
- * Extracts named entities (basic implementation)
+ * Extracts named entities (basic implementation) - only important legal/tax entities
  */
 function extractNamedEntities(title: string, excerpt: string, entities: string[]): void {
   // Extract law/article references
@@ -237,10 +237,16 @@ function extractNamedEntities(title: string, excerpt: string, entities: string[]
     entities.push(...articleMatches);
   }
 
-  // Extract date references
-  const dateMatches = excerpt.match(/\d{1,2}\.\d{1,2}\.\d{4}/g);
-  if (dateMatches) {
-    entities.push(...dateMatches);
+  // Extract monetary values with currency
+  const moneyMatches = excerpt.match(/(\d+(?:\.\d+)?)\s*(?:TL|₺|€|\$|USD|EUR)/gi);
+  if (moneyMatches) {
+    entities.push(...moneyMatches);
+  }
+
+  // Extract percentages
+  const percentMatches = excerpt.match(/(\d+(?:\.\d+)?)%/g);
+  if (percentMatches) {
+    entities.push(...percentMatches.map(p => p + ' oran'));
   }
 }
 

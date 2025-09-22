@@ -87,10 +87,10 @@ const getSourceTableName = (sourceTable?: string) => {
     'DANISTAYKARARLARI': 'Danıştay Kararları',
     'MAKALELER': 'Makaleler',
     'SORUCEVAP': 'Soru Cevap',
-    'Kaynak': 'Genel Kaynak',
+    'Kaynak': 'Genel Konu',
     'embeddings': 'Dokümanlar',
     'chunks': 'Metin Parçaları',
-    'sources': 'Kaynaklar'
+    'sources': 'Konular'
   };
   return tableNames[sourceTable || ''] || sourceTable || 'Kaynak';
 };

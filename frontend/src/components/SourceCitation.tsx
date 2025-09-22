@@ -127,19 +127,6 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
 
   return (
     <div className={`mt-3 space-y-1.5 ${isRelatedTopics ? 'border-l-4 border-purple-500 pl-3' : ''}`}>
-      {isRelatedTopics && (
-        <div className="flex items-center gap-2 mb-2">
-          <Network className="w-4 h-4 text-purple-600" />
-          <span className="text-sm font-medium text-purple-700 dark:text-purple-400">
-            İlgili Konular
-          </span>
-          {showRelatedInfo && (
-            <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-full">
-              Tıklandığında anlamsal arama yapılır
-            </span>
-          )}
-        </div>
-      )}
 
       <div className="space-y-1">
         {sources.map((source, idx) => (
@@ -181,6 +168,12 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
                     )}
                   </div>
                 </div>
+                {/* Excerpt/Description */}
+                {source.excerpt && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+                    {formatSourceExcerpt(source)}
+                  </p>
+                )}
                 {/* Semantic Keywords */}
                 <div className="flex flex-wrap gap-1 mt-2">
                   {getSemanticKeywords(source).map((keyword, idx) => (
