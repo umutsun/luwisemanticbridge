@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { API, SERVER, LLM } from '@/config';
 
 // Read configuration from file
 async function getConfig() {
@@ -15,7 +16,7 @@ async function getConfig() {
 }
 
 // ASB Backend URL from environment or default
-const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || `http://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,17 +49,17 @@ export async function POST(request: NextRequest) {
       userId: 'demo-user',
       // Add config settings if available (but not systemPrompt - let backend use database)
       ...(config && {
-        temperature: config.llmSettings?.temperature || 0.1,
-        model: config.llmSettings?.activeChatModel || 'anthropic/claude-3-sonnet',
-        ragWeight: config.llmSettings?.ragWeight || 100,
-        llmKnowledgeWeight: config.llmSettings?.llmKnowledgeWeight || 0,
+        temperature: config.llmSettings?.temperature || LLM.DEFAULT_SETTINGS.TEMPERATURE,
+        model: config.llmSettings?.activeChatModel || LLM.MODELS.DEFAULT,
+        ragWeight: config.llmSettings?.ragWeight || LLM.DEFAULT_SETTINGS.RAG_WEIGHT,
+        llmKnowledgeWeight: config.llmSettings?.llmKnowledgeWeight || LLM.DEFAULT_SETTINGS.LLM_KNOWLEDGE_WEIGHT,
         useLocalDb: config.dataSource?.useLocalDb !== false,
         language: config.llmSettings?.language || 'tr',
         responseStyle: config.llmSettings?.responseStyle || 'professional',
-        topP: config.llmSettings?.topP || 0.1,
-        maxTokens: config.llmSettings?.maxTokens || 2048,
-        presencePenalty: config.llmSettings?.presencePenalty || 0,
-        frequencyPenalty: config.llmSettings?.frequencyPenalty || 0
+        topP: config.llmSettings?.topP || LLM.DEFAULT_SETTINGS.TOP_P,
+        maxTokens: config.llmSettings?.maxTokens || LLM.DEFAULT_SETTINGS.MAX_TOKENS,
+        presencePenalty: config.llmSettings?.presencePenalty || LLM.DEFAULT_SETTINGS.PRESENCE_PENALTY,
+        frequencyPenalty: config.llmSettings?.frequencyPenalty || LLM.DEFAULT_SETTINGS.FREQUENCY_PENALTY
       })
     };
 
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(30000), // 30 second timeout
+      signal: AbortSignal.timeout(API.TIMEOUTS.CHAT), // Chat timeout
     });
 
     const responseText = await response.text();
@@ -119,8 +120,9 @@ export async function POST(request: NextRequest) {
         id: source.id || `source-${Date.now()}-${idx}`,
         title: source.title || source.document || 'Unknown Source',
         url: source.url,
-        content: source.text || source.excerpt || source.content,
-        excerpt: source.text || source.excerpt || source.content?.substring(0, 200),
+        content: source.content || source.text || source.excerpt,  // Use LLM-processed content first
+        excerpt: source.excerpt || source.text || source.content?.substring(0, 200),
+        question: source.question,  // Add LLM-generated question
         relevanceScore: source.relevance || source.score || source.similarity || 0,
         score: source.relevance || source.score || source.similarity || 0,
         relevance: source.relevance || source.score || source.similarity || 0,

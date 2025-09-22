@@ -274,7 +274,7 @@ export class SemanticSearchService {
       const queryEmbedding = await this.generateEmbedding(query);
       console.timeEnd(embeddingId);
 
-      // Search in unified_embeddings table
+      // Search in unified_embeddings table with minimum similarity threshold
       const searchQuery = `
         SELECT
           ue.id::text as id,
@@ -290,6 +290,7 @@ export class SemanticSearchService {
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
           AND ue.source_type = 'database'
+          AND (1 - (ue.embedding <=> $1::vector)) > 0.65  -- 65% minimum similarity threshold
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
@@ -318,8 +319,8 @@ export class SemanticSearchService {
     } catch (error) {
       console.timeEnd(queryId);
       console.error('Unified semantic search error:', error);
-      // Fallback to unified semantic search
-      return this.unifiedSemanticSearch(query, limit);
+      // Fallback to keyword search instead of recursive call
+      return this.keywordSearch(query, limit);
     }
   }
 

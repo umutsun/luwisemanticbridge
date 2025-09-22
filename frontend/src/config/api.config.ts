@@ -1,22 +1,23 @@
 // API Configuration
 // All API endpoints and URLs should be configured here
+import { SERVER } from './index';
 
 const config = {
   // Base URLs from environment variables
   api: {
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083',
-    websocketUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8083',
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`,
+    websocketUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`,
   },
   
   // API Endpoints
   endpoints: {
     // Chat endpoints
     chat: {
-      send: '/api/chat',
-      suggestions: 'http://localhost:8083/api/v2/chat/suggestions',
-      history: '/api/chat/history',
-      clear: '/api/chat/clear',
-      complete: '/api/chat/complete', // LLM excerpt completion
+      send: '/api/v2/chat',
+      suggestions: '/api/v2/chat/suggestions',
+      history: '/api/v2/chat/conversations',
+      clear: '/api/v2/chat/clear',
+      complete: '/api/v2/chat/complete', // LLM excerpt completion
     },
     
     // Search endpoints

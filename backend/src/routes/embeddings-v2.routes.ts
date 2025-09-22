@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import { getDatabaseSettings, asembPool } from '../config/database.config';
+import { TIMEOUTS } from '../config';
 
 // Helper function to log embedding operations - TEMPORARILY DISABLED
 function logEmbeddingOperation(data: {
@@ -1126,7 +1127,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
     console.log(`🚀 Worker ${workerId} starting parallel batch processing for table: ${table} (offset: ${batchOffset})`);
 
     // Add a small delay to stagger worker startups
-    await new Promise(resolve => setTimeout(resolve, workerId ? workerId * 500 : 0));
+    await new Promise(resolve => setTimeout(resolve, workerId ? workerId * TIMEOUTS.DELAYS.WORKER_INIT_BASE : 0));
 
     // Get table info
     const tableInfo = migrationProgress.tableProgress[table];
@@ -1343,7 +1344,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
               migrationProgress.tokensThisSession += tokens;
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 50));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.BATCH_PROCESSING));
             } catch (err) {
               console.error('Google embedding generation error:', err);
               // Fallback to local embeddings
@@ -1390,7 +1391,7 @@ async function processTableWorker(tables: string[], batchSize: number, embedding
     console.log(`📊 Worker ${workerId} initial progress:`, JSON.stringify(migrationProgress.tableProgress));
 
     // Add a small delay to stagger worker startups
-    await new Promise(resolve => setTimeout(resolve, workerId ? workerId * 200 : 0));
+    await new Promise(resolve => setTimeout(resolve, workerId ? workerId * TIMEOUTS.DELAYS.WORKER_INIT_MULTIPLIER : 0));
 
     // Call processTables with a flag to indicate this is a worker
     await processTables(tables, batchSize, embeddingMethod, operationId, resume, 1, workerId, true); // skipInitialization = true
@@ -1820,7 +1821,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               }
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 50));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.BATCH_PROCESSING));
             } catch (err) {
               console.error('Google embedding generation error:', err);
 
@@ -1891,7 +1892,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               migrationProgress.current++;
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 200));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.EMBEDDING_BATCH));
             } catch (err) {
               console.error('HuggingFace embedding generation error:', err);
 
@@ -1948,7 +1949,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               }
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 50));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.BATCH_PROCESSING));
             } catch (err) {
               console.error('Cohere embedding generation error:', err);
 
@@ -2006,7 +2007,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               }
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 200));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.EMBEDDING_BATCH));
             } catch (err) {
               console.error('Voyage embedding generation error:', err);
 
@@ -2056,7 +2057,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               migrationProgress.current++;
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 50));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.BATCH_PROCESSING));
             } catch (err) {
               console.error('Jina embedding generation error:', err);
 
@@ -2129,7 +2130,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               }
 
               // Rate limiting
-              await new Promise(resolve => setTimeout(resolve, 50));
+              await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.BATCH_PROCESSING));
             } catch (err) {
               console.error('Embedding generation error:', err);
 
@@ -2204,7 +2205,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         }
 
         // Small delay to prevent overwhelming
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, TIMEOUTS.DELAYS.BATCH_PROCESSING));
       }
 
       if (migrationProgress.status === 'processing') {

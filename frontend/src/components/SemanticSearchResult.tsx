@@ -16,6 +16,7 @@ import {
 import { SearchResult, SearchContext } from '@/utils/semantic-search-prompt';
 import {
   generateContextualQuestion,
+  generateQuestionFromExcerpt,
   generateQuestionOptionsForResult,
   searchResultsToPrompt,
   generateRefinedPrompt
@@ -31,6 +32,7 @@ interface SemanticSearchResultProps {
   onQuestionSelect: (question: string) => void;
   onTagClick: (tag: string) => void;
   onTagAppend?: (tag: string) => void; // New: Append tag to current query
+  showSourceTable?: boolean; // Whether to show sourceTable badge
 }
 
 const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
@@ -39,7 +41,8 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
   index,
   onQuestionSelect,
   onTagClick,
-  onTagAppend
+  onTagAppend,
+  showSourceTable = true
 }) => {
   const [showQuestions, setShowQuestions] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
@@ -82,12 +85,9 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
     setShowQuestions(false);
   };
 
-  // Generate refined prompt from tags
+  // Generate refined prompt from tags - append to current query
   const handleTagClick = (tag: string) => {
-    const basePrompt = generateContextualQuestion(result, context);
-    const refinedPrompt = generateRefinedPrompt(basePrompt, [tag], context);
-    onTagClick(tag);
-    onQuestionSelect(refinedPrompt);
+    onTagAppend?.(tag);
   };
 
   // Append tag to current query
@@ -116,8 +116,17 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
 
   const contextualKeywords = getContextualKeywords();
 
+  // Handle card click - generate question from excerpt
+  const handleCardClick = () => {
+    const question = generateQuestionFromExcerpt(result);
+    handleQuestionSelect(question);
+  };
+
   return (
-    <Card className="group relative p-4 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 border-l-transparent hover:border-l-blue-500">
+    <Card
+      className="group relative p-4 hover:shadow-lg transition-all duration-200 cursor-pointer border-l-4 border-l-transparent hover:border-l-blue-500"
+      onClick={handleCardClick}
+    >
       {/* Result Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start gap-3 flex-1">
@@ -139,9 +148,6 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
               <Badge variant="outline" className="text-xs">
                 {category}
               </Badge>
-              <Badge variant="secondary" className="text-xs">
-                {sourceTable}
-              </Badge>
             </div>
           </div>
         </div>
@@ -151,7 +157,10 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowQuestions(!showQuestions)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowQuestions(!showQuestions);
+            }}
             title="Soru seçeneklerini göster"
           >
             <MessageSquare className="w-4 h-4" />
@@ -172,7 +181,9 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
           <div key={idx} className="flex items-center gap-1">
             <button
               onClick={(e) => {
+                e.preventDefault();
                 e.stopPropagation();
+                console.log('Tag clicked:', keyword);
                 handleTagClick(keyword);
               }}
               className="text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-150 hover:scale-105"
@@ -183,6 +194,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
             {onTagAppend && (
               <button
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
                   handleTagAppend(keyword);
                 }}
@@ -209,7 +221,10 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
             {questionOptions.map((question, idx) => (
               <button
                 key={idx}
-                onClick={() => handleQuestionSelect(question)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleQuestionSelect(question);
+                }}
                 className="w-full text-left p-2 rounded bg-white dark:bg-gray-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-gray-200 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 transition-colors duration-150"
               >
                 <div className="flex items-center gap-2">
@@ -235,7 +250,8 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
           variant="ghost"
           size="sm"
           className="text-xs"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             const prompt = searchResultsToPrompt(context);
             onQuestionSelect(prompt);
           }}

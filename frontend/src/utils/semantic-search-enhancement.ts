@@ -3,11 +3,7 @@
  * Provides intelligent query generation and semantic context for enhanced search capabilities
  */
 
-import {
-  extractSemanticKeywords,
-  generateTagKeywords,
-  generateSearchQueryFromKeywords
-} from './keyword-extraction';
+import { TABLES, SOURCE_TYPE_DISPLAYS } from '../config';
 
 export interface SemanticContext {
   category?: string;
@@ -279,51 +275,91 @@ function generateConfidenceBasedQuery(baseQuery: string, confidenceLevel: 'high'
  * Enhanced source click handler for React components
  */
 export function createEnhancedSourceClickHandler(
+  getInputText: () => string,
   setInputText: (text: string) => void,
   focusInput: () => void,
   options: EnhancedQueryOptions = {}
 ) {
   return async (source: Record<string, unknown>) => {
-    const cleanTitle = cleanSourceTitle(source.title || '');
-    const sourceType = getTableDisplayName(source.sourceTable || (source.databaseInfo && source.databaseInfo.table));
-    const context = analyzeSemanticContext(
-      cleanTitle,
-      source.excerpt || source.content || '',
-      source.category || '',
-      sourceType
-    );
+    // Check if user is currently editing a question
+    const currentText = getInputText();
 
-    context.relevanceScore = source.score || source.relevanceScore || 0;
-
-    // Use keyword extraction for better query generation
-    const keywordContext = {
-      title: cleanTitle,
-      excerpt: source.excerpt || source.content || '',
-      category: source.category || '',
-      sourceType: sourceType,
-      relevanceScore: context.relevanceScore
-    };
-
-    try {
-      // Use enhanced keyword extraction for contextual question generation
-      const semanticKeywords = extractSemanticKeywords(keywordContext);
-      const tagKeywords = generateTagKeywords(semanticKeywords);
-
-      if (tagKeywords.length > 0) {
-        // Use the improved contextual question generation
-        const contextualQuery = generateSearchQueryFromKeywords(tagKeywords.slice(0, 4), keywordContext);
-        setInputText(contextualQuery);
-      } else {
-        // Use semantic context for question generation
-        const semanticQuery = generateEnhancedQuery(context, options);
-        setInputText(semanticQuery);
-      }
-    } catch {
-      // Fallback to semantic query generation if enhanced extraction fails
-      const semanticQuery = generateEnhancedQuery(context, options);
-      setInputText(semanticQuery);
+    // If input is not empty, don't override user's question
+    if (currentText && currentText.trim().length > 0) {
+      // Just focus the input without changing the text
+      focusInput();
+      return;
     }
 
+    // Prioritize LLM-generated question if available
+    let question = '';
+
+    // Debug: Log source object structure
+    console.log('Source click handler received:', {
+      hasQuestion: !!(source.question && typeof source.question === 'string' && source.question.trim().length > 0),
+      question: source.question,
+      title: source.title,
+      content: source.content ? (source.content as string).substring(0, 100) + '...' : 'No content',
+      excerpt: source.excerpt ? (source.excerpt as string).substring(0, 100) + '...' : 'No excerpt',
+      sourceTable: source.sourceTable
+    });
+
+    if (source.question && typeof source.question === 'string' && source.question.trim().length > 0) {
+      // Use the LLM-generated question
+      question = source.question.trim();
+      console.log('Using LLM-generated question:', question);
+    } else {
+      // Generate question from content/excerpt
+      const content = source.content || source.excerpt || '';
+      const cleanContent = content.replace(/^Cevap:\s*/i, '').trim();
+
+      if (cleanContent.length > 20) {
+        // Extract the core concept from content
+        const sentences = cleanContent.split(/[.!?]/).filter(s => s.trim().length > 10);
+
+        if (sentences.length > 0) {
+          // Use the first substantial sentence
+          const firstSentence = sentences[0].trim();
+
+          // Create context-aware questions based on content patterns
+          if (cleanContent.includes('şart') || cleanContent.includes('gerekir')) {
+            question = `${firstSentence} için hangi şartlar gereklidir?`;
+          } else if (cleanContent.includes('süre') || cleanContent.includes('gün')) {
+            question = `${firstSentence} konusunda süre hesaplaması nasıl yapılır?`;
+          } else if (cleanContent.includes('vergi') || cleanContent.includes('oran')) {
+            question = `${firstSentence} vergisel açıdan nasıl değerlendirilir?`;
+          } else if (cleanContent.includes('sözleşme')) {
+            question = `${firstSentence} sözleşme hukuku açısından ne ifade eder?`;
+          } else if (cleanContent.includes('dava') || cleanContent.includes('karar')) {
+            question = `${firstSentence} kararının hukuki sonuçları nelerdir?`;
+          } else {
+            // Default question pattern
+            question = `${firstSentence} hakkında detaylı bilgi verebilir misiniz?`;
+          }
+        } else {
+          // Fallback for very short content
+          question = `${cleanContent} Bu konuda açıklama yapar mısınız?`;
+        }
+      } else {
+        // Very short content - use table-specific question
+        const sourceTable = source.sourceTable as string;
+        if (sourceTable === TABLES.OZELGELER) {
+          question = 'Bu özelgedeki hükmün uygulaması için nelere dikkat etmek gerekir?';
+        } else if (sourceTable === TABLES.DANISTAY_KARARLARI) {
+          question = 'Bu Danıştay kararının emsal değeri var mıdır?';
+        } else if (sourceTable === TABLES.MEVZUAT) {
+          question = 'Bu hükmün istisnaları veya muafiyetleri var mıdır?';
+        } else {
+          question = 'Bu konuda detaylı bilgi verebilir misiniz?';
+        }
+      }
+    }
+
+    console.log('Final question to be set:', question);
+
+    // Set the generated question only if input was empty
+    console.log('Setting input text to:', question);
+    setInputText(question);
     focusInput();
   };
 }
@@ -332,16 +368,5 @@ export function createEnhancedSourceClickHandler(
  * Helper function to get table display names (consistent with frontend)
  */
 function getTableDisplayName(tableName: string): string {
-  const tableMap: { [key: string]: string } = {
-    'OZELGELER': 'Özelgeler',
-    'DANISTAYKARARLARI': 'Danıştay',
-    'MAKALELER': 'Makaleler',
-    'DOKUMAN': 'Dokümanlar',
-    'MEVZUAT': 'Mevzuat',
-    'sorucevap': 'Soru-Cevap',
-    'documents': 'Dokümanlar',
-    'conversations': 'Sohbetler',
-    'messages': 'Mesajlar'
-  };
-  return tableMap[tableName] || tableName;
+  return SOURCE_TYPE_DISPLAYS[tableName as keyof typeof SOURCE_TYPE_DISPLAYS] || tableName;
 }

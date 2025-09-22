@@ -5,6 +5,7 @@ import claudeService from './claude.service';
 import geminiService from './gemini.service';
 import pool from '../config/database';
 import dotenv from 'dotenv';
+import { TIMEOUTS } from '../config';
 
 dotenv.config();
 
@@ -218,11 +219,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       const avgScore = allResults.reduce((sum, r) => sum + (r.score || (r.similarity_score * 100) || 0), 0) / allResults.length;
       const maxScore = Math.max(...allResults.map(r => r.score || (r.similarity_score * 100) || 0));
 
-      // Dynamic threshold based on results quality
-      let threshold = 50; // Base threshold
-      if (maxScore > 80) threshold = 60; // High quality results available
-      if (maxScore < 50) threshold = 30; // Low quality results, be more lenient
-      if (allResults.length < 5) threshold = Math.min(threshold, 40); // Few results, be more inclusive
+      // Dynamic threshold based on results quality - more strict filtering
+      let threshold = 65; // Base threshold increased
+      if (maxScore > 85) threshold = 70; // High quality results available
+      if (maxScore < 60) threshold = 55; // Low quality results, be more lenient
+      if (allResults.length < 5) threshold = Math.min(threshold, 60); // Few results, be more inclusive
 
       searchResults = allResults.filter(result => {
         const score = result.score || (result.similarity_score * 100) || 0;
@@ -261,7 +262,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       await this.saveMessage(convId, 'assistant', response.content, searchResults);
 
       // 7. Format sources for frontend
-      const formattedSources = this.formatSources(searchResults);
+      const formattedSources = await this.formatSources(searchResults);
 
       // 8. Get related topics (different from sources used in response)
       const relatedTopics = await this.getRelatedTopics(message, searchResults, 7);
@@ -433,8 +434,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
   /**
    * Format sources for better UI display
    */
-  private formatSources(searchResults: any[]): any[] {
-    return searchResults.map((r, idx) => {
+  private async formatSources(searchResults: any[]): Promise<any[]> {
+    const formattedResults = [];
+
+    for (let idx = 0; idx < searchResults.length; idx++) {
+      const r = searchResults[idx];
       const category = this.categorizeSource(r);
       // Score already calculated in search results
       const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
@@ -455,11 +459,27 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // Clean HTML from title and excerpt
       const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
       const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
-      
-      return {
+
+      // Generate LLM-processed content and question (if enabled)
+      let processedContent = cleanExcerpt;
+      let generatedQuestion = `${cleanTitle} hakkında detaylı bilgi verir misiniz?`;
+
+      if (process.env.ENABLE_LLM_CONTENT_GENERATION !== 'false') {
+        try {
+          const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
+          processedContent = llmResult.processedContent;
+          generatedQuestion = llmResult.generatedQuestion;
+        } catch (error) {
+          console.warn('LLM content generation failed, using fallback:', error);
+        }
+      }
+
+      formattedResults.push({
         id: r.id,
         title: cleanTitle,
         excerpt: this.truncateExcerpt(cleanExcerpt, 250),
+        content: processedContent,  // LLM-processed content instead of raw excerpt
+        question: generatedQuestion,  // LLM-generated question
         category: category,
         sourceTable: r.source_table || 'documents',
         citation: citation,
@@ -477,8 +497,87 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         priority: idx + 1,  // Priority based on order
         hasContent: !!(r.content || r.excerpt),
         contentLength: (r.content || r.excerpt || '').length
+      });
+    }
+
+    return formattedResults;
+  }
+
+  /**
+   * Generate LLM-processed content and question from excerpt
+   */
+  private async generateContentAndQuestion(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
+    try {
+      console.time(`LLM processing for: ${title.substring(0, 30)}...`);
+      // Clean the excerpt first
+      const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
+
+      // Use Gemini for content processing (faster and free)
+      if (process.env.GOOGLE_API_KEY) {
+        const prompt = `
+Aşağıdaki başlık ve özetten, vergi ve hukuk alanında uzman bir asistan gibi davranarak:
+
+1. ÖZETİ DAHA İYİ ANLAŞILIR HALE GETİR (2-3 cümle):
+- Özeti akıcı ve profesyonel bir dille yeniden yaz
+- Teknik terimleri basitçe açıkla
+- Önemli noktaları vurgula
+
+2. İLGİLİ BİR SORU ÜRET:
+- Özetteki ana konuyu ele alan spesifik bir soru
+- "nedir?", "nasıl?", "hangi şartlarda?" gibi soru kalıpları kullan
+- Soru vergi/maaliyet/hukuki konularla ilgili olmalı
+
+BAŞLIK: ${title}
+
+ÖZET: ${cleanExcerpt}
+
+Cevabı şu formatta ver:
+İYİLEŞTİRİLMİŞ İÇERİK: [iyileştirilmiş içerik buraya]
+ÜRETİLMİŞ SORU: [üretilmiş soru buraya]
+`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 300
+            }
+          }),
+          signal: AbortSignal.timeout(TIMEOUTS.LLM_CALL) // Configurable timeout for each Gemini call
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const result = data.candidates[0].content.parts[0].text;
+
+          // Parse the response
+          const contentMatch = result.match(/İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nÜRETİLMİŞ SORU:|$)/s);
+          const questionMatch = result.match(/ÜRETİLMİŞ SORU:\s*(.*)/s);
+
+          return {
+            processedContent: contentMatch ? contentMatch[1].trim() : cleanExcerpt,
+            generatedQuestion: questionMatch ? questionMatch[1].trim() : `${title} hakkında bilgi verir misiniz?`
+          };
+        }
+        console.timeEnd(`LLM processing for: ${title.substring(0, 30)}...`);
+      }
+
+      // Fallback to simple processing
+      return {
+        processedContent: cleanExcerpt.length > 100 ? cleanExcerpt : `${cleanExcerpt}. Bu konuda uzman görüşü alınması önerilir.`,
+        generatedQuestion: `${title} nedir?`
       };
-    });
+    } catch (error) {
+      console.timeEnd(`LLM processing for: ${title.substring(0, 30)}...`);
+      console.error('Error generating content and question:', error);
+      return {
+        processedContent: excerpt,
+        generatedQuestion: `${title} hakkında bilgi verir misiniz?`
+      };
+    }
   }
 
   /**

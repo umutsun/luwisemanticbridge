@@ -10,6 +10,7 @@ import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
+import { SERVER, API } from './config';
 
 // Import routes
 import searchRoutes from './routes/search.routes';
@@ -40,7 +41,7 @@ const app: Application = express();
 const httpServer = createServer(app);
 
 // Parse CORS origins from environment variable
-const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map(origin => origin.trim());
+const corsOrigins = (process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND}`).split(',').map(origin => origin.trim());
 
 // Initialize Socket.io
 const io = new SocketServer(httpServer, {
@@ -97,7 +98,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Health check endpoint
-app.get('/health', async (req: Request, res: Response) => {
+app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
     // Check PostgreSQL
     await pgPool.query('SELECT 1');
@@ -127,23 +128,23 @@ app.get('/health', async (req: Request, res: Response) => {
 app.use(searchRoutes);
 app.use(chatRoutes);
 app.use(dashboardRoutes);
-app.use('/api/v2/scraper', scraperRoutes);
+app.use(API.ENDPOINTS.V2.SCRAPER, scraperRoutes);
 app.use('/api/v2/chatbot', chatbotSettingsRoutes);
 app.use(historyRoutes);
 app.use(documentsRoutes);
-app.use('/api/v2/migration', migrationRoutes);
-app.use('/api/v2/embeddings', embeddingsV2Routes);
-app.use('/api/v2/embeddings', embeddingProgressRoutes);
-app.use('/api/v2/settings', settingsRoutes);
+app.use(API.ENDPOINTS.V2.MIGRATION, migrationRoutes);
+app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingsV2Routes);
+app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingProgressRoutes);
+app.use(API.ENDPOINTS.V2.SETTINGS, settingsRoutes);
 app.use('/api/v2/config', settingsRoutes);
 app.use('/api/v2/migration-check', migrationCheckRoutes);
-app.use('/api/v2/rag', ragConfigRoutes);
-app.use('/api/v2/activity', activityRoutes);
+app.use(API.ENDPOINTS.V2.RAG, ragConfigRoutes);
+app.use(API.ENDPOINTS.V2.ACTIVITY, activityRoutes);
 app.use('/api/v2/raganything', ragAnythingRoutes);
-app.use('/api/v2/auth', authRoutes);
-app.use('/api/v2/users', usersRoutes);
+app.use(API.ENDPOINTS.V2.AUTH, authRoutes);
+app.use(API.ENDPOINTS.V2.USERS, usersRoutes);
 app.use('/api/v2/embedding-history', embeddingHistoryRoutes);
-app.use('/api/v2/embeddings', embeddingCleanupRoutes);
+app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
 
 // Base route
 app.get('/api/v2', (req: Request, res: Response) => {
@@ -151,17 +152,17 @@ app.get('/api/v2', (req: Request, res: Response) => {
     message: 'ASB Backend API v2',
     version: '2.0.0',
     endpoints: {
-      health: '/health',
-      chat: '/api/v2/chat',
+      health: API.ENDPOINTS.V2.HEALTH,
+      chat: API.ENDPOINTS.V2.CHAT,
       search: {
-        semantic: '/api/v2/search/semantic',
-        hybrid: '/api/v2/search/hybrid',
-        stats: '/api/v2/search/stats'
+        semantic: API.ENDPOINTS.V2.SEARCH + '/semantic',
+        hybrid: API.ENDPOINTS.V2.SEARCH + '/hybrid',
+        stats: API.ENDPOINTS.V2.SEARCH + '/stats'
       },
-      scraper: '/api/v2/scraper',
-      embeddings: '/api/v2/embeddings',
+      scraper: API.ENDPOINTS.V2.SCRAPER,
+      embeddings: API.ENDPOINTS.V2.EMBEDDINGS,
       dashboard: {
-        overview: '/api/v2/dashboard',
+        overview: API.ENDPOINTS.V2.DASHBOARD,
         lightrag: {
           stats: '/api/v2/lightrag/stats',
           query: '/api/v2/lightrag/query',
@@ -235,7 +236,7 @@ import { loadProgressFromRedis } from './routes/embeddings.routes';
 import { loadProgressFromRedis as loadV2ProgressFromRedis } from './routes/embeddings-v2.routes';
 
 // Start server
-const PORT = parseInt(process.env.PORT || '8083');
+const PORT = SERVER.PORT;
 httpServer.listen(PORT, async () => {
   console.log(`🚀 ASB Backend Server running on port ${PORT}`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);

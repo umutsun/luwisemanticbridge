@@ -64,34 +64,6 @@ export const analyzeSearchContext = (query: string, results: SearchResult[]): Se
   };
 };
 
-// Extract theme from a search result
-const extractTheme = (result: SearchResult): string => {
-  const { title, content, category } = result;
-  const text = (title + ' ' + content).toLowerCase();
-
-  // Common themes in legal/tax documents
-  const themeKeywords = {
-    'vergi': ['vergi', 'stopaj', 'kdv', 'ötv', 'gv', 'kurumlar', 'beyan'],
-    'iş hukuku': ['işçi', 'işveren', 'kıdem', 'ihbar', 'iş sözleşmesi', 'iş akdi'],
-    'tazminat': ['tazminat', 'tazmin', 'madde', 'hak', 'alacak'],
-    'sözleşme': ['sözleşme', 'akdi', 'anlaşma', 'taahhüt'],
-    'prosedür': ['başvuru', 'dava', 'itiraz', 'şikayet', 'uzlaşma'],
-    'ceza': ['ceza', 'idari', 'yaptırım', 'hapis', 'para']
-  };
-
-  let maxMatches = 0;
-  let detectedTheme = 'general';
-
-  Object.entries(themeKeywords).forEach(([theme, keywords]) => {
-    const matches = keywords.filter(keyword => text.includes(keyword)).length;
-    if (matches > maxMatches) {
-      maxMatches = matches;
-      detectedTheme = theme;
-    }
-  });
-
-  return detectedTheme;
-};
 
 // Generate contextual question from search result
 export const generateContextualQuestion = (result: SearchResult, context: SearchContext): string => {
@@ -340,27 +312,91 @@ export const searchResultsToPrompt = (context: SearchContext): string => {
   return prompt;
 };
 
+// Generate question from excerpt
+export const generateQuestionFromExcerpt = (result: SearchResult): string => {
+  const { excerpt, title } = result;
+
+  // Use excerpt as the primary source for question generation
+  const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
+  const cleanTitle = title.replace(/^(sorucevap|ozelgeler) -\s*/, '').replace(/ - ID: \d+$/, '');
+
+  // Extract the core concept from excerpt
+  const firstSentence = cleanExcerpt.split(/[.!?]/)[0].trim();
+
+  // If excerpt is meaningful, use it directly
+  if (firstSentence.length > 20) {
+    // Create a question based on the excerpt content
+    return `${firstSentence} hakkında detaylı bilgi verir misiniz?`;
+  }
+
+  // Fallback to title-based question
+  return `${cleanTitle} nedir?`;
+};
+
 // Generate multiple question options based on search result
+// Export extractTheme function for use in other components
+export const extractTheme = (result: SearchResult): string => {
+  const { title, content, category } = result;
+  const text = (title + ' ' + content).toLowerCase();
+
+  // Common themes in legal/tax documents
+  const themeKeywords = {
+    'vergi': ['vergi', 'stopaj', 'kdv', 'ötv', 'gv', 'kurumlar', 'beyan'],
+    'iş hukuku': ['işçi', 'işveren', 'kıdem', 'ihbar', 'iş sözleşmesi', 'iş akdi'],
+    'tazminat': ['tazminat', 'tazmin', 'madde', 'hak', 'alacak'],
+    'sözleşme': ['sözleşme', 'akdi', 'anlaşma', 'taahhüt'],
+    'prosedür': ['başvuru', 'dava', 'itiraz', 'şikayet', 'uzlaşma'],
+    'ceza': ['ceza', 'idari', 'yaptırım', 'hapis', 'para']
+  };
+
+  let maxMatches = 0;
+  let detectedTheme = 'general';
+
+  Object.entries(themeKeywords).forEach(([theme, keywords]) => {
+    const matches = keywords.filter(keyword => text.includes(keyword)).length;
+    if (matches > maxMatches) {
+      maxMatches = matches;
+      detectedTheme = theme;
+    }
+  });
+
+  // More specific theme detection
+  if (title.includes('kdv') || content.includes('kdv')) return 'KDV';
+  if (title.includes('gelir') || content.includes('gelir vergisi')) return 'Gelir Vergisi';
+  if (title.includes('kurumlar') || content.includes('kurumlar vergisi')) return 'Kurumlar Vergisi';
+  if (title.includes('stopaj') || content.includes('tevkifat')) return 'Stopaj';
+  if (title.includes('damga') || content.includes('damga vergisi')) return 'Damga Vergisi';
+  if (title.includes('ötv') || content.includes('özel tüketim')) return 'ÖTV';
+  if (title.includes('danıştay') || content.includes('karar')) return 'Danıştay Kararı';
+  if (title.includes('soru') || content.includes('cevap')) return 'Soru-Cevap';
+  if (title.includes('özelge') || content.includes('özelge')) return 'Özelge';
+
+  return detectedTheme.charAt(0).toUpperCase() + detectedTheme.slice(1);
+};
+
 export const generateQuestionOptionsForResult = (result: SearchResult, context: SearchContext, count: number = 3): string[] => {
   const questions: string[] = [];
 
-  // Primary contextual question
-  questions.push(generateContextualQuestion(result, context));
+  // Primary question from excerpt (more focused)
+  questions.push(generateQuestionFromExcerpt(result));
 
   // Extract key terms for variations
   const cleanContent = result.content.replace(/^Cevap:\s*/i, '').trim();
   const cleanTitle = result.title.replace(/^(sorucevap|ozelgeler) -\s*/, '').replace(/ - ID: \d+$/, '');
   const keyTerms = extractKeyTermsForQuestion(cleanContent);
 
-  // Generate variations based on content
+  // Generate variations based on excerpt content
+  const excerptQuestion = generateQuestionFromExcerpt(result);
+
+  // More specific variations
   const variations = [
-    `${cleanTitle} ile ilgili örnek bir durum açıklayabilir misiniz?`,
-    keyTerms.length > 0 ? `${keyTerms[0]} hususunda detaylı bilgi verir misiniz?` : `${cleanTitle} konusunda dikkat edilmesi gerekenler nelerdir?`,
-    `${cleanTitle} için uygulama prosedürünü anlatır mısınız?`
+    excerptQuestion, // Already added as primary
+    keyTerms.length > 0 ? `${keyTerms[0]} ile ilgili açıklama yapar mısınız?` : `${cleanTitle} hakkında bilgi verir misiniz?`,
+    `${cleanTitle} uygulamasında dikkat edilmesi gerekenler nelerdir?`
   ];
 
-  // Add variations
-  questions.push(...variations.slice(0, 2));
+  // Add variations (skip first one since it's already added)
+  questions.push(...variations.slice(1, 3));
 
   return questions.slice(0, count);
 };

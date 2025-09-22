@@ -34,6 +34,7 @@ import {
   Workflow
 } from 'lucide-react';
 import Link from 'next/link';
+import config, { getEndpoint } from '@/config/api.config';
 
 interface Message {
   id: string;
@@ -133,7 +134,7 @@ export default function ChatPage() {
     setMessages(prev => [...prev, typingMessage]);
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(getEndpoint('chat', 'send'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

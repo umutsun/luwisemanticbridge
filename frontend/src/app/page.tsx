@@ -41,7 +41,9 @@ import {
   SearchContext,
   generateContextualQuestion,
   analyzeSearchContext,
-  searchResultsToPrompt
+  searchResultsToPrompt,
+  extractTheme,
+  generateQuestionFromExcerpt
 } from '@/utils/semantic-search-prompt';
 import {
   extractSemanticKeywords,
@@ -342,7 +344,7 @@ export default function ChatInterface() {
     setMessages(prev => [...prev, typingMessage]);
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch(getEndpoint('chat', 'send'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -393,6 +395,7 @@ export default function ChatInterface() {
 
   // Create enhanced source click handler with semantic search capabilities
   const handleSourceClick = createEnhancedSourceClickHandler(
+    () => inputText,
     setInputText,
     () => textareaRef.current?.focus(),
     {
@@ -578,9 +581,8 @@ export default function ChatInterface() {
                             {message.sources && message.sources.length > 0 && (
                               <div className="mt-4 pt-3 border-t border-border/50">
                                 {(() => {
-                                  // Limit to max 15 sources even if more are returned
-                                  const limitedSources = message.sources.slice(0, 15);
-                                  const sortedSources = limitedSources.sort((a, b) => (b.score || 0) - (a.score || 0));
+                                  // Remove filter and show all sources
+                                  const sortedSources = (message.sources || []).sort((a, b) => (b.score || 0) - (a.score || 0));
                                   const visibleCount = visibleSourcesCount[message.id] || 7;
                                   const visibleSources = sortedSources.slice(0, visibleCount);
                                   const hasMore = sortedSources.length > visibleCount;
@@ -592,7 +594,16 @@ export default function ChatInterface() {
                                           <div
                                             key={idx}
                                             className="relative p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
-                                            onClick={() => handleSourceClick(source)}
+                                            onClick={() => {
+                                              console.log('Clicked source:', {
+                                                id: source.id,
+                                                title: source.title,
+                                                question: source.question,
+                                                sourceTable: source.sourceTable,
+                                                hasContent: !!source.content
+                                              });
+                                              handleSourceClick(source);
+                                            }}
                                             title="Bu konuyla ilgili detaylı araştırma yap"
                                           >
                                             <div className="flex items-start gap-3">
@@ -604,46 +615,26 @@ export default function ChatInterface() {
                                                 </div>
                                               </div>
                                               <div className="flex-1 min-w-0">
-                                                {source.excerpt && (
+                                                {/* Source Table Badge only */}
+                                                {source.sourceTable && (
+                                                  <Badge variant="secondary" className="text-xs mb-2">
+                                                    {source.sourceTable}
+                                                  </Badge>
+                                                )}
+
+                                                {/* LLM-generated content or processed excerpt */}
+                                                {source.content && (
+                                                  <p className="text-xs text-muted-foreground line-clamp-4 mt-1.5 pl-0.5">
+                                                    {source.content}
+                                                  </p>
+                                                )}
+                                                {source.excerpt && !source.content && (
                                                   <p className="text-xs text-muted-foreground line-clamp-4 mt-1.5 pl-0.5">
                                                     {(() => {
                                                       let excerpt = source.excerpt;
 
                                                       // Remove "Cevap:" prefix and clean up
                                                       excerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
-
-                                                      // If content is available, create a natural summary
-                                                      if (source.content && source.content !== excerpt) {
-                                                        const content = source.content.replace(/^Cevap:\s*/i, '').trim();
-
-                                                        // Extract the core meaning from content
-                                                        const sentences = content.split(/[.!?]/);
-                                                        const meaningfulSentences = sentences
-                                                          .map(s => s.trim())
-                                                          .filter(s => s.length > 20 && !s.includes('Soru:'));
-
-                                                        if (meaningfulSentences.length > 0) {
-                                                          // Create a natural summary
-                                                          const firstSentence = meaningfulSentences[0];
-
-                                                          // Add context if available
-                                                          if (meaningfulSentences.length > 1) {
-                                                            const secondSentence = meaningfulSentences[1];
-                                                            if (firstSentence.length + secondSentence.length < 250) {
-                                                              excerpt = firstSentence + '. ' + secondSentence;
-                                                            } else {
-                                                              excerpt = firstSentence;
-                                                            }
-                                                          } else {
-                                                            excerpt = firstSentence;
-                                                          }
-
-                                                          // Ensure it ends properly
-                                                          if (!excerpt.endsWith('.')) {
-                                                            excerpt += '.';
-                                                          }
-                                                        }
-                                                      }
 
                                                       // If still incomplete, complete naturally
                                                       if (!/[.!?]$/.test(excerpt)) {
@@ -752,7 +743,7 @@ export default function ChatInterface() {
                                   </span>
                                 </div>
                                 <div className="space-y-2">
-                                  {message.relatedTopics.map((topic, index) => {
+                                  {(message.relatedTopics || []).map((topic, index) => {
                                     // Convert related topic to SearchResult format
                                     const searchResult: SearchResult = {
                                       id: topic.id || `topic-${index}`,
@@ -791,6 +782,7 @@ export default function ChatInterface() {
                                         onQuestionSelect={handleQuestionSelect}
                                         onTagClick={handleTagClick}
                                         onTagAppend={handleTagAppend}
+                                        showSourceTable={false}
                                       />
                                     );
                                   })}
