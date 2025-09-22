@@ -10,7 +10,8 @@ import {
   Lightbulb,
   TrendingUp,
   FileText,
-  Settings
+  Settings,
+  Plus
 } from 'lucide-react';
 import { SearchResult, SearchContext } from '@/utils/semantic-search-prompt';
 import {
@@ -20,6 +21,7 @@ import {
   generateRefinedPrompt
 } from '@/utils/semantic-search-prompt';
 import { completeExcerpt } from '@/utils/excerpt-completion';
+import { completeExcerptWithLLM } from '@/utils/llm-excerpt-completion';
 
 interface SemanticSearchResultProps {
   result: SearchResult;
@@ -27,6 +29,7 @@ interface SemanticSearchResultProps {
   index: number;
   onQuestionSelect: (question: string) => void;
   onTagClick: (tag: string) => void;
+  onTagAppend?: (tag: string) => void; // New: Append tag to current query
   showScore?: boolean;
 }
 
@@ -36,22 +39,41 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
   index,
   onQuestionSelect,
   onTagClick,
+  onTagAppend,
   showScore = true
 }) => {
   const [showQuestions, setShowQuestions] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
+  const [completedExcerpt, setCompletedExcerpt] = useState<string>('');
 
   const { title, content, excerpt, category, sourceTable, score, keywords = [] } = result;
 
   // Generate contextual questions
   const questionOptions = generateQuestionOptionsForResult(result, context, 3);
 
-  // Format excerpt with intelligent completion
-  const formattedExcerpt = completeExcerpt(excerpt || content, {
-    maxLength: 160,
-    preserveSentences: true,
-    preserveKeywords: true
-  });
+  // Try LLM completion first, fallback to rule-based
+  React.useEffect(() => {
+    const completeExcerpt = async () => {
+      try {
+        const llmCompleted = await completeExcerptWithLLM(excerpt || content, {
+          maxLength: 160,
+          style: 'professional',
+          preserveEntities: true
+        });
+        setCompletedExcerpt(llmCompleted);
+      } catch (error) {
+        // Fallback to rule-based completion
+        const fallback = completeExcerpt(excerpt || content, {
+          maxLength: 160,
+          preserveSentences: true,
+          preserveKeywords: true
+        });
+        setCompletedExcerpt(fallback);
+      }
+    };
+
+    completeExcerpt();
+  }, [excerpt, content]);
 
   // Get confidence level
   const getConfidenceLevel = (score: number) => {
@@ -75,6 +97,11 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
     const refinedPrompt = generateRefinedPrompt(basePrompt, [tag], context);
     onTagClick(tag);
     onQuestionSelect(refinedPrompt);
+  };
+
+  // Append tag to current query
+  const handleTagAppend = (tag: string) => {
+    onTagAppend?.(tag);
   };
 
   // Context-aware keywords extraction
@@ -160,24 +187,37 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
       {/* Content/Excerpt */}
       <div className="mb-3 pl-11">
         <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-          {formattedExcerpt}
+          {completedExcerpt || (excerpt || content)}
         </p>
       </div>
 
       {/* Contextual Keywords */}
       <div className="flex flex-wrap gap-1.5 mb-3 pl-11">
         {contextualKeywords.map((keyword, idx) => (
-          <button
-            key={idx}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleTagClick(keyword);
-            }}
-            className="text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-150 hover:scale-105"
-            title={`"${keyword}" ile ilgili detaylı araştırma yap`}
-          >
-            {keyword}
-          </button>
+          <div key={idx} className="flex items-center gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTagClick(keyword);
+              }}
+              className="text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors duration-150 hover:scale-105"
+              title={`"${keyword}" ile ilgili detaylı araştırma yap`}
+            >
+              {keyword}
+            </button>
+            {onTagAppend && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTagAppend(keyword);
+                }}
+                className="text-xs p-1 rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors duration-150"
+                title={`Sorguya "${keyword}" ekle`}
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         ))}
       </div>
 
