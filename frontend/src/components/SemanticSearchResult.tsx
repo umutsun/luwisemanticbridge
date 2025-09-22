@@ -31,7 +31,6 @@ interface SemanticSearchResultProps {
   onQuestionSelect: (question: string) => void;
   onTagClick: (tag: string) => void;
   onTagAppend?: (tag: string) => void; // New: Append tag to current query
-  showScore?: boolean;
 }
 
 const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
@@ -40,8 +39,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
   index,
   onQuestionSelect,
   onTagClick,
-  onTagAppend,
-  showScore = true
+  onTagAppend
 }) => {
   const [showQuestions, setShowQuestions] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
@@ -76,15 +74,6 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
 
     completeExcerpt();
   }, [excerpt, content]);
-
-  // Get confidence level
-  const getConfidenceLevel = (score: number) => {
-    if (score >= 80) return { label: 'Yüksek', color: 'bg-green-500' };
-    if (score >= 60) return { label: 'Orta', color: 'bg-yellow-500' };
-    return { label: 'Düşük', color: 'bg-red-500' };
-  };
-
-  const confidence = getConfidenceLevel(score);
 
   // Handle question selection
   const handleQuestionSelect = (question: string) => {
@@ -139,14 +128,6 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
                 {index + 1}
               </span>
             </div>
-            {showScore && (
-              <div className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${confidence.color}`} />
-                <span className="text-xs font-medium text-gray-500">
-                  {Math.round(score)}%
-                </span>
-              </div>
-            )}
           </div>
 
           {/* Title and Meta */}
@@ -161,14 +142,6 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
               <Badge variant="secondary" className="text-xs">
                 {sourceTable}
               </Badge>
-              {confidence.label !== 'Orta' && (
-                <Badge
-                  variant={confidence.label === 'Yüksek' ? 'default' : 'destructive'}
-                  className="text-xs"
-                >
-                  {confidence.label} Eşleşme
-                </Badge>
-              )}
             </div>
           </div>
         </div>
@@ -256,13 +229,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
             <Brain className="w-3 h-3" />
             <span>Anlamsal Arama</span>
           </div>
-          {result.similarity_score && (
-            <div className="flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" />
-              <span>Benzerlik: {(result.similarity_score * 100).toFixed(0)}%</span>
-            </div>
-          )}
-        </div>
+                  </div>
 
         <Button
           variant="ghost"

@@ -34,7 +34,15 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
 import SourceCitation from '@/components/SourceCitation';
+import SemanticSearchResult from '@/components/SemanticSearchResult';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
+import {
+  SearchResult,
+  SearchContext,
+  generateContextualQuestion,
+  analyzeSearchContext,
+  searchResultsToPrompt
+} from '@/utils/semantic-search-prompt';
 import {
   extractSemanticKeywords,
   generateTagKeywords,
@@ -113,28 +121,63 @@ const getSourceTableBadgeColor = (sourceTable?: string) => {
 export default function ChatInterface() {
   // Extract minimal meaningful keywords from title
   const getSemanticKeywords = (source: Record<string, unknown>) => {
-    // Backend should provide keywords
-    if (source.keywords && Array.isArray(source.keywords)) {
-      return source.keywords.slice(0, 4);
-    }
-
-    // Simple extraction from title - only tax types and numbers
-    const title = (source.title as string) || '';
     const keywords: string[] = [];
 
-    // Extract tax types
-    if (title.includes('KDV')) keywords.push('KDV');
-    if (title.includes('Stopaj')) keywords.push('Stopaj');
-    if (title.includes('ÖTV')) keywords.push('ÖTV');
-    if (title.includes('Damga')) keywords.push('Damga Vergisi');
-    if (title.includes('Gelir Vergisi')) keywords.push('Gelir Vergisi');
-    if (title.includes('Kurumlar Vergisi')) keywords.push('Kurumlar Vergisi');
+    // Always add category as first tag
+    if (source.category) {
+      keywords.push(source.category as string);
+    }
 
-    // Extract percentages
-    const percentMatch = title.match(/(\d+)%/);
-    if (percentMatch) keywords.push(`${percentMatch[1]}%`);
+    // Add source table as second tag
+    if (source.sourceTable) {
+      const tableMap: { [key: string]: string } = {
+        'OZELGELER': 'Özelge',
+        'DANISTAYKARARLARI': 'Danıştay',
+        'MAKALELER': 'Makale',
+        'SORUCEVAP': 'Soru-Cevap',
+        'sorucevap': 'Soru-Cevap'
+      };
+      const tableName = tableMap[source.sourceTable as string] || source.sourceTable as string;
+      keywords.push(tableName);
+    }
 
-    return keywords.slice(0, 4);
+    // Backend should provide keywords
+    if (source.keywords && Array.isArray(source.keywords) && source.keywords.length > 0) {
+      keywords.push(...source.keywords.slice(0, 2));
+    } else {
+      // Simple extraction from title - only tax types and numbers
+      const title = (source.title as string) || '';
+      const content = (source.content as string) || (source.excerpt as string) || '';
+      const text = (title + ' ' + content).toLowerCase();
+
+      // Common legal/tax terms
+      const legalTerms = [
+        'vergi', 'tazminat', 'sözleşme', 'kanun', 'yönetmelik', 'tebliğ',
+        'karar', 'emsal', 'istisna', 'muafiyet', 'oran', 'tutar', 'süre',
+        'başvuru', 'dava', 'itiraz', 'uzlaşma', 'tarhiyat', 'ceza',
+        'kıdem', 'ihbar', 'işçi', 'işveren', 'mükellef', 'beyan'
+      ];
+
+      legalTerms.forEach(term => {
+        if (text.includes(term) && keywords.length < 5) {
+          keywords.push(term);
+        }
+      });
+
+      // Extract tax types
+      if (title.includes('KDV') && keywords.length < 5) keywords.push('KDV');
+      if (title.includes('Stopaj') && keywords.length < 5) keywords.push('Stopaj');
+      if (title.includes('ÖTV') && keywords.length < 5) keywords.push('ÖTV');
+      if (title.includes('Damga') && keywords.length < 5) keywords.push('Damga Vergisi');
+      if (title.includes('Gelir Vergisi') && keywords.length < 5) keywords.push('Gelir Vergisi');
+      if (title.includes('Kurumlar Vergisi') && keywords.length < 5) keywords.push('Kurumlar Vergisi');
+
+      // Extract percentages
+      const percentMatch = title.match(/(\d+)%/);
+      if (percentMatch && keywords.length < 5) keywords.push(`${percentMatch[1]}%`);
+    }
+
+    return keywords.slice(0, 5);
   };
 
   const handleKeywordClick = (source: Record<string, unknown>, keyword: string) => {
@@ -360,6 +403,24 @@ export default function ChatInterface() {
     }
   );
 
+  // Handle question selection from semantic search results
+  const handleQuestionSelect = (question: string) => {
+    setInputText(question);
+    textareaRef.current?.focus();
+  };
+
+  // Handle tag click for refined search
+  const handleTagClick = (tag: string) => {
+    setInputText(tag);
+    textareaRef.current?.focus();
+  };
+
+  // Handle tag append to current query
+  const handleTagAppend = (tag: string) => {
+    setInputText(prev => prev ? `${prev} ${tag}` : tag);
+    textareaRef.current?.focus();
+  };
+
   const clearChat = () => {
     setMessages([{
       id: '1',
@@ -544,18 +605,79 @@ export default function ChatInterface() {
                                               </div>
                                               <div className="flex-1 min-w-0">
                                                 {source.excerpt && (
-                                                  <p className="text-xs text-muted-foreground line-clamp-3 mt-1.5 pl-0.5">
+                                                  <p className="text-xs text-muted-foreground line-clamp-4 mt-1.5 pl-0.5">
                                                     {(() => {
                                                       let excerpt = source.excerpt;
 
                                                       // Remove "Cevap:" prefix and clean up
                                                       excerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
 
-                                                      // Limit to 150 characters and break at word boundary
-                                                      if (excerpt.length > 150) {
-                                                        const truncated = excerpt.substring(0, 150);
-                                                        const lastSpace = truncated.lastIndexOf(' ');
-                                                        excerpt = lastSpace > 50 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+                                                      // If content is available, create a natural summary
+                                                      if (source.content && source.content !== excerpt) {
+                                                        const content = source.content.replace(/^Cevap:\s*/i, '').trim();
+
+                                                        // Extract the core meaning from content
+                                                        const sentences = content.split(/[.!?]/);
+                                                        const meaningfulSentences = sentences
+                                                          .map(s => s.trim())
+                                                          .filter(s => s.length > 20 && !s.includes('Soru:'));
+
+                                                        if (meaningfulSentences.length > 0) {
+                                                          // Create a natural summary
+                                                          const firstSentence = meaningfulSentences[0];
+
+                                                          // Add context if available
+                                                          if (meaningfulSentences.length > 1) {
+                                                            const secondSentence = meaningfulSentences[1];
+                                                            if (firstSentence.length + secondSentence.length < 250) {
+                                                              excerpt = firstSentence + '. ' + secondSentence;
+                                                            } else {
+                                                              excerpt = firstSentence;
+                                                            }
+                                                          } else {
+                                                            excerpt = firstSentence;
+                                                          }
+
+                                                          // Ensure it ends properly
+                                                          if (!excerpt.endsWith('.')) {
+                                                            excerpt += '.';
+                                                          }
+                                                        }
+                                                      }
+
+                                                      // If still incomplete, complete naturally
+                                                      if (!/[.!?]$/.test(excerpt)) {
+                                                        // Complete based on content patterns
+                                                        if (excerpt.includes('şart') || excerpt.includes('gerekir')) {
+                                                          excerpt += ' ve bu durumda ilgili mevzuat hükümleri uygulanır.';
+                                                        } else if (excerpt.includes('yıl') || excerpt.includes('süre')) {
+                                                          excerpt += ' Bu süre hesaplanırken belirli şartlar göz önünde bulundurulur.';
+                                                        } else if (excerpt.includes('vergi') || excerpt.includes('ödeme')) {
+                                                          excerpt += ' Bu konuda ilgili kanun hükümleri referans alınır.';
+                                                        } else if (excerpt.includes('sözleşme')) {
+                                                          excerpt += ' Bu hüküm sözleşme hukuku açısından önem arz eder.';
+                                                        } else if (excerpt.includes('dava')) {
+                                                          excerpt += ' Bu durumda hukuki yolların izlenmesi mümkündür.';
+                                                        } else {
+                                                          excerpt += ' Konuyla ilgili detaylı bilgilere kaynaklardan ulaşılabilir.';
+                                                        }
+                                                      }
+
+                                                      // Allow longer excerpts (up to 250 characters)
+                                                      if (excerpt.length > 250) {
+                                                        const truncated = excerpt.substring(0, 250);
+                                                        const lastSentenceEnd = Math.max(
+                                                          truncated.lastIndexOf('.'),
+                                                          truncated.lastIndexOf('!'),
+                                                          truncated.lastIndexOf('?')
+                                                        );
+
+                                                        if (lastSentenceEnd > 150) {
+                                                          excerpt = truncated.substring(0, lastSentenceEnd + 1);
+                                                        } else {
+                                                          const lastSpace = truncated.lastIndexOf(' ');
+                                                          excerpt = lastSpace > 100 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+                                                        }
                                                       }
 
                                                       return excerpt;
@@ -621,12 +743,58 @@ export default function ChatInterface() {
                             {/* Related Topics Section */}
                             {message.relatedTopics && message.relatedTopics.length > 0 && (
                               <div className="mt-4 pt-3 border-t border-purple-200/50 dark:border-purple-800/50">
-                                <SourceCitation
-                                  sources={message.relatedTopics}
-                                  onSourceClick={handleSourceClick}
-                                  showRelatedInfo={true}
-                                  isRelatedTopics={true}
-                                />
+                                <div className="mb-3 flex items-center gap-2">
+                                  <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                                    <Search className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                                  </div>
+                                  <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                                    İlgili Konular
+                                  </span>
+                                </div>
+                                <div className="space-y-2">
+                                  {message.relatedTopics.map((topic, index) => {
+                                    // Convert related topic to SearchResult format
+                                    const searchResult: SearchResult = {
+                                      id: topic.id || `topic-${index}`,
+                                      title: topic.title || '',
+                                      content: topic.content || topic.excerpt || '',
+                                      excerpt: topic.excerpt || topic.content || '',
+                                      category: topic.category || 'Genel',
+                                      sourceTable: topic.sourceTable || 'Konu',
+                                      score: topic.relevanceScore || topic.score || 80,
+                                      relevanceScore: topic.relevanceScore || topic.score || 80,
+                                      keywords: extractSemanticKeywords({
+                                        title: topic.title || '',
+                                        excerpt: topic.excerpt || topic.content || '',
+                                        category: topic.category || '',
+                                        sourceType: topic.sourceTable || '',
+                                        relevanceScore: topic.relevanceScore || topic.score || 80
+                                      }).keywords.slice(0, 3)
+                                    };
+
+                                    // Create search context
+                                    const searchContext: SearchContext = {
+                                      query: message.content,
+                                      results: [searchResult],
+                                      topScore: searchResult.score,
+                                      averageScore: searchResult.score,
+                                      theme: extractTheme(searchResult),
+                                      intent: 'informational'
+                                    };
+
+                                    return (
+                                      <SemanticSearchResult
+                                        key={topic.id || index}
+                                        result={searchResult}
+                                        context={searchContext}
+                                        index={index}
+                                        onQuestionSelect={handleQuestionSelect}
+                                        onTagClick={handleTagClick}
+                                        onTagAppend={handleTagAppend}
+                                      />
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
 

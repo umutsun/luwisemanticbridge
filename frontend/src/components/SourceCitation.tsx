@@ -33,7 +33,7 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
     const extraction = extractSemanticKeywords(context);
 
     // Get the source table name as the primary keyword
-    const sourceTableName = getTableDisplayName(source.sourceTable || 'Kaynak');
+    const sourceTableName = getTableDisplayName(source.sourceTable || 'Konu');
 
     // Generate other keywords and filter out duplicates
     const keywords = generateTagKeywords(extraction)

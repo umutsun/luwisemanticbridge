@@ -95,60 +95,99 @@ const extractTheme = (result: SearchResult): string => {
 
 // Generate contextual question from search result
 export const generateContextualQuestion = (result: SearchResult, context: SearchContext): string => {
-  const { intent, theme } = context;
-  const { title, content, category } = result;
+  const { title, content } = result;
 
-  // Clean content
+  // Clean content and extract key phrase
   const cleanContent = content.replace(/^Cevap:\s*/i, '').trim();
   const cleanTitle = title.replace(/^(sorucevap|ozelgeler) -\s*/, '').replace(/ - ID: \d+$/, '');
 
-  // Extract key entities
-  const entities = extractEntities(cleanContent);
-  const procedures = extractProcedures(cleanContent);
-  const conditions = extractConditions(cleanContent);
+  // Get the first meaningful phrase from content
+  const firstPhrase = extractFirstMeaningfulPhrase(cleanContent);
 
-  // Intent-specific question templates
-  const templates = {
-    informational: [
-      `${cleanTitle} hakkında detaylı bilgi verebilir misiniz?`,
-      `${cleanTitle} konusunu açıklar mısınız?`,
-      `${cleanTitle} nedir ve nasıl uygulanır?`
-    ],
-    procedural: [
-      `${cleanTitle} için gerekli adımlar nelerdir?`,
-      `${cleanTitle} nasıl yapılır?`,
-      `${cleanTitle} süreci nasıl işler?`
-    ],
-    analytical: [
-      `${cleanTitle} etkileri nelerdir?`,
-      `${cleanTitle} analizi nasıl yapılır?`,
-      `${cleanTitle} sonuçları değerlendirildiğinde ne çıkar?`
-    ],
-    comparative: [
-      `${cleanTitle} ile benzer konular arasındaki farklar nelerdir?`,
-      `${cleanTitle} alternatifleri nelerdir?`,
-      `${cleanTitle} en iyi uygulama yöntemi nedir?`
-    ]
-  };
+  // Extract key terms for context
+  const keyTerms = extractKeyTermsForQuestion(cleanContent);
 
-  // Select base template
-  const baseTemplates = templates[intent] || templates.informational;
-  let question = baseTemplates[0];
+  // Build natural question
+  let question = '';
 
-  // Enhance with context based on entities and procedures
-  if (entities.length > 0) {
-    question += ` (${entities[0]} özelinde)`;
-  }
-  if (procedures.length > 0) {
-    question = `${procedures[0]} konusunda detaylı açıklama yapar mısınız?`;
+  // If we have a good first phrase, use it as base
+  if (firstPhrase && firstPhrase.length > 20) {
+    question = `${firstPhrase} hakkında detaylı bilgi`;
+  } else {
+    // Use title as base
+    question = `${cleanTitle} konusunda açıklama`;
   }
 
-  // Add category context if meaningful
-  if (category && category !== 'Genel' && category !== 'Kaynak') {
-    question += ` [${category}]`;
+  // Add context from key terms
+  if (keyTerms.length > 0) {
+    const topTerms = keyTerms.slice(0, 2);
+    question += ` (${topTerms.join(', ')})`;
+  }
+
+  // Make it a proper question (without "Merhaba")
+  if (!question.endsWith('?')) {
+    // Remove "Merhaba" if present
+    question = question.replace(/^Merhaba,\s*/i, '');
+    question += ' nedir?';
   }
 
   return question;
+};
+
+// Extract the first meaningful phrase from content
+const extractFirstMeaningfulPhrase = (content: string): string => {
+  // Remove date prefixes
+  content = content.replace(/^\d{2}\.\d{2}\.\d{4}\s*/, '');
+
+  // Split by common sentence endings
+  const sentences = content.split(/[.!?]/);
+
+  // Find the first substantial sentence
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+
+    // Skip if too short or doesn't contain meaningful content
+    if (trimmed.length < 20) continue;
+
+    // Skip if it's just a question
+    if (trimmed.includes('?')) continue;
+
+    // Clean up common prefixes
+    let phrase = trimmed
+      .replace(/^Soru:\s*/i, '')
+      .replace(/^Cevap:\s*/i, '')
+      .trim();
+
+    if (phrase.length > 20) {
+      return phrase;
+    }
+  }
+
+  return '';
+};
+
+// Extract key terms specifically for question generation
+const extractKeyTermsForQuestion = (content: string): string[] => {
+  const terms: string[] = [];
+
+  // Look for specific patterns
+  const patterns = [
+    /([A-ZÇĞİÖŞÜ][a-zçğıöşü]+ Vergisi)/g,  // "Gelir Vergisi", "Kurumlar Vergisi"
+    /([A-ZÇĞİÖŞÜ][a-zçğıöşü]+ Kanunu)/g,   // "Vergi Usul Kanunu"
+    /([A-ZÇĞİÖŞÜ][a-zçğıöşü]+ Sözleşmesi)/g, // "İş Sözleşmesi"
+    /(\d+%\s*oranında?)/g,                 // "15% oranında"
+    /(\d+\s*(?:gün|ay|yıl))/g,            // "6 ay", "1 yıl"
+    /(serbest bölge|stopaj|kdv|ötv)/gi     // Specific terms
+  ];
+
+  patterns.forEach(pattern => {
+    const matches = content.match(pattern);
+    if (matches) {
+      terms.push(...matches);
+    }
+  });
+
+  return [...new Set(terms)];
 };
 
 // Extract entities (nouns, proper nouns, numbers)
@@ -308,25 +347,20 @@ export const generateQuestionOptionsForResult = (result: SearchResult, context: 
   // Primary contextual question
   questions.push(generateContextualQuestion(result, context));
 
-  // Variations based on content analysis
-  const { content, category } = result;
+  // Extract key terms for variations
+  const cleanContent = result.content.replace(/^Cevap:\s*/i, '').trim();
   const cleanTitle = result.title.replace(/^(sorucevap|ozelgeler) -\s*/, '').replace(/ - ID: \d+$/, '');
+  const keyTerms = extractKeyTermsForQuestion(cleanContent);
 
-  // Generate variations based on intent and content
+  // Generate variations based on content
   const variations = [
-    `${cleanTitle} ile ilgili uygulama örnekleri gösterir misiniz?`,
-    `${cleanTitle} konusunda dikkat edilmesi gereken hususlar nelerdir?`,
-    `${cleanTitle} konusuyla ilgili genel bilgi verir misiniz?`,
-    `${cleanTitle} benzeri durumlarda ne yapılır?`
+    `${cleanTitle} ile ilgili örnek bir durum açıklayabilir misiniz?`,
+    keyTerms.length > 0 ? `${keyTerms[0]} hususunda detaylı bilgi verir misiniz?` : `${cleanTitle} konusunda dikkat edilmesi gerekenler nelerdir?`,
+    `${cleanTitle} için uygulama prosedürünü anlatır mısınız?`
   ];
 
   // Add variations
   questions.push(...variations.slice(0, 2));
-
-  // Category-specific variation
-  if (category === 'Mevzuat') {
-    questions.push(`${cleanTitle} hükmünün güncel yorumları nelerdir?`);
-  }
 
   return questions.slice(0, count);
 };
