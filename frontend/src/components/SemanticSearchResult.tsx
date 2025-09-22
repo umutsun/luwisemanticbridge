@@ -22,6 +22,7 @@ import {
 } from '@/utils/semantic-search-prompt';
 import { completeExcerpt } from '@/utils/excerpt-completion';
 import { completeExcerptWithLLM } from '@/utils/llm-excerpt-completion';
+import { useLLMSettings } from '@/hooks/useLLMSettings';
 
 interface SemanticSearchResultProps {
   result: SearchResult;
@@ -45,6 +46,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
   const [showQuestions, setShowQuestions] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<string | null>(null);
   const [completedExcerpt, setCompletedExcerpt] = useState<string>('');
+  const { settings: llmSettings } = useLLMSettings();
 
   const { title, content, excerpt, category, sourceTable, score, keywords = [] } = result;
 
@@ -56,15 +58,15 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
     const completeExcerpt = async () => {
       try {
         const llmCompleted = await completeExcerptWithLLM(excerpt || content, {
-          maxLength: 160,
-          style: 'professional',
-          preserveEntities: true
+          maxLength: llmSettings?.maxLength || 160,
+          style: llmSettings?.style || 'professional',
+          preserveEntities: llmSettings?.preserveEntities
         });
         setCompletedExcerpt(llmCompleted);
       } catch (error) {
         // Fallback to rule-based completion
         const fallback = completeExcerpt(excerpt || content, {
-          maxLength: 160,
+          maxLength: llmSettings?.maxLength || 160,
           preserveSentences: true,
           preserveKeywords: true
         });

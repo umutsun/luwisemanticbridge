@@ -14,11 +14,14 @@ export const completeExcerptWithLLM = async (
   content: string,
   options: CompletionOptions = {}
 ): Promise<string> => {
+  // Get settings from backend if not provided
+  const { settings: llmSettings } = useLLMSettings();
+
   const {
-    maxLength = 150,
-    style = 'professional',
-    preserveEntities = true,
-    addContext = true
+    maxLength = llmSettings?.maxLength || 150,
+    style = llmSettings?.style || 'professional',
+    preserveEntities = llmSettings?.preserveEntities ?? true,
+    addContext = llmSettings?.addContext ?? true
   } = options;
 
   // Clean the content
