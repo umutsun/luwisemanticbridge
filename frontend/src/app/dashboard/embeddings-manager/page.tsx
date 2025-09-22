@@ -320,7 +320,7 @@ export default function EmbeddingsManagerPage() {
     }
 
     // Fix total value if it's 0 but tableProgress has values
-    let fixedProgress = { ...progress };
+    const fixedProgress = { ...progress };
     if (progress.total === 0 && progress.tableProgress && progress.currentTable) {
       const tableInfo = progress.tableProgress[progress.currentTable];
       if (tableInfo && tableInfo.total > 0) {
@@ -769,7 +769,7 @@ export default function EmbeddingsManagerPage() {
 
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
-    let eventSourceExists = false;
+    const eventSourceExists = false;
 
     // Check if EventSource is available and if we should use SSE
     const shouldUseSSE = typeof EventSource !== 'undefined' &&

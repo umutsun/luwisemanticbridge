@@ -1,10 +1,32 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import ReactMarkdown from 'react-markdown';
 import { User, Bot } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { SourceCitation } from './source-citation';
+
+/**
+ * Highlights repeating keywords in text with markup
+ */
+function highlightRepeatingKeywords(text: string, keywords: string[]): string {
+  if (!keywords || keywords.length === 0) return text;
+
+  // Create a regex pattern for each keyword (case-insensitive)
+  const keywordPatterns = keywords.map(keyword =>
+    new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi')
+  );
+
+  let highlightedText = text;
+
+  // Apply highlighting for each keyword
+  keywordPatterns.forEach((pattern) => {
+    highlightedText = highlightedText.replace(pattern, (match) => {
+      return `<mark class="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1 py-0.5 rounded font-medium">${match}</mark>`;
+    });
+  });
+
+  return highlightedText;
+}
 
 interface MessageItemProps {
   message: Message;
@@ -12,7 +34,7 @@ interface MessageItemProps {
 
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user';
-  
+
   // Calculate response quality based on sources
   const getResponseQuality = () => {
     if (isUser || !message.sources) return null;
@@ -24,6 +46,48 @@ export function MessageItem({ message }: MessageItemProps) {
   };
 
   const responseQuality = getResponseQuality();
+
+  // Extract keywords from sources for highlighting
+  const getKeywordsFromSources = (): string[] => {
+    if (!message.sources || message.sources.length === 0) return [];
+
+    const allKeywords: string[] = [];
+    message.sources.forEach(source => {
+      if (source.sourceTable) {
+        allKeywords.push(source.sourceTable.toLowerCase());
+      }
+      if (source.category) {
+        allKeywords.push(source.category.toLowerCase());
+      }
+      if (source.title) {
+        // Extract potential keywords from title
+        const titleWords = source.title.toLowerCase().split(/\s+/);
+        allKeywords.push(...titleWords.filter(word => word.length > 3));
+      }
+    });
+
+    // Return unique keywords, limited to important ones
+    return [...new Set(allKeywords)].slice(0, 10);
+  };
+
+  const keywords = getKeywordsFromSources();
+
+  // Apply highlighting to the first paragraph of AI response
+  const getProcessedContent = () => {
+    if (isUser || !keywords.length) return message.content;
+
+    // Split content into paragraphs
+    const paragraphs = message.content.split('\n\n');
+    if (paragraphs.length === 0) return message.content;
+
+    // Apply highlighting to the first paragraph only
+    const firstParagraph = highlightRepeatingKeywords(paragraphs[0], keywords);
+    const remainingParagraphs = paragraphs.slice(1).join('\n\n');
+
+    return firstParagraph + (remainingParagraphs ? '\n\n' + remainingParagraphs : '');
+  };
+
+  const processedContent = getProcessedContent();
   
   return (
     <div className={cn(
@@ -55,7 +119,7 @@ export function MessageItem({ message }: MessageItemProps) {
             </span>
             {message.sources && (
               <span className="text-xs text-gray-400 dark:text-gray-500">
-                ({message.sources.length} kaynak)
+                ({message.sources.length} konu)
               </span>
             )}
           </div>
@@ -65,9 +129,9 @@ export function MessageItem({ message }: MessageItemProps) {
           'prose prose-sm max-w-none',
           isUser ? 'prose-invert' : 'prose-gray dark:prose-invert',
           '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0'
-        )}>
-          <ReactMarkdown>{message.content}</ReactMarkdown>
-        </div>
+        )}
+        dangerouslySetInnerHTML={{ __html: processedContent }}
+        />
         
         {message.sources && message.sources.length > 0 && (
           <SourceCitation sources={message.sources} />

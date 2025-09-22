@@ -135,7 +135,7 @@
       "references": "Kaynak Referansları",
       "referencesDesc": "[Kaynak 1], [Kaynak 2] formatını kullanın",
       "context": "Bağlam Kullanımı",
-      "contextDesc": "En ilgili kaynaklar başta gelir",
+      "contextDesc": "En ilgili konular başta gelir",
       "temperature": "Sıcaklık",
       "temperatureDesc": "0.1: Tutarlı, 0.5: Dengeli, 0.9: Yaratıcı"
     },

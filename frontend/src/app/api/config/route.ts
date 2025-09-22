@@ -98,7 +98,7 @@ const isObject = (item: any) => {
 };
 
 const deepMerge = (target: any, source: any) => {
-  let output = { ...target };
+  const output = { ...target };
   if (isObject(target) && isObject(source)) {
     Object.keys(source).forEach(key => {
       if (isObject(source[key])) {

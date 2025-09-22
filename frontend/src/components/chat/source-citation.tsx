@@ -72,20 +72,6 @@ export function SourceCitation({ sources }: SourceCitationProps) {
 
   return (
     <div className="mt-4 pt-3 border-t border-gray-100/60 dark:border-gray-600/30">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 flex items-center gap-1">
-          <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
-          İlgili Konular ({sources.length})
-        </p>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="flex items-center gap-1">
-            <span className="text-gray-500 dark:text-gray-400">Güven:</span>
-            <span className={`font-medium ${confidenceColor}`}>
-              {confidenceText} ({confidence})
-            </span>
-          </span>
-        </div>
-      </div>
       <div className="space-y-2">
         {sources.map((source, index) => {
           // Calculate individual metrics
@@ -109,16 +95,31 @@ export function SourceCitation({ sources }: SourceCitationProps) {
                         rel="noopener noreferrer"
                         className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium line-clamp-2"
                       >
-                        {source.citation || source.title}
+                        {(() => {
+                          let title = source.citation || source.title || '';
+                          // Clean up title
+                          title = title
+                            .replace(/ - ID: \d+/g, '')
+                            .replace(/^sorucevap -\s*/, '')
+                            .replace(/^ozelgeler -\s*/, '')
+                            .replace(/\s*\([^)]*\)$/, '') // Remove category suffixes
+                            .trim();
+                          return title;
+                        })()}
                       </a>
                     ) : (
                       <span className="text-xs font-medium text-gray-700 dark:text-gray-300 line-clamp-2">
-                        {source.citation || source.title}
-                      </span>
-                    )}
-                    {source.sourceTable && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getBadgeColor(source.sourceTable)}`}>
-                        {getSourceTableName(source.sourceTable)}
+                        {(() => {
+                          let title = source.citation || source.title || '';
+                          // Clean up title
+                          title = title
+                            .replace(/ - ID: \d+/g, '')
+                            .replace(/^sorucevap -\s*/, '')
+                            .replace(/^ozelgeler -\s*/, '')
+                            .replace(/\s*\([^)]*\)$/, '') // Remove category suffixes
+                            .trim();
+                          return title;
+                        })()}
                       </span>
                     )}
                   </div>
@@ -127,41 +128,13 @@ export function SourceCitation({ sources }: SourceCitationProps) {
                       {source.excerpt}
                     </p>
                   )}
-                  {/* Additional metadata display */}
-                  {source.metadata && (
-                    <div className="flex gap-2 mt-1">
-                      {source.metadata.tarih && (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          📅 {source.metadata.tarih}
-                        </span>
-                      )}
-                      {source.metadata.sayiNo && (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          📄 {source.metadata.sayiNo}
-                        </span>
-                      )}
-                      {source.metadata.kararNo && (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          ⚖️ {source.metadata.kararNo}
-                        </span>
-                      )}
-                    </div>
-                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <div className="flex items-center gap-1">
-                    <div className="opacity-70 group-hover:opacity-100 transition-opacity">
-                      {getSourceIcon(source.sourceTable)}
-                    </div>
                     <span className={`text-xs font-medium ${scoreColor}`}>
                       {scoreDisplay}
                     </span>
                   </div>
-                  {hasMetadata && (
-                    <span className="text-xs text-green-600 dark:text-green-400">
-                      ✓
-                    </span>
-                  )}
                 </div>
               </div>
             </div>

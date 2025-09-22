@@ -33,6 +33,14 @@ import {
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import Link from 'next/link';
+import SourceCitation from '@/components/SourceCitation';
+import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
+import {
+  extractSemanticKeywords,
+  generateTagKeywords,
+  getKeywordColor,
+  generateSearchQueryFromKeywords
+} from '@/utils/keyword-extraction';
 
 interface Message {
   id: string;
@@ -40,6 +48,7 @@ interface Message {
   content: string;
   timestamp: Date;
   sources?: any[];
+  relatedTopics?: any[];
   context?: string[];
   isTyping?: boolean;
   isFromSource?: boolean; // Track if message came from clicking a source
@@ -72,7 +81,82 @@ const getTableDisplayName = (tableName: string): string => {
   return tableMap[tableName] || tableName;
 };
 
+const getSourceTableName = (sourceTable?: string) => {
+  const tableNames: { [key: string]: string } = {
+    'OZELGELER': 'Özelgeler',
+    'DANISTAYKARARLARI': 'Danıştay Kararları',
+    'MAKALELER': 'Makaleler',
+    'SORUCEVAP': 'Soru Cevap',
+    'Kaynak': 'Genel Kaynak',
+    'embeddings': 'Dokümanlar',
+    'chunks': 'Metin Parçaları',
+    'sources': 'Kaynaklar'
+  };
+  return tableNames[sourceTable || ''] || sourceTable || 'Kaynak';
+};
+
+const getSourceTableBadgeColor = (sourceTable?: string) => {
+  switch (sourceTable) {
+    case 'OZELGELER':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+    case 'DANISTAYKARARLARI':
+      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
+    case 'MAKALELER':
+      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+    case 'SORUCEVAP':
+      return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+    default:
+      return 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400';
+  }
+};
+
 export default function ChatInterface() {
+  // Keyword extraction and handling
+  const getSemanticKeywords = (source: Record<string, unknown>) => {
+    const context = {
+      title: (source.title as string) || '',
+      excerpt: (source.excerpt as string) || (source.content as string) || '',
+      category: (source.category as string) || '',
+      sourceType: (source.table as string) || '',
+      relevanceScore: (source.score as number) || (source.relevanceScore as number) || 0
+    };
+
+    const extraction = extractSemanticKeywords(context);
+    return generateTagKeywords(extraction);
+  };
+
+  const handleKeywordClick = (source: Record<string, unknown>, keyword: string) => {
+    const relevanceScore = (source.score as number) || (source.relevanceScore as number) || 0;
+    const context = {
+      title: (source.title as string) || '',
+      excerpt: (source.excerpt as string) || (source.content as string) || '',
+      category: (source.category as string) || '',
+      sourceType: (source.table as string) || (source.sourceTable as string) || '',
+      relevanceScore: relevanceScore
+    };
+
+    // Get all semantic keywords from the source
+    const allKeywords = getSemanticKeywords(source);
+
+    // Prioritize the clicked keyword and add related context
+    const keywordContext = {
+      ...context,
+      // Ensure the clicked keyword is first, then add other relevant keywords
+      primaryKeyword: keyword,
+      relatedKeywords: allKeywords.filter(k => k !== keyword).slice(0, 3)
+    };
+
+    // Generate enhanced search query with specific source context
+    const searchQuery = generateSearchQueryFromKeywords(
+      [keyword, ...keywordContext.relatedKeywords],
+      context
+    );
+
+    // Set the generated query and focus the input
+    setInputText(searchQuery);
+    textareaRef.current?.focus();
+  };
+
   // Chatbot settings state with loading indicator
   const [chatbotSettings, setChatbotSettings] = useState({
     title: '',
@@ -276,6 +360,7 @@ export default function ChatInterface() {
         content: data.message?.content || data.response || data.message || 'Üzgünüm, bir hata oluştu.',
         timestamp: new Date(),
         sources: data.sources,
+        relatedTopics: data.relatedTopics,
         context: data.context,
       };
 
@@ -306,61 +391,17 @@ export default function ChatInterface() {
     textareaRef.current?.focus();
   };
 
-  const handleSourceClick = async (source: any) => {
-    // Create a more intelligent search query based on the source
-    const cleanTitle = (source.title || '').replace(/ - ID: \d+/g, '').replace(/ \(Part \d+\/\d+\)/g, '').replace(/^sorucevap -\s*/, '').replace(/^ozelgeler -\s*/, '').trim();
-    const sourceType = getTableDisplayName(source.sourceTable || (source.databaseInfo && source.databaseInfo.table));
-    const category = source.category || '';
-    const excerpt = source.excerpt || source.content || '';
-
-    // Create a context-aware search query
-    let searchQuery = '';
-
-    // Content analysis for better question generation
-    const hasQuestionWords = /(?:nedir|nasıl|neden|hangi|kim|ne zaman|kaç|nerede|ne|mi|mu|mü|mı)/i.test(excerpt);
-    const hasLegalTerms = /(?:tevkiğ|kararı|kanunu|tüzüğü|yönetmeliği|tebliği|genelge|sirküler)/i.test(cleanTitle);
-    const hasTaxTerms = /(?:vergi|stopaj|kdv|ötv|gv|kv|kurumlar|damga|harç)/i.test(cleanTitle);
-    const isAboutProcedure = /(?:prosedür|süreç|uygulama|başvuru|talep)/i.test(cleanTitle);
-    const isAboutDefinition = /(?:tanımı|kapsamı|unsurları|özellikleri)/i.test(cleanTitle);
-
-    // Extract key topic from the title (remove table prefixes and IDs)
-    const topic = cleanTitle.length > 50 ? cleanTitle.substring(0, 50) + '...' : cleanTitle;
-
-    // Enhanced question patterns based on content type and context
-    if (sourceType === 'Soru-Cevap' && (excerpt.includes('Cevap:') || excerpt.includes('Yanıt:'))) {
-      searchQuery = `"${topic}" konusunda bana detaylı bilgi ve örnekler verebilir misin? Bu konuda sıkça sorulan soruları da açıklar mısın?`;
-    } else if (category === 'Mevzuat' && hasLegalTerms) {
-      searchQuery = `"${topic}" ile ilgili bilmeniz gereken en önemli bilgileri anlatabilir misin? Kimleri kapsar, nasıl uygulanır?`;
-    } else if (category === 'Mevzuat' && hasTaxTerms) {
-      searchQuery = `"${topic}" hakkında detaylı bilgi alabilir miyim? Oranı, kimleri etkilediği ve istisnaları nelerdir?`;
-    } else if (sourceType === 'Danıştay' || category === 'İçtihat') {
-      searchQuery = `"${topic}" kararının içtihat değeri nedir? Bu kararın pratikteki sonuçları ve emsal oluşturup oluşturmadığını açıklar mısın?`;
-    } else if (isAboutProcedure) {
-      searchQuery = `"${topic}" sürecini adım adım anlatabilir misin? Başvuru için gerekli belgeler ve dikkat edilmesi gerekenler nelerdir?`;
-    } else if (isAboutDefinition) {
-      searchQuery = `"${topic}" nedir ve nasıl uygulanır? Kapsamına giren durumlar ve istisnaları hakkında bilgi verir misin?`;
-    } else if (cleanTitle.includes('istisna')) {
-      searchQuery = `"${topic}" hangi durumlarda uygulanır? Kimler bu istisnadan yararlanabilir ve şartları nelerdir?`;
-    } else if (cleanTitle.includes('defter') || cleanTitle.includes('elektronik')) {
-      searchQuery = `"${topic}" ile ilgili uygulama usulünü, süresini ve yükümlülükleri detaylı olarak açıklar mısın?`;
-    } else if (hasQuestionWords) {
-      searchQuery = `"${topic}" konusundaki bu sorunun cevabını detaylandırır mısın? Benzer durumlar için de bilgi verir misin?`;
-    } else {
-      // More natural and conversational generic questions
-      const questionPatterns = [
-        `"${topic}" hakkında bana kapsamlı bilgi verebilir misin?`,
-        `"${topic}" konusunda ne gibi bilgiler paylaşabilirsin? Detaylı açıklama yapar mısın?`,
-        `"${topic}" ile ilgili en önemli noktaları anlatabilir misin? Pratik örnekler verirsen çok sevinirim.`,
-        `"${topic}" konusunu baştan sona açıklayabilir misin? Kimleri etkiler ve nasıl uygulanır?`
-      ];
-      searchQuery = questionPatterns[Math.floor(Math.random() * questionPatterns.length)];
+  // Create enhanced source click handler with semantic search capabilities
+  const handleSourceClick = createEnhancedSourceClickHandler(
+    setInputText,
+    () => textareaRef.current?.focus(),
+    {
+      includeCrossSourceContext: true,
+      includeRelevanceContext: true,
+      maxSemanticTerms: 3,
+      queryStyle: 'detailed'
     }
-
-    setInputText(searchQuery);
-    textareaRef.current?.focus();
-
-    // Don't automatically send, let the user review and edit
-  };
+  );
 
   const clearChat = () => {
     setMessages([{
@@ -528,101 +569,75 @@ export default function ChatInterface() {
                                   
                                   return (
                                     <>
-                                      <div className="flex items-center justify-between mb-3">
-                                        <p className="text-sm font-semibold">İlgili Konular</p>
-                                        <span className="text-xs text-muted-foreground">
-                                          {limitedSources.length} konu
-                                        </span>
-                                      </div>
                                       <div className="space-y-2">
                                         {visibleSources.map((source, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="relative p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
-                                      onClick={() => handleSourceClick(source)}
-                                      title="Bu kaynakla ilgili detaylı araştırma yap"
-                                    >
-                                      <div className="flex items-start gap-3">
-                                        <div className="flex-shrink-0">
-                                          <div className="flex flex-col items-center gap-1">
-                                            <span className="flex items-center justify-center w-7 h-7 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                                              {idx + 1}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between gap-2">
-                                            <h4 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 flex-1">
-                                              {(() => {
-                                                let title = source.title?.replace(/ - ID: \d+/g, '')?.replace(/ \(Part \d+\/\d+\)/g, '')?.replace(/^sorucevap -\s*/, '')?.replace(/^ozelgeler -\s*/, '')?.trim() || source.citation || `Kaynak ${idx + 1}`;
-
-                                                // Add category if available
-                                                if (source.category && source.category !== 'Kaynak') {
-                                                  title += ` (${source.category})`;
-                                                }
-
-                                                return title;
-                                              })()}
-                                            </h4>
-                                            {source.score && (
-                                              <div className="flex items-center gap-1 flex-shrink-0">
-                                                <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                                  <div 
-                                                    className="h-full bg-gradient-to-r from-slate-400 to-slate-600 dark:from-slate-500 dark:to-slate-400 transition-all duration-300"
-                                                    style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
-                                                  />
+                                          <div
+                                            key={idx}
+                                            className="relative p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
+                                            onClick={() => handleSourceClick(source)}
+                                            title="Bu konuyla ilgili detaylı araştırma yap"
+                                          >
+                                            <div className="flex items-start gap-3">
+                                              <div className="flex-shrink-0">
+                                                <div className="flex flex-col items-center gap-1">
+                                                  <span className="flex items-center justify-center w-7 h-7 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                                                    {idx + 1}
+                                                  </span>
                                                 </div>
-                                                <span className="text-[10px] text-muted-foreground w-8 text-right">
-                                                  {Math.round(source.score)}
-                                                </span>
                                               </div>
-                                            )}
-                                          </div>
-                                          {source.excerpt && (
-                                            <p className="text-xs text-muted-foreground line-clamp-3 mt-1.5 pl-0.5">
-                                              {(() => {
-                                                let excerpt = source.excerpt;
+                                              <div className="flex-1 min-w-0">
+                                                {source.excerpt && (
+                                                  <p className="text-xs text-muted-foreground line-clamp-3 mt-1.5 pl-0.5">
+                                                    {(() => {
+                                                      let excerpt = source.excerpt;
 
-                                                // Remove "Cevap:" prefix and clean up
-                                                excerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
+                                                      // Remove "Cevap:" prefix and clean up
+                                                      excerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
 
-                                                // Limit to 150 characters and break at word boundary
-                                                if (excerpt.length > 150) {
-                                                  const truncated = excerpt.substring(0, 150);
-                                                  const lastSpace = truncated.lastIndexOf(' ');
-                                                  excerpt = lastSpace > 50 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
-                                                }
+                                                      // Limit to 150 characters and break at word boundary
+                                                      if (excerpt.length > 150) {
+                                                        const truncated = excerpt.substring(0, 150);
+                                                        const lastSpace = truncated.lastIndexOf(' ');
+                                                        excerpt = lastSpace > 50 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+                                                      }
 
-                                                return excerpt;
-                                              })()}
-                                            </p>
-                                          )}
-                                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                            {source.category && (
-                                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${getCategoryColor(source.category)}`}>
-                                                {source.category}
-                                              </span>
-                                            )}
-                                            {(source.sourceTable || source.databaseInfo?.table) && (
-                                              <div className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                                <span>{getTableDisplayName(source.sourceTable || source.databaseInfo?.table)}</span>
+                                                      return excerpt;
+                                                    })()}
+                                                  </p>
+                                                )}
+                                                {/* Semantic Keywords instead of static tags */}
+                                                <div className="flex flex-wrap gap-1 mt-2">
+                                                  {getSemanticKeywords(source).slice(0, 4).map((keyword: string, idx: number) => (
+                                                    <button
+                                                      key={idx}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleKeywordClick(source, keyword);
+                                                      }}
+                                                      className={`text-xs px-2 py-1 rounded-none font-medium transition-colors duration-200 ${getKeywordColor(keyword)}`}
+                                                      title={`"${keyword}" ile ilgili araştırma yap`}
+                                                    >
+                                                      {keyword}
+                                                    </button>
+                                                  ))}
+                                                  {source.score && (
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                                      <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                        <div
+                                                          className="h-full bg-gradient-to-r from-slate-400 to-slate-600 dark:from-slate-500 dark:to-slate-400 transition-all duration-300"
+                                                          style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
+                                                        />
+                                                      </div>
+                                                      <span className="text-[10px] text-muted-foreground w-8 text-right">
+                                                        {Math.round(source.score)}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                </div>
                                               </div>
-                                            )}
-                                            {source.metadata?.documentType && (
-                                              <Badge variant="secondary" className="text-xs py-0 h-5">
-                                                {source.metadata.documentType}
-                                              </Badge>
-                                            )}
-                                            {source.metadata?.date && (
-                                              <span className="text-xs text-muted-foreground">
-                                                {new Date(source.metadata.date).toLocaleDateString('tr-TR')}
-                                              </span>
-                                            )}
+                                            </div>
                                           </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
+                                        ))}
                                         {hasMore && (
                                           <Button
                                             variant="outline"
@@ -645,7 +660,19 @@ export default function ChatInterface() {
                                 })()}
                               </div>
                             )}
-                            
+
+                            {/* Related Topics Section */}
+                            {message.relatedTopics && message.relatedTopics.length > 0 && (
+                              <div className="mt-4 pt-3 border-t border-purple-200/50 dark:border-purple-800/50">
+                                <SourceCitation
+                                  sources={message.relatedTopics}
+                                  onSourceClick={handleSourceClick}
+                                  showRelatedInfo={true}
+                                  isRelatedTopics={true}
+                                />
+                              </div>
+                            )}
+
                             <p className="text-xs opacity-60 mt-2">
                               {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
                                 hour: '2-digit',
