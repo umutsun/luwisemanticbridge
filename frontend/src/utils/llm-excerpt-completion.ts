@@ -1,5 +1,6 @@
 // LLM-powered excerpt completion for natural language summaries
 import config, { getEndpoint } from '@/config/api.config';
+import { useLLMSettings } from '@/hooks/useLLMSettings';
 
 export interface CompletionOptions {
   maxLength?: number;

@@ -96,7 +96,7 @@ const extractTheme = (result: SearchResult): string => {
 // Generate contextual question from search result
 export const generateContextualQuestion = (result: SearchResult, context: SearchContext): string => {
   const { intent, theme } = context;
-  const { title, content, category, score } = result;
+  const { title, content, category } = result;
 
   // Clean content
   const cleanContent = content.replace(/^Cevap:\s*/i, '').trim();
@@ -135,22 +135,16 @@ export const generateContextualQuestion = (result: SearchResult, context: Search
   const baseTemplates = templates[intent] || templates.informational;
   let question = baseTemplates[0];
 
-  // Enhance with context
-  if (score > 75) {
-    // High relevance - be more specific
-    if (entities.length > 0) {
-      question += ` (${entities[0]} özelinde)`;
-    }
-    if (procedures.length > 0) {
-      question = `${procedures[0]} konusunda detaylı açıklama yapar mısınız?`;
-    }
-  } else if (score < 60) {
-    // Lower relevance - be more general
-    question = `${theme} alanında genel bilgi verir misiniz?`;
+  // Enhance with context based on entities and procedures
+  if (entities.length > 0) {
+    question += ` (${entities[0]} özelinde)`;
+  }
+  if (procedures.length > 0) {
+    question = `${procedures[0]} konusunda detaylı açıklama yapar mısınız?`;
   }
 
-  // Add category context
-  if (category && category !== 'Genel') {
+  // Add category context if meaningful
+  if (category && category !== 'Genel' && category !== 'Kaynak') {
     question += ` [${category}]`;
   }
 
@@ -315,21 +309,23 @@ export const generateQuestionOptionsForResult = (result: SearchResult, context: 
   questions.push(generateContextualQuestion(result, context));
 
   // Variations based on content analysis
-  const { content, category, score } = result;
+  const { content, category } = result;
+  const cleanTitle = result.title.replace(/^(sorucevap|ozelgeler) -\s*/, '').replace(/ - ID: \d+$/, '');
 
-  if (score > 70) {
-    // High relevance - specific questions
-    questions.push(`${result.title} ile ilgili uygulama örnekleri gösterir misiniz?`);
-    questions.push(`${result.title} konusunda dikkat edilmesi gereken hususlar nelerdir?`);
-  } else {
-    // Lower relevance - exploratory questions
-    questions.push(`${result.title} konusuyla ilgili genel bilgi verir misiniz?`);
-    questions.push(`${result.title} benzeri durumlarda ne yapılır?`);
-  }
+  // Generate variations based on intent and content
+  const variations = [
+    `${cleanTitle} ile ilgili uygulama örnekleri gösterir misiniz?`,
+    `${cleanTitle} konusunda dikkat edilmesi gereken hususlar nelerdir?`,
+    `${cleanTitle} konusuyla ilgili genel bilgi verir misiniz?`,
+    `${cleanTitle} benzeri durumlarda ne yapılır?`
+  ];
+
+  // Add variations
+  questions.push(...variations.slice(0, 2));
 
   // Category-specific variation
   if (category === 'Mevzuat') {
-    questions.push(`${result.title} hükmünün güncel yorumları nelerdir?`);
+    questions.push(`${cleanTitle} hükmünün güncel yorumları nelerdir?`);
   }
 
   return questions.slice(0, count);

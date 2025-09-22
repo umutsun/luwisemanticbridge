@@ -16,6 +16,7 @@ const config = {
       suggestions: 'http://localhost:8083/api/v2/chat/suggestions',
       history: '/api/chat/history',
       clear: '/api/chat/clear',
+      complete: '/api/chat/complete', // LLM excerpt completion
     },
     
     // Search endpoints
