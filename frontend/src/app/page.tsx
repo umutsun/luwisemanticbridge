@@ -87,12 +87,12 @@ const getSourceTableName = (sourceTable?: string) => {
     'DANISTAYKARARLARI': 'Danıştay Kararları',
     'MAKALELER': 'Makaleler',
     'SORUCEVAP': 'Soru Cevap',
-    'Kaynak': 'Genel Konu',
+    'Konu': 'Genel Konu',
     'embeddings': 'Dokümanlar',
     'chunks': 'Metin Parçaları',
     'sources': 'Konular'
   };
-  return tableNames[sourceTable || ''] || sourceTable || 'Kaynak';
+  return tableNames[sourceTable || ''] || sourceTable || 'Konu';
 };
 
 const getSourceTableBadgeColor = (sourceTable?: string) => {
@@ -111,18 +111,30 @@ const getSourceTableBadgeColor = (sourceTable?: string) => {
 };
 
 export default function ChatInterface() {
-  // Keyword extraction and handling
+  // Extract minimal meaningful keywords from title
   const getSemanticKeywords = (source: Record<string, unknown>) => {
-    const context = {
-      title: (source.title as string) || '',
-      excerpt: (source.excerpt as string) || (source.content as string) || '',
-      category: (source.category as string) || '',
-      sourceType: (source.table as string) || '',
-      relevanceScore: (source.score as number) || (source.relevanceScore as number) || 0
-    };
+    // Backend should provide keywords
+    if (source.keywords && Array.isArray(source.keywords)) {
+      return source.keywords.slice(0, 4);
+    }
 
-    const extraction = extractSemanticKeywords(context);
-    return generateTagKeywords(extraction);
+    // Simple extraction from title - only tax types and numbers
+    const title = (source.title as string) || '';
+    const keywords: string[] = [];
+
+    // Extract tax types
+    if (title.includes('KDV')) keywords.push('KDV');
+    if (title.includes('Stopaj')) keywords.push('Stopaj');
+    if (title.includes('ÖTV')) keywords.push('ÖTV');
+    if (title.includes('Damga')) keywords.push('Damga Vergisi');
+    if (title.includes('Gelir Vergisi')) keywords.push('Gelir Vergisi');
+    if (title.includes('Kurumlar Vergisi')) keywords.push('Kurumlar Vergisi');
+
+    // Extract percentages
+    const percentMatch = title.match(/(\d+)%/);
+    if (percentMatch) keywords.push(`${percentMatch[1]}%`);
+
+    return keywords.slice(0, 4);
   };
 
   const handleKeywordClick = (source: Record<string, unknown>, keyword: string) => {
@@ -168,59 +180,6 @@ export default function ChatInterface() {
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Default questions for fallback
-  const defaultQuestions = [
-    // KDV ve Satış Vergileri
-    'KDV oranları hangi mal ve hizmetlerde değişti?',
-    'KDV iadesi başvuru süreci nasıl işler?',
-    'İndirimli KDV uygulaması hangi durumlarda geçerli?',
-    'KDV tevkifatı oranları nedir?',
-    'E-fatura düzenleme zorunluluğu kimleri kapsar?',
-    'KDV beyannamesi düzenleme ve ödeme süreleri',
-    'İhracatta KDV istisnası nasıl uygulanır?',
-    'Özel matrah şekilleri nelerdir?',
-    
-    // Gelir ve Kurumlar Vergisi
-    'Gelir vergisi dilimleri ve oranları 2024',
-    'Kurumlar vergisi istisnaları nelerdir?',
-    'Ar-Ge indirimi şartları ve oranları',
-    'Yıllık gelir vergisi beyannamesi nasıl verilir?',
-    'Stopaj oranları hangi ödemelerde uygulanır?',
-    'Geçici vergi dönemleri ve hesaplama',
-    'Transfer fiyatlandırması düzenlemeleri',
-    'Kontrol edilen yabancı kurum kazancı',
-    
-    // Vergi Usul ve Mevzuat
-    'Vergi cezaları ve indirim oranları',
-    'Mücbir sebep halleri nelerdir?',
-    'Vergi dairesi işlemleri nasıl yapılır?',
-    'Defter tutma yükümlülüğü kimleri kapsar?',
-    'E-defter uygulaması zorunlu mu?',
-    'Vergi incelemesi süreçleri nasıl işler?',
-    'Uzlaşma komisyonu başvuru şartları',
-    'Vergi affı ve yapılandırma imkanları',
-    
-    // Danıştay Kararları ve Özelgeler
-    'Son Danıştay vergi dava kararları',
-    'Özelge başvurusu nasıl yapılır?',
-    'Emsal Danıştay kararları nelerdir?',
-    'Vergi mahkemesi itiraz süreleri',
-    'İstinaf ve temyiz başvuru şartları',
-    
-    // Özel Konular
-    'Dijital hizmet vergisi kimleri kapsar?',
-    'Konaklama vergisi oranları nedir?',
-    'Motorlu taşıtlar vergisi hesaplama',
-    'Değerli konut vergisi uygulaması',
-    'Damga vergisi oranları ve istisnaları',
-    'Harçlar kanunu uygulamaları',
-    'Gümrük vergisi muafiyetleri',
-    'Özel tüketim vergisi oranları',
-    'Banka ve sigorta muameleleri vergisi',
-    'Çevre temizlik vergisi tarifeleri',
-    'Emlak vergisi matrah ve oranları'
-  ];
-
   // Fetch popular questions from backend
   const fetchSuggestedQuestions = async () => {
     try {
@@ -232,9 +191,7 @@ export default function ChatInterface() {
     } catch (error) {
       console.error('Failed to fetch suggestions:', error);
     }
-    // Fallback to random default questions
-    const shuffled = [...defaultQuestions].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 4);
+    return [];
   };
 
   const [messages, setMessages] = useState<Message[]>([
@@ -353,7 +310,7 @@ export default function ChatInterface() {
       if (!response.ok) throw new Error('Failed to get response');
 
       const data = await response.json();
-      
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

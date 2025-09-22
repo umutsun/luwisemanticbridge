@@ -87,7 +87,7 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
       case 'SORUCEVAP':
         return 'S/C';
       default:
-        return 'Kaynak';
+        return 'Konu';
     }
   };
 
