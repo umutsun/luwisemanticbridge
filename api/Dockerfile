@@ -19,7 +19,8 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy installed modules and application code from the builder stage
-COPY --from=builder /app ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app .
 
 # Install PM2 globally
 RUN npm install pm2 -g
