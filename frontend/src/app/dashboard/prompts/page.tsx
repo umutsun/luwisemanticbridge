@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { AlertCircle, Save, RotateCcw, Copy, Check, Bot, MessageSquare, Palette, Plus, Trash2, Settings, Brain } from 'lucide-react';
+import { AlertCircle, Save, RotateCcw, Copy, Check, Bot, MessageSquare, Palette, Plus, Trash2, Settings, Brain, Database } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -115,7 +115,7 @@ export default function PromptsPage() {
 
   const fetchPrompts = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/config/prompts');
+      const response = await fetch('/api/config/prompts');
       if (response.ok) {
         const data = await response.json();
         setPrompts(data.prompts || []);
@@ -241,7 +241,7 @@ export default function PromptsPage() {
     setSuccess('');
 
     try {
-      const response = await fetch('http://localhost:8083/api/v2/config/prompts', {
+      const response = await fetch('/api/config/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -750,7 +750,7 @@ export default function PromptsPage() {
                       <Slider
                         id="maxTokens"
                         min={256}
-                        max={4096}
+                        max={8192}
                         step={256}
                         value={[maxTokens]}
                         onValueChange={(v) => setMaxTokens(v[0])}

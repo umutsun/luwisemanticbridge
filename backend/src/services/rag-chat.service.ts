@@ -7,6 +7,50 @@ import pool from '../config/database';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
 
+// Settings service interface
+interface SettingsService {
+  getSetting(key: string): Promise<string | null>;
+}
+
+// Settings service using the existing chatbot_settings table
+class SettingsServiceImpl implements SettingsService {
+  private pool = pool;
+
+  async getSetting(key: string): Promise<string | null> {
+    try {
+      const result = await this.pool.query(
+        'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+        [key]
+      );
+
+      return result.rows[0]?.setting_value || null;
+    } catch (error) {
+      console.error('Error fetching setting:', error);
+      return null;
+    }
+  }
+
+  async setSetting(key: string, value: string, category?: string, description?: string): Promise<void> {
+    try {
+      await this.pool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value, description, updated_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+         ON CONFLICT (setting_key)
+         DO UPDATE SET
+           setting_value = $2,
+           description = COALESCE($3, chatbot_settings.description),
+           updated_at = CURRENT_TIMESTAMP`,
+        [key, value, description]
+      );
+    } catch (error) {
+      console.error('Error saving setting:', error);
+      throw error;
+    }
+  }
+}
+
+const settingsService = new SettingsServiceImpl();
+
 dotenv.config();
 
 interface ChatMessage {
@@ -32,7 +76,7 @@ export class RAGChatService {
   private aiProviderPriority: string[] = ['gemini', 'claude', 'openai', 'fallback'];
   private fallbackEnabled: boolean;
   private defaultTemperature: number = 0.1;
-  private defaultMaxTokens: number = 2048;
+  private defaultMaxTokens: number = 4096;
   private defaultGeminiModel: string = 'gemini-1.5-flash';
 
   constructor() {
@@ -115,7 +159,7 @@ export class RAGChatService {
           this.defaultTemperature = parseFloat(row.setting_value) || 0.1;
           console.log(`📝 Temperature loaded from database: ${this.defaultTemperature}`);
         } else if (row.setting_key === 'max_tokens') {
-          this.defaultMaxTokens = parseInt(row.setting_value) || 2048;
+          this.defaultMaxTokens = parseInt(row.setting_value) || 4096;
           console.log(`📝 Max tokens loaded from database: ${this.defaultMaxTokens}`);
         } else if (row.setting_key === 'gemini_model') {
           this.defaultGeminiModel = row.setting_value || 'gemini-1.5-flash';
@@ -512,28 +556,67 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // Clean the excerpt first
       const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
 
+      // Get language setting from database
+      const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
+
       // Use Gemini for content processing (faster and free)
       if (process.env.GOOGLE_API_KEY) {
-        const prompt = `
-Aşağıdaki başlık ve özetten, vergi ve hukuk alanında uzman bir asistan gibi davranarak:
+        // Create prompt based on language setting
+      const prompt = responseLanguage === 'en' ? `
+Process the following title and content to improve readability and generate a specific question:
 
-1. ÖZETİ DAHA İYİ ANLAŞILIR HALE GETİR (2-3 cümle):
-- Özeti akıcı ve profesyonel bir dille yeniden yaz
-- Teknik terimleri basitçe açıkla
-- Önemli noktaları vurgula
+TITLE: ${title}
+CONTENT: ${cleanExcerpt}
 
-2. İLGİLİ BİR SORU ÜRET:
-- Özetteki ana konuyu ele alan spesifik bir soru
-- "nedir?", "nasıl?", "hangi şartlarda?" gibi soru kalıpları kullan
-- Soru vergi/maaliyet/hukuki konularla ilgili olmalı
+TASKS:
+1. Improve the content for better readability while preserving meaning
+2. Generate a specific question based on the UNIQUE content, not just the title
+
+RULES:
+- Keep the improved content concise and clear
+- The question MUST be about the specific details in the content
+- Keep questions as SHORT as possible (maximum 10-12 words)
+- Use direct question format (e.g., "What requirements...", "When is...", "How much...")
+- For legal content: Ask about implementation, requirements, or exceptions
+- For tax content: Ask about rates, procedures, or calculations
+- For Q&A content: Ask about similar scenarios or applications
+- Make each question unique based on the content's specific details
+- DO NOT use generic templates like "Tell me more about [title]"
+- DO NOT use markdown formatting like **
+
+RESPONSE:
+IMPROVED CONTENT:
+[improved content]
+
+QUESTION:
+[specific question about the content]
+` : `
+Aşağıdaki başlığı ve içeriği işleyerek okunabilirliğini artır ve spesifik bir soru üret:
 
 BAŞLIK: ${title}
+İÇERİK: ${cleanExcerpt}
 
-ÖZET: ${cleanExcerpt}
+GÖREVLER:
+1. İçeriği anlamı koruyarak daha okunaklı hale getir
+2. Sadece başlığa değil, İÇERİĞİN ÖZELİNDE spesifik bir soru üret
 
-Cevabı şu formatta ver:
-İYİLEŞTİRİLMİŞ İÇERİK: [iyileştirilmiş içerik buraya]
-ÜRETİLMİŞ SORU: [üretilmiş soru buraya]
+KURALLAR:
+- İyileştirilmiş içeriği kısa ve açık tut
+- Soru KESİNLİKLE içeriğin spesifik detayları hakkında olmalı
+- Soruyu MÜMKÜNCE KISA tut (maksimum 10-12 kelime)
+- Doğrudan soru formatında kullan (örn: "Hangi şartlar...", "Ne zaman...", "Kaç para...")
+- Yasal içerik için: uygulama, şartlar veya istisnalar hakkında sor
+- Vergi içerik için: oranlar, prosedürler veya hesaplama hakkında sor
+- Her soruyu içeriğin spesifik detaylarına göre BENZERSİZ yap
+- "[başlık] hakkında daha fazla bilgi edinin" gibi GENERIC kalıplar KULLANMA
+- ** gibi markdown formatları KULLANMA
+
+CEVAP:
+İYİLEŞTİRİLMİŞ İÇERİK:
+[iyileştirilmiş içerik]
+
+SORU:
+[içeriğe özgü spesifik soru]
 `;
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
@@ -542,8 +625,8 @@ Cevabı şu formatta ver:
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 300
+              temperature: 0.7,
+              maxOutputTokens: 500
             }
           }),
           signal: AbortSignal.timeout(TIMEOUTS.LLM_CALL) // Configurable timeout for each Gemini call
@@ -553,13 +636,29 @@ Cevabı şu formatta ver:
           const data = await response.json();
           const result = data.candidates[0].content.parts[0].text;
 
-          // Parse the response
-          const contentMatch = result.match(/İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nÜRETİLMİŞ SORU:|$)/s);
-          const questionMatch = result.match(/ÜRETİLMİŞ SORU:\s*(.*)/s);
+          // Parse the response based on language
+          const contentMatch = result.match(
+            responseLanguage === 'en'
+              ? /IMPROVED CONTENT:\s*(.*?)(?=\nGENERATED QUESTION:|$)/s
+              : /İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nÜRETİLMİŞ SORU:|$)/s
+          );
+          const questionMatch = result.match(
+            responseLanguage === 'en'
+              ? /QUESTION:\s*(.*)/s
+              : /SORU:\s*(.*)/s
+          );
+
+          // Clean the content - remove markdown formatting and unwanted text
+          let processedContent = contentMatch ? contentMatch[1].trim() : cleanExcerpt;
+          processedContent = processedContent.replace(/^\*\*+/g, '').replace(/\*\*+$/g, '').replace(/\*\*\*/g, '').trim();
+
+          // Clean the question - remove any unwanted prefixes and markdown
+          let generatedQuestion = questionMatch ? questionMatch[1].trim() : `${title} hakkında daha fazla bilgi edinin.`;
+          generatedQuestion = generatedQuestion.replace(/^\*\*+/g, '').replace(/^Üretilmiş Soru:\s*/i, '').trim();
 
           return {
-            processedContent: contentMatch ? contentMatch[1].trim() : cleanExcerpt,
-            generatedQuestion: questionMatch ? questionMatch[1].trim() : `${title} hakkında bilgi verir misiniz?`
+            processedContent,
+            generatedQuestion
           };
         }
         console.timeEnd(`LLM processing for: ${title.substring(0, 30)}...`);
@@ -567,15 +666,15 @@ Cevabı şu formatta ver:
 
       // Fallback to simple processing
       return {
-        processedContent: cleanExcerpt.length > 100 ? cleanExcerpt : `${cleanExcerpt}. Bu konuda uzman görüşü alınması önerilir.`,
-        generatedQuestion: `${title} nedir?`
+        processedContent: cleanExcerpt.length > 100 ? cleanExcerpt : `${cleanExcerpt}. Expert consultation is recommended for this topic.`,
+        generatedQuestion: cleanExcerpt.length > 50 ? `${title} ile ilgili detaylı bilgi alabilir miyim?` : `${title} hakkında bilgi verebilir misiniz?`
       };
     } catch (error) {
       console.timeEnd(`LLM processing for: ${title.substring(0, 30)}...`);
       console.error('Error generating content and question:', error);
       return {
         processedContent: excerpt,
-        generatedQuestion: `${title} hakkında bilgi verir misiniz?`
+        generatedQuestion: '' // Don't generate fallback questions
       };
     }
   }
@@ -748,7 +847,7 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
       model: openaiModel,
       messages,
       temperature: temperature,
-      max_tokens: Math.min(maxTokens, 4000) // OpenAI has different max token limits
+      max_tokens: Math.min(maxTokens, 8000) // Allow up to 8000 tokens for longer responses
     });
 
     return {

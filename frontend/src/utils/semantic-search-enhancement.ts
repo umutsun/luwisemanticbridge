@@ -284,12 +284,8 @@ export function createEnhancedSourceClickHandler(
     // Check if user is currently editing a question
     const currentText = getInputText();
 
-    // If input is not empty, don't override user's question
-    if (currentText && currentText.trim().length > 0) {
-      // Just focus the input without changing the text
-      focusInput();
-      return;
-    }
+    // Allow changing question even if input is not empty
+    // This lets users click different sources to see different questions
 
     // Prioritize LLM-generated question if available
     let question = '';
@@ -304,64 +300,127 @@ export function createEnhancedSourceClickHandler(
       sourceTable: source.sourceTable
     });
 
-    if (source.question && typeof source.question === 'string' && source.question.trim().length > 0) {
-      // Use the LLM-generated question
-      question = source.question.trim();
-      console.log('Using LLM-generated question:', question);
-    } else {
-      // Generate question from content/excerpt
-      const content = source.content || source.excerpt || '';
-      const cleanContent = content.replace(/^Cevap:\s*/i, '').trim();
+    // Only use LLM-generated questions, never generate fallbacks
+  if (source.question && typeof source.question === 'string' && source.question.trim().length > 0) {
+    // Use the LLM-generated question directly
+    question = source.question.trim();
 
-      if (cleanContent.length > 20) {
-        // Extract the core concept from content
-        const sentences = cleanContent.split(/[.!?]/).filter(s => s.trim().length > 10);
-
-        if (sentences.length > 0) {
-          // Use the first substantial sentence
-          const firstSentence = sentences[0].trim();
-
-          // Create context-aware questions based on content patterns
-          if (cleanContent.includes('şart') || cleanContent.includes('gerekir')) {
-            question = `${firstSentence} için hangi şartlar gereklidir?`;
-          } else if (cleanContent.includes('süre') || cleanContent.includes('gün')) {
-            question = `${firstSentence} konusunda süre hesaplaması nasıl yapılır?`;
-          } else if (cleanContent.includes('vergi') || cleanContent.includes('oran')) {
-            question = `${firstSentence} vergisel açıdan nasıl değerlendirilir?`;
-          } else if (cleanContent.includes('sözleşme')) {
-            question = `${firstSentence} sözleşme hukuku açısından ne ifade eder?`;
-          } else if (cleanContent.includes('dava') || cleanContent.includes('karar')) {
-            question = `${firstSentence} kararının hukuki sonuçları nelerdir?`;
-          } else {
-            // Default question pattern
-            question = `${firstSentence} hakkında detaylı bilgi verebilir misiniz?`;
-          }
-        } else {
-          // Fallback for very short content
-          question = `${cleanContent} Bu konuda açıklama yapar mısınız?`;
-        }
-      } else {
-        // Very short content - use table-specific question
-        const sourceTable = source.sourceTable as string;
-        if (sourceTable === TABLES.OZELGELER) {
-          question = 'Bu özelgedeki hükmün uygulaması için nelere dikkat etmek gerekir?';
-        } else if (sourceTable === TABLES.DANISTAY_KARARLARI) {
-          question = 'Bu Danıştay kararının emsal değeri var mıdır?';
-        } else if (sourceTable === TABLES.MEVZUAT) {
-          question = 'Bu hükmün istisnaları veya muafiyetleri var mıdır?';
-        } else {
-          question = 'Bu konuda detaylı bilgi verebilir misiniz?';
-        }
+    // Truncate to a reasonable length if too long (max 100 chars)
+    if (question.length > 100) {
+      question = question.substring(0, 100);
+      // Try to end at a word boundary
+      const lastSpace = question.lastIndexOf(' ');
+      if (lastSpace > 50) {
+        question = question.substring(0, lastSpace);
       }
+      question += '?';
     }
 
-    console.log('Final question to be set:', question);
+    console.log('Using LLM-generated question:', question);
+  }
 
-    // Set the generated question only if input was empty
+  // If no LLM question, don't generate anything - leave input empty
+
+    console.log('Final question to be set:', question);
+    console.log('Current input text:', getInputText());
+
+    // Set the generated question
     console.log('Setting input text to:', question);
+
+    // Update both React state and DOM directly
     setInputText(question);
-    focusInput();
+
+    // Also update DOM directly for immediate effect
+    setTimeout(() => {
+      const inputElement = document.querySelector('textarea') as HTMLTextAreaElement;
+      if (inputElement) {
+        inputElement.value = question;
+        inputElement.focus();
+        inputElement.setSelectionRange(question.length, question.length);
+        // Trigger React to recognize the change
+        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }, 0);
   };
+}
+
+/**
+ * Extract keywords from text for question generation
+ */
+function extractKeywords(text: string): string[] {
+  const keywords: string[] = [];
+
+  // Common tax and legal terms
+  const terms = [
+    'KDV', 'ÖTV', 'Stopaj', 'Damga Vergisi', 'Gelir Vergisi', 'Kurumlar Vergisi',
+    'vergi', 'tazminat', 'sözleşme', 'kanun', 'yönetmelik', 'tebliğ',
+    'karar', 'emsal', 'istisna', 'muafiyet', 'oran', 'tutar', 'süre',
+    'başvuru', 'dava', 'itiraz', 'uzlaşma', 'tarhiyat', 'ceza',
+    'kıdem', 'ihbar', 'işçi', 'işveren', 'mükellef', 'beyan'
+  ];
+
+  const textLower = text.toLowerCase();
+  terms.forEach(term => {
+    if (textLower.includes(term.toLowerCase())) {
+      keywords.push(term);
+    }
+  });
+
+  // Extract percentages
+  const percentMatch = text.match(/(\d+)%/);
+  if (percentMatch) {
+    keywords.push(`${percentMatch[1]}%`);
+  }
+
+  return keywords.slice(0, 3);
+}
+
+/**
+ * Generate contextual question from title and metadata
+ */
+function generateQuestionFromContext(title: string, content: string, category: string, sourceTable: string, keywords: string[]): string {
+  // Clean title for question generation
+  const cleanTitle = cleanSourceTitle(title);
+
+  // Category-specific question patterns
+  if (category === 'Mevzuat' || sourceTable === TABLES.MEVZUAT || sourceTable === 'MEVZUAT') {
+    if (keywords.some(k => k.includes('Vergi'))) {
+      return `${cleanTitle} konusunda vergisel yükümlülükler nelerdir?`;
+    }
+    return `${cleanTitle} hükmünün uygulaması nasıl yapılır?`;
+  }
+
+  if (sourceTable === TABLES.DANISTAY_KARARLARI || sourceTable === 'DANISTAYKARARLARI' || category === 'İçtihat') {
+    return `${cleanTitle} kararının emsal değeri ve uygulaması hakkında bilgi verebilir misiniz?`;
+  }
+
+  if (sourceTable === TABLES.OZELGELER || sourceTable === 'OZELGELER') {
+    return `${cleanTitle} özelgesinin kapsamı ve şartları nelerdir?`;
+  }
+
+  if (sourceTable === TABLES.MAKALELER || sourceTable === 'Makaleler') {
+    return `${cleanTitle} konusuyla ilgili görüşleriniz nelerdir?`;
+  }
+
+  if (sourceTable === TABLES.SORU_CEVAP || sourceTable === 'sorucevap') {
+    return `${cleanTitle} sorusuna benzer durumlar için ne yapmalıyım?`;
+  }
+
+  // Default patterns based on keywords
+  if (keywords.some(k => k.includes('şart') || k.includes('gerekir'))) {
+    return `${cleanTitle} için hangi şartlar aranır?`;
+  }
+
+  if (keywords.some(k => k.includes('süre') || k.includes('tarih'))) {
+    return `${cleanTitle} konusunda zaman sınırlamaları var mıdır?`;
+  }
+
+  if (keywords.some(k => k.includes('ceza') || k.includes('yaptırım'))) {
+    return `${cleanTitle} ihlalinin sonuçları nelerdir?`;
+  }
+
+  // Generic fallback
+  return `${cleanTitle} hakkında detaylı bilgi alabilir miyim?`;
 }
 
 /**

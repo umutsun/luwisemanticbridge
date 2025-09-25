@@ -46,6 +46,14 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: '/api/dashboard/:path*',
+        destination: 'http://localhost:8083/api/dashboard/:path*',
+      },
+      {
+        source: '/api/config/:path*',
+        destination: 'http://localhost:8083/api/v2/config/:path*',
+      },
+      {
         source: '/api/:path*',
         destination: 'http://localhost:8083/api/v2/:path*',
       },

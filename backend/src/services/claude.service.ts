@@ -4,7 +4,7 @@ import pool from '../config/database';
 export class ClaudeService {
   private client: Anthropic | null = null;
   private apiKey: string | null = null;
-  private defaultMaxTokens: number = 2048;
+  private defaultMaxTokens: number = 4096;
   private defaultModel: string = 'claude-3-haiku-20240307';
 
   constructor() {

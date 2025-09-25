@@ -81,7 +81,8 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
   // Handle question selection
   const handleQuestionSelect = (question: string) => {
     setSelectedQuestion(question);
-    onQuestionSelect(question);
+    // onQuestionSelect expects a source object, so we pass the result
+    onQuestionSelect(result);
     setShowQuestions(false);
   };
 
@@ -116,10 +117,13 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
 
   const contextualKeywords = getContextualKeywords();
 
-  // Handle card click - generate question from excerpt
+  // Handle card click - use LLM-generated question
   const handleCardClick = () => {
-    const question = generateQuestionFromExcerpt(result);
-    handleQuestionSelect(question);
+    // Use the LLM-generated question if available, otherwise fallback
+    const question = result.question || generateQuestionFromExcerpt(result);
+    setSelectedQuestion(question);
+    // onQuestionSelect expects a source object, so we pass the result
+    onQuestionSelect(result);
   };
 
   return (

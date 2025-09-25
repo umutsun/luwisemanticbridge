@@ -14,7 +14,7 @@ export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private model: string = 'gemini-1.5-flash'; // Default to Flash for speed
   private initialized: boolean = false;
-  private defaultMaxTokens: number = 2048;
+  private defaultMaxTokens: number = 4096;
   private apiKey: string | null = null;
 
   constructor() {
@@ -27,7 +27,7 @@ export class GeminiService {
     try {
       // Try to get API key and settings from database first
       let apiKey = process.env.GOOGLE_API_KEY;
-      let maxTokens = 2048;
+      let maxTokens = 4096;
 
       const result = await pool.query(
         "SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ('google_api_key', 'gemini_model', 'max_tokens')"
@@ -39,7 +39,7 @@ export class GeminiService {
         } else if (row.setting_key === 'gemini_model') {
           this.model = row.setting_value;
         } else if (row.setting_key === 'max_tokens') {
-          maxTokens = parseInt(row.setting_value) || 2048;
+          maxTokens = parseInt(row.setting_value) || 4096;
         }
       }
 

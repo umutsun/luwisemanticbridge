@@ -600,13 +600,16 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
 router.get('/config/prompts', async (req: Request, res: Response) => {
   try {
     const result = await pgPool.query(
-      'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key LIKE $1',
-      ['%prompt%']
+      `SELECT setting_key, setting_value FROM chatbot_settings
+       WHERE setting_key LIKE '%prompt%'
+       OR setting_key IN ('temperature', 'max_tokens')`
     );
 
-    const prompts: { [key: string]: string } = {
+    const prompts: any = {
       system_prompt: 'You are a helpful assistant.',
       user_prompt_template: 'Question: {question}',
+      temperature: '0.1',
+      max_tokens: '4096',
       // Add default prompts
     };
 
@@ -618,6 +621,74 @@ router.get('/config/prompts', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching prompts:', error);
     res.status(500).json({ error: 'Failed to fetch prompts' });
+  }
+});
+
+// Save prompts configuration
+router.post('/config/prompts', async (req: Request, res: Response) => {
+  try {
+    const { prompt, temperature, maxTokens, name } = req.body;
+
+    // Save system prompt
+    if (prompt !== undefined) {
+      await pgPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+         VALUES ('system_prompt', $1, 'System prompt for AI assistant')
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $1`,
+        [prompt]
+      );
+    }
+
+    // Save temperature
+    if (temperature !== undefined) {
+      await pgPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+         VALUES ('temperature', $1, 'Temperature for AI responses')
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $1`,
+        [temperature.toString()]
+      );
+    }
+
+    // Save max tokens
+    if (maxTokens !== undefined) {
+      await pgPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+         VALUES ('max_tokens', $1, 'Maximum tokens for AI responses')
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $1`,
+        [maxTokens.toString()]
+      );
+    }
+
+    // Save prompt name if provided
+    if (name) {
+      await pgPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+         VALUES ('prompt_name', $1, 'Name of the custom prompt')
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $1`,
+        [name]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Prompt settings saved successfully',
+      settings: {
+        prompt,
+        temperature,
+        maxTokens,
+        name
+      }
+    });
+  } catch (error) {
+    console.error('Error saving prompts:', error);
+    res.status(500).json({
+      error: 'Failed to save prompt settings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

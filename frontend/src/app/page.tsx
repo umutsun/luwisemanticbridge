@@ -594,7 +594,9 @@ export default function ChatInterface() {
                                           <div
                                             key={idx}
                                             className="relative p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
                                               console.log('Clicked source:', {
                                                 id: source.id,
                                                 title: source.title,
@@ -615,12 +617,6 @@ export default function ChatInterface() {
                                                 </div>
                                               </div>
                                               <div className="flex-1 min-w-0">
-                                                {/* Source Table Badge only */}
-                                                {source.sourceTable && (
-                                                  <Badge variant="secondary" className="text-xs mb-2">
-                                                    {source.sourceTable}
-                                                  </Badge>
-                                                )}
 
                                                 {/* LLM-generated content or processed excerpt */}
                                                 {source.content && (
