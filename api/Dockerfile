@@ -4,29 +4,18 @@ FROM node:18-alpine AS builder
 # Set the working directory
 WORKDIR /app
 
-# Copy necessary files and folders from the project root
+# Copy package.json from the api directory to the root
+COPY api/package.json ./package.json
+
+# Install dependencies in the root /app directory
+# This creates /app/node_modules, making it accessible to all sub-folders
+RUN rm -f package-lock.json && npm install
+
+# Copy necessary files and folders from the project root AFTER installing dependencies
 COPY api ./api
 COPY src ./src
 COPY config ./config
 COPY ecosystem.config.js ./
-
-# Install dependencies inside the api directory
-RUN cd api && rm -f package-lock.json && npm install
-
-# --- Second Stage ---
-# Use a clean, small image for the final stage
-FROM node:18-alpine AS builder
-
-WORKDIR /app
-
-# Copy necessary files and folders from the project root
-COPY api ./api
-COPY src ./src
-COPY config ./config
-COPY ecosystem.config.js ./
-
-# Install dependencies inside the api directory
-RUN cd api && rm -f package-lock.json && npm install
 
 # --- Second Stage ---
 # Use a clean, small image for the final stage
@@ -35,7 +24,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy installed modules and application code from the builder stage
-COPY --from=builder /app ./ 
+COPY --from=builder /app ./
 
 # Install PM2 globally
 RUN npm install pm2 -g
