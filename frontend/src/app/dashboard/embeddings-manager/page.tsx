@@ -75,6 +75,50 @@ interface EmbeddingProgress {
   mightBeStuck?: boolean;
 }
 
+// Helper function to extract content preview from any record structure
+function getContentPreview(record: any): string {
+  if (!record) return '-';
+
+  // Common field names for content, ordered by priority
+  const contentFields = [
+    'content', 'text', 'icerik', 'içerik', 'description', 'body',
+    'message', 'baslik', 'title', 'question', 'soru', 'cevap', 'answer',
+    'name', 'adi', 'ad', 'subject', 'konu', 'summary', 'ozet'
+  ];
+
+  // Try to find a suitable field
+  for (const field of contentFields) {
+    if (record[field] && typeof record[field] === 'string' && record[field].trim().length > 0) {
+      return record[field].trim();
+    }
+  }
+
+  // If no standard content field found, look for any string field that's not an id or metadata
+  const excludedFields = ['id', 'created_at', 'updated_at', 'embedding', 'vector', 'metadata', 'isEmbedded'];
+  const otherFields = Object.keys(record).filter(key =>
+    !excludedFields.includes(key.toLowerCase()) &&
+    typeof record[key] === 'string' &&
+    record[key].trim().length > 0
+  );
+
+  if (otherFields.length > 0) {
+    return record[otherFields[0]].trim();
+  }
+
+  // As a last resort, convert the first non-excluded field to string
+  const otherNonStringFields = Object.keys(record).filter(key =>
+    !excludedFields.includes(key.toLowerCase()) &&
+    record[key] !== null &&
+    record[key] !== undefined
+  );
+
+  if (otherNonStringFields.length > 0) {
+    return String(record[otherNonStringFields[0]]);
+  }
+
+  return '-';
+}
+
 export default function EmbeddingsManagerPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [migrationStats, setMigrationStats] = useState<MigrationStats | null>(null);
@@ -226,6 +270,7 @@ export default function EmbeddingsManagerPage() {
       const response = await fetch(`${API_BASE}/table/${tableName}/details`);
       if (response.ok) {
         const data = await response.json();
+        console.log('Recent records data for', tableName, ':', data.recentRecords?.[0]);
         setRecentRecords(prev => ({
           ...prev,
           [tableName]: data.recentRecords || []
@@ -233,6 +278,30 @@ export default function EmbeddingsManagerPage() {
       }
     } catch (error) {
       console.error('Failed to fetch recent records:', error);
+    } finally {
+      setLoadingRecentRecords(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tableName);
+        return newSet;
+      });
+    }
+  };
+
+  // Fetch embedded records for a table
+  const fetchEmbeddedRecords = async (tableName: string) => {
+    setLoadingRecentRecords(prev => new Set(prev).add(tableName));
+    try {
+      const response = await fetch(`${API_BASE}/table/${tableName}/embedded-recent`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Embedded records data for', tableName, ':', data.embeddedRecords?.[0]);
+        setRecentRecords(prev => ({
+          ...prev,
+          [tableName]: data.embeddedRecords || []
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch embedded records:', error);
     } finally {
       setLoadingRecentRecords(prev => {
         const newSet = new Set(prev);
@@ -250,8 +319,8 @@ export default function EmbeddingsManagerPage() {
       delete newRecords[tableName];
       return newRecords;
     });
-    // Fetch fresh records
-    await fetchRecentRecords(tableName);
+    // Fetch fresh embedded records
+    await fetchEmbeddedRecords(tableName);
   };
 
   // Toggle table expansion
@@ -262,9 +331,9 @@ export default function EmbeddingsManagerPage() {
         newSet.delete(tableName);
       } else {
         newSet.add(tableName);
-        // Fetch recent records if not already loaded
+        // Fetch embedded records if not already loaded
         if (!recentRecords[tableName]) {
-          fetchRecentRecords(tableName);
+          fetchEmbeddedRecords(tableName);
         }
       }
       return newSet;
@@ -1351,35 +1420,43 @@ export default function EmbeddingsManagerPage() {
                                         {loadingRecentRecords.has(table.name) ? (
                                             <div className="text-center py-8">
                                                 <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-                                                <p className="text-sm text-muted-foreground">Loading recent records...</p>
+                                                <p className="text-sm text-muted-foreground">Loading embedded records...</p>
                                             </div>
                                         ) : recentRecords[table.name] && recentRecords[table.name].length > 0 ? (
                                             <div>
-                                                <h4 className="text-sm font-medium mb-3">Recent 20 Records</h4>
+                                                <h4 className="text-sm font-medium mb-3">Recently Embedded Records (Last 20)</h4>
                                                 <div className="border rounded-lg">
                                                     <Table>
                                                         <TableHeader>
                                                             <TableRow className="bg-muted/50">
-                                                                <TableHead className="w-16 text-xs font-medium text-muted-foreground">ID</TableHead>
-                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Status</TableHead>
+                                                                <TableHead className="w-16 text-xs font-medium text-muted-foreground">Source ID</TableHead>
                                                                 <TableHead className="text-xs font-medium text-muted-foreground">Content Preview</TableHead>
+                                                                <TableHead className="w-24 text-xs font-medium text-muted-foreground">Model</TableHead>
+                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Tokens</TableHead>
+                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Chunks</TableHead>
+                                                                <TableHead className="w-32 text-xs font-medium text-muted-foreground">Embedded At</TableHead>
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
                                                             {recentRecords[table.name].slice(0, 20).map((record, index) => (
-                                                                <TableRow key={record.id || index}>
+                                                                <TableRow key={record.source_id || index}>
                                                                     <TableCell className="text-sm">
-                                                                        {record.id || '-'}
+                                                                        {record.source_id || '-'}
                                                                     </TableCell>
-                                                                    <TableCell>
-                                                                        {record.isEmbedded ? (
-                                                                            <CheckCircle className="h-4 w-4 text-green-600" />
-                                                                        ) : (
-                                                                            <Circle className="h-4 w-4 text-gray-400" />
-                                                                        )}
+                                                                    <TableCell className="text-sm max-w-md truncate" title={record.content || ''}>
+                                                                        {record.content ? (record.content.length > 100 ? record.content.substring(0, 100) + '...' : record.content) : '-'}
                                                                     </TableCell>
-                                                                    <TableCell className="text-sm max-w-md truncate">
-                                                                        {record.content || record.baslik || record.title || record.question || record.soru || '-'}
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {record.model || 'Unknown'}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {record.tokens || '-'}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {record.chunk_count || '-'}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {record.created_at ? new Date(record.created_at).toLocaleString('tr-TR') : '-'}
                                                                     </TableCell>
                                                                 </TableRow>
                                                             ))}
@@ -1389,7 +1466,7 @@ export default function EmbeddingsManagerPage() {
                                             </div>
                                         ) : (
                                             <div className="text-center py-4 text-sm text-muted-foreground">
-                                                No recent records found
+                                                No embedded records found for this table
                                             </div>
                                         )}
                                     </div>

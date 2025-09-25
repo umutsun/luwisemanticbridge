@@ -2854,6 +2854,10 @@ router.get('/table/:tableName/details', async (req: Request, res: Response) => {
         LIMIT 20
       `);
       recentRecords = recentQuery.rows;
+      console.log(`DEBUG: Recent records for ${tableName}:`, recentRecords.length > 0 ? Object.keys(recentRecords[0]) : 'No records');
+      if (recentRecords.length > 0) {
+        console.log('DEBUG: First record:', recentRecords[0]);
+      }
     } catch (err) {
       console.error(`Error fetching recent records for ${tableName}:`, err);
     }
@@ -2902,6 +2906,76 @@ router.get('/table/:tableName/details', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Table details error:', error);
     res.status(500).json({ error: 'Failed to fetch table details' });
+  }
+});
+
+// Get recently embedded records for a table
+router.get('/table/:tableName/embedded-recent', async (req: Request, res: Response) => {
+  try {
+    const { tableName } = req.params;
+
+    // Get display name dynamically
+    const displayName = getDisplayName(tableName);
+
+    // Get recently embedded records from unified_embeddings table
+    let embeddedRecords = [];
+    try {
+      const recentQuery = await asembPool.query(`
+        SELECT
+          ue.source_id,
+          ue.content,
+          ue.metadata,
+          ue.created_at,
+          ue.model,
+          ue.source_table,
+          ue.tokens,
+          ue.chunk_count
+        FROM unified_embeddings ue
+        WHERE
+          ue.source_type = 'database' AND
+          (ue.source_table = $1 OR ue.metadata->>'table' = $2)
+        ORDER BY ue.created_at DESC
+        LIMIT 20
+      `, [displayName, tableName]);
+
+      // If no records found, try case-insensitive search
+      if (recentQuery.rows.length === 0) {
+        const caseInsensitiveQuery = await asembPool.query(`
+          SELECT
+            ue.source_id,
+            ue.content,
+            ue.metadata,
+            ue.created_at,
+            ue.model,
+            ue.source_table,
+            ue.tokens,
+            ue.chunk_count
+          FROM unified_embeddings ue
+          WHERE
+            ue.source_type = 'database' AND
+            LOWER(ue.metadata->>'table') = LOWER($1)
+          ORDER BY ue.created_at DESC
+          LIMIT 20
+        `, [tableName]);
+
+        embeddedRecords = caseInsensitiveQuery.rows;
+      } else {
+        embeddedRecords = recentQuery.rows;
+      }
+
+      console.log(`DEBUG: Found ${embeddedRecords.length} embedded records for ${tableName}`);
+    } catch (err) {
+      console.error(`Error fetching embedded records for ${tableName}:`, err);
+    }
+
+    res.json({
+      tableName,
+      displayName,
+      embeddedRecords: embeddedRecords
+    });
+  } catch (error) {
+    console.error('Embedded recent records error:', error);
+    res.status(500).json({ error: 'Failed to fetch embedded recent records' });
   }
 });
 
