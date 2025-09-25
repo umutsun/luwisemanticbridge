@@ -4,18 +4,13 @@ FROM node:18-alpine AS builder
 # Set the working directory
 WORKDIR /app
 
-# Copy package.json from the api directory to the root
-COPY api/package.json ./package.json
+# Copy the root package.json and install all dependencies from there
+# This creates a single /app/node_modules that all sub-projects can use
+COPY package*.json ./
+RUN npm install
 
-# Install dependencies in the root /app directory
-# This creates /app/node_modules, making it accessible to all sub-folders
-RUN rm -f package-lock.json && npm install
-
-# Copy necessary files and folders from the project root AFTER installing dependencies
-COPY api ./api
-COPY src ./src
-COPY config ./config
-COPY ecosystem.config.js ./
+# Copy the rest of the project source code
+COPY . .
 
 # --- Second Stage ---
 # Use a clean, small image for the final stage
