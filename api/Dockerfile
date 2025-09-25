@@ -1,21 +1,15 @@
-# Use a standard Node.js image
+# Use the standard Node.js image
 FROM node:18-alpine
 
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the root package.json and package-lock.json (if available)
-COPY package*.json ./
-
-# Install all dependencies from the root package.json
-RUN npm install
-
-# Copy the entire application source code into the container
-# (.dockerignore will prevent local node_modules, .git, etc. from being copied)
+# Copy ALL files from the build context (respecting .dockerignore)
+# This assumes node_modules already exists in the context from a local install
 COPY . .
 
-# Expose the port the app runs on
+# Expose the port
 EXPOSE 3000
 
-# The command to run the application directly with Node for simplicity
+# Run the server
 CMD ["node", "api/server.js"]
