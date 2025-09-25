@@ -1,21 +1,44 @@
-# Node.js'in Alpine tabanlı, hafif bir versiyonunu kullan
-FROM node:18-alpine
-
-# Uygulama dosyaları için /app adında bir klasör oluştur
+# Set the working directory
 WORKDIR /app
 
-# Önce bağımlılık dosyalarını kopyala
-COPY package*.json ./
+# Copy necessary files and folders from the project root
+COPY api ./api
+COPY src ./src
+COPY config ./config
+COPY ecosystem.config.js ./
 
-# Install any needed packages
-RUN rm -f package-lock.json
-RUN npm install
+# Install dependencies inside the api directory
+RUN cd api && rm -f package-lock.json && npm install
 
-# Projenin geri kalan tüm dosyalarını kopyala
-COPY . .
+# --- Second Stage ---
+# Use a clean, small image for the final stage
+FROM node:18-alpine AS builder
 
-# Uygulamanın çalışacağı 3000 portunu dışarıya aç
+WORKDIR /app
+
+# Copy necessary files and folders from the project root
+COPY api ./api
+COPY src ./src
+COPY config ./config
+COPY ecosystem.config.js ./
+
+# Install dependencies inside the api directory
+RUN cd api && rm -f package-lock.json && npm install
+
+# --- Second Stage ---
+# Use a clean, small image for the final stage
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy installed modules and application code from the builder stage
+COPY --from=builder /app ./ 
+
+# Install PM2 globally
+RUN npm install pm2 -g
+
+# Expose the port the app runs on
 EXPOSE 3000
 
-# Konteyner başladığında çalıştırılacak komut
-CMD ["node", "server.js"]
+# The command to run the application using the ecosystem file from the app's root
+CMD ["pm2-runtime", "start", "ecosystem.config.js"]
