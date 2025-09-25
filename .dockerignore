@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Node dependencies - these will be installed inside the container
+**/node_modules
+
+# Build artifacts from other services
+asb-dashboard/.next
+dashboard/.next
+dashboard-next/.next
+**/dist
+coverage
+
+# Logs
+logs
+*.log
+
+# Local environment files - these are injected, not copied
+.env*
+!.env.example
+
+# IDE/Editor directories
+.vscode
+
+# OS-specific
+.DS_Store
+
+# Other project-specific files that shouldn't be in the image
+*.bat
+*.ps1
+*.sh
