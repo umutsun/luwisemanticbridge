@@ -2923,10 +2923,12 @@ router.get('/table/:tableName/embedded-recent', async (req: Request, res: Respon
     try {
       const recentQuery = await asembPool.query(`
         SELECT
+          ue.id,
           ue.source_id,
           ue.content,
           ue.metadata,
           ue.created_at,
+          ue.updated_at,
           ue.source_table,
           ue.source_name,
           ue.model_used as model,
