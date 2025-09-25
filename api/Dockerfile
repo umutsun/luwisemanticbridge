@@ -7,7 +7,8 @@ WORKDIR /app
 # Önce bağımlılık dosyalarını kopyala
 COPY package*.json ./
 
-# Bağımlılıkları kur
+# Install any needed packages
+RUN rm -f package-lock.json
 RUN npm install
 
 # Projenin geri kalan tüm dosyalarını kopyala
