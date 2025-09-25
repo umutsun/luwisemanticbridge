@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -110,7 +112,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
     }
 
     try {
-      const response = await fetch('/api/dashboard');
+      const response = await fetch(`${API_URL}/api/dashboard`);
       if (response.ok) {
         const data = await response.json();
         setConnectionProgress(100);

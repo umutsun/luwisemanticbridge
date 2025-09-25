@@ -28,11 +28,20 @@ import {
   X,
   RotateCcw,
   ChevronDown,
-  Circle
+  Circle,
+  Eye
 } from 'lucide-react';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface TableInfo {
   name: string;
@@ -146,6 +155,7 @@ export default function EmbeddingsManagerPage() {
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [recentRecords, setRecentRecords] = useState<{ [tableName: string]: RecentRecord[] }>({});
   const [loadingRecentRecords, setLoadingRecentRecords] = useState<Set<string>>(new Set());
+  const [previewContent, setPreviewContent] = useState<{ title: string; content: string } | null>(null);
   const [showCleanupAlert, setShowCleanupAlert] = useState(false);
   const [cleanupIssues, setCleanupIssues] = useState<any[]>([]);
   const [cleanupRecommendations, setCleanupRecommendations] = useState<string[]>([]);
@@ -1429,40 +1439,77 @@ export default function EmbeddingsManagerPage() {
                                                     <Table>
                                                         <TableHeader>
                                                             <TableRow className="bg-muted/50">
-                                                                <TableHead className="w-16 text-xs font-medium text-muted-foreground">Source ID</TableHead>
-                                                                <TableHead className="text-xs font-medium text-muted-foreground">Content Preview</TableHead>
+                                                                <TableHead className="w-16 text-xs font-medium text-muted-foreground">ID</TableHead>
+                                                                <TableHead className="w-24 text-xs font-medium text-muted-foreground">Source ID</TableHead>
+                                                                <TableHead className="text-xs font-medium text-muted-foreground">Created</TableHead>
+                                                                <TableHead className="text-xs font-medium text-muted-foreground">Updated</TableHead>
                                                                 <TableHead className="w-24 text-xs font-medium text-muted-foreground">Model</TableHead>
                                                                 <TableHead className="w-20 text-xs font-medium text-muted-foreground">Tokens</TableHead>
-                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Chunks</TableHead>
-                                                                <TableHead className="w-32 text-xs font-medium text-muted-foreground">Embedded At</TableHead>
+                                                                <TableHead className="text-xs font-medium text-muted-foreground">Preview</TableHead>
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
                                                             {recentRecords[table.name].slice(0, 20).map((record, index) => (
-                                                                <TableRow key={record.source_id || index}>
-                                                                    <TableCell className="text-sm">
+                                                                <TableRow key={record.id || record.source_id || index}>
+                                                                    <TableCell className="text-sm font-mono">
+                                                                        {record.id || '-'}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-sm font-mono">
                                                                         {record.source_id || '-'}
                                                                     </TableCell>
-                                                                    <TableCell className="text-sm max-w-md truncate" title={record.content || ''}>
-                                                                        {record.content ? (record.content.length > 100 ? record.content.substring(0, 100) + '...' : record.content) : '-'}
+                                                                    <TableCell className="text-xs text-muted-foreground">
+                                                                        {record.created_at ? new Date(record.created_at).toLocaleDateString('tr-TR') : '-'}
                                                                     </TableCell>
                                                                     <TableCell className="text-xs text-muted-foreground">
-                                                                        {record.model || 'Unknown'}
+                                                                        {record.updated_at ? new Date(record.updated_at).toLocaleDateString('tr-TR') : (record.created_at ? new Date(record.created_at).toLocaleDateString('tr-TR') : '-')}
+                                                                    </TableCell>
+                                                                    <TableCell className="text-xs text-muted-foreground font-mono">
+                                                                        {record.model_used || record.model || 'text-embedding-004'}
                                                                     </TableCell>
                                                                     <TableCell className="text-xs text-muted-foreground">
-                                                                        {record.tokens || '-'}
+                                                                        {record.tokens_used || record.tokens || record.metadata?.tokens || '-'}
                                                                     </TableCell>
-                                                                    <TableCell className="text-xs text-muted-foreground">
-                                                                        {record.chunk_count || '-'}
-                                                                    </TableCell>
-                                                                    <TableCell className="text-xs text-muted-foreground">
-                                                                        {record.created_at ? new Date(record.created_at).toLocaleString('tr-TR') : '-'}
+                                                                    <TableCell>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="h-8 w-8 p-0"
+                                                                            onClick={() => {
+                                                                                setPreviewContent({
+                                                                                    title: `Record ${record.source_id}`,
+                                                                                    content: record.content || record.metadata?.content || 'No content available'
+                                                                                });
+                                                                            }}
+                                                                        >
+                                                                            <Eye className="h-4 w-4" />
+                                                                        </Button>
                                                                     </TableCell>
                                                                 </TableRow>
                                                             ))}
                                                         </TableBody>
                                                     </Table>
                                                 </div>
+
+                                                {/* Preview Dialog */}
+                                                <Dialog open={!!previewContent} onOpenChange={() => setPreviewContent(null)}>
+                                                    <DialogContent className="max-w-4xl max-h-[80vh]">
+                                                        <DialogHeader>
+                                                            <DialogTitle>{previewContent?.title}</DialogTitle>
+                                                        </DialogHeader>
+                                                        <div className="space-y-4">
+                                                            <ScrollArea className="max-h-[60vh] p-4 border rounded-lg bg-muted/50">
+                                                                <pre className="whitespace-pre-wrap text-sm font-mono">
+                                                                    {previewContent?.content}
+                                                                </pre>
+                                                            </ScrollArea>
+                                                            <div className="flex justify-end">
+                                                                <Button variant="outline" onClick={() => setPreviewContent(null)}>
+                                                                    Close
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </DialogContent>
+                                                </Dialog>
                                             </div>
                                         ) : (
                                             <div className="text-center py-4 text-sm text-muted-foreground">

@@ -8,6 +8,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
+import { WebSocketServer as StandardWebSocketServer } from 'ws';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { SERVER, API } from './config';
@@ -48,6 +49,25 @@ const io = new SocketServer(httpServer, {
   cors: {
     origin: corsOrigins,
     credentials: true
+  }
+});
+
+// Initialize Standard WebSocket Server for /ws/notifications
+const wss = new StandardWebSocketServer({
+  noServer: true,
+  path: '/ws/notifications'
+});
+
+// Handle WebSocket upgrade for standard WebSocket connections
+httpServer.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+
+  if (pathname === '/ws/notifications') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
   }
 });
 
@@ -175,32 +195,161 @@ app.get('/api/v2', (req: Request, res: Response) => {
 
 // WebSocket handling
 io.on('connection', (socket) => {
+  console.log('WebSocket client connected');
+
+  // Handle notifications namespace
+  if (socket.handshake.query.namespace === 'notifications') {
+    socket.join('notifications');
+    console.log('Client joined notifications room');
+  }
+
   // Join user room
   socket.on('join', (userId: string) => {
     socket.join(`user:${userId}`);
   });
-  
+
   // Handle typing indicators
   socket.on('chat:typing', (data: any) => {
     socket.broadcast.to(`conversation:${data.conversationId}`).emit('chat:typing', data);
   });
-  
+
   // Handle chat messages
   socket.on('chat:message', async (data: any) => {
     // Broadcast to conversation participants
     io.to(`conversation:${data.conversationId}`).emit('chat:message', data);
-    
+
     // Update Redis for real-time sync
     await redis.publish('asb:chat:messages', JSON.stringify(data));
   });
-  
+
   // Dashboard real-time updates
   socket.on('dashboard:subscribe', () => {
     socket.join('dashboard:updates');
   });
-  
+
+  // Test notification endpoint
+  socket.on('notification:test', () => {
+    socket.emit('notification', {
+      type: 'test',
+      id: Date.now().toString(),
+      severity: 'info',
+      title: 'Test Notification',
+      message: 'WebSocket connection is working',
+      timestamp: new Date().toISOString(),
+      source: 'System'
+    });
+  });
+
   socket.on('disconnect', () => {
-    // WebSocket disconnected
+    console.log('WebSocket client disconnected');
+  });
+});
+
+// Standard WebSocket connection handling
+wss.on('connection', (ws, request) => {
+  console.log('Standard WebSocket client connected to /ws/notifications');
+
+  // Store the IP address for logging/security
+  const clientIp = request.socket.remoteAddress;
+
+  // Send initial connection confirmation
+  ws.send(JSON.stringify({
+    type: 'connection',
+    message: 'WebSocket connection established',
+    timestamp: new Date().toISOString()
+  }));
+
+  // Handle incoming messages
+  ws.on('message', async (data) => {
+    try {
+      const message = JSON.parse(data.toString());
+
+      // Handle different message types
+      switch (message.type) {
+        case 'test':
+          // Send test notification
+          ws.send(JSON.stringify({
+            type: 'notification',
+            id: Date.now().toString(),
+            severity: 'info',
+            title: 'Test Notification',
+            message: 'Standard WebSocket connection is working',
+            timestamp: new Date().toISOString(),
+            source: 'System'
+          }));
+          break;
+
+        case 'ping':
+          ws.send(JSON.stringify({
+            type: 'pong',
+            timestamp: new Date().toISOString()
+          }));
+          break;
+
+        default:
+          console.log('Received unknown message type:', message.type);
+      }
+    } catch (error) {
+      console.error('Error parsing WebSocket message:', error);
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Invalid message format',
+        timestamp: new Date().toISOString()
+      }));
+    }
+  });
+
+  // Handle connection close
+  ws.on('close', (code, reason) => {
+    console.log(`Standard WebSocket client disconnected: ${code} - ${reason}`);
+  });
+
+  // Handle errors
+  ws.on('error', (error) => {
+    console.error('Standard WebSocket error:', error);
+  });
+
+  // Set up a ping interval to keep the connection alive
+  const pingInterval = setInterval(() => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'ping',
+        timestamp: new Date().toISOString()
+      }));
+    }
+  }, 30000); // Every 30 seconds
+
+  // Clean up ping interval when connection closes
+  ws.on('close', () => {
+    clearInterval(pingInterval);
+  });
+});
+
+// Helper function to broadcast notifications to all connected standard WebSocket clients
+export function broadcastNotification(notification: {
+  severity: string;
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  source: string;
+}) {
+  const message = JSON.stringify({
+    type: 'notification',
+    ...notification
+  });
+
+  wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Also forward Socket.IO notifications to standard WebSocket clients
+io.on('connection', (socket) => {
+  socket.on('notification', (notification) => {
+    broadcastNotification(notification);
   });
 });
 

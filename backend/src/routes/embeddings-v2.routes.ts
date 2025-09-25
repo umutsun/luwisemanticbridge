@@ -2667,8 +2667,8 @@ router.get('/stats', async (req: Request, res: Response) => {
       SELECT
         COUNT(*) as totalEmbeddings,
         COUNT(DISTINCT source_table) as tablesProcessed,
-        SUM(CAST(metadata->>'tokens' AS INTEGER)) as totalTokens,
-        COUNT(DISTINCT metadata->>'model') as modelsUsed
+        SUM(tokens_used) as totalTokens,
+        COUNT(DISTINCT model_used) as modelsUsed
       FROM unified_embeddings
     `);
 
@@ -2676,7 +2676,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       SELECT
         source_table,
         COUNT(*) as count,
-        SUM(CAST(metadata->>'tokens' AS INTEGER)) as tokens
+        SUM(tokens_used) as tokens
       FROM unified_embeddings
       WHERE source_type = 'database'
       GROUP BY source_table
@@ -2916,6 +2916,7 @@ router.get('/table/:tableName/embedded-recent', async (req: Request, res: Respon
 
     // Get display name dynamically
     const displayName = getDisplayName(tableName);
+    console.log(`DEBUG: Processing request for table "${tableName}", display name: "${displayName}"`);
 
     // Get recently embedded records from unified_embeddings table
     let embeddedRecords = [];
@@ -2926,44 +2927,50 @@ router.get('/table/:tableName/embedded-recent', async (req: Request, res: Respon
           ue.content,
           ue.metadata,
           ue.created_at,
-          ue.model,
           ue.source_table,
-          ue.tokens,
-          ue.chunk_count
+          ue.source_name,
+          ue.model_used as model,
+          ue.tokens_used as tokens,
+          ue.metadata->>'chunk_count' as chunk_count
         FROM unified_embeddings ue
         WHERE
           ue.source_type = 'database' AND
-          (ue.source_table = $1 OR ue.metadata->>'table' = $2)
+          (
+            ue.source_table = $1 OR
+            ue.source_table = $2 OR
+            ue.metadata->>'table' = $1 OR
+            ue.metadata->>'table' = $2 OR
+            LOWER(ue.source_table) = LOWER($1) OR
+            LOWER(ue.source_table) = LOWER($2) OR
+            LOWER(ue.metadata->>'table') = LOWER($1) OR
+            LOWER(ue.metadata->>'table') = LOWER($2)
+          )
         ORDER BY ue.created_at DESC
         LIMIT 20
       `, [displayName, tableName]);
 
-      // If no records found, try case-insensitive search
-      if (recentQuery.rows.length === 0) {
-        const caseInsensitiveQuery = await asembPool.query(`
-          SELECT
-            ue.source_id,
-            ue.content,
-            ue.metadata,
-            ue.created_at,
-            ue.model,
-            ue.source_table,
-            ue.tokens,
-            ue.chunk_count
-          FROM unified_embeddings ue
-          WHERE
-            ue.source_type = 'database' AND
-            LOWER(ue.metadata->>'table') = LOWER($1)
-          ORDER BY ue.created_at DESC
-          LIMIT 20
-        `, [tableName]);
-
-        embeddedRecords = caseInsensitiveQuery.rows;
-      } else {
-        embeddedRecords = recentQuery.rows;
-      }
+      embeddedRecords = recentQuery.rows;
 
       console.log(`DEBUG: Found ${embeddedRecords.length} embedded records for ${tableName}`);
+
+      // Check what tables actually exist in unified_embeddings
+      const tablesCheck = await asembPool.query(`
+        SELECT DISTINCT source_table, metadata->>'table' as metadata_table
+        FROM unified_embeddings
+        WHERE source_type = 'database'
+        LIMIT 10
+      `);
+      console.log('DEBUG: Available tables in unified_embeddings:', tablesCheck.rows);
+
+      // Log the first record for debugging
+      if (embeddedRecords.length > 0) {
+        console.log('DEBUG: First embedded record:', {
+          source_id: embeddedRecords[0].source_id,
+          source_table: embeddedRecords[0].source_table,
+          metadata: embeddedRecords[0].metadata,
+          created_at: embeddedRecords[0].created_at
+        });
+      }
     } catch (err) {
       console.error(`Error fetching embedded records for ${tableName}:`, err);
     }
