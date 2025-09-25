@@ -28,5 +28,5 @@ RUN npm install pm2 -g
 # Expose the port the app runs on
 EXPOSE 3000
 
-# The command to run the application using the ecosystem file from the app's root
-CMD ["pm2-runtime", "start", "ecosystem.config.js"]
+# The command to run the application directly with Node
+CMD ["node", "api/server.js"]
