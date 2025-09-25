@@ -78,4 +78,48 @@ async function getChatSettings() {
 
 // JSON formatını zorunlu kılan prompt oluşturucu
 function createJsonSystemPrompt(basePrompt) {
-    return `${basePrompt}\n\nALWAYS provide your response in the following JSON format. Do not include any text outside of this JSON structure:\n{\n  \
+    return `${basePrompt}\n\nALWAYS provide your response in the following JSON format. Do not include any text outside of this JSON structure:\n{\n  "response": "Your detailed answer here.",\n  "sources": [\n    {\n      "id": "document_id_1",\n      "title": "Document Title 1",\n      "score": 0.95\n    }\n  ]\n}`;
+}
+
+// Chat handler
+async function handleChat(req, res) {
+    const { message } = req.body;
+    if (!message) {
+        return res.status(400).json({ error: 'Message is required' });
+    }
+
+    try {
+        const settings = await getChatSettings();
+        const documents = await searchDocuments(message);
+
+        let context = "Relevant documents:\n";
+        documents.forEach(doc => {
+            context += `Title: ${doc.title}\nContent: ${doc.content}\n\n`;
+        });
+
+        const modelConfig = settings.models[settings.primaryModel];
+        let systemPrompt = modelConfig.systemPrompt;
+        if (settings.enableJsonOutput) {
+            systemPrompt = createJsonSystemPrompt(systemPrompt);
+        }
+
+        const response = await openai.chat.completions.create({
+            model: modelConfig.modelName,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: `Context:\n${context}\n\nQuestion: ${message}` }
+            ],
+        });
+
+        res.json(JSON.parse(response.choices[0].message.content));
+
+    } catch (error) {
+        console.error("Chat error:", error);
+        res.status(500).json({ error: "Failed to process chat message." });
+    }
+}
+
+
+router.post('/chat', handleChat);
+
+module.exports = router;
