@@ -17,6 +17,8 @@ services:
       POSTGRES_CHECKPOINT_COMPLETION_TARGET: "0.9"
       POSTGRES_WAL_BUFFERS: "16MB"
       POSTGRES_MAX_CONNECTIONS: "100"
+    env_file:
+      - .env.asemb
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
