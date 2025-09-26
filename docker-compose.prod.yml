@@ -39,16 +39,7 @@ services:
     image: redis:7-alpine
     container_name: asemb-redis
     restart: unless-stopped
-    command: >
-      redis-server
-      --appendonly yes
-      --appendfsync everysec
-      --requirepass ${REDIS_PASSWORD}
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --tcp-backlog 511
-      --timeout 300
-      --tcp-keepalive 60
+    command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
       - redis_data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf
