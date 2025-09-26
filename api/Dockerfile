@@ -8,6 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install production dependencies
+RUN rm -f package-lock.json
 RUN npm install --production
 
 # Copy the rest of the application code
