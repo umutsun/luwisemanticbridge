@@ -74,6 +74,11 @@ const runCommand = (command) => new Promise((resolve, reject) => {
 
 // --- API Routes ---
 
+// Health Check Endpoint for Docker
+app.get('/api/v1/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // --- Service Management Router ---
 const serviceRouter = express.Router();
 
