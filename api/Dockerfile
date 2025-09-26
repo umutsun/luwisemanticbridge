@@ -4,18 +4,19 @@ FROM node:18-alpine
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json first to leverage Docker cache
-COPY package*.json ./
+# Copy package.json and package-lock.json from the 'api' subdirectory
+# This is the key fix to ensure correct dependencies are installed
+COPY api/package*.json ./
 
-# Install production dependencies
-RUN rm -f package-lock.json
+# Install production dependencies for the API
 RUN npm install --production
 
-# Copy the rest of the application code
+# Copy the entire project context
+# The application code will be at /app/api/server.js etc.
 COPY . .
 
 # Expose the port the app runs on
 EXPOSE 3000
 
-# Command to run the application
+# Command to run the application, pointing to the correct path
 CMD ["node", "api/server.js"]
