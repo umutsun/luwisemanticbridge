@@ -1,15 +1,20 @@
-# Use the standard Node.js image
+# Use a specific Node.js version for reproducibility
 FROM node:18-alpine
 
-# Set the working directory
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy ALL files from the build context (respecting .dockerignore)
-# This assumes node_modules already exists in the context from a local install
+# Copy package.json and package-lock.json first to leverage Docker cache
+COPY package*.json ./
+
+# Install production dependencies
+RUN npm install --production
+
+# Copy the rest of the application code
 COPY . .
 
-# Expose the port
+# Expose the port the app runs on
 EXPOSE 3000
 
-# Run the server
-CMD ["node", "api/server.js"]
+# Command to run the application
+CMD ["node", "server.js"]
