@@ -77,6 +77,7 @@ services:
     env_file:
       - .env.asemb
     volumes:
+      - ./config:/app/config:ro
       - ./logs:/app/logs
       - ./workspaces:/workspaces:ro
     depends_on:
