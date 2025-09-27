@@ -332,6 +332,7 @@ vitest.config.ts
 
 # Duplicate/unused dashboards
 dashboard-next/
+frontend/src/app/dashboard-v2/
 
 # Development Docker configs
 docker-compose.dev.yml
