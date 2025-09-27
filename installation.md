@@ -150,7 +150,48 @@ cd /path/to/asemb
 docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d
 ```
 
-## 5. Updating the Application
+## 5. Local Development Setup
+
+For local development, you have multiple options:
+
+### Option 1: Docker with Local Code (Recommended)
+```bash
+# Start only database services
+docker-compose -f docker-compose.local.yml up -d postgres redis
+
+# Start API locally
+cd api
+npm install
+npm run dev
+
+# Start frontend locally
+cd frontend
+npm install
+npm run dev
+```
+
+### Option 2: Quick Start with Script
+```bash
+# Windows
+scripts\local-dev.bat
+
+# Or without Docker (using remote database)
+scripts\dev-no-docker.bat
+```
+
+### Option 3: Full Docker Environment
+```bash
+# Using the development docker-compose
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+Access Points:
+- Frontend: http://localhost:3000
+- API: http://localhost:8083
+- Database: localhost:5432
+- Redis: localhost:6379
+
+## 6. Updating the Application
 
 To update the application after pushing changes to Git:
 
@@ -161,7 +202,7 @@ To update the application after pushing changes to Git:
     docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d --build
     ```
 
-## 6. Troubleshooting Common Issues
+## 7. Troubleshooting Common Issues
 
 - **502 Bad Gateway:** This means the host Nginx can't reach the Docker container.
   - Check if the Docker containers are running: `docker ps`.
