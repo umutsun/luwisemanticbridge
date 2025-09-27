@@ -1439,13 +1439,13 @@ export default function EmbeddingsManagerPage() {
                                                     <Table>
                                                         <TableHeader>
                                                             <TableRow className="bg-muted/50">
-                                                                <TableHead className="w-16 text-xs font-medium text-muted-foreground">ID</TableHead>
-                                                                <TableHead className="w-24 text-xs font-medium text-muted-foreground">Source ID</TableHead>
-                                                                <TableHead className="text-xs font-medium text-muted-foreground">Created</TableHead>
-                                                                <TableHead className="text-xs font-medium text-muted-foreground">Updated</TableHead>
-                                                                <TableHead className="w-24 text-xs font-medium text-muted-foreground">Model</TableHead>
-                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Tokens</TableHead>
-                                                                <TableHead className="text-xs font-medium text-muted-foreground">Preview</TableHead>
+                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">ID</TableHead>
+                                                                <TableHead className="w-28 text-xs font-medium text-muted-foreground">Source ID</TableHead>
+                                                                <TableHead className="w-28 text-xs font-medium text-muted-foreground">Created</TableHead>
+                                                                <TableHead className="w-28 text-xs font-medium text-muted-foreground">Updated</TableHead>
+                                                                <TableHead className="w-40 text-xs font-medium text-muted-foreground">Model</TableHead>
+                                                                <TableHead className="w-24 text-xs font-medium text-muted-foreground">Tokens</TableHead>
+                                                                <TableHead className="w-20 text-xs font-medium text-muted-foreground">Preview</TableHead>
                                                             </TableRow>
                                                         </TableHeader>
                                                         <TableBody>
