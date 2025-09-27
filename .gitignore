@@ -313,4 +313,36 @@ backend/nul
 
 # Submodules / Test Directories
 awesome-claude-code-agents/
-.claude/ 
+.claude/
+.kimi/
+.zai/
+
+# Windows scripts (not needed for Linux production)
+*.bat
+*.ps1
+
+# Testing frameworks (not needed in production)
+e2e/
+tests/
+playwright.config.ts
+vitest.config.ts
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Duplicate/unused dashboards
+dashboard-next/
+
+# Development Docker configs
+docker-compose.dev.yml
+docker-compose.sandbox.yml
+
+# Examples and sample workflows
+examples/
+example-workflow.json
+
+# Backup directories
+backups/
+
+# Log directories (can be recreated)
+logs/ 
