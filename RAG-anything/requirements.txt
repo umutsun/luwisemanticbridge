@@ -1,14 +1,23 @@
+# Core LightRAG packages - minimal install to save space
+# Note: In production, you might want to install specific versions
+# lightrag-hku is commented out to avoid heavy PyTorch dependencies
+# Uncomment the line below if you need LightRAG functionality
+# lightrag-hku
+
+# Basic requirements for RAG service
 huggingface_hub
-# LightRAG packages
-lightrag-hku
-# MinerU 2.0 packages (replaces magic-pdf)
-mineru[core]
+python-dotenv
+fastapi
+uvicorn[standard]
+pydantic
+openai
+
 # Progress bars for batch processing
 tqdm
-# Note: Optional dependencies are now defined in setup.py extras_require:
-# - [image]: Pillow>=10.0.0 (for BMP, TIFF, GIF, WebP format conversion)
-# - [text]: reportlab>=4.0.0 (for TXT, MD to PDF conversion)
-# - [office]: requires LibreOffice (external program, not Python package)
-# - [all]: includes all optional dependencies
-#
-# Install with: pip install raganything[image,text] or pip install raganything[all]
+
+# MinerU 2.0 packages (replaces magic-pdf) - commented to save space
+# mineru[core]
+
+# Note: Uncomment the following lines if you need full RAG functionality:
+# lightrag-hku
+# mineru[core]

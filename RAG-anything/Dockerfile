@@ -10,8 +10,9 @@ COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
 # Also install uvicorn and fastapi as they are needed for the web server
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install "uvicorn[standard]" fastapi pydantic
+# Use --no-cache-dir to save space and --break-system-packages for slim image
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+RUN pip install --no-cache-dir --break-system-packages "uvicorn[standard]" fastapi pydantic
 
 # Copy the rest of the application's code into the container at /app
 COPY . .
