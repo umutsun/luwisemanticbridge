@@ -5,7 +5,6 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy package.json and package-lock.json from the 'api' subdirectory
-# This is the key fix to ensure correct dependencies are installed
 COPY api/package*.json ./
 
 # Install production dependencies for the API
