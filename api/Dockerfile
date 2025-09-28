@@ -1,25 +1,20 @@
+# Use the official Node.js 18 Alpine image as a base
 FROM node:18-alpine
+
+# Set the working directory in the container
 WORKDIR /app
 
-# Ortam değişkenlerini Docker build aşamasında kullanmak için
-ARG OPENAI_API_KEY
-ARG DEEPSEEK_API_KEY
-ARG HUGGINGFACE_API_KEY
-ARG ANTHROPIC_API_KEY
+# Copy package.json and package-lock.json from the 'api' directory to the container's working directory
+COPY api/package*.json ./
 
-# Sadece bağımlılıklar için gerekli dosyaları kopyala
-COPY package*.json ./
-# Build sırasında --secret kullanarak key'leri güvenli bir şekilde kullan
+# Install production dependencies
 RUN npm install --production
 
-# Önce paylaşılan modülleri kopyala
-COPY src/shared/ ./src/shared/
+# Copy all files from the 'api' directory into the container's working directory
+COPY api/ ./
 
-# Sonra API'nin geri kalanını kopyala
-COPY . ./
-
-# Ve config dosyasını
-COPY ../config/ ./config/
-
+# Expose the port the app runs on
 EXPOSE 8083
+
+# The command to run the application
 CMD ["node", "server.js"]
