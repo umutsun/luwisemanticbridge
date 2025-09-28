@@ -6,7 +6,6 @@ const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const { Client } = require('pg');
 const { exec } = require('child_process');
-const { cacheManager } = require('../src/shared/cache-manager');
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
@@ -28,9 +27,13 @@ try {
     console.error("Failed to load config.json:", error);
 }
 
+// Initialize cache manager with config
+const { CacheManager } = require('../src/shared/cache-manager');
+const cacheManager = new CacheManager();
+
 // Database pool for ASEMB
 const asembPool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb'
+    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@postgres:5432/postgres'
 });
 
 app.use(express.json()); // Add this middleware to parse JSON bodies

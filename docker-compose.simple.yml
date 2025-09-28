@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: asemb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: asemb-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # API Service
+  api:
+    image: alice-semantic-bridge-api:latest
+    container_name: asemb-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DEBUG: false
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      ASEMB_DB_HOST: postgres
+      ASEMB_DB_PORT: 5432
+      ASEMB_DB_NAME: asemb
+      ASEMB_DB_USER: asemb_user
+      ASEMB_DB_PASSWORD: Semsiye!22
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
+    ports:
+      - "8083:8083"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./config:/app/config
+      - ./lib:/app/lib
+      - ./RAG-anything:/app/RAG-anything
+
+  
+volumes:
+  postgres_data:
+  redis_data:

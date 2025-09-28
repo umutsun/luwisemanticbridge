@@ -2,10 +2,36 @@ const Redis = require('ioredis');
 
 class CacheManager {
   constructor() {
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      db: parseInt(process.env.REDIS_DB || '2')
+    // Try to get Redis config from environment first
+    const redisUrl = process.env.REDIS_URL;
+    const redisHost = process.env.REDIS_HOST;
+    const redisPort = process.env.REDIS_PORT;
+    const redisDb = process.env.REDIS_DB;
+    const redisPassword = process.env.REDIS_PASSWORD;
+
+    // If environment variables are set, use them
+    if (redisUrl) {
+      this.redis = new Redis(redisUrl);
+    } else if (redisHost) {
+      this.redis = new Redis({
+        host: redisHost,
+        port: parseInt(redisPort || '6379'),
+        db: parseInt(redisDb || '0'),
+        password: redisPassword
+      });
+    } else {
+      // Fall back to defaults
+      this.redis = new Redis({
+        host: 'redis',
+        port: 6379,
+        db: 0,
+        password: process.env.REDIS_PASSWORD
+      });
+    }
+
+    // Handle Redis errors gracefully
+    this.redis.on('error', (err) => {
+      console.error('Redis connection error:', err);
     });
     
     this.stats = {

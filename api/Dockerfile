@@ -16,7 +16,7 @@ RUN npm install --production
 COPY . .
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 8083
 
 # Command to run the application, pointing to the correct path
 CMD ["node", "api/server.js"]

@@ -16,11 +16,13 @@ const pgConfig = {
 };
 
 // Redis configuration
-const redis = new Redis({
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: process.env.REDIS_PORT || 6379,
-  db: process.env.REDIS_DB || 2
-});
+const redis = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL)
+  : new Redis({
+      host: process.env.REDIS_HOST || 'redis',
+      port: process.env.REDIS_PORT || 6379,
+      db: process.env.REDIS_DB || 2
+    });
 
 // OpenAI configuration
 const openai = new OpenAI({
