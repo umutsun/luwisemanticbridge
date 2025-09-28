@@ -116,8 +116,8 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://asemb.luwi.dev/api
-    ports:
-      - "3001:3000"
+    # ports:
+      # - "3001:3000"
     networks:
       - asemb-network
     healthcheck:
