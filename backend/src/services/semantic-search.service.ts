@@ -1,4 +1,5 @@
 import { OpenAI } from 'openai';
+import { Pool } from 'pg';
 import pool from '../config/database';
 import dotenv from 'dotenv';
 
@@ -6,11 +7,17 @@ dotenv.config();
 
 export class SemanticSearchService {
   private pool = pool;
+  private customerPool: Pool;
   private openai: OpenAI | null = null;
   private useOpenAI: boolean = false;
 
   constructor() {
-    
+
+    // Initialize customer database pool
+    this.customerPool = new Pool({
+      connectionString: process.env.RAG_CHATBOT_DATABASE_URL || process.env.CUSTOMER_DB_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/rag_chatbot'
+    });
+
     // Initialize OpenAI
     if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith('sk-')) {
       try {
@@ -101,18 +108,33 @@ export class SemanticSearchService {
     const queryId = `keywordSearch_${query.substring(0, 10)}_${Date.now()}`;
     console.time(queryId);
     try {
-      // Search in SORUCEVAP table
-      const searchQuery = `
-        WITH combined_results AS (
-          SELECT 
+      // Search in SORUCEVAP table (from customer database)
+      let sorucevapResults = [];
+      try {
+        const sorucevapQuery = `
+          SELECT
             id::text as id,
             'SORUCEVAP - ' || COALESCE(LEFT(question, 100), '') as title,
             'sorucevap' as source_table,
             id::text as source_id,
             LEFT(answer, 500) as excerpt,
             1 as priority
-          FROM public."SORUCEVAP"
+          FROM sorucevap
           WHERE question ILIKE $1 OR answer ILIKE $1
+          LIMIT $2
+        `;
+        const sorucevapResult = await this.customerPool.query(sorucevapQuery, [
+          `%${query}%`,
+          limit
+        ]);
+        sorucevapResults = sorucevapResult.rows;
+      } catch (error) {
+        console.log('SORUCEVAP table not accessible, skipping...');
+      }
+
+      // Search in other tables
+      const searchQuery = `
+        WITH combined_results AS (
           
           UNION ALL
           
@@ -160,8 +182,11 @@ export class SemanticSearchService {
         limit
       ]);
 
+      // Combine results
+      const allResults = [...sorucevapResults, ...result.rows];
+
       console.timeEnd(queryId);
-      return result.rows.map(row => ({
+      return allResults.map(row => ({
         ...row,
         score: 100 - (row.priority * 10) // Score based on priority
       }));
@@ -382,19 +407,26 @@ export class SemanticSearchService {
       
       switch(sourceTable.toLowerCase()) {
         case 'sorucevap':
-          searchQuery = `
-            SELECT 
-              id::text as id,
-              'SORUCEVAP - ' || LEFT(question, 100) as title,
-              'sorucevap' as source_table,
-              id::text as source_id,
-              LEFT(answer, 500) as excerpt
-            FROM public."SORUCEVAP"
-            WHERE question ILIKE $1 OR answer ILIKE $1
-            ORDER BY id DESC
-            LIMIT $2
-          `;
-          break;
+          try {
+            searchQuery = `
+              SELECT
+                id::text as id,
+                'SORUCEVAP - ' || LEFT(question, 100) as title,
+                'sorucevap' as source_table,
+                id::text as source_id,
+                LEFT(answer, 500) as excerpt
+              FROM sorucevap
+              WHERE question ILIKE $1 OR answer ILIKE $1
+              ORDER BY id DESC
+              LIMIT $2
+            `;
+            // Use customerPool for sorucevap
+            const result = await this.customerPool.query(searchQuery, [`%${query}%`, limit]);
+            return result.rows;
+          } catch (error) {
+            console.log('SORUCEVAP table not accessible for search');
+            return [];
+          }
         case 'ozelgeler':
           searchQuery = `
             SELECT 
@@ -432,19 +464,27 @@ export class SemanticSearchService {
     try {
       const statsQuery = `
         WITH table_counts AS (
-          SELECT 'SORUCEVAP' as source_table, COUNT(*) as count FROM public."SORUCEVAP"
+          SELECT 'sorucevap' as source_table, COUNT(*) as count FROM sorucevap
           UNION ALL
-          SELECT 'OZELGELER', COUNT(*) FROM public."OZELGELER"
+          SELECT 'ozelgeler', COUNT(*) FROM ozelgeler
           UNION ALL
-          SELECT 'MAKALELER', COUNT(*) FROM public."MAKALELER"
+          SELECT 'makaleler', COUNT(*) FROM makaleler
           UNION ALL
-          SELECT 'DANISTAYKARARLARI', COUNT(*) FROM public."DANISTAYKARARLARI"
+          SELECT 'danistaykararlari', COUNT(*) FROM danistaykararlari
         )
         SELECT * FROM table_counts ORDER BY count DESC
       `;
 
-      const result = await this.pool.query(statsQuery);
-      
+      let result;
+      try {
+        // Try customer pool first (where the tables are)
+        result = await this.customerPool.query(statsQuery);
+      } catch (error) {
+        console.log('Could not get stats from customer database:', error.message);
+        // Fallback to empty result
+        result = { rows: [] };
+      }
+
       // Get embeddings count
       const embeddingsQuery = `SELECT COUNT(*) as count FROM public.embeddings`;
       const embeddingsResult = await this.pool.query(embeddingsQuery);

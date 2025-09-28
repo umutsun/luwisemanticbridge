@@ -12,7 +12,7 @@ interface ChatMessage {
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
-  private model: string = 'gemini-1.5-flash'; // Default to Flash for speed
+  private model: string = 'gemini-1.5-pro'; // Use Pro model for stability
   private initialized: boolean = false;
   private defaultMaxTokens: number = 4096;
   private apiKey: string | null = null;

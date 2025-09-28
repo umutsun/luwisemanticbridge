@@ -61,4 +61,12 @@ const testConnection = async (retries = 3) => {
 
 testConnection();
 
+// Database table names configuration
+export const TABLE_NAMES = {
+  SORUCEVAP: process.env.TABLE_SORUCEVAP || 'sorucevap',
+  OZELGELER: process.env.TABLE_OZELGELER || 'ozelgeler',
+  MAKALELER: process.env.TABLE_MAKALELER || 'makaleler',
+  DANISTAYKARARLARI: process.env.TABLE_DANISTAYKARARLARI || 'danistaykararlari'
+};
+
 export default pool;
