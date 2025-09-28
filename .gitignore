@@ -130,7 +130,7 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
+# Keep lib/ directory - it's needed for the build
 lib64/
 parts/
 sdist/
