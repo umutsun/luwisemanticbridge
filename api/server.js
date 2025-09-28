@@ -28,7 +28,7 @@ try {
 }
 
 // Initialize cache manager with config
-const { CacheManager } = require('../src/shared/cache-manager');
+const CacheManager = require('../src/shared/cache-manager').CacheManager;
 const cacheManager = new CacheManager();
 
 // Database pool for ASEMB
