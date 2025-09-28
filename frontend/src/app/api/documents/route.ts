@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile, readdir, stat } from 'fs/promises';
 import path from 'path';
 
 // In-memory storage for demo (should use database in production)
@@ -12,6 +11,7 @@ export async function GET(request: NextRequest) {
     let realDocuments: any[] = [];
     
     try {
+      const { readdir, stat } = await import('fs/promises');
       const files = await readdir(uploadDir);
       const docPromises = files.map(async (fileName) => {
         const filePath = path.join(uploadDir, fileName);

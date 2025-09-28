@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
 import path from 'path';
 import { Pool } from 'pg';
 
@@ -13,6 +12,7 @@ export async function GET() {
     let status = 'disconnected';
     
     try {
+      const fs = await import('fs/promises');
       const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
       config = JSON.parse(configData);
       
@@ -97,12 +97,13 @@ export async function POST(request: NextRequest) {
     config.connectionString = `postgresql://${config.username}:${config.password}@${config.host}:${config.port}/${config.database}`;
     
     // Save to file
+    const fs = await import('fs/promises');
     await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-    
+
     // Also update .env.local for Next.js
     const envPath = path.join(process.cwd(), '.env.local');
     let envContent = '';
-    
+
     try {
       envContent = await fs.readFile(envPath, 'utf-8');
     } catch (error) {

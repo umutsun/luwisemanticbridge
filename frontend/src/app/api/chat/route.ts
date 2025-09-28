@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
 import path from 'path';
 import { API, SERVER, LLM } from '@/config';
 
 // Read configuration from file
 async function getConfig() {
   try {
+    const fs = await import('fs/promises');
     const configPath = path.join(process.cwd(), 'config.json');
     const configData = await fs.readFile(configPath, 'utf-8');
     return JSON.parse(configData);

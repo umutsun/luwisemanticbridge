@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
 import path from 'path';
 
 // Correctly resolve the path to the root config directory
@@ -119,6 +118,7 @@ const deepMerge = (target: any, source: any) => {
 // Helper function to read the config file
 async function readConfig() {
   try {
+    const fs = await import('fs/promises');
     await fs.access(configFilePath);
     const fileContent = await fs.readFile(configFilePath, 'utf-8');
     const parsedContent = fileContent ? JSON.parse(fileContent) : {};
@@ -134,6 +134,7 @@ async function readConfig() {
 // Helper function to write to the config file
 async function writeConfig(data: any) {
   try {
+    const fs = await import('fs/promises');
     const dirPath = path.dirname(configFilePath);
     await fs.mkdir(dirPath, { recursive: true });
     await fs.writeFile(configFilePath, JSON.stringify(data, null, 2), 'utf-8');
