@@ -43,6 +43,8 @@ const nextConfig = {
   // Experimental features for better performance
   experimental: {
     optimizeCss: true,
+    // Disable static generation for problematic packages
+    serverComponentsExternalPackages: ['puppeteer', 'cheerio']
   },
 
   // Environment variables

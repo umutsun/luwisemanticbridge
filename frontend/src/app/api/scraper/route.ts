@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as cheerio from 'cheerio';
-import puppeteer from 'puppeteer';
+
+// Dynamically import dependencies to avoid build-time issues
+let cheerio: any, puppeteer: any;
+
+async function loadDependencies() {
+  if (!cheerio) {
+    cheerio = (await import('cheerio')).default;
+  }
+  if (!puppeteer) {
+    puppeteer = (await import('puppeteer')).default;
+  }
+}
 
 // In-memory storage for scraping history
 let scrapingHistory: any[] = [];
@@ -142,7 +152,13 @@ async function dynamicScrape(url: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // Check if we're in build mode
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({ error: 'Scraper is not available during build' }, { status: 503 });
+  }
+
   try {
+    await loadDependencies();
     const { url, saveToDb = false, storeEmbeddings = false, mode = 'static' } = await request.json();
     
     if (!url) {
