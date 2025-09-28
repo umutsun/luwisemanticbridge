@@ -60,8 +60,8 @@ services:
   # Production API with PM2
   api:
     build:
-      context: .
-      dockerfile: api/Dockerfile
+      context: ./api
+      dockerfile: Dockerfile
     container_name: asemb-api
     restart: unless-stopped
     environment:
