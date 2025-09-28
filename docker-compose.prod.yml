@@ -60,16 +60,21 @@ services:
 
   # Production API with PM2
   api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
+    image: alice-semantic-bridge-api:latest
     container_name: asemb-api
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: 8083
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+      ASEMB_DB_HOST: postgres
+      ASEMB_DB_PORT: 5432
+      ASEMB_DB_NAME: asemb
+      ASEMB_DB_USER: asemb_user
+      ASEMB_DB_PASSWORD: Semsiye!22
+      REDIS_URL: redis://redis:6379
       # Security
       API_RATE_LIMIT: "100"
       API_RATE_WINDOW: "15m"
@@ -78,6 +83,8 @@ services:
       - .env.asemb
     volumes:
       - ./config:/app/config:ro
+      - ./lib:/app/lib:ro
+      - ./RAG-anything:/app/RAG-anything:ro
       - ./logs:/app/logs
       - ./workspaces:/workspaces:ro
     depends_on:
@@ -88,7 +95,7 @@ services:
     networks:
       - asemb-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
