@@ -71,6 +71,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.asemb
+    volumes:
+      - ./config/asb-config.json:/app/config/config.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,15 +94,14 @@ services:
   # Frontend Application
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
     container_name: asemb-frontend
     restart: unless-stopped
+    command: npx next start -p 3000
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://asemb.luwi.dev/api
-    # ports:
-      # - "3001:3000"
     networks:
       - asemb-network
     healthcheck:
