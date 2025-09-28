@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # Production PostgreSQL with optimizations
@@ -60,7 +59,9 @@ services:
 
   # Production API with PM2
   api:
-    image: alice-semantic-bridge-api:latest
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     container_name: asemb-api
     restart: unless-stopped
     environment:
