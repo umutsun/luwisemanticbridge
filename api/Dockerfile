@@ -1,23 +1,25 @@
-# Use a specific Node.js version for reproducibility
 FROM node:18-alpine
-
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY api/package*.json ./
+# Ortam değişkenlerini Docker build aşamasında kullanmak için
+ARG OPENAI_API_KEY
+ARG DEEPSEEK_API_KEY
+ARG HUGGINGFACE_API_KEY
+ARG ANTHROPIC_API_KEY
 
-# Install production dependencies for the API
+# Sadece bağımlılıklar için gerekli dosyaları kopyala
+COPY package*.json ./
+# Build sırasında --secret kullanarak key'leri güvenli bir şekilde kullan
 RUN npm install --production
 
-# Copy API server files
-COPY api/ ./
-
-# Copy shared modules
+# Önce paylaşılan modülleri kopyala
 COPY src/shared/ ./src/shared/
 
-# Expose the port the app runs on
-EXPOSE 8083
+# Sonra API'nin geri kalanını kopyala
+COPY . ./
 
-# Command to run the application, pointing to the correct path
+# Ve config dosyasını
+COPY ../config/ ./config/
+
+EXPOSE 8083
 CMD ["node", "server.js"]

@@ -1,0 +1,71 @@
+=== Manual Server Setup Steps ===
+
+Connect to the server first using SSH:
+ssh root@asemb.luwi.dev
+Password: Semsiye!22
+
+Once connected, run these commands step by step:
+
+=== Step 1: Test current backend API endpoints ===
+curl -X GET http://localhost:3000/health
+curl -X GET http://localhost:8080/health
+curl -X GET http://localhost:5000/health
+
+=== Step 2: Install PM2 globally ===
+npm install -g pm2
+
+If Node.js is not installed:
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+npm install -g pm2
+
+=== Step 3: Find the backend application directory ===
+ls -la /var/www
+ls -la /opt
+find /home -name "package.json" -type f 2>/dev/null | head -10
+lsof -i :3000 -i :8080 -i :5000 2>/dev/null
+
+=== Step 4: Navigate to backend directory (replace with actual path) ===
+cd /path/to/backend
+# For example: cd /var/www/backend or cd /home/ubuntu/backend
+
+=== Step 5: Install dependencies ===
+npm install
+
+=== Step 6: Start the backend with PM2 ===
+# Try these commands in order, stop when one works:
+
+# If package.json has "start" script:
+pm2 start npm --name "backend" -- start
+
+# If package.json has "dev" script:
+pm2 start npm --name "backend" -- dev
+
+# If server.js exists:
+pm2 start server.js --name "backend"
+
+# If index.js exists:
+pm2 start index.js --name "backend"
+
+# If app.js exists:
+pm2 start app.js --name "backend"
+
+=== Step 7: Configure PM2 to start on boot ===
+pm2 startup
+pm2 save
+
+=== Step 8: Check status and logs ===
+pm2 status
+pm2 list
+pm2 logs backend --lines 20
+
+=== Step 9: Test the backend ===
+curl -X GET http://localhost:3000/health
+# or whichever port your backend uses
+
+=== Useful PM2 Commands ===
+pm2 restart backend
+pm2 stop backend
+pm2 monit
+pm2 logs backend
+pm2 status

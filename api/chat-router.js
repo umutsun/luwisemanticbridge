@@ -6,20 +6,39 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
-// --- Model İstemcilerini Başlatma ---
+// --- Model İstemcilerini Başlatma (Lazy Initialization) ---
 
-// OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openai = null;
+let anthropic = null;
+let genAI = null;
 
-// Anthropic (Claude)
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// Initialize OpenAI client when needed
+function getOpenAI() {
+  if (!openai && process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openai;
+}
 
-// Google (Gemini)
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+// Initialize Anthropic client when needed
+function getAnthropic() {
+  if (!anthropic && process.env.ANTHROPIC_API_KEY) {
+    anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+  }
+  return anthropic;
+}
+
+// Initialize Google client when needed
+function getGenAI() {
+  if (!genAI && process.env.GOOGLE_API_KEY) {
+    genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+  }
+  return genAI;
+}
 
 // --- Veritabanı Bağlantısı ---
 const pool = new Pool({
@@ -32,7 +51,7 @@ const pool = new Pool({
 async function searchDocuments(query, limit = 5) {
   const client = await pool.connect();
   try {
-    const queryEmbeddingResponse = await openai.embeddings.create({
+    const queryEmbeddingResponse = await getOpenAI().embeddings.create({
       model: "text-embedding-ada-002",
       input: query,
     });
@@ -103,7 +122,7 @@ async function handleChat(req, res) {
             systemPrompt = createJsonSystemPrompt(systemPrompt);
         }
 
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
             model: modelConfig.modelName,
             messages: [
                 { role: "system", content: systemPrompt },

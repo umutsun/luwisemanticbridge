@@ -28,8 +28,7 @@ try {
 }
 
 // Initialize cache manager with config
-const CacheManager = require('../src/shared/cache-manager').CacheManager;
-const cacheManager = new CacheManager();
+const { cacheManager } = require('./src/shared/cache-manager');
 
 // Database pool for ASEMB
 const asembPool = new Pool({
@@ -122,7 +121,7 @@ serviceRouter.get('/postgres/status', async (req, res) => {
         port: dbConfig.port || 5432,
         user: dbConfig.user,
         password: dbConfig.password,
-        database: dbConfig.name,
+        database: dbConfig.database,
         connectionTimeoutMillis: 2000,
     });
     try {

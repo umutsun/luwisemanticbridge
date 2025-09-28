@@ -7,13 +7,12 @@ services:
     container_name: asemb-postgres
     environment:
       POSTGRES_USER: asemb_user
-      POSTGRES_PASSWORD: your_secure_password_here
+      POSTGRES_PASSWORD: asemb_password_2025
       POSTGRES_DB: asemb
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U asemb_user"]
       interval: 10s
@@ -27,8 +26,6 @@ services:
     image: redis:7-alpine
     container_name: asemb-redis
     command: redis-server --appendonly yes
-    environment:
-      REDIS_PASSWORD: sprint_MVP_2025!
     ports:
       - "6379:6379"
     volumes:
@@ -70,17 +67,18 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3000
+      DATABASE_URL: postgresql://asemb_user:asemb_password_2025@postgres:5432/asemb
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
-      REDIS_PASSWORD: sprint_MVP_2025!
       POSTGRES_USER: asemb_user
-      POSTGRES_PASSWORD: your_secure_password_here
+      POSTGRES_PASSWORD: asemb_password_2025
       POSTGRES_DB: asemb
       NEO4J_URI: bolt://neo4j:7687
     ports:
       - "3001:3000"
     volumes:
       - ./api:/app
+      - ./config:/config
       - ./workspaces:/workspaces
     depends_on:
       postgres:
@@ -109,7 +107,6 @@ services:
       - DB_TYPE=redis
       - DB_REDIS_HOST=asemb-redis
       - DB_REDIS_PORT=6379
-      - DB_REDIS_PASSWORD=sprint_MVP_2025!
       - DB_REDIS_DB=2
     ports:
       - "5678:5678"
