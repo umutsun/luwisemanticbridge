@@ -1,6 +1,6 @@
 import { OpenAI } from 'openai';
 import { Pool } from 'pg';
-import pool from '../config/database';
+import pool, { TABLE_NAMES } from '../config/database';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -119,7 +119,7 @@ export class SemanticSearchService {
             id::text as source_id,
             LEFT(answer, 500) as excerpt,
             1 as priority
-          FROM sorucevap
+          FROM ${TABLE_NAMES.SORUCEVAP}
           WHERE question ILIKE $1 OR answer ILIKE $1
           LIMIT $2
         `;
@@ -135,17 +135,16 @@ export class SemanticSearchService {
       // Search in other tables
       const searchQuery = `
         WITH combined_results AS (
-          
-          UNION ALL
-          
-          SELECT 
+          -- No SORUCEVAP results to include (already handled separately)
+
+          SELECT
             id::text as id,
             'ÖZELGE - ' || COALESCE(LEFT(subject, 100), '') as title,
             'ozelgeler' as source_table,
             id::text as source_id,
             LEFT(content, 500) as excerpt,
             2 as priority
-          FROM public."OZELGELER"
+          FROM ${TABLE_NAMES.OZELGELER}
           WHERE subject ILIKE $1 OR content ILIKE $1
           
           UNION ALL
@@ -157,7 +156,7 @@ export class SemanticSearchService {
             id::text as source_id,
             LEFT(content, 500) as excerpt,
             3 as priority
-          FROM public."MAKALELER"
+          FROM ${TABLE_NAMES.MAKALELER}
           WHERE title ILIKE $1 OR content ILIKE $1
           
           UNION ALL
@@ -169,7 +168,7 @@ export class SemanticSearchService {
             id::text as source_id,
             LEFT(content, 500) as excerpt,
             4 as priority
-          FROM public."DANISTAYKARARLARI"
+          FROM ${TABLE_NAMES.DANISTAYKARARLARI}
           WHERE subject ILIKE $1 OR content ILIKE $1
         )
         SELECT * FROM combined_results
@@ -415,7 +414,7 @@ export class SemanticSearchService {
                 'sorucevap' as source_table,
                 id::text as source_id,
                 LEFT(answer, 500) as excerpt
-              FROM sorucevap
+              FROM ${TABLE_NAMES.SORUCEVAP}
               WHERE question ILIKE $1 OR answer ILIKE $1
               ORDER BY id DESC
               LIMIT $2
@@ -435,7 +434,7 @@ export class SemanticSearchService {
               'ozelgeler' as source_table,
               id::text as source_id,
               LEFT(content, 500) as excerpt
-            FROM public."OZELGELER"
+            FROM ${TABLE_NAMES.OZELGELER}
             WHERE subject ILIKE $1 OR content ILIKE $1
             ORDER BY id DESC
             LIMIT $2
@@ -464,13 +463,13 @@ export class SemanticSearchService {
     try {
       const statsQuery = `
         WITH table_counts AS (
-          SELECT 'sorucevap' as source_table, COUNT(*) as count FROM sorucevap
+          SELECT 'sorucevap' as source_table, COUNT(*) as count FROM ${TABLE_NAMES.SORUCEVAP}
           UNION ALL
-          SELECT 'ozelgeler', COUNT(*) FROM ozelgeler
+          SELECT 'ozelgeler', COUNT(*) FROM ${TABLE_NAMES.OZELGELER}
           UNION ALL
-          SELECT 'makaleler', COUNT(*) FROM makaleler
+          SELECT 'makaleler', COUNT(*) FROM ${TABLE_NAMES.MAKALELER}
           UNION ALL
-          SELECT 'danistaykararlari', COUNT(*) FROM danistaykararlari
+          SELECT 'danistaykararlari', COUNT(*) FROM ${TABLE_NAMES.DANISTAYKARARLARI}
         )
         SELECT * FROM table_counts ORDER BY count DESC
       `;
@@ -521,7 +520,7 @@ export class SemanticSearchService {
           'sorucevap' as source_table,
           id::text as source_id,
           LEFT(answer, 200) as excerpt
-        FROM public."SORUCEVAP"
+        FROM public."${TABLE_NAMES.SORUCEVAP}"
         ORDER BY id DESC
         LIMIT $1
       `;

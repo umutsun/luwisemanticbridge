@@ -12,7 +12,7 @@ interface ChatMessage {
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
-  private model: string = 'gemini-1.5-pro'; // Use Pro model for stability
+  private model: string = 'gemini-pro'; // Use Pro model for stability
   private initialized: boolean = false;
   private defaultMaxTokens: number = 4096;
   private apiKey: string | null = null;
@@ -48,11 +48,11 @@ export class GeminiService {
         apiKey = process.env.GOOGLE_API_KEY;
       }
 
-      this.apiKey = apiKey;
+      this.apiKey = apiKey || null;
       this.defaultMaxTokens = maxTokens;
     } catch (error) {
       console.warn('Failed to load Gemini settings from database:', error);
-      this.apiKey = process.env.GOOGLE_API_KEY;
+      this.apiKey = process.env.GOOGLE_API_KEY || null;
     }
   }
 
