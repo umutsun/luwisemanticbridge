@@ -33,7 +33,7 @@ export class EnhancedPuppeteerService {
   async initialize() {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: 'new',
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -94,7 +94,7 @@ export class EnhancedPuppeteerService {
       console.log(`[ENHANCED-PUPPETEER] Status: ${response?.status()}`);
 
       // Wait for initial load
-      await page.waitForTimeout(options.waitTime || 3000);
+      await new Promise(resolve => setTimeout(resolve, options.waitTime || 3000));
 
       // Handle cookie consent for common sites
       if (options.clickCookieConsent) {
@@ -221,7 +221,7 @@ export class EnhancedPuppeteerService {
         if (element) {
           await element.click();
           console.log('[ENHANCED-PUPPETEER] Clicked cookie consent');
-          await page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
           break;
         }
       } catch (e) {

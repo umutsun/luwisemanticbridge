@@ -62,37 +62,15 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
+      args:
+        - OPENAI_API_KEY=${OPENAI_API_KEY}
+        - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+        - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+        - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     container_name: asemb-api
     restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: 8083
-      POSTGRES_HOST: postgres
-      REDIS_HOST: redis
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
-      ASEMB_DB_HOST: postgres
-      ASEMB_DB_PORT: 5432
-      ASEMB_DB_NAME: asemb
-      ASEMB_DB_USER: asemb_user
-      ASEMB_DB_PASSWORD: Semsiye!22
-      REDIS_URL: redis://redis:6379
-      # API Keys (must be set in .env.asemb)
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      # Security
-      API_RATE_LIMIT: "100"
-      API_RATE_WINDOW: "15m"
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
     env_file:
       - .env.asemb
-    volumes:
-      - ./config:/app/config:ro
-      - ./lib:/app/lib:ro
-      - ./RAG-anything:/app/RAG-anything:ro
-      - ./logs:/app/logs
-      - ./workspaces:/workspaces:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -24,7 +24,7 @@ export class GibScraperService {
   async initialize() {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: 'new',
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -68,7 +68,7 @@ export class GibScraperService {
       console.log(`[GIB-SCRAPER] Status: ${response?.status()}`);
 
       // Wait for content to load
-      await page.waitForTimeout(3000);
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Check if it's a law/regulation page with articles
       const isKanunPage = url.includes('/kanun/') || url.includes('/mevzuat/');
@@ -86,7 +86,7 @@ export class GibScraperService {
       }
 
       // Wait a bit more for dynamic content
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Get page content
       const html = await page.content();
@@ -231,7 +231,7 @@ export class GibScraperService {
       });
 
       console.log('[GIB-SCRAPER] Expanded collapsible content');
-      await page.waitForTimeout(1000);
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (e) {
       console.log('[GIB-SCRAPER] No expandable content found');
     }
