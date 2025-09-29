@@ -98,7 +98,7 @@ services:
       dockerfile: Dockerfile
     container_name: asemb-frontend
     restart: unless-stopped
-    command: npx next start -p 3000
+    command: node server.js
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://asemb.luwi.dev/api
