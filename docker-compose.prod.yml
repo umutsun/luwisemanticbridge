@@ -72,7 +72,7 @@ services:
     env_file:
       - .env.asemb
     volumes:
-      - ./config/asb-config.json:/app/config/config.json:ro
+      - ./config/asb-config.json:/app/config.json:ro
     depends_on:
       postgres:
         condition: service_healthy
