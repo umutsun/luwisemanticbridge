@@ -8,7 +8,7 @@ WORKDIR /app
 COPY api/package*.json ./
 
 # Install production dependencies
-RUN npm install --production
+RUN npm install --production --legacy-peer-deps
 
 # Copy all files from the 'api' directory into the container's working directory
 COPY api/ ./
