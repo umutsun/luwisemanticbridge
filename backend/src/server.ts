@@ -12,6 +12,7 @@ import { WebSocketServer as StandardWebSocketServer } from 'ws';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { SERVER, API } from './config';
+import { initializeRedis } from './config/redis';
 
 // Import routes
 import searchRoutes from './routes/search.routes';
@@ -398,8 +399,8 @@ httpServer.listen(PORT, async () => {
     await pgPool.query('SELECT 1');
     console.log('✅ PostgreSQL: Connected');
 
-    // Redis connection
-    await redis.ping();
+    // Initialize Redis with settings from database
+    await initializeRedis();
     console.log('✅ Redis: Connected');
 
     // Check Redis database info
