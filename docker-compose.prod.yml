@@ -97,14 +97,15 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.simple
     container_name: asemb-frontend
     restart: unless-stopped
-    command: npx next start -p ${FRONTEND_PORT:-3000}
+    command: node server.js
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://asemb.luwi.dev/api
       - FRONTEND_PORT=${FRONTEND_PORT:-3000}
+    # volumes:
     env_file:
       - .env.asemb
     networks:
