@@ -4,20 +4,63 @@ import { Pool } from 'pg';
 
 const CONFIG_FILE = path.join(process.cwd(), 'database-config.json');
 
-// Get current database configuration
+// Get current database configuration from settings
 export async function GET() {
   try {
-    // Try to read config file
+    // Connect to ASEMB database to get settings
+    const asembPool = new Pool({
+      host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
+      port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
+      database: process.env.ASEMB_DB_NAME || 'asemb',
+      user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
+      password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
+      max: 1
+    });
+
     let config = null;
     let status = 'disconnected';
-    
+    let source = 'settings';
+
     try {
-      const fs = await import('fs/promises');
-      const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
-      config = JSON.parse(configData);
-      
-      // Test current connection
-      if (config) {
+      // Get customer database settings from ASEMB settings table
+      const result = await asembPool.query(`
+        SELECT value FROM settings WHERE key = 'customer_database'
+      `);
+
+      if (result.rows.length > 0) {
+        config = result.rows[0].value;
+
+        // Test connection to customer database
+        const customerPool = new Pool({
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.username,
+          password: config.password,
+          ssl: config.sslMode === 'require' ? { rejectUnauthorized: false } : false,
+          max: 1
+        });
+
+        try {
+          await customerPool.query('SELECT 1');
+          status = 'connected';
+        } catch (error) {
+          status = 'disconnected';
+        } finally {
+          await customerPool.end();
+        }
+      }
+    } catch (error) {
+      console.error('Error reading settings from database:', error);
+
+      // Fallback to file-based config
+      try {
+        const fs = await import('fs/promises');
+        const configData = await fs.readFile(CONFIG_FILE, 'utf-8');
+        config = JSON.parse(configData);
+        source = 'file';
+
+        // Test the connection
         const pool = new Pool({
           host: config.host,
           port: config.port,
@@ -25,9 +68,9 @@ export async function GET() {
           user: config.username,
           password: config.password,
           ssl: config.sslMode === 'require' ? { rejectUnauthorized: false } : false,
-          max: config.poolSize || 20
+          max: 1
         });
-        
+
         try {
           await pool.query('SELECT 1');
           status = 'connected';
@@ -36,37 +79,28 @@ export async function GET() {
         } finally {
           await pool.end();
         }
+      } catch (fileError) {
+        // Last resort - use environment variables
+        config = {
+          host: process.env.CUSTOMER_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
+          port: parseInt(process.env.CUSTOMER_DB_PORT || process.env.POSTGRES_PORT || '5432'),
+          database: process.env.CUSTOMER_DB_NAME || 'rag_chatbot',
+          username: process.env.CUSTOMER_DB_USER || process.env.POSTGRES_USER || 'postgres',
+          password: process.env.CUSTOMER_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
+          schema: 'public',
+          sslMode: 'disable' as const,
+          poolSize: 20
+        };
+        source = 'environment';
       }
-    } catch (error) {
-      // Use environment variables as fallback
-      const envConfig = {
-        host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
-        port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
-        database: process.env.ASEMB_DB_NAME || 'asemb',
-        username: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
-        password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'Semsiye!22',
-        schema: process.env.DB_SCHEMA || 'public',
-        sslMode: 'disable' as const,
-        poolSize: parseInt(process.env.DB_POOL_SIZE || '20')
-      };
-      
-      // Parse DATABASE_URL if available
-      if (process.env.DATABASE_URL) {
-        const url = new URL(process.env.DATABASE_URL);
-        envConfig.host = url.hostname;
-        envConfig.port = parseInt(url.port || '5432');
-        envConfig.database = url.pathname.slice(1);
-        envConfig.username = url.username;
-        envConfig.password = decodeURIComponent(url.password);
-      }
-      
-      config = envConfig;
+    } finally {
+      await asembPool.end();
     }
-    
+
     return NextResponse.json({
       config,
       status,
-      source: config ? 'file' : 'environment'
+      source
     });
   } catch (error) {
     console.error('Error getting database config:', error);
@@ -77,13 +111,13 @@ export async function GET() {
   }
 }
 
-// Save database configuration
+// Save database configuration to settings
 export async function POST(request: NextRequest) {
   try {
     const config = await request.json();
-    
+
     // Validate required fields
-    const required = ['host', 'port', 'database', 'username', 'schema'];
+    const required = ['host', 'port', 'database', 'username'];
     for (const field of required) {
       if (!config[field]) {
         return NextResponse.json(
@@ -92,63 +126,55 @@ export async function POST(request: NextRequest) {
         );
       }
     }
-    
+
     // Generate connection string
     config.connectionString = `postgresql://${config.username}:${config.password}@${config.host}:${config.port}/${config.database}`;
-    
-    // Save to file
-    const fs = await import('fs/promises');
-    await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
 
-    // Also update .env.local for Next.js
-    const envPath = path.join(process.cwd(), '.env.local');
-    let envContent = '';
+    // Connect to ASEMB database to save settings
+    const asembPool = new Pool({
+      host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
+      port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
+      database: process.env.ASEMB_DB_NAME || 'asemb',
+      user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
+      password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
+      max: 1
+    });
 
     try {
-      envContent = await fs.readFile(envPath, 'utf-8');
+      // Save to ASEMB settings table
+      await asembPool.query(`
+        INSERT INTO settings (key, value, category, description)
+        VALUES ('customer_database', $1, 'database', 'Customer database connection settings')
+        ON CONFLICT (key)
+        DO UPDATE SET
+          value = $1,
+          updated_at = CURRENT_TIMESTAMP
+      `, [JSON.stringify(config)]);
+
+      // Also save to file as backup
+      const fs = await import('fs/promises');
+      await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+
+      return NextResponse.json({
+        success: true,
+        message: 'Database configuration saved successfully',
+        savedTo: 'settings'
+      });
     } catch (error) {
-      // File doesn't exist, create new
+      console.error('Error saving to database:', error);
+
+      // Fallback to file only
+      const fs = await import('fs/promises');
+      await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+
+      return NextResponse.json({
+        success: true,
+        message: 'Database configuration saved to file (database save failed)',
+        savedTo: 'file'
+      });
+    } finally {
+      await asembPool.end();
     }
-    
-    // Update or add DATABASE_URL
-    const envLines = envContent.split('\n');
-    const dbUrlIndex = envLines.findIndex(line => line.startsWith('DATABASE_URL='));
-    const newDbUrl = `DATABASE_URL=${config.connectionString}`;
-    
-    if (dbUrlIndex >= 0) {
-      envLines[dbUrlIndex] = newDbUrl;
-    } else {
-      envLines.push(newDbUrl);
-    }
-    
-    // Add other DB settings
-    const dbSettings = {
-      DB_HOST: config.host,
-      DB_PORT: config.port,
-      DB_NAME: config.database,
-      DB_USER: config.username,
-      DB_PASSWORD: config.password,
-      DB_SCHEMA: config.schema,
-      DB_POOL_SIZE: config.poolSize
-    };
-    
-    for (const [key, value] of Object.entries(dbSettings)) {
-      const index = envLines.findIndex(line => line.startsWith(`${key}=`));
-      const newLine = `${key}=${value}`;
-      
-      if (index >= 0) {
-        envLines[index] = newLine;
-      } else {
-        envLines.push(newLine);
-      }
-    }
-    
-    await fs.writeFile(envPath, envLines.join('\n'), 'utf-8');
-    
-    return NextResponse.json({
-      success: true,
-      message: 'Database configuration saved successfully'
-    });
   } catch (error) {
     console.error('Error saving database config:', error);
     return NextResponse.json(

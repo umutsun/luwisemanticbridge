@@ -6,7 +6,7 @@ const pool = new Pool({
   port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
   database: process.env.ASEMB_DB_NAME || 'asemb',
   user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
-  password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'Semsiye!22'
+  password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD
 });
 
 export async function GET(request: NextRequest) {
