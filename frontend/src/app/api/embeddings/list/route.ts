@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'postgres',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'postgres',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'VavaCars2021'
+  host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
+  port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
+  database: process.env.ASEMB_DB_NAME || 'asemb',
+  user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
+  password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD || 'Semsiye!22'
 });
 
 export async function GET(request: NextRequest) {
