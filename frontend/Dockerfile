@@ -16,8 +16,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Copy jsconfig.json for path mapping
-COPY jsconfig.json ./
+# Copy tsconfig.json for TypeScript configuration
+COPY tsconfig.json ./
 
 # Environment variables
 ENV NEXT_TELEMETRY_DISABLED=1
