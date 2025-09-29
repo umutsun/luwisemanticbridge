@@ -1,4 +1,12 @@
-docker exec asemb-frontend ls -la /app/
-docker exec asemb-frontend find /app -name "server.js" -type f
-docker exec asemb-frontend ls -la /app/.next/
-docker exec asemb-frontend ls -la /app/.next/standalone/
+# On the server, run these commands:
+
+# Make the script executable
+chmod +x update-frontend.sh
+
+# Then run it
+./update-frontend.sh
+
+# Or if script still doesn't work, run manually:
+docker-compose -f docker-compose.prod.yml build frontend
+docker-compose -f docker-compose.prod.yml up -d frontend
+docker-compose -f docker-compose.prod.yml logs -f frontend

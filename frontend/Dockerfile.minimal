@@ -28,4 +28,4 @@ ENV HOSTNAME="0.0.0.0"
 EXPOSE 3000
 
 # Start the application with standalone output
-CMD ["node", ".next/standalone/frontend/server.js"]
+CMD ["npm", "start"]
