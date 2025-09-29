@@ -16,5 +16,9 @@ COPY api/ ./
 # Expose the port the app runs on
 EXPOSE 8083
 
+# Create config directory and symlink before running the app
+RUN mkdir -p /config && \
+    ln -sf /app/config/config.json /config/config.json
+
 # The command to run the application
 CMD ["node", "server.js"]
