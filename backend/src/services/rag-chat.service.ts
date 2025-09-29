@@ -309,7 +309,9 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       const formattedSources = await this.formatSources(searchResults);
 
       // 8. Get related topics (different from sources used in response)
-      const relatedTopics = await this.getRelatedTopics(message, searchResults, 7);
+      const rawRelatedTopics = await this.getRelatedTopics(message, searchResults, 7);
+      const relatedTopics = this.selectSmartQuestions(rawRelatedTopics, 7);
+
 
       return {
         response: response.content,
@@ -1182,6 +1184,30 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
         'Geçici vergi nasıl hesaplanır?'
       ];
     }
+  }
+
+  /**
+   * Select smart questions from different categories
+   */
+  selectSmartQuestions(questions: string[], count: number): string[] {
+    const categories = {
+      "KDV": questions.filter(q => q.includes("KDV")),
+      "vergi": questions.filter(q => q.includes("vergi") && !q.includes("KDV")),
+      "e-": questions.filter(q => q.includes("e-")),
+      "diğer": questions.filter(q => !q.includes("KDV") && !q.includes("vergi") && !q.includes("e-"))
+    };
+
+    const selected = [];
+    const categoryKeys = Object.keys(categories);
+
+    for (let i = 0; i < count && i < categoryKeys.length; i++) {
+      const category = categoryKeys[i];
+      if (categories[category].length > 0) {
+        selected.push(categories[category][0]);
+      }
+    }
+
+    return selected.slice(0, count);
   }
 }
 

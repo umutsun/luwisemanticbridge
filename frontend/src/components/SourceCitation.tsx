@@ -92,35 +92,20 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
   };
 
   const formatSourceTitle = (source: Source) => {
-    let title = source.title || '';
+    const cleanTitle = source.title?.replace(/ - ID: \d+/g, '').replace(/^sorucevap -\s*/, '').trim();
+    const category = source.category || '';
+    const sourceType = getTableDisplayName(source.sourceTable);
 
-    // Clean up title - remove all prefixes and IDs
-    title = title
-      .replace(/ - ID: \d+/g, '')
-      .replace(/^sorucevap -\s*/, '')
-      .replace(/^ozelgeler -\s*/, '')
-      .replace(/\s*\([^)]*\)$/, '') // Remove category suffixes like (Soru-Cevap)
-      .trim();
-
-    return title;
+    return `${cleanTitle} (${category})`;
   };
 
   const formatSourceExcerpt = (source: Source) => {
-    let excerpt = source.excerpt || source.content || '';
+    const excerpt = source.excerpt || source.content || "";
+    // İlk 100 karakter, noktadan sonra kes
+    const short = excerpt.substring(0, 100);
+    const lastDot = short.lastIndexOf(".");
 
-    // Remove "Cevap:" prefix
-    excerpt = excerpt.replace(/^Cevap:\s*/i, '');
-
-    // Clean up and limit length
-    excerpt = excerpt.trim();
-    if (excerpt.length > 80) {
-      // Try to break at word boundary
-      const truncated = excerpt.substring(0, 80);
-      const lastSpace = truncated.lastIndexOf(' ');
-      excerpt = lastSpace > 40 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
-    }
-
-    return excerpt;
+    return lastDot > 50 ? short.substring(0, lastDot + 1) : short + "...";
   };
 
   if (!sources || sources.length === 0) return null;
