@@ -44,6 +44,10 @@ POSTGRES_DB=asemb
 # Redis Settings
 REDIS_PASSWORD=your_secure_redis_password
 
+# Port Configuration (Optional - defaults will be used if not set)
+FRONTEND_PORT=3000
+BACKEND_PORT=8083
+
 # n8n Credentials
 N8N_USER=admin
 N8N_PASSWORD=your_secure_n8n_password
@@ -191,23 +195,64 @@ Access Points:
 - Database: localhost:5432
 - Redis: localhost:6379
 
-## 6. Updating the Application
+## 6. Configurable Port System
+
+The application now supports configurable ports through environment variables:
+
+### Frontend and Backend Ports
+- Edit `.env.asemb` to set custom ports:
+  ```ini
+  FRONTEND_PORT=3000  # Default: 3000
+  BACKEND_PORT=8083  # Default: 8083
+  ```
+- These ports are used by the frontend and backend containers
+- The host Nginx configuration in step 3.2 automatically forwards to the correct ports
+
+### Service Ports (Redis, PostgreSQL for migration)
+Service ports can be configured through the dashboard settings:
+1. Navigate to Settings → Service Configuration
+2. Configure Redis and PostgreSQL migration ports
+3. The application will automatically use these configurations
+
+## 7. Updating the Application
 
 To update the application after pushing changes to Git:
 
 1.  Connect to your server and navigate to the project directory.
-2.  Pull the latest code: `git pull`
-3.  Rebuild and restart the containers:
+2.  Clean up Docker space if needed (recommended for large updates):
+    ```bash
+    ./cleanup-docker.sh
+    ```
+3.  Pull the latest code: `git pull`
+4.  Rebuild and restart the containers:
     ```bash
     docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d --build
     ```
 
-## 7. Troubleshooting Common Issues
+### For Frontend Updates Only
+If only frontend changes were made, you can rebuild just the frontend:
+```bash
+docker-compose -f docker-compose.prod.yml build --no-cache frontend
+docker-compose -f docker-compose.prod.yml up -d frontend
+```
+
+## 8. Troubleshooting Common Issues
 
 - **502 Bad Gateway:** This means the host Nginx can't reach the Docker container.
   - Check if the Docker containers are running: `docker ps`.
-  - Check the logs of the `asemb-api` container for errors: `docker logs asemb-api`.
+  - Check the logs of the `asemb-frontend` container for errors: `docker logs asemb-frontend`.
   - **On CentOS/RHEL, this is often an SELinux issue.** Test by temporarily disabling it: `sudo setenforce 0`. If this works, you need to create a permanent rule: `sudo setsebool -P httpd_can_network_connect 1`.
+
+- **Disk Space Issues During Build:**
+  - Docker builds may fail with "no space left on device" error.
+  - Run the cleanup script: `./cleanup-docker.sh`
+  - This removes unused containers, images, and volumes, freeing up several GB of space.
+  - For manual cleanup: `docker system prune -a -f`
+
+- **Frontend Container "server.js not found":**
+  - This happens when Next.js standalone output isn't properly configured.
+  - Ensure you're using the updated Dockerfile.minimal
+  - Rebuild with: `docker-compose -f docker-compose.prod.yml build --no-cache frontend`
 
 - **Host Nginx Fails to Start or `asemb-nginx` container fails with `Address already in use`:**
   - This means another process is using port 80/443. This is often the host's own Nginx service.
