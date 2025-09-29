@@ -63,10 +63,10 @@ testConnection();
 
 // Database table names configuration
 export const TABLE_NAMES = {
-  SORUCEVAP: process.env.TABLE_SORUCEVAP || 'sorucevap',
-  OZELGELER: process.env.TABLE_OZELGELER || 'ozelgeler',
-  MAKALELER: process.env.TABLE_MAKALELER || 'makaleler',
-  DANISTAYKARARLARI: process.env.TABLE_DANISTAYKARARLARI || 'danistaykararlari'
+  SORUCEVAP: 'Soru-Cevap',
+  OZELGELER: 'Özelgeler',
+  MAKALELER: 'Makaleler',
+  DANISTAYKARARLARI: 'Danıştay Kararları'
 };
 
 export default pool;

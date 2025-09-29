@@ -5,21 +5,21 @@ dotenv.config();
 
 // ASEMB System Database - Our application's own database
 export const asembDbConfig = {
-  host: process.env.ASEMB_DB_HOST || 'localhost',
-  port: parseInt(process.env.ASEMB_DB_PORT || '5432'),
-  database: process.env.ASEMB_DB_NAME || 'asemb',
-  user: process.env.ASEMB_DB_USER || 'postgres',
-  password: process.env.ASEMB_DB_PASSWORD || 'postgres',
+  host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
+  database: process.env.ASEMB_DB_NAME || process.env.POSTGRES_DB || 'postgres',
+  user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
+  password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
   ssl: process.env.ASEMB_DB_SSL === 'true' ? { rejectUnauthorized: false } : false
 };
 
 // Customer Database - For migration/embedding customer's data
 export const customerDbConfig = {
-  host: process.env.CUSTOMER_DB_HOST || 'localhost',
-  port: parseInt(process.env.CUSTOMER_DB_PORT || '5432'),
-  database: process.env.CUSTOMER_DB_NAME || 'customer_db',
-  user: process.env.CUSTOMER_DB_USER || 'postgres',
-  password: process.env.CUSTOMER_DB_PASSWORD || 'postgres',
+  host: process.env.CUSTOMER_DB_HOST || process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.CUSTOMER_DB_PORT || process.env.POSTGRES_PORT || '5432'),
+  database: process.env.CUSTOMER_DB_NAME || 'rag_chatbot',
+  user: process.env.CUSTOMER_DB_USER || process.env.POSTGRES_USER || 'postgres',
+  password: process.env.CUSTOMER_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
   ssl: process.env.CUSTOMER_DB_SSL === 'true' ? { rejectUnauthorized: false } : false
 };
 

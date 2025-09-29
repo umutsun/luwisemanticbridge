@@ -1,11 +1,11 @@
 {
-  "host": "91.99.229.96",
+  "host": "localhost",
   "port": 5432,
-  "database": "asemb",
+  "database": "postgres",
   "username": "postgres",
-  "password": "Semsiye!22",
-  "schema": "rag_data",
+  "password": "",
+  "schema": "public",
   "sslMode": "disable",
   "poolSize": 20,
-  "connectionString": "postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb"
+  "connectionString": "postgresql://postgres@localhost:5432/postgres"
 }

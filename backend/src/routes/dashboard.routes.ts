@@ -86,28 +86,40 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
             database: 'rag_chatbot'
         }));
         
+        // Helper function to create display name from table name
+        const createDisplayName = (tableName: string): string => {
+            // Convert snake_case to Title Case with Turkish characters
+            return tableName
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ')
+                .replace(/Danistay/g, 'Danıştay')
+                .replace(/Ozel/g, 'Özel')
+                .replace(/Sorucevap/g, 'Soru-Cevap')
+                .replace(/Mevzuat/g, 'Mevzuat')
+                .replace(/Dokuman/g, 'Doküman');
+        };
+
         for (const table of tables) {
             try {
                 const recordCount = await ragChatbotPool.query(`SELECT COUNT(*) FROM public.${table.name}`);
                 const totalRecords = parseInt(recordCount.rows[0].count);
-                
+
                 let embeddedRecords = 0;
                 try {
-                    let sourceTableName = table.name;
-                    const tableMappings: { [key: string]: string } = {
-                      'sorucevap': 'Soru-Cevap',
-                      'makaleler': 'Makaleler',
-                      'danistaykararlari': 'Danıştay Kararları',
-                      'ozelgeler': 'Özelgeler',
-                      'chat_history': 'Sohbet Geçmişi'
-                    };
-                    sourceTableName = tableMappings[table.name] || table.name;
-                    
-                    const embeddedCount = await client.query(`SELECT COUNT(DISTINCT(source_id)) FROM unified_embeddings WHERE source_table = $1`, [sourceTableName]);
+                    // Use display name for source_table (dynamically generated)
+                    const displayName = createDisplayName(table.name);
+                    const embeddedCount = await client.query(`SELECT COUNT(DISTINCT(source_id)) FROM unified_embeddings WHERE source_table = $1`, [displayName]);
                     embeddedRecords = parseInt(embeddedCount.rows[0].count);
                 } catch (e) { /* ignore */ }
-                
-                tableInfo.push({ ...table, totalRecords, embeddedRecords });
+
+                // Update table with display name
+                const tableWithDisplay = {
+                    ...table,
+                    displayName: createDisplayName(table.name)
+                };
+
+                tableInfo.push({ ...tableWithDisplay, totalRecords, embeddedRecords });
             } catch (err) { /* ignore */ }
         }
     } finally {
@@ -711,12 +723,20 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
             let clientReleased = false;
             
             try {
-                let sourceTableName = tableName;
-                if (tableName === 'sorucevap') sourceTableName = 'Soru-Cevap';
-                else if (tableName === 'danistaykararlari') sourceTableName = 'Danıştay Kararları';
-                else if (tableName === 'makaleler') sourceTableName = 'Makaleler';
-                else if (tableName === 'ozelgeler') sourceTableName = 'Özelgeler';
-                else if (tableName === 'chat_history') sourceTableName = 'Sohbet Geçmişi';
+                // Create display name dynamically from table name
+                const createDisplayName = (tableName: string): string => {
+                    return tableName
+                        .split('_')
+                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                        .join(' ')
+                        .replace(/Danistay/g, 'Danıştay')
+                        .replace(/Ozel/g, 'Özel')
+                        .replace(/Sorucevap/g, 'Soru-Cevap')
+                        .replace(/Mevzuat/g, 'Mevzuat')
+                        .replace(/Dokuman/g, 'Doküman');
+                };
+
+                const sourceTableName = createDisplayName(tableName);
 
                 try {
                     // Get the count of already embedded records for this table

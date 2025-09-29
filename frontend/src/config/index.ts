@@ -5,12 +5,12 @@
 
 // Database Table Names
 export const TABLES = {
-  OZELGELER: 'OZELGELER',
-  DANISTAY_KARARLARI: 'DANISTAYKARARLARI',
-  MEVZUAT: 'MEVZUAT',
+  OZELGELER: 'Özelgeler',
+  DANISTAY_KARARLARI: 'Danıştay Kararları',
+  MEVZUAT: 'Mevzuat',
   MAKALELER: 'Makaleler',
   DOKUMAN: 'Dokümanlar',
-  SORU_CEVAP: 'sorucevap',
+  SORU_CEVAP: 'Soru-Cevap',
   DOCUMENTS: 'documents',
   CONVERSATIONS: 'conversations',
   MESSAGES: 'messages',

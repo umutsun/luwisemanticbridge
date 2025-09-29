@@ -6,7 +6,7 @@
     "locale": "en"
   },
   "database": {
-    "host": "91.99.229.96",
+    "host": "postgres",
     "port": 5432,
     "name": "asemb",
     "user": "postgres",
@@ -15,7 +15,7 @@
     "maxConnections": 20
   },
   "redis": {
-    "host": "localhost",
+    "host": "redis",
     "port": 6379,
     "password": "",
     "db": 0

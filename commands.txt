@@ -1,0 +1,4 @@
+docker exec asemb-frontend ls -la /app/
+docker exec asemb-frontend find /app -name "server.js" -type f
+docker exec asemb-frontend ls -la /app/.next/
+docker exec asemb-frontend ls -la /app/.next/standalone/
