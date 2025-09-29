@@ -8,7 +8,7 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
-RUN npm config set registry https://registry.npmmirror.com && npm install
+RUN npm install
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -31,7 +31,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm config set registry https://registry.npmmirror.com
+#RUN npm config set registry https://registry.npmmirror.com
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -54,4 +54,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["npx", "next", "start"]
