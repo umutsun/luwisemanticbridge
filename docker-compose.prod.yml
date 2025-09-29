@@ -95,11 +95,15 @@ services:
 
   # Frontend Application
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.simple-final
+    image: node:20-alpine
     container_name: asemb-frontend
     restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "npm install && npm run build && npx next start -p 3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=https://asemb.luwi.dev/api
