@@ -155,8 +155,8 @@ router.get('/api/v2/settings/ai', async (req: Request, res: Response) => {
       hasOpenAIKey: !!(aiSettings?.openaiApiKey || process.env.OPENAI_API_KEY),
       openaiApiBase: aiSettings?.openaiApiBase,
       hasDeepSeekKey: !!(aiSettings?.deepseekApiKey || process.env.DEEPSEEK_API_KEY),
-      hasGeminiKey: !!process.env.GEMINI_API_KEY,
-      hasClaudeKey: !!process.env.CLAUDE_API_KEY
+      hasGeminiKey: !!(aiSettings?.geminiApiKey || process.env.GEMINI_API_KEY),
+      hasClaudeKey: !!(aiSettings?.anthropicApiKey || process.env.CLAUDE_API_KEY)
     };
 
     res.json(maskedSettings);

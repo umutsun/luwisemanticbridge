@@ -10,6 +10,24 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { getAiSettings } from '../config/database.config';
 
+// Settings service for reading API keys from database
+class SettingsService {
+  constructor(private pool: Pool) {}
+
+  async getApiKey(key: string): Promise<string | null> {
+    try {
+      const result = await this.pool.query(
+        'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+        [key]
+      );
+      return result.rows[0]?.setting_value || null;
+    } catch (error) {
+      console.error(`Error fetching ${key}:`, error);
+      return null;
+    }
+  }
+}
+
 export class LightRAGService {
   private vectorStore: MemoryVectorStore | null = null;
   private embeddings: any;
@@ -19,22 +37,31 @@ export class LightRAGService {
   private isInitialized: boolean = false;
   private currentProvider: string = 'none';
 
+  private settingsService: SettingsService;
+
   constructor(pool: Pool, redis: Redis) {
     this.pool = pool;
     this.redis = redis;
+    this.settingsService = new SettingsService(pool);
 
     // Initialize embeddings and LLM will be done in initialize() method
   }
 
   
-  private initializeLLM() {
+  private async initializeLLM() {
     // Priority order: OpenAI -> Gemini -> Deepseek -> Claude
-    
+
+    // Get API keys from database
+    const openaiKey = await this.settingsService.getApiKey('openai_api_key') || process.env.OPENAI_API_KEY;
+    const geminiKey = await this.settingsService.getApiKey('gemini_api_key') || process.env.GEMINI_API_KEY;
+    const deepseekKey = await this.settingsService.getApiKey('deepseek_api_key') || process.env.DEEPSEEK_API_KEY;
+    const anthropicKey = await this.settingsService.getApiKey('anthropic_api_key') || process.env.ANTHROPIC_API_KEY;
+
     // Try OpenAI first (primary)
-    if (process.env.OPENAI_API_KEY) {
+    if (openaiKey) {
       try {
         this.llm = new ChatOpenAI({
-          openAIApiKey: process.env.OPENAI_API_KEY,
+          openAIApiKey: openaiKey,
           modelName: 'gpt-3.5-turbo',
           temperature: 0.3,
           maxTokens: 1000
@@ -48,10 +75,10 @@ export class LightRAGService {
     }
 
     // Try Gemini as first fallback
-    if (process.env.GEMINI_API_KEY) {
+    if (geminiKey) {
       try {
         this.llm = new ChatGoogleGenerativeAI({
-          apiKey: process.env.GEMINI_API_KEY,
+          apiKey: geminiKey,
           model: 'gemini-pro',
           temperature: 0.3,
           maxOutputTokens: 1000
@@ -65,10 +92,10 @@ export class LightRAGService {
     }
 
     // Try Deepseek as second fallback (OpenAI compatible)
-    if (process.env.DEEPSEEK_API_KEY) {
+    if (deepseekKey) {
       try {
         this.llm = new ChatOpenAI({
-          openAIApiKey: process.env.DEEPSEEK_API_KEY,
+          openAIApiKey: deepseekKey,
           modelName: 'deepseek-chat',
           temperature: 0.3,
           maxTokens: 1000,
@@ -85,10 +112,10 @@ export class LightRAGService {
     }
 
     // Try Claude as last fallback
-    if (process.env.CLAUDE_API_KEY) {
+    if (anthropicKey) {
       try {
         this.llm = new ChatAnthropic({
-          anthropicApiKey: process.env.CLAUDE_API_KEY,
+          anthropicApiKey: anthropicKey,
           modelName: 'claude-3-haiku-20240307',
           temperature: 0.3,
           maxTokens: 1000
@@ -116,7 +143,7 @@ export class LightRAGService {
       await this.initializeEmbeddings();
 
       // Initialize LLM
-      this.initializeLLM();
+      await this.initializeLLM();
 
       // Load documents from PostgreSQL
       const documents = await this.loadDocumentsFromDB();
