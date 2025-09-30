@@ -3,8 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
 
   // Enable standalone output for Docker deployment
-  // Temporarily disabled due to path issues
-  // output: 'standalone',
+  output: 'standalone',
 
   // Set workspace root to silence lockfile warning
   outputFileTracingRoot: require('path').join(__dirname, '../'),

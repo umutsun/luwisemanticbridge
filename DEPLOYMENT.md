@@ -1,43 +1,71 @@
-# ASEM Deployment Guide
+# Alice Semantic Bridge - Professional Deployment Guide
 
 ## Architecture Overview
 
-### Production (CentOS Server)
-- **Frontend**: Docker container (Next.js)
-- **Backend API**: Docker container (Node.js/Express)
-- **Database**: PostgreSQL with pgvector (Docker)
-- **Cache**: Redis (Docker)
-- **Proxy**: Nginx (Docker)
-- **Workflows**: n8n (Docker)
+### Production Environment
+- **Frontend**: Docker container (Next.js) - Port 443
+- **Backend API**: Docker container (Node.js/Express) - Internal Port 3000
+- **Database**: PostgreSQL with pgvector (Docker) - Port 5432
+- **Cache**: Redis (Docker) - Port 6379
+- **Proxy**: Nginx (Docker) - Ports 80/443
+- **Workflows**: n8n (Docker) - Port 5678
+- **Monitoring**: Grafana (Optional) - Port 3030
 
-### Development (Windows Local)
-- **Frontend**: Local Next.js dev server
-- **Backend API**: Local Node.js server
-- **Database**: Docker containers (PostgreSQL + Redis)
+### Development Environment
+- **Frontend**: Docker container (Next.js dev mode) - Port 3000
+- **Backend API**: Docker container (Node.js dev mode) - Port 8083
+- **Database**: PostgreSQL with pgvector (Docker) - Port 5432
+- **Cache**: Redis (Docker) - Port 6379
+- **Dev Tools**: Adminer, Redis Commander (Optional)
 
-## Quick Commands
+## Quick Start
 
-### Development (Windows)
+### Development Environment
+
 ```bash
-# Option 1: Quick start with databases in Docker
-scripts\local-dev.bat
+# 1. Setup environment
+cp .env.asemb.example .env.asemb
+# Edit .env.asemb with your configuration
 
-# Option 2: No Docker required (uses remote DB)
-scripts\dev-no-docker.bat
+# 2. Start development services
+docker compose --env-file ./.env.asemb -f docker-compose.dev.yml up --build
 
-# Option 3: Test production config locally
-scripts\prod-test.bat
+# 3. Start with optional services
+docker compose --env-file ./.env.asemb -f docker-compose.dev.yml --profile with-n8n --profile dev-tools up --build
+
+# 4. Use deployment scripts
+chmod +x scripts/deploy-dev.sh
+./scripts/deploy-dev.sh
 ```
 
-### Production (CentOS)
-```bash
-# Update and deploy
-git pull origin main
-docker-compose -f docker-compose.prod.yml down
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d --build
+### Production Environment
 
-# Check logs
-docker-compose -f docker-compose.prod.yml logs -f [service]
+```bash
+# 1. Setup SSL certificates
+mkdir -p ssl
+# Add your SSL certificates: cert.pem, key.pem, chain.pem
+
+# 2. Start production services
+docker compose --env-file ./.env.asemb -f docker-compose.prod.yml up -d
+
+# 3. Start with optional services
+docker compose --env-file ./.env.asemb -f docker-compose.prod.yml --profile with-n8n up -d
+
+# 4. Use deployment scripts
+chmod +x scripts/deploy-prod.sh
+./scripts/deploy-prod.sh
+```
+
+### Local Development (without Docker)
+
+```bash
+# PM2-based local development
+npm install -g pm2
+npm run dev
+
+# Or manual development
+cd api && npm run dev
+cd frontend && npm run dev
 ```
 
 ## Service Ports

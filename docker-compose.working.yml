@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # PostgreSQL with pgvector
   postgres:
@@ -8,7 +10,7 @@ services:
       POSTGRES_PASSWORD: asemb_password_2025
       POSTGRES_DB: asemb
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -19,17 +21,17 @@ services:
     image: redis:7-alpine
     container_name: asemb-redis
     ports:
-      - "6380:6379"
+      - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
       - asemb-network
 
-  # API Service - Directly from source
+  # API Service
   api:
     build:
       context: ./api
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     container_name: asemb-api
     environment:
       - NODE_ENV=development
@@ -37,19 +39,19 @@ services:
       - DATABASE_URL=postgresql://asemb_user:asemb_password_2025@postgres:5432/asemb
       - REDIS_HOST=redis
     ports:
-      - "8084:8083"
+      - "8083:8083"
     volumes:
       - ./api:/app
-      - ./config:/config
       - /app/node_modules
     depends_on:
       - postgres
       - redis
     networks:
       - asemb-network
-    command: npm run dev
+    # Override CMD to run as root user for development
+    command: nodemon server.js
 
-  # Frontend Service - Directly from source
+  # Frontend Service
   frontend:
     build:
       context: ./frontend
@@ -57,9 +59,9 @@ services:
     container_name: asemb-frontend
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8084
+      - NEXT_PUBLIC_API_URL=http://localhost:8083
     ports:
-      - "3005:3000"
+      - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -68,6 +70,7 @@ services:
       - api
     networks:
       - asemb-network
+    command: npm run dev
 
 volumes:
   postgres_data:

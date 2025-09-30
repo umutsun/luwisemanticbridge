@@ -16,7 +16,10 @@
         "REDIS_HOST": "127.0.0.1",
         "REDIS_PORT": "6379",
         "REDIS_DB": "2",
-        "OPENAI_API_KEY": "sk-proj-xxx"
+        "OPENAI_API_KEY": "sk-proj-xxx",
+        "ZAI_API_KEY": "bcb06fea095f40999c4324565d174046.etSFKvcMyHzlYlmn",
+        "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+        "ANTHROPIC_AUTH_TOKEN": "bcb06fea095f40999c4324565d174046.etSFKvcMyHzlYlmn"
       }
     },
     "filesystem": {

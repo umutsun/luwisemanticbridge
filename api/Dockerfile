@@ -4,14 +4,14 @@ FROM node:20-alpine
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json from the 'api' directory to the container's working directory
-COPY api/package*.json ./
+# Copy package.json and package-lock.json to the container's working directory
+COPY package*.json ./
 
 # Install production dependencies
 RUN npm install --production --legacy-peer-deps
 
-# Copy all files from the 'api' directory into the container's working directory
-COPY api/ ./
+# Copy all files to the container's working directory
+COPY . ./
 
 # Expose the port the app runs on
 EXPOSE 8083

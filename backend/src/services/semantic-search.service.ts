@@ -1,6 +1,7 @@
 import { OpenAI } from 'openai';
 import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
+import { asembPool } from '../server'; // Import asembPool
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -115,22 +116,23 @@ export class SemanticSearchService {
         const unifiedQuery = `
           SELECT
             id::text as id,
-            COALESCE(title, 'Document ' || id) as title,
-            COALESCE(source_table, 'document') as source_table,
-            id::text as source_id,
-            COALESCE(LEFT(content, 500), LEFT(excerpt, 500)) as excerpt,
+            COALESCE(metadata->>'title', 'Document ' || id) as title,
+            metadata->>'table' as source_table,
+            source_id::text as source_id,
+            LEFT(content, 500) as excerpt,
             1 as priority
           FROM unified_embeddings
-          WHERE title ILIKE $1 OR content ILIKE $1 OR excerpt ILIKE $1
+          WHERE content ILIKE $1 OR (metadata->>'title') ILIKE $1
           LIMIT $2
         `;
-        const unifiedResult = await this.pool.query(unifiedQuery, [
+        const unifiedResult = await asembPool.query(unifiedQuery, [
           `%${query}%`,
           limit
         ]);
         allResults = [...allResults, ...unifiedResult.rows];
         console.log(`Found ${unifiedResult.rows.length} results from unified_embeddings`);
       } catch (error) {
+        console.error('Error accessing unified_embeddings:', error);
         console.log('unified_embeddings table not accessible, trying other tables...');
       }
 
@@ -283,7 +285,7 @@ export class SemanticSearchService {
 
     try {
       // Check if unified_embeddings exists and has data
-      const embeddingCheck = await this.pool.query(`
+      const embeddingCheck = await asembPool.query(`
         SELECT COUNT(*) as count
         FROM unified_embeddings
         WHERE embedding IS NOT NULL
@@ -328,7 +330,7 @@ export class SemanticSearchService {
       `;
 
       console.time(queryId);
-      const result = await this.pool.query(searchQuery, [
+      const result = await asembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
         limit,
         `%${query}%`
@@ -343,8 +345,8 @@ export class SemanticSearchService {
         content: row.excerpt
       }));
     } catch (error) {
-      console.timeEnd(queryId);
       console.error('Unified semantic search error:', error);
+      console.timeEnd(queryId);
       // Fallback to keyword search instead of recursive call
       return this.keywordSearch(query, limit);
     }
@@ -355,30 +357,30 @@ export class SemanticSearchService {
    */
   async hybridSearch(query: string, limit: number = 10) {
     try {
-      // Try semantic search first
-      const semanticResults = await this.semanticSearch(query, limit);
-      
-      if (semanticResults && semanticResults.length > 0) {
-        console.log(`Found ${semanticResults.length} results via semantic search from rag_data`);
-        return semanticResults.map((result, index) => ({
+      // Try unified semantic search first, as it's the primary source
+      const unifiedResults = await this.unifiedSemanticSearch(query, limit);
+
+      if (unifiedResults && unifiedResults.length > 0) {
+        console.log(`Found ${unifiedResults.length} results via unified semantic search`);
+        return unifiedResults.map((result) => ({
           ...result,
           keyword_score: 0,
           semantic_score: result.score / 100,
           similarity_score: result.score / 100,
-          combined_score: result.score / 100
+          combined_score: result.score / 100,
         }));
       }
-      
-      // Fallback to unified semantic search if no rag_data results
-      console.log('No semantic results, falling back to unified semantic search');
-      const unifiedResults = await this.unifiedSemanticSearch(query, limit);
 
-      return unifiedResults.map((result, index) => ({
+      // Fallback to keyword search if no unified results
+      console.log('No unified semantic results, falling back to keyword search');
+      const keywordResults = await this.keywordSearch(query, limit);
+
+      return keywordResults.map((result) => ({
         ...result,
-        keyword_score: 0,
-        semantic_score: result.score / 100,
-        similarity_score: result.score / 100,
-        combined_score: result.score / 100
+        keyword_score: result.score / 100,
+        semantic_score: 0,
+        similarity_score: 0,
+        combined_score: result.score / 100,
       }));
     } catch (error) {
       console.error('Hybrid search error:', error);

@@ -12,6 +12,13 @@ class ClaudeCodeMCPServer {
     this.projectRoot = process.env.PROJECT_ROOT || 'C:/xampp/htdocs/alice-semantic-bridge';
     this.agentName = process.env.AGENT_NAME || 'claude-code';
     this.memory = null;
+    
+    // z.ai (GLM-4.5) configuration
+    this.zaiConfig = {
+      apiKey: process.env.ZAI_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://open.bigmodel.cn/api/anthropic',
+      model: 'glm-4.5'
+    };
   }
 
   async initialize() {
@@ -50,7 +57,10 @@ class ClaudeCodeMCPServer {
                 'get_context',
                 'list_agents',
                 'queue_task',
-                'get_tasks'
+                'get_tasks',
+                'zai_generate',
+                'zai_review',
+                'zai_chat'
               ]
             }
           };

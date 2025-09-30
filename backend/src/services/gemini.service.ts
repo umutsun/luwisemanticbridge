@@ -12,7 +12,7 @@ interface ChatMessage {
 
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
-  private model: string = 'gemini-1.5-flash'; // Use 1.5 Flash model for better compatibility
+  private model: string = 'gemini-2.0-flash-exp'; // Use the latest working model
   private initialized: boolean = false;
   private defaultMaxTokens: number = 4096;
   private apiKey: string | null = null;
@@ -81,57 +81,55 @@ export class GeminiService {
     systemPrompt?: string,
     maxTokens?: number
   ) {
-    if (!this.isAvailable()) {
-      throw new Error('Gemini API not available');
+    if (!this.apiKey) {
+      throw new Error('Gemini API key not available');
     }
 
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+
     try {
-      // Get the generative model
-      const model = this.genAI.getGenerativeModel({
-        model: this.model,
+      const fullPrompt = `${this.createSystemPrompt(context, systemPrompt)}\n\nKullanıcı Sorusu: ${query}`;
+      
+      const requestBody = {
+        contents: [{
+          parts: [{ text: fullPrompt }]
+        }],
         generationConfig: {
           temperature: temperature,
           topP: 0.8,
           topK: 40,
           maxOutputTokens: maxTokens || this.defaultMaxTokens,
         }
-      });
+      };
 
-      // Start a chat session
-      const chat = model.startChat({
-        history: this.formatHistory(history),
-        generationConfig: {
-          temperature: temperature,
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify(requestBody),
       });
 
-      // Create the prompt with context
-      const finalSystemPrompt = this.createSystemPrompt(context, systemPrompt);
-      const fullPrompt = `${finalSystemPrompt}\n\nKullanıcı Sorusu: ${query}`;
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Gemini API fetch error:', errorData);
+        throw new Error(`Gemini API request failed with status ${response.status}: ${errorData.error?.message || 'Unknown error'}`);
+      }
 
-      // Generate response
-      const result = await chat.sendMessage(fullPrompt);
-      const response = await result.response;
+      const responseData = await response.json();
+      const content = responseData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
       return {
-        content: response.text(),
+        content: content,
         model: this.model,
         usage: {
-          promptTokens: 0, // Gemini doesn't provide token counts in free tier
+          promptTokens: 0,
           completionTokens: 0,
           totalTokens: 0
         }
       };
     } catch (error: any) {
       console.error('Gemini API error:', error);
-
-      // Handle specific error cases
-      if (error.message?.includes('API_KEY_INVALID')) {
-        throw new Error('Invalid Gemini API key');
-      } else if (error.message?.includes('QUOTA_EXCEEDED')) {
-        throw new Error('Gemini API quota exceeded');
-      }
-
       throw new Error(`Gemini API error: ${error.message}`);
     }
   }
@@ -214,6 +212,7 @@ ${context}`;
     if (!this.isAvailable()) return false;
 
     try {
+      if (!this.genAI) return false;
       const model = this.genAI.getGenerativeModel({ model: this.model });
       const result = await model.generateContent("Test");
       return !!result.response;

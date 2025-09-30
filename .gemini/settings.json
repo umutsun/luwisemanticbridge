@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "alice-shell-bridge": {
+      "command": "node",
+      "args": [
+        "C:/mcp-servers/alice-shell-bridge/index.js"
+      ]
+    },
+    "asb-cli": {
+      "command": "node",
+      "args": [
+        "C:/mcp-servers/asb-cli/index.js"
+      ]
+    }
+  }
+}

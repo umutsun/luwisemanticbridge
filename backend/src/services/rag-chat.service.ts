@@ -67,6 +67,7 @@ interface ChatOptions {
   useLocalDb?: boolean;
   language?: string;
   responseStyle?: string;
+  maxTokens?: number;
 }
 
 export class RAGChatService {
@@ -619,7 +620,7 @@ SORU:
 [içeriğe özgü spesifik soru]
 `;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -718,7 +719,7 @@ SORU:
 
           case 'claude':
             if (claudeService.isAvailable()) {
-              response = await claudeService.generateResponse(query, context, history, temperature, options.systemPrompt, maxTokens);
+              response = await claudeService.generateResponse(query, context, history, options.systemPrompt, maxTokens);
               successfulProvider = 'Claude';
               console.log('✅ Claude successful');
             } else {

@@ -325,7 +325,7 @@ router.post('/chat', async (req: Request, res: Response) => {
         response = completion.content[0].type === 'text' ? completion.content[0].text : '';
       } else if (provider === 'gemini' && settings.gemini_api_key) {
         const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
-        const model = genAI.getGenerativeModel({ model: settings.gemini_model || 'gemini-pro' });
+        const model = genAI.getGenerativeModel({ model: settings.gemini_model || 'gemini-1.5-pro' });
         const result = await model.generateContent(fullPrompt);
         response = result.response.text();
       }
@@ -361,7 +361,7 @@ router.post('/chat', async (req: Request, res: Response) => {
             break;
           } else if (fallback === 'gemini' && settings.gemini_api_key) {
             const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
-            const model = genAI.getGenerativeModel({ model: settings.gemini_model || 'gemini-pro' });
+            const model = genAI.getGenerativeModel({ model: settings.gemini_model || 'gemini-1.5-pro' });
             const result = await model.generateContent(fullPrompt);
             response = result.response.text();
             break;
@@ -643,7 +643,7 @@ router.get('/prompts', async (req: Request, res: Response) => {
     const result = await asembPool.query(`
       SELECT setting_key, setting_value
       FROM chatbot_settings
-      WHERE setting_key IN ('system_prompt', 'temperature', 'max_tokens', 'prompts_config')
+      WHERE setting_key IN ('system_prompt', 'llmSettings.temperature', 'llmSettings.maxTokens', 'prompts_config', 'llmSettings.systemPrompt')
     `);
 
     const settings: { [key: string]: any } = {
@@ -653,10 +653,16 @@ router.get('/prompts', async (req: Request, res: Response) => {
     };
 
     result.rows.forEach(row => {
-      if (row.setting_key === 'temperature' || row.setting_key === 'max_tokens') {
-        settings[row.setting_key] = parseFloat(row.setting_value);
-      } else {
-        settings[row.setting_key] = row.setting_value;
+      if (row.setting_key === 'llmSettings.temperature') {
+        settings.temperature = parseFloat(row.setting_value);
+      } else if (row.setting_key === 'llmSettings.maxTokens') {
+        settings.max_tokens = parseFloat(row.setting_value);
+      } else if (row.setting_key === 'llmSettings.systemPrompt') {
+        settings.system_prompt = row.setting_value;
+      } else if (row.setting_key === 'system_prompt') {
+        settings.system_prompt = row.setting_value;
+      } else if (row.setting_key === 'prompts_config') {
+        settings.prompts_config = row.setting_value;
       }
     });
 
@@ -677,11 +683,12 @@ router.get('/prompts', async (req: Request, res: Response) => {
         name: 'System Prompt',
         content: settings.system_prompt,
         temperature: settings.temperature,
-        maxTokens: settings.maxTokens,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }];
+        maxTokens: settings.max_tokens,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }];
+    }
 
     res.json({ prompts });
   } catch (error) {

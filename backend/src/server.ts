@@ -34,6 +34,8 @@ import authRoutes from './routes/auth.routes';
 import usersRoutes from './routes/users.routes';
 import embeddingHistoryRoutes from './routes/embedding-history.routes';
 import embeddingCleanupRoutes from './routes/embedding-cleanup.routes';
+import aiSettingsRoutes from './routes/ai-settings.routes';
+import aiSettingsRoutes from './routes/ai-settings.routes';
 
 // Load environment variables
 dotenv.config();
@@ -166,6 +168,8 @@ app.use(API.ENDPOINTS.V2.AUTH, authRoutes);
 app.use(API.ENDPOINTS.V2.USERS, usersRoutes);
 app.use('/api/v2/embedding-history', embeddingHistoryRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
+app.use('/api/v2/ai', aiSettingsRoutes);
+app.use('/api/v2/ai', aiSettingsRoutes);
 
 // Base route
 app.get('/api/v2', (req: Request, res: Response) => {

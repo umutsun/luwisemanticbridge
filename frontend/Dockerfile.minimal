@@ -1,31 +1,40 @@
-# Minimal single-stage Dockerfile for Next.js
-FROM node:20-alpine
-
-# Install dependencies
-RUN apk add --no-cache libc6-compat
-
+# Stage 1: Builder - Installs all dependencies and builds the app
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies for the build)
+RUN npm install
 
-# Copy source code
+# Copy the rest of the source code
 COPY . .
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+# Stage 2: Runner - Creates a lean production image
+FROM node:20-alpine AS runner
+WORKDIR /app
 
-# Expose port
+# Set NODE_ENV to production
+ENV NODE_ENV=production
+
+# Copy production dependencies from the builder stage
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+
+# Copy the standalone Next.js server output
+COPY --from=builder /app/.next/standalone ./
+
+# Copy the static assets
+COPY --from=builder /app/.next/static ./.next/static
+
+# Expose the port the app runs on
 EXPOSE 3000
 
-# Start the application with standalone output
-CMD ["npm", "start"]
+# The command to run the application
+# Note: The standalone output creates a server.js file in the root of the standalone directory
+CMD ["node", "server.js"]

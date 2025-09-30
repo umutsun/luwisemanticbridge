@@ -12,8 +12,16 @@ class ClaudeAgent {
       'code-review',
       'documentation',
       'system-integration',
-      'mcp-coordination'
+      'mcp-coordination',
+      'glm-4.5-integration'
     ];
+    
+    // z.ai (GLM-4.5) configuration
+    this.zaiConfig = {
+      apiKey: process.env.ZAI_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
+      baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://open.bigmodel.cn/api/anthropic',
+      model: 'glm-4.5'
+    };
   }
 
   async initialize() {
@@ -173,6 +181,100 @@ class ClaudeAgent {
       console.log(`[CLAUDE] Context retrieved: ${key}`, context);
       return context;
     }
+  }
+
+  // z.ai (GLM-4.5) integration methods
+  async callZAI(prompt, options = {}) {
+    if (!this.zaiConfig.apiKey) {
+      throw new Error('ZAI_API_KEY or ANTHROPIC_AUTH_TOKEN not configured');
+    }
+    
+    const requestData = {
+      model: this.zaiConfig.model,
+      max_tokens: options.maxTokens || 4096,
+      temperature: options.temperature || 0.7,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
+    };
+    
+    try {
+      const response = await fetch(`${this.zaiConfig.baseUrl}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.zaiConfig.apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(requestData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`z.ai API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      return {
+        success: true,
+        content: data.content[0].text,
+        usage: data.usage,
+        model: data.model
+      };
+    } catch (error) {
+      console.error('[CLAUDE] z.ai API call failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+  
+  // Generate code using GLM-4.5
+  async generateCodeWithGLM(description, language = 'javascript') {
+    const prompt = `Generate ${language} code for the following requirement:\n\n${description}\n\nPlease provide clean, well-commented code that follows best practices.`;
+    
+    const result = await this.callZAI(prompt, {
+      maxTokens: 2048,
+      temperature: 0.3
+    });
+    
+    if (result.success) {
+      // Store the generated code in shared memory
+      await this.memory.setContext(`glm-generated:${Date.now()}`, {
+        type: 'code-generation',
+        language,
+        description,
+        code: result.content,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return result;
+  }
+  
+  // Review code using GLM-4.5
+  async reviewCodeWithGLM(filePath, content) {
+    const prompt = `Please review the following code from file ${filePath}:\n\n\`\`\`\n${content}\n\`\`\`\n\nProvide a detailed code review including:\n1. Code quality assessment\n2. Potential bugs or issues\n3. Performance optimizations\n4. Security considerations\n5. Best practice recommendations`;
+    
+    const result = await this.callZAI(prompt, {
+      maxTokens: 2048,
+      temperature: 0.5
+    });
+    
+    if (result.success) {
+      // Store the review in shared memory
+      await this.memory.setContext(`glm-review:${filePath}`, {
+        type: 'code-review',
+        filePath,
+        review: result.content,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    return result;
   }
 
   // Cleanup

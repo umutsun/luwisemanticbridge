@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: asemb-postgres
+    environment:
+      POSTGRES_USER: asemb_user
+      POSTGRES_PASSWORD: asemb_password_2025
+      POSTGRES_DB: asemb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asemb_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asemb-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: asemb-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - asemb-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  asemb-network:
+    driver: bridge
