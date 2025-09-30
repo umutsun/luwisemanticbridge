@@ -79,7 +79,7 @@ export class LightRAGService {
       try {
         this.llm = new ChatGoogleGenerativeAI({
           apiKey: geminiKey,
-          model: 'gemini-pro',
+          model: 'gemini-1.5-flash',
           temperature: 0.3,
           maxOutputTokens: 1000
         });

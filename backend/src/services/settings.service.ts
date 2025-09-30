@@ -94,10 +94,10 @@ export class SettingsService {
         if (config.redis) {
           await client.query(`
             INSERT INTO settings (key, value, category, description)
-            VALUES ('redis_config', $1, 'ports', 'Redis connection configuration')
+            VALUES ('redis_config', $1::jsonb, 'ports', 'Redis connection configuration')
             ON CONFLICT (key)
             DO UPDATE SET
-              value = $1,
+              value = $1::jsonb,
               updated_at = CURRENT_TIMESTAMP
           `, [JSON.stringify(config.redis)]);
         }
@@ -105,10 +105,10 @@ export class SettingsService {
         if (config.postgres) {
           await client.query(`
             INSERT INTO settings (key, value, category, description)
-            VALUES ('postgres_config', $1, 'ports', 'PostgreSQL connection configuration for migration')
+            VALUES ('postgres_config', $1::jsonb, 'ports', 'PostgreSQL connection configuration for migration')
             ON CONFLICT (key)
             DO UPDATE SET
-              value = $1,
+              value = $1::jsonb,
               updated_at = CURRENT_TIMESTAMP
           `, [JSON.stringify(config.postgres)]);
         }
@@ -116,10 +116,10 @@ export class SettingsService {
         if (config.n8n) {
           await client.query(`
             INSERT INTO settings (key, value, category, description)
-            VALUES ('n8n_config', $1, 'ports', 'n8n service configuration')
+            VALUES ('n8n_config', $1::jsonb, 'ports', 'n8n service configuration')
             ON CONFLICT (key)
             DO UPDATE SET
-              value = $1,
+              value = $1::jsonb,
               updated_at = CURRENT_TIMESTAMP
           `, [JSON.stringify(config.n8n)]);
         }
@@ -127,10 +127,10 @@ export class SettingsService {
         if (config.grafana) {
           await client.query(`
             INSERT INTO settings (key, value, category, description)
-            VALUES ('grafana_config', $1, 'ports', 'Grafana service configuration')
+            VALUES ('grafana_config', $1::jsonb, 'ports', 'Grafana service configuration')
             ON CONFLICT (key)
             DO UPDATE SET
-              value = $1,
+              value = $1::jsonb,
               updated_at = CURRENT_TIMESTAMP
           `, [JSON.stringify(config.grafana)]);
         }
@@ -180,12 +180,12 @@ export class SettingsService {
       try {
         await client.query(`
           INSERT INTO settings (key, value, category, description)
-          VALUES ($1, $2, $3, $4)
+          VALUES ($1, $2::jsonb, $3, $4)
           ON CONFLICT (key)
           DO UPDATE SET
-            value = $2,
+            value = $2::jsonb,
             updated_at = CURRENT_TIMESTAMP
-        `, [keyName, keyValue, category, `API key for ${keyName}`]);
+        `, [keyName, JSON.stringify(keyValue), category, `API key for ${keyName}`]);
 
         return { success: true };
       } finally {

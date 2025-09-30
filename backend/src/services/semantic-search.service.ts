@@ -102,87 +102,89 @@ export class SemanticSearchService {
   }
 
   /**
-   * Perform keyword search on multiple tables
+   * Perform keyword search on available tables
    */
   async keywordSearch(query: string, limit: number = 10) {
     const queryId = `keywordSearch_${query.substring(0, 10)}_${Date.now()}`;
     console.time(queryId);
     try {
-      // Search in SORUCEVAP table (from customer database)
-      let sorucevapResults = [];
+      let allResults = [];
+
+      // Try to search in unified_embeddings table first
       try {
-        const sorucevapQuery = `
+        const unifiedQuery = `
           SELECT
             id::text as id,
-            'SORUCEVAP - ' || COALESCE(LEFT(question, 100), '') as title,
-            'sorucevap' as source_table,
+            COALESCE(title, 'Document ' || id) as title,
+            COALESCE(source_table, 'document') as source_table,
             id::text as source_id,
-            LEFT(answer, 500) as excerpt,
+            COALESCE(LEFT(content, 500), LEFT(excerpt, 500)) as excerpt,
             1 as priority
-          FROM ${TABLE_NAMES.SORUCEVAP}
-          WHERE question ILIKE $1 OR answer ILIKE $1
+          FROM unified_embeddings
+          WHERE title ILIKE $1 OR content ILIKE $1 OR excerpt ILIKE $1
           LIMIT $2
         `;
-        const sorucevapResult = await this.customerPool.query(sorucevapQuery, [
+        const unifiedResult = await this.pool.query(unifiedQuery, [
           `%${query}%`,
           limit
         ]);
-        sorucevapResults = sorucevapResult.rows;
+        allResults = [...allResults, ...unifiedResult.rows];
+        console.log(`Found ${unifiedResult.rows.length} results from unified_embeddings`);
       } catch (error) {
-        console.log('SORUCEVAP table not accessible, skipping...');
+        console.log('unified_embeddings table not accessible, trying other tables...');
       }
 
-      // Search in other tables
-      const searchQuery = `
-        WITH combined_results AS (
-          -- No SORUCEVAP results to include (already handled separately)
+      // If no results, try scraped_data table
+      if (allResults.length === 0) {
+        try {
+          const scrapedQuery = `
+            SELECT
+              id::text as id,
+              COALESCE(title, 'Document ' || id) as title,
+              'scraped_data' as source_table,
+              id::text as source_id,
+              COALESCE(LEFT(content, 500), LEFT(description, 500)) as excerpt,
+              2 as priority
+            FROM scraped_data
+            WHERE title ILIKE $1 OR content ILIKE $1 OR description ILIKE $1
+            LIMIT $2
+          `;
+          const scrapedResult = await this.pool.query(scrapedQuery, [
+            `%${query}%`,
+            limit
+          ]);
+          allResults = [...allResults, ...scrapedResult.rows];
+          console.log(`Found ${scrapedResult.rows.length} results from scraped_data`);
+        } catch (error) {
+          console.log('scraped_data table not accessible...');
+        }
+      }
 
-          SELECT
-            id::text as id,
-            'ÖZELGE - ' || COALESCE(LEFT(subject, 100), '') as title,
-            'ozelgeler' as source_table,
-            id::text as source_id,
-            LEFT(content, 500) as excerpt,
-            2 as priority
-          FROM ${TABLE_NAMES.OZELGELER}
-          WHERE subject ILIKE $1 OR content ILIKE $1
-          
-          UNION ALL
-          
-          SELECT 
-            id::text as id,
-            'MAKALE - ' || COALESCE(LEFT(title, 100), '') as title,
-            'makaleler' as source_table,
-            id::text as source_id,
-            LEFT(content, 500) as excerpt,
-            3 as priority
-          FROM ${TABLE_NAMES.MAKALELER}
-          WHERE title ILIKE $1 OR content ILIKE $1
-          
-          UNION ALL
-          
-          SELECT 
-            id::text as id,
-            'DANIŞTAY - ' || COALESCE(LEFT(subject, 100), '') as title,
-            'danistay' as source_table,
-            id::text as source_id,
-            LEFT(content, 500) as excerpt,
-            4 as priority
-          FROM ${TABLE_NAMES.DANISTAYKARARLARI}
-          WHERE subject ILIKE $1 OR content ILIKE $1
-        )
-        SELECT * FROM combined_results
-        ORDER BY priority, id DESC
-        LIMIT $2
-      `;
-
-      const result = await this.pool.query(searchQuery, [
-        `%${query}%`,
-        limit
-      ]);
-
-      // Combine results
-      const allResults = [...sorucevapResults, ...result.rows];
+      // If still no results, try documents table
+      if (allResults.length === 0) {
+        try {
+          const documentsQuery = `
+            SELECT
+              id::text as id,
+              COALESCE(title, 'Document ' || id) as title,
+              'documents' as source_table,
+              id::text as source_id,
+              COALESCE(LEFT(content, 500), LEFT(summary, 500)) as excerpt,
+              3 as priority
+            FROM documents
+            WHERE title ILIKE $1 OR content ILIKE $1 OR summary ILIKE $1
+            LIMIT $2
+          `;
+          const documentsResult = await this.pool.query(documentsQuery, [
+            `%${query}%`,
+            limit
+          ]);
+          allResults = [...allResults, ...documentsResult.rows];
+          console.log(`Found ${documentsResult.rows.length} results from documents`);
+        } catch (error) {
+          console.log('documents table not accessible...');
+        }
+      }
 
       console.timeEnd(queryId);
       return allResults.map(row => ({
