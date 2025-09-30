@@ -26,6 +26,10 @@ export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [searchResults, setSearchResults] = useState([]);
+  const [appConfig, setAppConfig] = useState({
+    name: 'Alice Semantic Bridge',
+    description: 'AI-Powered Knowledge Management System'
+  });
   const [stats, setStats] = useState({
     documents: 220,
     entities: 1760,
@@ -35,6 +39,17 @@ export default function Dashboard() {
 
   useEffect(() => {
     setMounted(true);
+    
+    // Load application configuration
+    fetch('/config/asb-config.json')
+      .then(res => res.json())
+      .then(config => {
+        if (config.app) {
+          setAppConfig(config.app);
+        }
+      })
+      .catch(err => console.error('Failed to load app config:', err));
+    
     // Fetch real stats from API
     fetch('/api/lightrag/health')
       .then(res => res.json())
@@ -59,11 +74,13 @@ export default function Dashboard() {
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-col">
               <h1 className="text-2xl font-bold text-gray-900">
-                Alice Semantic Bridge
+                {appConfig.name}
               </h1>
-              <span className="text-sm text-gray-500">v1.0.0</span>
+              <p className="text-sm text-gray-600 mt-1">
+                {appConfig.description}
+              </p>
             </div>
             <div className="flex items-center space-x-4">
               <span className="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">

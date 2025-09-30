@@ -1,6 +1,44 @@
 document.addEventListener('DOMContentLoaded', () => {
     const API_BASE_URL = 'http://localhost:8083'; // Updated API port
 
+    // --- Application Configuration ---
+    let appConfig = {
+        name: 'Alice Semantic Bridge',
+        description: 'AI-Powered Knowledge Management System'
+    };
+
+    // Load application configuration
+    async function loadAppConfig() {
+        try {
+            const response = await fetch('/config/asb-config.json');
+            if (response.ok) {
+                const config = await response.json();
+                if (config.app) {
+                    appConfig = config.app;
+                    updateHeaderInfo();
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load app config:', error);
+            // Use default values
+            updateHeaderInfo();
+        }
+    }
+
+    // Update header with app information
+    function updateHeaderInfo() {
+        const headerTitle = document.querySelector('.main-header h1');
+        const headerDescription = document.querySelector('.header-description');
+        
+        if (headerTitle) {
+            headerTitle.textContent = `🌉 ${appConfig.name} Control Center`;
+        }
+        
+        if (headerDescription) {
+            headerDescription.textContent = appConfig.description;
+        }
+    }
+
     // --- Element Selections ---
     const apiStatus = document.getElementById('api-status')?.querySelector('.status-indicator');
     const redisStatus = document.getElementById('redis-status')?.querySelector('.status-indicator');
@@ -156,7 +194,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initial Load and Periodic Refresh ---
     addLogEntry({ timestamp: new Date(), message: 'Dashboard initialized. Fetching data...' });
-    fetchAndUpdateDashboard(); // Initial fetch
+    
+    // Load application configuration first
+    loadAppConfig().then(() => {
+        fetchAndUpdateDashboard(); // Initial fetch after config is loaded
+    });
+    
     setInterval(fetchAndUpdateDashboard, 5000); // Refresh every 5 seconds
 });
 
