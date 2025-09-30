@@ -70,7 +70,7 @@ services:
     container_name: asemb-api
     restart: unless-stopped
     env_file:
-      - .env.asemb
+      - .env.asemb.production
     environment:
       - BACKEND_PORT=${BACKEND_PORT:-8083}
     volumes:

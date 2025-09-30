@@ -10,6 +10,16 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const chatRouter = require('./chat-router');
+const dotenv = require('dotenv');
+
+// Load environment variables from .env.asemb
+const envPath = path.resolve(__dirname, '../.env.asemb');
+if (fs.existsSync(envPath)) {
+    console.log('Loading environment from:', envPath);
+    dotenv.config({ path: envPath });
+} else {
+    console.log('No .env.asemb file found, using process.env');
+}
 
 const app = express();
 const server = http.createServer(app);
