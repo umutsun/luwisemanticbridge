@@ -7,7 +7,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const router = Router();
 
 // Database connections
-const asbPool = new Pool({
+const asembPool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb'
 });
 
@@ -47,7 +47,7 @@ const TURKISH_LAW_TABLES = {
 router.get('/config', async (req: Request, res: Response) => {
   try {
     // Get settings from database
-    const settingsResult = await asbPool.query(`
+    const settingsResult = await asembPool.query(`
       SELECT setting_key, setting_value
       FROM chatbot_settings
       WHERE setting_key IN ('ai_provider', 'openai_api_key', 'claude_api_key', 'gemini_api_key',
@@ -155,7 +155,7 @@ router.put('/config', async (req: Request, res: Response) => {
     }
     
     for (const update of updates) {
-      await asbPool.query(
+      await asembPool.query(
         `INSERT INTO chatbot_settings (setting_key, setting_value) 
          VALUES ($1, $2) 
          ON CONFLICT (setting_key) 
@@ -181,7 +181,7 @@ router.post('/search', async (req: Request, res: Response) => {
     }
     
     // Get API key from settings
-    const apiKeyResult = await asbPool.query(
+    const apiKeyResult = await asembPool.query(
       "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'openai_api_key'"
     );
     const apiKey = apiKeyResult.rows[0]?.setting_value || process.env.OPENAI_API_KEY;
@@ -255,7 +255,7 @@ router.post('/chat', async (req: Request, res: Response) => {
     }
     
     // Get settings
-    const settingsResult = await asbPool.query(`
+    const settingsResult = await asembPool.query(`
       SELECT setting_key, setting_value 
       FROM chatbot_settings 
       WHERE setting_key IN ('ai_provider', 'openai_api_key', 'claude_api_key', 
@@ -378,11 +378,11 @@ router.post('/chat', async (req: Request, res: Response) => {
     
     // Save conversation if needed
     if (conversationId) {
-      await asbPool.query(
+      await asembPool.query(
         `INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)`,
         [conversationId, 'user', message]
       );
-      await asbPool.query(
+      await asembPool.query(
         `INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)`,
         [conversationId, 'assistant', response]
       );
@@ -443,44 +443,66 @@ router.post('/test-provider', async (req: Request, res: Response) => {
 // Prompts management
 router.post('/prompts', async (req: Request, res: Response) => {
   try {
-    const { prompt, temperature = 0.1, maxTokens = 2048, name = 'Custom System Prompt' } = req.body;
+    const { prompts } = req.body;
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
+    if (!prompts || !Array.isArray(prompts)) {
+      return res.status(400).json({ error: 'Prompts array is required' });
     }
 
-    // Save to chatbot_settings
-    await asbPool.query(
+    // Find the active prompt
+    const activePrompt = prompts.find(p => p.isActive);
+
+    if (!activePrompt || !activePrompt.content) {
+      return res.status(400).json({ error: 'Active prompt with content is required' });
+    }
+
+    // Save system prompt
+    await asembPool.query(
       `INSERT INTO chatbot_settings (setting_key, setting_value)
        VALUES ('system_prompt', $1)
        ON CONFLICT (setting_key)
        DO UPDATE SET setting_value = $1`,
-      [prompt]
+      [activePrompt.content]
     );
 
-    // Save temperature and max tokens
-    await asbPool.query(
-      `INSERT INTO chatbot_settings (setting_key, setting_value)
-       VALUES ('temperature', $1)
-       ON CONFLICT (setting_key)
-       DO UPDATE SET setting_value = $1`,
-      [temperature.toString()]
-    );
+    // Save temperature and max tokens from active prompt
+    if (activePrompt.temperature !== undefined) {
+      await asembPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value)
+         VALUES ('temperature', $1)
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $1`,
+        [activePrompt.temperature.toString()]
+      );
+    }
 
-    await asbPool.query(
+    if (activePrompt.maxTokens !== undefined) {
+      await asembPool.query(
+        `INSERT INTO chatbot_settings (setting_key, setting_value)
+         VALUES ('max_tokens', $1)
+         ON CONFLICT (setting_key)
+         DO UPDATE SET setting_value = $1`,
+        [activePrompt.maxTokens.toString()]
+      );
+    }
+
+    // Save all prompts configuration as JSON for future reference
+    await asembPool.query(
       `INSERT INTO chatbot_settings (setting_key, setting_value)
-       VALUES ('max_tokens', $1)
+       VALUES ('prompts_config', $1)
        ON CONFLICT (setting_key)
        DO UPDATE SET setting_value = $1`,
-      [maxTokens.toString()]
+      [JSON.stringify(prompts)]
     );
 
     res.json({
       success: true,
-      message: 'Prompt saved successfully',
-      prompt,
-      temperature,
-      maxTokens
+      message: 'Prompts saved successfully',
+      activePrompt: {
+        content: activePrompt.content,
+        temperature: activePrompt.temperature,
+        maxTokens: activePrompt.maxTokens
+      }
     });
   } catch (error) {
     console.error('Save prompt error:', error);
@@ -508,7 +530,7 @@ router.post('/related-topics', async (req: Request, res: Response) => {
     // Check database setting if not set in environment
     if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
       try {
-        const settingResult = await asbPool.query(
+        const settingResult = await asembPool.query(
           "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
         );
         useUnifiedEmbeddings = settingResult.rows[0]?.setting_value === 'true';
@@ -618,10 +640,10 @@ router.post('/related-topics', async (req: Request, res: Response) => {
 router.get('/prompts', async (req: Request, res: Response) => {
   try {
     // Get current system prompt and settings
-    const result = await asbPool.query(`
+    const result = await asembPool.query(`
       SELECT setting_key, setting_value
       FROM chatbot_settings
-      WHERE setting_key IN ('system_prompt', 'temperature', 'max_tokens')
+      WHERE setting_key IN ('system_prompt', 'temperature', 'max_tokens', 'prompts_config')
     `);
 
     const settings: { [key: string]: any } = {
@@ -638,13 +660,24 @@ router.get('/prompts', async (req: Request, res: Response) => {
       }
     });
 
-    // Create a prompt object for the frontend
-    const prompts = [{
-      id: '1',
-      name: 'Active System Prompt',
-      prompt: settings.system_prompt,
-      temperature: settings.temperature,
-      maxTokens: settings.maxTokens,
+    // Try to get saved prompts configuration first
+    let prompts = [];
+    if (settings.prompts_config) {
+      try {
+        prompts = JSON.parse(settings.prompts_config);
+      } catch (error) {
+        console.warn('Failed to parse prompts_config, using default format');
+      }
+    }
+
+    // If no prompts config, create from current settings
+    if (prompts.length === 0) {
+      prompts = [{
+        id: '1',
+        name: 'System Prompt',
+        content: settings.system_prompt,
+        temperature: settings.temperature,
+        maxTokens: settings.maxTokens,
       isActive: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -663,7 +696,7 @@ router.put('/config', async (req: Request, res: Response) => {
     const { aiProvider, fallbackEnabled } = req.body;
 
     // Update settings in database
-    await asbPool.query(`
+    await asembPool.query(`
       INSERT INTO chatbot_settings (setting_key, setting_value, updated_at)
       VALUES
         ('ai_provider', $1, NOW()),
@@ -707,7 +740,7 @@ router.get('/ai/settings', async (req: Request, res: Response) => {
       'gemini_model'
     ];
 
-    const result = await asbPool.query(
+    const result = await asembPool.query(
       `SELECT setting_key, setting_value
        FROM chatbot_settings
        WHERE setting_key = ANY($1)`,
@@ -826,7 +859,7 @@ router.post('/ai/settings', async (req: Request, res: Response) => {
     }
 
     for (const update of updates) {
-      await asbPool.query(
+      await asembPool.query(
         `INSERT INTO chatbot_settings (setting_key, setting_value)
          VALUES ($1, $2)
          ON CONFLICT (setting_key)
