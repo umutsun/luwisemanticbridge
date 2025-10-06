@@ -401,7 +401,7 @@ export class SemanticSearchService {
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) > 0.1  -- 10% minimum similarity threshold (adjusted from 30%)
+          AND (1 - (ue.embedding <=> $1::vector)) > 0.001  -- 0.1% minimum similarity threshold (very low to get more results)
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
@@ -481,7 +481,7 @@ export class SemanticSearchService {
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) > 0.1  -- 10% minimum similarity threshold (adjusted from 30%)
+          AND (1 - (ue.embedding <=> $1::vector)) > 0.001  -- 0.1% minimum similarity threshold (very low to get more results)
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
