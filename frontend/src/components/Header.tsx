@@ -321,31 +321,31 @@ export default function Header({ user, onLogout }: HeaderProps) {
                   } animate-pulse`} />
                 </div>
 
-                {/* Service status dots */}
+                {/* Service status text */}
                 <div className="flex items-center justify-around p-3 bg-muted/30 rounded-lg">
                   <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
-                      systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-muted-foreground">DB</span>
+                    <span className="text-xs font-medium">DB</span>
+                    <p className="text-xs text-muted-foreground">
+                      {systemStatus?.database.connected ? 'Online' : 'Offline'}
+                    </p>
                   </div>
                   <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
-                      systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-muted-foreground">Redis</span>
+                    <span className="text-xs font-medium">Redis</span>
+                    <p className="text-xs text-muted-foreground">
+                      {systemStatus?.redis.connected ? 'Online' : 'Offline'}
+                    </p>
                   </div>
                   <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
-                      systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-muted-foreground">LLM</span>
+                    <span className="text-xs font-medium">LLM</span>
+                    <p className="text-xs text-muted-foreground">
+                      {systemStatus?.llmModel.active ? 'Online' : 'Offline'}
+                    </p>
                   </div>
                   <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
-                      systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
-                    }`} />
-                    <span className="text-xs text-muted-foreground">Embed</span>
+                    <span className="text-xs font-medium">Embed</span>
+                    <p className="text-xs text-muted-foreground">
+                      {systemStatus?.embedder.active ? 'Ready' : 'Offline'}
+                    </p>
                   </div>
                 </div>
 
@@ -463,13 +463,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                           ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
                           : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
                       }`}>
-                        <div className="flex items-center gap-2">
-                          <Database className="h-3 w-3 text-muted-foreground" />
-                          <div className={`h-1.5 w-1.5 rounded-full ${
-                            systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                        </div>
-                        <p className="text-xs font-medium mt-1">Database</p>
+                        <p className="text-xs font-medium">Database</p>
                         <p className="text-xs text-muted-foreground">
                           {systemStatus?.database.connected ? 'Connected' : 'Offline'}
                         </p>
@@ -481,13 +475,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                           ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
                           : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
                       }`}>
-                        <div className="flex items-center gap-2">
-                          <Cpu className="h-3 w-3 text-muted-foreground" />
-                          <div className={`h-1.5 w-1.5 rounded-full ${
-                            systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                        </div>
-                        <p className="text-xs font-medium mt-1">Redis</p>
+                        <p className="text-xs font-medium">Redis</p>
                         <p className="text-xs text-muted-foreground">
                           {systemStatus?.redis.connected ? 'Connected' : 'Offline'}
                         </p>
@@ -499,12 +487,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                           ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
                           : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
                       }`}>
-                        <div className="flex items-center gap-2">
-                          <div className={`h-1.5 w-1.5 rounded-full ${
-                            systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                        </div>
-                        <p className="text-xs font-medium mt-1">LLM</p>
+                        <p className="text-xs font-medium">LLM</p>
                         <p className="text-xs text-muted-foreground truncate">
                           Active
                         </p>
@@ -516,13 +499,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                           ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
                           : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
                       }`}>
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-3 w-3 text-muted-foreground" />
-                          <div className={`h-1.5 w-1.5 rounded-full ${
-                            systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                        </div>
-                        <p className="text-xs font-medium mt-1">Embeddings</p>
+                        <p className="text-xs font-medium">Embeddings</p>
                         <p className="text-xs text-muted-foreground">
                           {systemStatus?.embedder.active ? 'Ready' : 'Offline'}
                         </p>
