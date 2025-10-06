@@ -24,6 +24,22 @@ export interface ServicePortConfig {
   };
 }
 
+export interface DatabaseConfig {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  ssl?: boolean;
+}
+
+export interface RedisConfig {
+  host: string;
+  port: number;
+  db: number;
+  password?: string;
+}
+
 export class SettingsService {
   private static instance: SettingsService;
 
@@ -194,6 +210,34 @@ export class SettingsService {
     } catch (error: any) {
       logger.error(`Failed to save API key ${keyName}:`, error);
       return { success: false, error: error.message };
+    }
+  }
+
+  // Get all settings
+  async getAllSettings(): Promise<Record<string, any>> {
+    try {
+      const client = await asembPool.connect();
+
+      try {
+        // Get settings from the settings table
+        const result = await client.query(`
+          SELECT key, value FROM settings
+        `);
+
+        const settings: Record<string, any> = {};
+
+        // Process settings
+        for (const row of result.rows) {
+          settings[row.key] = row.value;
+        }
+
+        return settings;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      logger.error('Failed to get all settings:', error);
+      return {};
     }
   }
 

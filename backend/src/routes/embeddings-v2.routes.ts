@@ -80,8 +80,8 @@ const router = Router();
 // Redis client for caching
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  db: parseInt(process.env.REDIS_DB || '0')
+  port: parseInt(process.env.REDIS_PORT || '6380'),
+  db: parseInt(process.env.REDIS_DB || '2')
 });
 
 // Get source database name from settings
@@ -100,20 +100,20 @@ const sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
     connectionString: process.env.RAG_CHATBOT_DATABASE_URL
   }) :
   new Pool({
-    host: process.env.CUSTOMER_DB_HOST || 'localhost',
-    port: parseInt(process.env.CUSTOMER_DB_PORT || '5432'),
-    database: process.env.CUSTOMER_DB_NAME || 'rag_chatbot',
-    user: process.env.CUSTOMER_DB_USER || 'postgres',
-    password: process.env.CUSTOMER_DB_PASSWORD || 'postgres'
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    database: process.env.POSTGRES_DB || 'asemb',
+    user: process.env.POSTGRES_USER || 'postgres',
+    password: process.env.POSTGRES_PASSWORD || ''
   });
 
 // Target database (asemb) - where we write embeddings to
 const targetPool = new Pool({
-  host: process.env.ASEMB_DB_HOST || 'localhost',
-  port: parseInt(process.env.ASEMB_DB_PORT || '5432'),
-  database: process.env.ASEMB_DB_NAME || 'asemb',
-  user: process.env.ASEMB_DB_USER || 'postgres',
-  password: process.env.ASEMB_DB_PASSWORD || 'postgres'
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DB || 'asemb',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || ''
 });
 
 // Use targetPool for default queries (settings, migration history)
@@ -124,7 +124,7 @@ async function getApiKey(provider: string) {
   try {
     // Try to get from ASEMB settings table first
     const result = await asembPool.query(
-      `SELECT value->>'${provider}_api_key' as api_key FROM settings WHERE key = 'ai_settings'`
+      `SELECT setting_value as api_key FROM chatbot_settings WHERE setting_key = '${provider}_api_key'`
     );
 
     if (result.rows[0]?.api_key) {
@@ -134,7 +134,11 @@ async function getApiKey(provider: string) {
     // Fallback to environment variable
     return process.env[`${provider.toUpperCase()}_API_KEY`] || '';
   } catch (error) {
-    console.error(`Error fetching ${provider} API key:`, error.message);
+    if (error instanceof Error) {
+      console.error(`Error fetching ${provider} API key:`, error.message);
+    } else {
+      console.error(`An unknown error occurred while fetching ${provider} API key`);
+    }
     return process.env[`${provider.toUpperCase()}_API_KEY`] || '';
   }
 }
@@ -338,7 +342,11 @@ async function ensureEmbeddingColumn(tableName: string) {
       `ALTER TABLE public."${tableName}" ADD COLUMN IF NOT EXISTS embedding vector(1536)`
     );
   } catch (err) {
-    console.log(`Embedding column check failed for ${tableName}:`, err.message);
+    if (err instanceof Error) {
+      console.log(`Embedding column check failed for ${tableName}:`, err.message);
+    } else {
+      console.log(`An unknown error occurred during embedding column check for ${tableName}`);
+    }
   }
 }
 
@@ -803,27 +811,18 @@ router.post('/generate', async (req: Request, res: Response) => {
     if (hasProgress &&
         migrationProgress.tables &&
         migrationProgress.tables.length === tables.length &&
-        migrationProgress.tables.every(table => tables.includes(table)) &&
+        migrationProgress.tables.every((table: string) => tables.includes(table)) &&
         (migrationProgress.status === 'paused' || migrationProgress.status === 'processing')) {
       // Continue existing migration
       migrationProgress.status = 'processing';
       migrationProgress.lastHeartbeat = Date.now(); // Initialize heartbeat
       migrationProgress.workerCount = workerCount; // Update worker count when resuming
-      migrationProgress.currentTable = remainingTables[0] || tables[0]; // Set current table
-
-      // Clear any paused status in Redis
-      await redis.set('embedding:status', 'processing');
-      await saveProgressToRedis(); // Save before starting workers
-      console.log('Continuing existing migration from progress:', {
-        current: migrationProgress.current,
-        total: migrationProgress.total
-      });
-
-      // If resuming with parallel workers, we need to redistribute the tables
+      
+      let remainingTables: string[] = [];
       if (workerCount && workerCount > 1) {
         // Get all tables and determine which ones still need processing
         const allTables = migrationProgress.tables || tables;
-        const remainingTables = allTables.filter(table => {
+        remainingTables = allTables.filter((table: string) => {
           const tableProgress = migrationProgress.tableProgress[table];
           const needsProcessing = !tableProgress || tableProgress.embedded < tableProgress.total;
           console.log(`Table ${table}: progress=${tableProgress ? JSON.stringify(tableProgress) : 'none'}, needsProcessing=${needsProcessing}`);
@@ -835,6 +834,8 @@ router.post('/generate', async (req: Request, res: Response) => {
           remainingTables: remainingTables.length,
           workerCount: workerCount
         });
+        
+        migrationProgress.currentTable = remainingTables[0] || tables[0]; // Set current table AFTER declaration
 
         // Start parallel workers with remaining tables
         const workers = [];
@@ -862,7 +863,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Wait for all workers to complete
         Promise.all(workers).then(async () => {
           // Check if all tables are actually completed
-          const allTablesCompleted = remainingTables.every(table => {
+          const allTablesCompleted = remainingTables.every((table: string) => {
             const tableProgress = migrationProgress.tableProgress[table];
             return tableProgress && tableProgress.embedded >= tableProgress.total;
           });
@@ -905,6 +906,8 @@ router.post('/generate', async (req: Request, res: Response) => {
         });
 
         return res.json({ message: 'Migration resumed with parallel workers', progress: migrationProgress });
+      } else {
+        migrationProgress.currentTable = tables[0]; // Set for single worker resume
       }
     } else {
       // Start fresh migration
@@ -1140,17 +1143,17 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
 
     // For parallel processing, each worker starts from the table offset
     // and will only process batches assigned to them (based on batchOffset)
-    if (totalWorkers > 1) {
+    if ((totalWorkers ?? 1) > 1) {
       // Start from the table's current offset
       currentOffset = tableInfo.offset || 0;
 
       // If resuming, find the next available batch for this worker
       if (resume) {
         // For parallel processing, we need to find the next batch that belongs to this worker
-        const batchesPerWorker = Math.ceil(tableInfo.total / (batchSize * totalWorkers));
+        const batchesPerWorker = Math.ceil(tableInfo.total / (batchSize * (totalWorkers ?? 1)));
 
         for (let batchNum = 0; batchNum < batchesPerWorker; batchNum++) {
-          const globalBatchNum = batchNum * totalWorkers + batchOffset;
+          const globalBatchNum = batchNum * (totalWorkers ?? 1) + (batchOffset ?? 0);
           const batchStartOffset = globalBatchNum * batchSize;
 
           // Check if this batch is already processed
@@ -1186,7 +1189,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
 
       // Check if this batch belongs to this worker
       const batchIndex = Math.floor(currentOffset / batchSize);
-      if (batchIndex % totalWorkers !== batchOffset) {
+      if (batchIndex % (totalWorkers ?? 1) !== (batchOffset ?? 0)) {
         // Skip this batch, it belongs to another worker
         currentOffset += batchSize;
         continue;
@@ -1302,7 +1305,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
 
       if (uniqueTexts.length === 0) {
         console.log(`⏭️  Worker ${workerId} skipping batch - all records are duplicates`);
-        currentOffset += batchSize * totalWorkers;
+        currentOffset += batchSize * (totalWorkers ?? 1);
         continue;
       }
 
@@ -1375,7 +1378,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
       console.log(`✅ Worker ${workerId} completed batch at offset ${currentOffset}: ${successfullyEmbeddedInBatch} records`);
 
       // Move to next batch
-      currentOffset += batchSize * totalWorkers; // Skip batches belonging to other workers
+      currentOffset += batchSize * (totalWorkers ?? 1); // Skip batches belonging to other workers
     }
 
     console.log(`✅ Worker ${workerId} completed processing for table: ${table}`);
@@ -2088,7 +2091,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
           }
 
           // Map method to model
-          const modelMap = {
+          const modelMap: { [key: string]: string } = {
             'openai-text-embedding-3-large': 'text-embedding-3-large',
             'openai-text-embedding-3-small': 'text-embedding-3-small',
             'openai-text-embedding-ada-002': 'text-embedding-ada-002'
@@ -2256,7 +2259,11 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
     }
   } catch (error) {
     console.error('Processing error:', error);
-    migrationProgress.error = error.message;
+    if (error instanceof Error) {
+      migrationProgress.error = error.message;
+    } else {
+      migrationProgress.error = 'An unknown error occurred during migration.';
+    }
     migrationProgress.status = 'error';
 
     // Log embedding operation error
@@ -2273,11 +2280,10 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
           processed_records: migrationProgress.current || 0,
           error_count: (migrationProgress.errorCount || 0) + 1,
           execution_time: Date.now() - (migrationProgress.startTime || Date.now()),
-          error_message: error.message,
+          error_message: error instanceof Error ? error.message : 'Unknown error',
           metadata: {
-            error: error.message,
-            tables: migrationProgress.tables || [],
-            stack: error.stack
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : 'No stack available'
           }
         });
         console.log('✅ Embedding error logged successfully');
@@ -2464,7 +2470,7 @@ router.post('/resume', async (req: Request, res: Response) => {
     await saveProgressToRedis();
 
     // Get remaining tables to process
-    const remainingTables = [];
+    const remainingTables: string[] = [];
     for (const tableName of migrationProgress.tables || []) {
       const tableProgress = migrationProgress.tableProgress?.[tableName];
       if (tableProgress && tableProgress.embedded < tableProgress.total) {
@@ -2798,7 +2804,8 @@ router.get('/debug/embeddings', async (req: Request, res: Response) => {
     // Check all variations of ozelgeler
     const variations = ['ozelgeler', 'Ozelgeler', 'Özelgler', 'özelgeler'];
 
-    const results = {};
+    const remainingTables: string[] = [];
+    const results: Record<string, any> = {};
     let totalCount = 0;
 
     for (const variation of variations) {

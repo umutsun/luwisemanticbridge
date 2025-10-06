@@ -1,8 +1,6 @@
 # Core LightRAG packages - minimal install to save space
 # Note: In production, you might want to install specific versions
-# lightrag-hku is commented out to avoid heavy PyTorch dependencies
-# Uncomment the line below if you need LightRAG functionality
-# lightrag-hku
+lightrag-hku
 
 # Basic requirements for RAG service
 huggingface_hub
@@ -18,6 +16,6 @@ tqdm
 # MinerU 2.0 packages (replaces magic-pdf) - commented to save space
 # mineru[core]
 
-# Note: Uncomment the following lines if you need full RAG functionality:
-# lightrag-hku
+# Note: The following packages are needed for full RAG functionality:
+# lightrag-hku (installed above)
 # mineru[core]

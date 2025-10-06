@@ -1,0 +1,34 @@
+FROM node:20-alpine
+
+# Install dependencies for TypeScript and pgvector
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    pkgconfig \
+    postgresql-dev \
+    curl
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including dev for development)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Install TypeScript globally for development
+RUN npm install -g typescript ts-node nodemon
+
+# Expose port
+EXPOSE 8083
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8083/health || exit 1
+
+# Start the application in development mode
+CMD ["npm", "run", "dev"]

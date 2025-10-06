@@ -464,15 +464,11 @@ router.post('/scraper', async (req: Request, res: Response) => {
         // Save to database if requested
         let savedId = null;
         if (saveToDb) {
-          savedId = await puppeteerScraper.saveToDatabase(puppeteerResult);
+          savedId = await puppeteerScraper.saveToDatabase(url, puppeteerResult);
         }
         
-        // Generate and save embeddings if requested
+        // Embeddings are handled within the saveToDatabase method
         let embeddings: number[][] = [];
-        if (generateEmbeddings && puppeteerResult.chunks && savedId) {
-          embeddings = await puppeteerScraper.generateEmbeddings(puppeteerResult.chunks);
-          await puppeteerScraper.saveEmbeddings(savedId, puppeteerResult.chunks, embeddings);
-        }
         
         // Log activity
         await logActivity(

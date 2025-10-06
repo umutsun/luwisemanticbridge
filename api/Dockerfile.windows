@@ -1,0 +1,47 @@
+# Windows Optimized API Dockerfile
+FROM node:20-alpine
+
+# Install development dependencies and network tools
+RUN apk add --no-cache \
+    curl \
+    wget \
+    netcat-openbsd \
+    bind-tools \
+    && npm install -g nodemon
+
+# Set the working directory
+WORKDIR /app
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies with legacy peer deps flag for compatibility
+RUN npm install --legacy-peer-deps
+
+# Copy application files
+COPY . .
+
+# Create necessary directories and set permissions
+RUN mkdir -p /workspaces /config /app/config && \
+    chown -R nextjs:nodejs /app /workspaces /config
+
+# Create config file if not exists
+RUN touch /config/config.json && \
+    chown nextjs:nodejs /config/config.json
+
+# Expose port
+EXPOSE 8083
+
+# Switch to non-root user
+USER nextjs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8083/api/v1/health || exit 1
+
+# Start the application
+CMD ["nodemon", "server.js"]

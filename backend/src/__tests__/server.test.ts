@@ -1,25 +1,21 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import supertest from 'supertest';
-import { app } from '../server'; // Sunucu dosyasından app'i import et
-import { Server } from 'http';
 
-let server: Server;
+import supertest from 'supertest';
+import { httpServer } from '../server';
+
 let request: supertest.SuperTest<supertest.Test>;
 
+beforeAll(() => {
+  // We use 'as any' here to bypass a persistent and complex type mismatch issue
+  // between supertest, @types/supertest, express, and the project's TS config.
+  // This allows the tests to run, confirming the issue is type-related, not a runtime error.
+  request = supertest(httpServer) as any;
+});
+
+afterAll((done) => {
+  httpServer.close(done);
+});
+
 describe('Server API Endpoints', () => {
-  beforeAll(() => {
-    // Testler başlamadan önce sunucuyu başlat
-    // Gerçek sunucunun kullandığı porttan farklı bir portta çalıştırabiliriz
-    // Veya çalışan sunucuyu direkt kullanabiliriz. Şimdilik app'i direkt kullanalım.
-    // server = app.listen(8084); // Rastgele bir portta test sunucusu başlat
-    request = supertest(app);
-  });
-
-  // afterAll((done) => {
-  //   // Testler bittikten sonra sunucuyu kapat
-  //   server.close(done);
-  // });
-
   it('GET /health should respond with 200 OK and a healthy status', async () => {
     const response = await request.get('/health');
     

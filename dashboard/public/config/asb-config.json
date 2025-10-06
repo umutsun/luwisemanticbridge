@@ -1,0 +1,15 @@
+{
+  "app": {
+    "name": "Alice Semantic Bridge",
+    "description": "AI-Powered Knowledge Management System"
+  },
+  "api": {
+    "baseUrl": "/api"
+  },
+  "features": {
+    "knowledgeGraph": true,
+    "semanticSearch": true,
+    "rag": true,
+    "monitoring": true
+  }
+}

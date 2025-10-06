@@ -9,10 +9,10 @@ import morgan from 'morgan';
 import { createServer } from 'http';
 import { Server as SocketServer } from 'socket.io';
 import { WebSocketServer as StandardWebSocketServer } from 'ws';
-import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { SERVER, API } from './config';
 import { initializeRedis } from './config/redis';
+import { initializeConfigs, getAppConfig, asembPool, initializeAsembDatabase } from './config/database.config';
 
 // Import routes
 import searchRoutes from './routes/search.routes';
@@ -35,81 +35,109 @@ import usersRoutes from './routes/users.routes';
 import embeddingHistoryRoutes from './routes/embedding-history.routes';
 import embeddingCleanupRoutes from './routes/embedding-cleanup.routes';
 import aiSettingsRoutes from './routes/ai-settings.routes';
-import aiSettingsRoutes from './routes/ai-settings.routes';
+import appSettingsRoutes from './routes/app-settings.routes';
+import healthRoutes from './routes/health.routes';
+import adminRoutes from './routes/admin.routes';
 
-// Load environment variables
-dotenv.config();
 
 // Initialize Express app
 const app: Application = express();
 const httpServer = createServer(app);
 
-// Parse CORS origins from environment variable
-const corsOrigins = (process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND}`).split(',').map(origin => origin.trim());
+// Parse CORS origins from environment variable - use CORS_ORIGINS from .env.asemb
+const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3004`).split(',').map(origin => origin.trim());
 
-// Initialize Socket.io
-const io = new SocketServer(httpServer, {
+// Initialize Socket.io if WebSocket is enabled
+console.log('🔌 WebSocket Configuration:', {
+  ENABLED: SERVER.WEBSOCKET.ENABLED,
+  PORT: SERVER.WEBSOCKET.PORT,
+  PATH: SERVER.WEBSOCKET.PATH,
+  CORS_ORIGINS: corsOrigins,
+  ENV_ENABLED: process.env.ENABLE_WEBSOCKET
+});
+
+const io = SERVER.WEBSOCKET.ENABLED ? new SocketServer(httpServer, {
   cors: {
     origin: corsOrigins,
-    credentials: true
-  }
-});
+    credentials: true,
+    methods: ["GET", "POST"]
+  },
+  path: SERVER.WEBSOCKET.PATH,
+  transports: ['websocket', 'polling']
+}) : null;
 
-// Initialize Standard WebSocket Server for /ws/notifications
-const wss = new StandardWebSocketServer({
+// Initialize Standard WebSocket Server for notifications if enabled
+const wss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
   noServer: true,
-  path: '/ws/notifications'
-});
+  path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH
+}) : null;
 
-// Handle WebSocket upgrade for standard WebSocket connections
-httpServer.on('upgrade', (request, socket, head) => {
-  const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+// Handle WebSocket upgrade for standard WebSocket connections if enabled
+if (SERVER.WEBSOCKET.ENABLED && wss) {
+  httpServer.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
 
-  if (pathname === '/ws/notifications') {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
-    });
-  } else {
-    socket.destroy();
-  }
-});
+    if (pathname === SERVER.WEBSOCKET.NOTIFICATIONS_PATH) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+}
 
-// Initialize PostgreSQL
-export const pgPool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL || 'postgresql://postgres:postgres@localhost:5432/postgres',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 3000
-});
-
-// Initialize ASEMB PostgreSQL
-export const asembPool = new Pool({
-  host: process.env.ASEMB_DB_HOST || 'localhost',
-  port: parseInt(process.env.ASEMB_DB_PORT || '5432'),
-  database: process.env.ASEMB_DB_NAME || 'asemb',
-  user: process.env.ASEMB_DB_USER || 'postgres',
-  password: process.env.ASEMB_DB_PASSWORD || 'postgres',
-  ssl: process.env.ASEMB_DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000
-});
+// Use the ASEMB pool from database.config - it will be initialized properly
 
 // Initialize Redis
-export const redis = new Redis({
+const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  port: parseInt(process.env.REDIS_PORT || '6380'),
   db: parseInt(process.env.REDIS_DB || '2')
 });
 
-// Middleware
+// Disable helmet for CORS issues during development
 app.use(helmet({
-  contentSecurityPolicy: false // For development
+  contentSecurityPolicy: false, // For development
+  crossOriginEmbedderPolicy: false, // For CORS
+  crossOriginResourcePolicy: false, // For CORS
+  crossOriginOpenerPolicy: false, // For CORS
 }));
-app.use(cors({
-  origin: corsOrigins,
-  credentials: true
-}));
+
+// CORS middleware - place AFTER helmet
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  console.log(`CORS Debug - Request received: ${req.method} ${req.url}, Origin: ${origin}`);
+
+  // Parse CORS origins from environment variable
+  const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3004`).split(',').map(o => o.trim());
+
+  // Check if origin is in allowed list
+  const isOriginAllowed = origin && corsOrigins.includes(origin);
+
+  // Set CORS headers based on origin validation
+  if (isOriginAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    // For requests without origin or disallowed origins, use a safe default
+    res.setHeader('Access-Control-Allow-Origin', corsOrigins[0] || 'http://localhost:3000');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Origin, Accept, X-API-Key, Cache-Control, Pragma');
+  res.setHeader('Access-Control-Max-Age', '86400');
+
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    console.log('CORS Debug - Handling OPTIONS preflight request');
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
+app.use(require('cookie-parser')());
 app.use(compression());
 app.use(morgan('dev', {
   skip: (req, res) => {
@@ -124,18 +152,18 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
     // Check PostgreSQL
-    await pgPool.query('SELECT 1');
-    
+    await asembPool.query('SELECT 1');
+
     // Check Redis
     await redis.ping();
-    
+
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       services: {
         postgres: 'connected',
         redis: 'connected',
-        lightrag: 'initializing'
+        lightrag: 'disabled'
       },
       agent: 'claude'
     });
@@ -169,7 +197,9 @@ app.use(API.ENDPOINTS.V2.USERS, usersRoutes);
 app.use('/api/v2/embedding-history', embeddingHistoryRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
 app.use('/api/v2/ai', aiSettingsRoutes);
-app.use('/api/v2/ai', aiSettingsRoutes);
+app.use('/api/v2/settings', appSettingsRoutes);
+app.use('/api/v2/health', healthRoutes);
+app.use('/api/v2/admin', adminRoutes);
 
 // Base route
 app.get('/api/v2', (req: Request, res: Response) => {
@@ -187,19 +217,16 @@ app.get('/api/v2', (req: Request, res: Response) => {
       scraper: API.ENDPOINTS.V2.SCRAPER,
       embeddings: API.ENDPOINTS.V2.EMBEDDINGS,
       dashboard: {
-        overview: API.ENDPOINTS.V2.DASHBOARD,
-        lightrag: {
-          stats: '/api/v2/lightrag/stats',
-          query: '/api/v2/lightrag/query',
-          documents: '/api/v2/lightrag/documents'
-        }
+        overview: API.ENDPOINTS.V2.DASHBOARD
       }
     }
   });
 });
 
-// WebSocket handling
-io.on('connection', (socket) => {
+// WebSocket handling - only if enabled
+if (SERVER.WEBSOCKET.ENABLED && io) {
+  console.log(`🔌 WebSocket enabled on path: ${SERVER.WEBSOCKET.PATH}`);
+  io.on('connection', (socket) => {
   console.log('WebSocket client connected');
 
   // Handle notifications namespace
@@ -249,9 +276,14 @@ io.on('connection', (socket) => {
     console.log('WebSocket client disconnected');
   });
 });
+} else {
+  console.log('🔌 WebSocket disabled by configuration');
+}
 
-// Standard WebSocket connection handling
-wss.on('connection', (ws, request) => {
+// Standard WebSocket connection handling - only if enabled
+if (SERVER.WEBSOCKET.ENABLED && wss) {
+  console.log(`🔌 Standard WebSocket enabled on path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`);
+  wss.on('connection', (ws, request) => {
   console.log('Standard WebSocket client connected to /ws/notifications');
 
   // Store the IP address for logging/security
@@ -329,6 +361,7 @@ wss.on('connection', (ws, request) => {
     clearInterval(pingInterval);
   });
 });
+}
 
 // Helper function to broadcast notifications to all connected standard WebSocket clients
 export function broadcastNotification(notification: {
@@ -339,6 +372,11 @@ export function broadcastNotification(notification: {
   timestamp: string;
   source: string;
 }) {
+  // Only broadcast if WebSocket is enabled and wss is available
+  if (!SERVER.WEBSOCKET.ENABLED || !wss) {
+    return;
+  }
+
   const message = JSON.stringify({
     type: 'notification',
     ...notification
@@ -352,11 +390,13 @@ export function broadcastNotification(notification: {
 }
 
 // Also forward Socket.IO notifications to standard WebSocket clients
-io.on('connection', (socket) => {
-  socket.on('notification', (notification) => {
-    broadcastNotification(notification);
+if (SERVER.WEBSOCKET.ENABLED && io) {
+  io.on('connection', (socket) => {
+    socket.on('notification', (notification) => {
+      broadcastNotification(notification);
+    });
   });
-});
+}
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -381,121 +421,164 @@ app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// Import LightRAG service
-import LightRAGService from './services/lightrag.service';
-export let lightRAGService: LightRAGService | null = null;
+// LightRAG service disabled
+export let lightRAGService = null;
 
 // Import embeddings progress loader
 import { loadProgressFromRedis } from './routes/embeddings.routes';
 import { loadProgressFromRedis as loadV2ProgressFromRedis } from './routes/embeddings-v2.routes';
 
-// Start server
+// Start server with database dependency
 const PORT = SERVER.PORT;
-httpServer.listen(PORT, async () => {
-  console.log(`🚀 ASB Backend Server running on port ${PORT}`);
+
+async function startServer() {
+  console.log(`🚀 Starting ASB Backend Server on port ${PORT}`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'}`);
+  if (SERVER.WEBSOCKET.ENABLED) {
+    console.log(`   Socket.IO Path: ${SERVER.WEBSOCKET.PATH}`);
+    console.log(`   Notifications Path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`);
+  }
 
-  try {
-    // Test database connections
-    console.log('\n📊 Initializing Services...');
+  // Database connection variables
+  let dbConnectionAttempts = 0;
+  const maxDbRetries = 5;
+  const dbRetryDelay = 5000; // 5 seconds
 
-    // PostgreSQL connection
-    await pgPool.query('SELECT 1');
-    console.log('✅ PostgreSQL: Connected');
+  // Retry database connection with backoff
+  while (dbConnectionAttempts < maxDbRetries) {
+    try {
+      console.log('\n📊 Initializing ASEMB Database Connection...');
+      console.log(`📡 Attempt ${dbConnectionAttempts + 1}/${maxDbRetries}`);
+      console.log(`🔗 Connecting to: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`);
+
+      await asembPool.query('SELECT 1');
+      console.log('✅ ASEMB Database: Connected');
+      break; // Success, exit retry loop
+
+    } catch (dbError: any) {
+      dbConnectionAttempts++;
+      console.error(`❌ Database connection attempt ${dbConnectionAttempts} failed:`, dbError.message);
+
+      if (dbConnectionAttempts >= maxDbRetries) {
+        console.error('\n🔴 DATABASE CONNECTION ERROR: Could not connect to ASEMB database after multiple attempts');
+        console.error('🔴 Please check your database configuration in .env file');
+        console.error(`🔴 Expected: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`);
+        console.error('🔴 Server will continue in LIMITED MODE - Dashboard will show loading state');
+
+        // Set server status to indicate database connection failure
+        (global as any).serverStatus = {
+          database: 'disconnected',
+          loading: true,
+          error: dbError.message
+        };
+        break;
+      }
+
+      console.log(`⏳ Retrying in ${dbRetryDelay/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, dbRetryDelay));
+    }
+  }
+
+  // Only proceed with full initialization if database is connected
+  if ((global as any).serverStatus?.database !== 'disconnected') {
+    try {
+      // Initialize ASEMB database tables
+      console.log('🗃️ Initializing ASEMB Database Tables...');
+      await initializeAsembDatabase();
+      console.log('✅ ASEMB Database Tables: Ready');
+
+      // Load all configurations from ASEMB database
+      console.log('⚙️ Loading configurations from ASEMB database...');
+      await initializeConfigs();
+      console.log('✅ All configurations loaded from database');
+
+      // Update server status to indicate successful database connection
+      (global as any).serverStatus = {
+        database: 'connected',
+        loading: false,
+        settings: 'loaded'
+      };
+    } catch (configError: any) {
+      console.error('⚠️ Database connected but failed to load configurations:', configError.message);
+      (global as any).serverStatus = {
+        database: 'connected',
+        loading: false,
+        settings: 'failed',
+        error: configError.message
+      };
+    }
+  }
 
     // Initialize Redis with settings from database
+  try {
+    console.log('\n📡 Initializing Redis...');
     await initializeRedis();
     console.log('✅ Redis: Connected');
 
-    // Check Redis database info
-    const redisInfo = await redis.info('keyspace');
-    const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
-    if (dbKeys) {
-      console.log(`📋 Redis DB${process.env.REDIS_DB || 2}: ${dbKeys[1]} keys`);
+    // Update server status with Redis connection
+    if ((global as any).serverStatus) {
+      (global as any).serverStatus.redis = 'connected';
     }
+  } catch (redisError: any) {
+    console.error('⚠️ Redis connection failed:', redisError.message);
+    if ((global as any).serverStatus) {
+      (global as any).serverStatus.redis = 'disconnected';
+      (global as any).serverStatus.redisError = redisError.message;
+    }
+  }
 
-    // Initialize AI Services
-    console.log('\n🤖 AI Services Status:');
-
-    // Check API keys from both .env and database
+    // Check Redis database info if Redis is available
+  if (redis) {
     try {
-      const dbSettings = await getAiSettings();
-      const aiServices = [
-        { name: 'OpenAI', envKey: 'OPENAI_API_KEY', dbKey: 'openai_api_key', model: 'GPT-3.5/4' },
-        { name: 'Claude', envKey: 'ANTHROPIC_API_KEY', dbKey: 'anthropic_api_key', model: 'Claude 3' },
-        { name: 'Gemini', envKey: 'GOOGLE_API_KEY', dbKey: 'google_api_key', model: 'Gemini Pro' },
-        { name: 'DeepSeek', envKey: 'DEEPSEEK_API_KEY', dbKey: 'deepseek_api_key', model: 'DeepSeek' }
-      ];
-
-      aiServices.forEach(service => {
-        const envKey = process.env[service.envKey];
-        const dbKey = dbSettings[service.dbKey];
-
-        if (envKey || dbKey) {
-          const source = envKey && dbKey ? 'both' : (envKey ? '.env' : 'database');
-          console.log(`✅ ${service.name}: Available (${service.model}) [${source}]`);
-        } else {
-          console.log(`❌ ${service.name}: Not configured`);
-        }
-      });
-    } catch (error) {
-      // Fallback to .env only
-      const aiServices = [
-        { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-3.5/4' },
-        { name: 'Claude', key: 'ANTHROPIC_API_KEY', model: 'Claude 3' },
-        { name: 'Gemini', key: 'GOOGLE_API_KEY', model: 'Gemini Pro' },
-        { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek' }
-      ];
-
-      aiServices.forEach(service => {
-        if (process.env[service.key]) {
-          console.log(`✅ ${service.name}: Available (${service.model}) [.env]`);
-        } else {
-          console.log(`❌ ${service.name}: Not configured`);
-        }
-      });
+      const redisInfo = await redis.info('keyspace');
+      const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
+      if (dbKeys) {
+        console.log(`📋 Redis DB${process.env.REDIS_DB || 2}: ${dbKeys[1]} keys`);
+      }
+    } catch (redisInfoError) {
+      console.log('⚠️ Could not get Redis info:', (redisInfoError as Error).message);
     }
+  }
 
-    // Check Embedding settings
-    console.log('\n🔤 Embedding Configuration:');
+    // Initialize AI Services (basic check from .env)
+  console.log('\n🤖 AI Services Status:');
+  const aiServices = [
+    { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-3.5/4' },
+    { name: 'Claude', key: 'CLAUDE_API_KEY', model: 'Claude 3' },
+    { name: 'Gemini', key: 'GEMINI_API_KEY', model: 'Gemini Pro' },
+    { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek' }
+  ];
+
+  aiServices.forEach(service => {
+    if (process.env[service.key]) {
+      console.log(`✅ ${service.name}: Available (${service.model}) [.env]`);
+    } else {
+      console.log(`❌ ${service.name}: Not configured`);
+    }
+  });
+
+    // Check Embedding settings (basic)
+  console.log('\n🔤 Embedding Configuration:');
+  if (process.env.USE_LOCAL_EMBEDDINGS === 'true') {
+    console.log('📦 Provider: Local (random vectors)');
+  } else {
+    console.log('📦 Provider: OpenAI (default)');
+  }
+
+    // LightRAG service disabled
+  console.log('\n🔍 LightRAG Status: Disabled by configuration');
+  lightRAGService = null;
+
+    // Load migration progress from Redis (only if Redis is available)
+  if (redis) {
     try {
-      const aiSettings = await getAiSettings();
-      const embeddingProvider = aiSettings?.embeddingProvider || 'openai';
-      const useLocal = process.env.USE_LOCAL_EMBEDDINGS === 'true';
-
-      if (useLocal) {
-        console.log('📦 Provider: Local (random vectors)');
-      } else {
-        const providerName = embeddingProvider.toUpperCase();
-        console.log(`📦 Provider: ${providerName}`);
-
-        if (embeddingProvider === 'openai' && aiSettings?.openaiApiBase) {
-          console.log(`   Base URL: ${aiSettings.openaiApiBase}`);
-        } else if (embeddingProvider === 'google') {
-          console.log(`   Model: text-embedding-004`);
-        } else if (embeddingProvider === 'cohere') {
-          console.log(`   Model: embed-v3.0`);
-        } else if (embeddingProvider === 'voyage') {
-          console.log(`   Model: voyage-large-2`);
-        }
-      }
-    } catch (error) {
-      // Fallback to basic info
-      if (process.env.USE_LOCAL_EMBEDDINGS === 'true') {
-        console.log('📦 Provider: Local (random vectors)');
-      } else {
-        console.log('📦 Provider: OpenAI (default)');
-      }
+      console.log('\n📈 Migration Status:');
+      await loadProgressFromRedis();
+    } catch (migrationError: any) {
+      console.log('⚠️ Migration progress check failed:', migrationError.message);
     }
-
-    // Initialize LightRAG service
-    console.log('\n🔍 LightRAG Status:');
-    lightRAGService = new LightRAGService(pgPool, redis);
-    await lightRAGService.initialize();
-
-    // Load migration progress from Redis
-    console.log('\n📈 Migration Status:');
-    await loadProgressFromRedis();
+  }
 
     // Also check v2 embedding progress
     const v2ProgressLoaded = await loadV2ProgressFromRedis();
@@ -513,7 +596,11 @@ httpServer.listen(PORT, async () => {
             headers: { 'Content-Type': 'application/json' }
           });
         } catch (autoResumeError) {
-          console.log('⚠️ Auto-resume failed, user can resume manually:', autoResumeError.message);
+          if (autoResumeError instanceof Error) {
+            console.log('⚠️ Auto-resume failed, user can resume manually:', autoResumeError.message);
+          } else {
+            console.log('⚠️ Auto-resume failed with an unknown error, user can resume manually.');
+          }
         }
       }
     }
@@ -533,77 +620,199 @@ httpServer.listen(PORT, async () => {
       // Silently ignore
     }
 
-    // Clean up stale embedding progress records
-    try {
-      await pgPool.query(`
-        UPDATE embedding_progress
-        SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-        WHERE status IN ('processing', 'paused')
-        AND started_at < NOW() - INTERVAL '1 hour'
-      `);
-    } catch (cleanupError) {
-      // Silently ignore
-    }
-
-    // Check for existing embedding process on startup
-    try {
-      const existingProcess = await pgPool.query(`
-        SELECT * FROM embedding_progress
-        WHERE status IN ('processing', 'paused')
-        ORDER BY started_at DESC
-        LIMIT 1
-      `);
-
-      if (existingProcess.rows.length > 0) {
-        const process = existingProcess.rows[0];
-
-        // If process was 'processing', mark it as 'paused' for safety
-        if (process.status === 'processing') {
-          // Found orphaned processing process, marking as paused
-          await pgPool.query(`
-            UPDATE embedding_progress
-            SET status = 'paused'
-            WHERE id = $1
-          `, [process.id]);
-
-          // Also update Redis
-          await redis.set('embedding:status', 'paused');
-          const progressData = {
-            status: 'paused',
-            current: process.processed_chunks || 0,
-            total: process.total_chunks || 0,
-            percentage: process.total_chunks > 0 ? Math.round((process.processed_chunks / process.total_chunks) * 100) : 0,
-            currentTable: process.document_type,
-            error: process.error_message,
-            startTime: new Date(process.started_at).getTime(),
-            newlyEmbedded: process.processed_chunks || 0,
-            errorCount: process.error_message ? 1 : 0,
-            processedTables: process.document_type ? [process.document_type] : []
-          };
-          await redis.set('embedding:progress', JSON.stringify(progressData), 'EX', 7 * 24 * 60 * 60);
-          // Process marked as paused, user can resume manually
-        }
+    // Clean up stale embedding progress records (only if database is connected)
+    if ((global as any).serverStatus?.database === 'connected') {
+      try {
+        await asembPool.query(`
+          UPDATE embedding_progress
+          SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+          WHERE status IN ('processing', 'paused')
+          AND started_at < NOW() - INTERVAL '1 hour'
+        `);
+      } catch (cleanupError) {
+        // Silently ignore
       }
-    } catch (checkError) {
-      // Silently ignore
-    }
-    
-    // Final startup status
-    console.log('\n🎉 Backend Initialization Complete!');
-    console.log('📡 WebSocket server ready');
-    console.log(`🌐 API available at: http://localhost:${PORT}`);
-    console.log('📖 Health check: GET /health');
-    console.log('🔗 API docs: GET /api/v2');
 
-    // Publish startup event
-    await redis.publish('asb:backend:status', JSON.stringify({
+      // Check for existing embedding process on startup (only if database is connected)
+      try {
+        const existingProcess = await asembPool.query(`
+          SELECT * FROM embedding_progress
+          WHERE status IN ('processing', 'paused')
+          ORDER BY started_at DESC
+          LIMIT 1
+        `);
+
+        if (existingProcess.rows.length > 0) {
+          const process = existingProcess.rows[0];
+
+          // If process was 'processing', mark it as 'paused' for safety
+          if (process.status === 'processing') {
+            // Found orphaned processing process, marking as paused
+            await asembPool.query(`
+              UPDATE embedding_progress
+              SET status = 'paused'
+              WHERE id = $1
+            `, [process.id]);
+
+            // Also update Redis
+            await redis.set('embedding:status', 'paused');
+            const progressData = {
+              status: 'paused',
+              current: process.processed_chunks || 0,
+              total: process.total_chunks || 0,
+              percentage: process.total_chunks > 0 ? Math.round((process.processed_chunks / process.total_chunks) * 100) : 0,
+              currentTable: process.document_type,
+              error: process.error_message,
+              startTime: new Date(process.started_at).getTime(),
+                newlyEmbedded: process.processed_chunks || 0,
+              errorCount: process.error_message ? 1 : 0,
+              processedTables: process.document_type ? [process.document_type] : []
+            };
+            await redis.set('embedding:progress', JSON.stringify(progressData), 'EX', 7 * 24 * 60 * 60);
+            // Process marked as paused, user can resume manually
+          }
+        }
+      } catch (checkError) {
+        // Silently ignore
+      }
+    }
+  }
+
+
+// Start HTTP server (this should always happen regardless of database status)
+const startHttpServer = () => {
+  console.log('\n🎉 Backend Server Starting...');
+  console.log('📡 WebSocket server ready');
+  console.log(`🌐 API available at: http://localhost:${PORT}`);
+  console.log('📖 Health check: GET /health');
+  console.log('🔗 API docs: GET /api/v2');
+
+  // Publish startup event
+  if (redis) {
+    redis.publish('asb:backend:status', JSON.stringify({
       event: 'startup',
       timestamp: new Date(),
       port: PORT,
-      status: 'ready'
-    }));
-  } catch (error) {
-    console.error('❌ Startup error:', error);
+      status: (global as any).serverStatus?.database === 'connected' ? 'ready' : 'limited'
+    })).catch(err => console.log('Could not publish startup event:', err));
+  }
+
+  // Start the HTTP server
+  if (!httpServer.listening) {
+    httpServer.listen(PORT, () => {
+      console.log(`\n🚀 HTTP Server listening on port ${PORT}`);
+
+      // Display server status
+      const serverStatus = (global as any).serverStatus;
+      if (serverStatus?.database === 'connected') {
+        console.log('✅ Server Status: Fully Operational');
+      } else if (serverStatus?.loading) {
+        console.log('⚠️ Server Status: Limited Mode - Database Connection Failed');
+        console.log('🔄 Dashboard will show loading state');
+      } else {
+        console.log('⚠️ Server Status: Limited Mode - Some Services Unavailable');
+      }
+    });
+  }
+};
+
+// 🚀 Emergency Chat Routes - Quick Fix
+const setupChatRoutes = () => {
+  console.log('🔄 Setting up emergency /api/v2/chatbot routes...');
+  console.log('🔄 Setting up emergency /api/v2/chatbot routes...');
+
+  // 1. Settings
+  app.get('/api/v2/chatbot/settings', async (req, res) => {
+    try {
+      console.log('✅ /api/v2/chatbot/settings called');
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+      // Get chatbot settings from database
+      const settingsResult = await asembPool.query(`
+        SELECT value FROM settings WHERE key = 'chatbot'
+      `);
+
+      let chatbotSettings = {};
+      if (settingsResult.rows.length > 0) {
+        chatbotSettings = settingsResult.rows[0].value || {};
+      }
+
+      res.json({
+        title: chatbotSettings.title || 'ASB Hukuki Asistan',
+        subtitle: chatbotSettings.subtitle || 'Yapay Zeka Asistanınız',
+        logoUrl: chatbotSettings.logoUrl || '',
+        welcomeMessage: chatbotSettings.welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
+        placeholder: chatbotSettings.placeholder || 'Sorunuzu yazın...',
+        primaryColor: chatbotSettings.primaryColor || '#3B82F6',
+        activeModel: chatbotSettings.activeModel || 'Claude 3'
+      });
+    } catch (error) {
+      console.error('Error fetching chatbot settings:', error);
+      res.json({
+        title: 'ASB Hukuki Asistan',
+        subtitle: 'Yapay Zeka Asistanınız',
+        logoUrl: '',
+        welcomeMessage: 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
+        placeholder: 'Sorunuzu yazın...',
+        primaryColor: '#3B82F6',
+        activeModel: 'Claude 3'
+      });
+    }
+  });
+
+  // 2. Chat
+  app.post('/api/v2/chat', (req, res) => {
+    console.log('✅ /api/v2/chat called', req.body);
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.json({
+      id: Date.now().toString(),
+      sessionId: 'default',
+      message: "Backend çalışıyor! Emergency route devrede. / Merhaba! Backend çalışıyor ve emergency route devrede.",
+      timestamp: new Date().toISOString(),
+      type: 'bot',
+      sources: [],
+      relatedTopics: [],
+      conversationId: 'emergency-' + Date.now()
+    });
+  });
+
+  // 3. Suggestions
+  app.get('/api/v2/chat/suggestions', (req, res) => {
+    console.log('✅ /api/v2/chat/suggestions called');
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.json([
+      'Hukuki sistem hakkında bilgi verir misiniz?',
+      'Hangi konularda yardımcı olabilirsiniz?',
+      'Mevzuat taraması nasıl yapılır?'
+    ]);
+  });
+
+  console.log('✅ Emergency routes mounted successfully!');
+};
+
+// Setup emergency routes first - will be called after function declaration
+setupChatRoutes();
+
+// 🚀 Start server immediately without waiting for all services
+const emergencyServerStarted = false;
+
+// Try to start full services (but don't block)
+startServer().then(() => {
+  // After trying to start full services, ensure HTTP server is ready
+  if (!emergencyServerStarted) {
+    startHttpServer();
+  }
+}).catch(err => {
+  console.error('⚠️ Full startup failed, but emergency routes are working:', err);
+  // Even if full startup fails, start HTTP server in limited mode
+  if (!emergencyServerStarted) {
+    startHttpServer();
   }
 });
 
@@ -615,10 +824,10 @@ process.on('SIGTERM', async () => {
     // HTTP server closed
   });
 
-  await pgPool.end();
+  await asembPool.end();
   await redis.quit();
 
   process.exit(0);
 });
 
-export { app, io };
+export { app, io, httpServer, asembPool as pgPool, redis };

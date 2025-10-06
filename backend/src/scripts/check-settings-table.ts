@@ -33,9 +33,9 @@ async function checkSettingsTable() {
 
       // Check current settings
       const currentSettings = await asembPool.query(`
-        SELECT key, value, category, updated_at
-        FROM settings
-        ORDER BY category, key
+        SELECT setting_key as key, setting_value as value, description, created_at as updated_at
+        FROM chatbot_settings
+        ORDER BY description, setting_key
       `);
 
       console.log(`\nCurrent settings (${currentSettings.rows.length} total):`);
@@ -59,13 +59,13 @@ async function checkSettingsTable() {
 
       // Verify the insertion
       const verify = await asembPool.query(`
-        SELECT value FROM settings WHERE key = 'test_connection'
+        SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'test_connection'
       `);
       console.log(`✅ Verification successful: ${verify.rows[0].value}`);
 
       // Clean up test record
       await asembPool.query(`
-        DELETE FROM settings WHERE key = 'test_connection'
+        DELETE FROM chatbot_settings WHERE setting_key = 'test_connection'
       `);
       console.log('✅ Test record cleaned up');
 

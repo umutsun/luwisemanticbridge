@@ -43,7 +43,6 @@ export class EnhancedPuppeteerService {
           '--window-size=1920,1080',
           '--lang=tr-TR,tr,en-US,en'
         ],
-        ignoreHTTPSErrors: true,
         defaultViewport: {
           width: 1920,
           height: 1080

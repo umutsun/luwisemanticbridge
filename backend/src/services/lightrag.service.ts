@@ -8,25 +8,8 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
-import { getAiSettings } from '../config/database.config';
-
-// Settings service for reading API keys from database
-class SettingsService {
-  constructor(private pool: Pool) {}
-
-  async getApiKey(key: string): Promise<string | null> {
-    try {
-      const result = await this.pool.query(
-        'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
-        [key]
-      );
-      return result.rows[0]?.setting_value || null;
-    } catch (error) {
-      console.error(`Error fetching ${key}:`, error);
-      return null;
-    }
-  }
-}
+import { getAiSettings as fetchAiSettings, asembPool } from '../config/database.config';
+import SettingsService from './settings.service'; // Correct import
 
 export class LightRAGService {
   private vectorStore: MemoryVectorStore | null = null;
@@ -42,7 +25,7 @@ export class LightRAGService {
   constructor(pool: Pool, redis: Redis) {
     this.pool = pool;
     this.redis = redis;
-    this.settingsService = new SettingsService(pool);
+    this.settingsService = SettingsService.getInstance(); // Use the singleton instance
 
     // Initialize embeddings and LLM will be done in initialize() method
   }
@@ -52,10 +35,12 @@ export class LightRAGService {
     // Priority order: OpenAI -> Gemini -> Deepseek -> Claude
 
     // Get API keys from database
-    const openaiKey = await this.settingsService.getApiKey('openai_api_key') || process.env.OPENAI_API_KEY;
-    const geminiKey = await this.settingsService.getApiKey('gemini_api_key') || process.env.GEMINI_API_KEY;
-    const deepseekKey = await this.settingsService.getApiKey('deepseek_api_key') || process.env.DEEPSEEK_API_KEY;
-    const anthropicKey = await this.settingsService.getApiKey('anthropic_api_key') || process.env.ANTHROPIC_API_KEY;
+    const aiSettings = await this.settingsService.getAiSettings();
+
+    const openaiKey = aiSettings['openai_api_key'] || process.env.OPENAI_API_KEY;
+    const geminiKey = aiSettings['gemini_api_key'] || process.env.GEMINI_API_KEY;
+    const deepseekKey = aiSettings['deepseek_api_key'] || process.env.DEEPSEEK_API_KEY;
+    const anthropicKey = aiSettings['anthropic_api_key'] || process.env.ANTHROPIC_API_KEY;
 
     // Try OpenAI first (primary)
     if (openaiKey) {
@@ -602,7 +587,7 @@ export class LightRAGService {
       }
 
       // Get AI settings from database
-      const aiSettings = await getAiSettings();
+      const aiSettings = await fetchAiSettings();
       // AI settings loaded from database
 
       let openaiApiKey = aiSettings?.openaiApiKey || process.env.OPENAI_API_KEY;

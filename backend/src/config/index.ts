@@ -3,29 +3,35 @@
  * All hardcoded values should be moved here
  */
 
-// Database Table Names
+// Database Table Names - Environment variables'den al
 export const TABLES = {
-  OZELGELER: 'OZELGELER',
-  DANISTAY_KARARLARI: 'DANISTAYKARARLARI',
-  MEVZUAT: 'MEVZUAT',
-  MAKALELER: 'Makaleler',
-  DOKUMAN: 'Dokümanlar',
-  SORU_CEVAP: 'sorucevap',
-  DOCUMENTS: 'documents',
-  CONVERSATIONS: 'conversations',
-  MESSAGES: 'messages',
-  EMBEDDINGS: 'embeddings',
-  UNIFIED_EMBEDDINGS: 'unified_embeddings',
+  OZELGELER: process.env.DB_TABLE_OZELGELER || 'OZELGELER',
+  DANISTAY_KARARLARI: process.env.DB_TABLE_DANISTAY_KARARLARI || 'DANISTAYKARARLARI',
+  MEVZUAT: process.env.DB_TABLE_MEVZUAT || 'MEVZUAT',
+  MAKALELER: process.env.DB_TABLE_MAKALELER || 'Makaleler',
+  DOKUMAN: process.env.DB_TABLE_DOKUMAN || 'Dokümanlar',
+  SORU_CEVAP: process.env.DB_TABLE_SORU_CEVAP || 'sorucevap',
+  DOCUMENTS: process.env.DB_TABLE_DOCUMENTS || 'documents',
+  CONVERSATIONS: process.env.DB_TABLE_CONVERSATIONS || 'conversations',
+  MESSAGES: process.env.DB_TABLE_MESSAGES || 'messages',
+  EMBEDDINGS: process.env.DB_TABLE_EMBEDDINGS || 'embeddings',
+  UNIFIED_EMBEDDINGS: process.env.DB_TABLE_UNIFIED_EMBEDDINGS || 'unified_embeddings',
 } as const;
 
 // Server Configuration
 export const SERVER = {
-  PORT: parseInt(process.env.PORT || '8083', 10),
+  PORT: parseInt(process.env.BACKEND_PORT || process.env.API_PORT || '8083', 10),
   HOST: process.env.HOST || '0.0.0.0',
   DEFAULT_PORTS: {
-    BACKEND: 8083,
-    FRONTEND: 3000,
-    REDIS: 6379,
+    BACKEND: parseInt(process.env.BACKEND_PORT || '8083', 10),
+    FRONTEND: parseInt(process.env.FRONTEND_PORT || '3000', 10),
+    REDIS: parseInt(process.env.REDIS_PORT || '6380', 10),
+  },
+  WEBSOCKET: {
+    PORT: parseInt(process.env.WEBSOCKET_PORT || '8083', 10),
+    PATH: process.env.WEBSOCKET_PATH || '/socket.io',
+    ENABLED: process.env.ENABLE_WEBSOCKET === 'true',
+    NOTIFICATIONS_PATH: process.env.WEBSOCKET_NOTIFICATIONS_PATH || '/ws/notifications',
   },
 } as const;
 
@@ -114,9 +120,10 @@ export const DATABASE = {
 
 // Redis Configuration
 export const REDIS = {
-  DEFAULT_DB: parseInt(process.env.REDIS_DB || '1', 10),
-  DEFAULT_PORT: 6379,
-  DEFAULT_HOST: 'localhost',
+  DEFAULT_DB: parseInt(process.env.REDIS_DB || '2', 10),
+  DEFAULT_PORT: parseInt(process.env.REDIS_PORT || '6380', 10),
+  DEFAULT_HOST: process.env.REDIS_HOST || 'localhost',
+  DEFAULT_PASSWORD: process.env.REDIS_PASSWORD || 'redis_password_2025',
 } as const;
 
 // Rate Limiting

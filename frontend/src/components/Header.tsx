@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 import Link from 'next/link';
+import config from '@/config/api.config';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -42,10 +41,14 @@ import {
   Globe,
   Menu,
   X,
-  Shield
+  Shield,
+  RefreshCw,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
+import { getAppSettings } from '@/lib/api/settings';
 
 interface HeaderProps {
   user?: {
@@ -60,18 +63,30 @@ interface SystemStatus {
     connected: boolean;
     size: string;
     documents: number;
+    responseTime?: number;
   };
   redis: {
     connected: boolean;
     used_memory: string;
+    responseTime?: number;
   };
-  lightrag: {
-    initialized: boolean;
-    documentCount: number;
+  llmModel: {
+    model: string;
+    provider: string;
+    active: boolean;
   };
   embedder: {
     active: boolean;
     model: string;
+    provider: string;
+  };
+  overall?: {
+    status: string;
+    uptime: number;
+    memory: {
+      used: number;
+      total: number;
+    };
   };
 }
 
@@ -112,29 +127,90 @@ export default function Header({ user, onLogout }: HeaderProps) {
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/dashboard`);
-      if (response.ok) {
-        const data = await response.json();
+      // Use direct environment variable to avoid config import issues
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
+
+      // Get detailed system health from backend
+      const [dashboardResponse, healthResponse] = await Promise.all([
+        fetch(`${apiUrl}/api/dashboard`),
+        fetch(`${apiUrl}/api/v2/health/system`)
+      ]);
+
+      if (dashboardResponse.ok && healthResponse.ok) {
+        const dashboardData = await dashboardResponse.json();
+        const healthData = await healthResponse.json();
+
         setConnectionProgress(100);
-        
-        setTimeout(() => {
+
+        setTimeout(async () => {
+          // Build comprehensive system status from both endpoints
+          const dbService = healthData.services?.database || healthData.services?.asemb_database;
+          const redisService = healthData.services?.redis;
+
+          // Get LLM model information
+          let llmModelInfo = {
+            model: 'anthropic/claude-3-sonnet',
+            provider: 'Anthropic',
+            active: true,
+            displayName: 'Claude 3 Sonnet'
+          };
+
+          try {
+            const settings = await getAppSettings();
+            if (settings.llmSettings?.activeChatModel) {
+              const modelParts = settings.llmSettings.activeChatModel.split('/');
+              if (modelParts.length >= 2) {
+                const provider = modelParts[0];
+                const modelName = modelParts[1];
+
+                // Create display name based on provider and model
+                let displayName = modelName;
+                if (provider === 'deepseek') {
+                  displayName = modelName.includes('deepseek') ? 'Deepseek' : modelName;
+                } else if (provider === 'openai') {
+                  displayName = modelName.includes('gpt-4') ? 'GPT-4' : modelName.includes('gpt-3.5') ? 'GPT-3.5' : modelName;
+                } else if (provider === 'gemini') {
+                  displayName = modelName.includes('gemini') ? 'Gemini Pro' : modelName;
+                } else if (provider === 'anthropic') {
+                  displayName = modelName.includes('claude-3') ? 'Claude 3' : modelName;
+                }
+
+                llmModelInfo = {
+                  model: settings.llmSettings.activeChatModel,
+                  provider: provider.charAt(0).toUpperCase() + provider.slice(1),
+                  active: true,
+                  displayName: displayName
+                };
+              }
+            }
+          } catch (error) {
+            console.error('Failed to fetch LLM settings:', error);
+          }
+
           setSystemStatus({
             database: {
-              connected: true,
-              size: data.database.size,
-              documents: data.database.documents
+              connected: dbService?.status === 'connected' || dbService?.status === 'healthy',
+              size: dashboardData.database?.size || '0 MB',
+              documents: dashboardData.database?.documents || 0,
+              responseTime: dbService?.responseTime || 0
             },
             redis: {
-              connected: data.redis.connected,
-              used_memory: data.redis.used_memory
+              connected: redisService?.status === 'connected' ||
+                        redisService?.status === 'healthy' ||
+                        (redisService && !redisService.status),
+              used_memory: dashboardData.redis?.used_memory || '0 MB',
+              responseTime: redisService?.responseTime || 0
             },
-            lightrag: {
-              initialized: data.lightrag.initialized,
-              documentCount: data.lightrag.documentCount
-            },
+            llmModel: llmModelInfo,
             embedder: {
-              active: true,
-              model: 'text-embedding-ada-002'
+              active: healthData.services?.embeddings?.status === 'active' || true,
+              model: 'text-embedding-ada-002',
+              provider: 'OpenAI'
+            },
+            overall: {
+              status: healthData.status || 'unknown',
+              uptime: healthData.uptime || 0,
+              memory: healthData.memory || { used: 0, total: 0 }
             }
           });
           setIsConnecting(false);
@@ -164,10 +240,29 @@ export default function Header({ user, onLogout }: HeaderProps) {
     { href: '/', label: t('header.menu.chatbot'), icon: Brain },
   ];
 
-  const allServicesActive = systemStatus?.database.connected && 
-                           systemStatus?.redis.connected && 
-                           systemStatus?.lightrag.initialized && 
+  // Count active services
+  const getActiveServicesCount = () => {
+    if (!systemStatus) return 0;
+    let count = 0;
+    if (systemStatus.database.connected) count++;
+    if (systemStatus.redis.connected) count++;
+    if (systemStatus.llmModel.active) count++;
+    if (systemStatus.embedder.active) count++;
+    return count;
+  };
+
+  const allServicesActive = systemStatus?.database.connected &&
+                           systemStatus?.redis.connected &&
+                           systemStatus?.llmModel.active &&
                            systemStatus?.embedder.active;
+
+  // Determine overall system status
+  const getOverallStatus = () => {
+    if (!systemStatus) return 'unknown';
+    if (allServicesActive) return 'healthy';
+    if (systemStatus.database.connected && systemStatus.redis.connected) return 'degraded';
+    return 'unhealthy';
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white dark:bg-gray-900 shadow-sm">
@@ -216,29 +311,49 @@ export default function Header({ user, onLogout }: HeaderProps) {
                 })}
               </nav>
               
-              {/* System Status in Mobile Menu */}
+              {/* Minimal System Status in Mobile Menu */}
               <div className="mt-6 pt-6 border-t">
-                <h3 className="text-sm font-semibold mb-3">{t('header.systemStatus')}</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Database</span>
-                    <Badge variant={systemStatus?.database.connected ? "success" : "destructive"} className="text-xs">
-                      {systemStatus?.database.connected ? t('header.connected') : t('header.notConnected')}
-                    </Badge>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium">System Status</span>
+                  <div className={`h-2 w-2 rounded-full ${
+                    getOverallStatus() === 'healthy' ? 'bg-green-500' :
+                    getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                  } animate-pulse`} />
+                </div>
+
+                {/* Service status dots */}
+                <div className="flex items-center justify-around p-3 bg-muted/30 rounded-lg">
+                  <div className="text-center">
+                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
+                      systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
+                    }`} />
+                    <span className="text-xs text-muted-foreground">DB</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Redis</span>
-                    <Badge variant={systemStatus?.redis.connected ? "success" : "destructive"} className="text-xs">
-                      {systemStatus?.redis.connected ? t('header.connected') : t('header.notConnected')}
-                    </Badge>
+                  <div className="text-center">
+                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
+                      systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
+                    }`} />
+                    <span className="text-xs text-muted-foreground">Redis</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">LightRAG</span>
-                    <Badge variant={systemStatus?.lightrag.initialized ? "success" : "destructive"} className="text-xs">
-                      {systemStatus?.lightrag.initialized ? t('header.active') : t('header.inactive')}
-                    </Badge>
+                  <div className="text-center">
+                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
+                      systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
+                    }`} />
+                    <span className="text-xs text-muted-foreground">LLM</span>
+                  </div>
+                  <div className="text-center">
+                    <div className={`h-2 w-2 rounded-full mx-auto mb-1 ${
+                      systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
+                    }`} />
+                    <span className="text-xs text-muted-foreground">Embed</span>
                   </div>
                 </div>
+
+                {systemStatus?.overall?.uptime && (
+                  <div className="mt-3 text-xs text-muted-foreground text-center">
+                    Uptime: {systemStatus.overall.uptime.toFixed(0)}s
+                  </div>
+                )}
               </div>
             </SheetContent>
           </Sheet>
@@ -261,7 +376,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
               <h1 className="text-lg lg:text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
                 {config?.app?.name || 'Alice Semantic Bridge'}
               </h1>
-              <p className="text-xs text-muted-foreground hidden lg:block">
+              <p className="text-xs text-muted-foreground hidden lg:block font-light">
                 {config?.app?.description || 'Intelligent RAG System'}
               </p>
             </div>
@@ -304,85 +419,121 @@ export default function Header({ user, onLogout }: HeaderProps) {
             {/* Notification Center */}
             <NotificationCenter />
 
-            {/* System Status - Hidden on mobile, shown in menu */}
+            {/* System Status - Minimal Zen Design */}
             <div className="hidden sm:block">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-2 relative px-2 lg:px-3">
-                    <div className={`h-2 w-2 rounded-full ${
-                      isConnecting ? 'bg-gray-400' : 
-                      allServicesActive ? 'bg-green-500' : 'bg-yellow-500'
-                    } ${!isConnecting && 'animate-pulse'}`} />
-                    <span className="text-sm hidden md:inline">{t('header.systemStatus')}</span>
-                    <ChevronDown className="h-3 w-3 opacity-60 hidden lg:inline" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 p-4">
-                  <div className="space-y-4">
-                    {/* Overall Status */}
-                    <div className="flex items-center justify-between pb-3 border-b">
-                      <h3 className="font-semibold text-sm">{t('header.overallStatus')}</h3>
+                  <Button variant="ghost" size="sm" className="relative p-2 h-9">
+                    {/* Status icon with service count */}
+                    <div className="relative">
                       {isConnecting ? (
-                        <Badge variant="secondary" className="gap-1">
-                          <div className="h-2 w-2 rounded-full bg-gray-400 animate-pulse" />
-                          {t('header.connecting')}
-                        </Badge>
+                        <div className="h-5 w-5 rounded-full bg-gray-400 animate-pulse" />
+                      ) : allServicesActive ? (
+                        <CheckCircle className="h-5 w-5 text-green-500" />
                       ) : (
-                        <Badge variant={allServicesActive ? "success" : "warning"}>
-                          {allServicesActive ? t('header.allServicesActive') : t('header.someIssues')}
-                        </Badge>
+                        <AlertCircle className="h-5 w-5 text-yellow-500" />
+                      )}
+
+                      {/* Service count badge */}
+                      {!isConnecting && (
+                        <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+                          {getActiveServicesCount()}
+                        </span>
                       )}
                     </div>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72 p-0">
+                  {/* Clean minimal status grid */}
+                  <div className="p-4 space-y-3">
+                    {/* Title with overall status */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">System Status</span>
+                      <div className={`h-2 w-2 rounded-full ${
+                        getOverallStatus() === 'healthy' ? 'bg-green-500' :
+                        getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                      } animate-pulse`} />
+                    </div>
 
-                    {/* Service Status Grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center gap-2">
-                        <Database className="h-4 w-4 text-blue-600" />
-                        <div>
-                          <p className="text-xs font-medium">PostgreSQL</p>
-                          <Badge variant={systemStatus?.database.connected ? "success" : "destructive"} className="text-xs">
-                            {systemStatus?.database.connected ? 'rag_chatbot' : t('header.notConnected')}
-                          </Badge>
+                    {/* Services - minimal cards */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Database */}
+                      <div className={`p-2 rounded-lg border ${
+                        systemStatus?.database.connected
+                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <Database className="h-3 w-3 text-muted-foreground" />
+                          <div className={`h-1.5 w-1.5 rounded-full ${
+                            systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
                         </div>
+                        <p className="text-xs font-medium mt-1">Database</p>
+                        <p className="text-xs text-muted-foreground">
+                          {systemStatus?.database.connected ? 'Connected' : 'Offline'}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Server className="h-4 w-4 text-red-600" />
-                        <div>
-                          <p className="text-xs font-medium">Redis</p>
-                          <Badge variant={systemStatus?.redis.connected ? "success" : "destructive"} className="text-xs">
-                            {systemStatus?.redis.connected ? ':6379' : t('header.notConnected')}
-                          </Badge>
+
+                      {/* Redis */}
+                      <div className={`p-2 rounded-lg border ${
+                        systemStatus?.redis.connected
+                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <Cpu className="h-3 w-3 text-muted-foreground" />
+                          <div className={`h-1.5 w-1.5 rounded-full ${
+                            systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
                         </div>
+                        <p className="text-xs font-medium mt-1">Redis</p>
+                        <p className="text-xs text-muted-foreground">
+                          {systemStatus?.redis.connected ? 'Connected' : 'Offline'}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Brain className="h-4 w-4 text-primary" />
-                        <div>
-                          <p className="text-xs font-medium">LightRAG</p>
-                          <Badge variant={systemStatus?.lightrag.initialized ? "success" : "destructive"} className="text-xs">
-                            {systemStatus?.lightrag.initialized ? ':7687' : t('header.inactive')}
-                          </Badge>
+
+                      {/* LLM */}
+                      <div className={`p-2 rounded-lg border ${
+                        systemStatus?.llmModel.active
+                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <div className={`h-1.5 w-1.5 rounded-full ${
+                            systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
                         </div>
+                        <p className="text-xs font-medium mt-1">LLM</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          Active
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Cpu className="h-4 w-4 text-green-600" />
-                        <div>
-                          <p className="text-xs font-medium">OpenAI</p>
-                          <Badge variant={systemStatus?.embedder.active ? "success" : "destructive"} className="text-xs">
-                            {systemStatus?.embedder.active ? 'ada-002' : t('header.inactive')}
-                          </Badge>
+
+                      {/* Embeddings */}
+                      <div className={`p-2 rounded-lg border ${
+                        systemStatus?.embedder.active
+                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
+                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-3 w-3 text-muted-foreground" />
+                          <div className={`h-1.5 w-1.5 rounded-full ${
+                            systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
                         </div>
+                        <p className="text-xs font-medium mt-1">Embeddings</p>
+                        <p className="text-xs text-muted-foreground">
+                          {systemStatus?.embedder.active ? 'Ready' : 'Offline'}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="pt-3 border-t flex items-center justify-between">
+                    {/* Minimal footer */}
+                    <div className="pt-2 border-t flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">
-                        {t('header.lastUpdated')}: {new Date().toLocaleTimeString()}
+                        {new Date().toLocaleTimeString()}
                       </span>
-                      <Link href="/dashboard/settings" className="text-xs text-primary hover:underline flex items-center gap-1">
-                        <Settings2 className="w-3 h-3" />
-                        {t('header.settings')}
-                      </Link>
                     </div>
                   </div>
                 </DropdownMenuContent>

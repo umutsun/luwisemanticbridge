@@ -300,7 +300,7 @@ export function createEnhancedSourceClickHandler(
       sourceTable: source.sourceTable
     });
 
-    // Only use LLM-generated questions, never generate fallbacks
+    // Use LLM-generated question if available
   if (source.question && typeof source.question === 'string' && source.question.trim().length > 0) {
     // Use the LLM-generated question directly
     question = source.question.trim();
@@ -317,9 +317,22 @@ export function createEnhancedSourceClickHandler(
     }
 
     console.log('Using LLM-generated question:', question);
-  }
+  } else {
+    // Generate a question from the source title and content
+    const title = (source.title as string) || '';
+    const excerpt = (source.excerpt as string) || '';
+    const content = (source.content as string) || '';
+    const category = (source.category as string) || (source.sourceTable as string) || '';
+    const sourceTable = (source.sourceTable as string) || '';
 
-  // If no LLM question, don't generate anything - leave input empty
+    // Extract keywords from the source
+    const keywords = extractKeywords(title + ' ' + excerpt + ' ' + content);
+
+    // Generate contextual question
+    question = generateQuestionFromContext(title, content || excerpt, category, sourceTable, keywords);
+
+    console.log('Generated contextual question:', question);
+  }
 
     console.log('Final question to be set:', question);
     console.log('Current input text:', getInputText());

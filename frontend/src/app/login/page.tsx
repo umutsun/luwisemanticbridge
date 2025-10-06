@@ -7,55 +7,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Brain, Lock, Mail, Loader2, AlertTriangle } from 'lucide-react';
+import { Brain, Lock, Mail, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+
+  const { login, isLoading, error, clearError } = useAuthStore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Login attempt:', { email, password });
-    setLoading(true);
-    setError('');
 
     try {
-      // For demo purposes, using hardcoded credentials
-      // In production, this should validate against a real auth backend
-      if (email === 'admin@asb.com' && password === 'admin123') {
-        console.log('Login successful');
-        
-        // Store auth token in both localStorage and cookie
-        const token = 'demo-token-' + Date.now();
-        localStorage.setItem('asb_token', token);
-        localStorage.setItem('asb_user', JSON.stringify({
-          id: '1',
-          name: 'Admin',
-          email: email,
-          role: 'admin'
-        }));
-        
-        // Set cookie for middleware
-        document.cookie = `asb_token=${token}; path=/; max-age=86400`; // 24 hours
-        
-        console.log('Redirecting to dashboard...');
-        // Add small delay to ensure cookie is set
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 100);
-      } else {
-        console.log('Invalid credentials');
-        setError('Geçersiz email veya şifre');
-      }
-    } catch (err) {
-      console.error('Login error:', err);
-      setError('Giriş işlemi başarısız oldu');
-    } finally {
-      setLoading(false);
+      await login({ email, password });
+      router.push('/dashboard');
+    } catch (error) {
+      // Error is handled in the store
     }
   };
 
@@ -95,9 +66,12 @@ export default function LoginPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="admin@asb.com"
+                    placeholder="Email adresiniz"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (error) clearError();
+                    }}
                     className="pl-10"
                     required
                   />
@@ -110,18 +84,32 @@ export default function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     id="password"
-                    type="password"
-                    placeholder="••••••••"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Şifreniz"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (error) clearError();
+                    }}
+                    className="pl-10 pr-10"
                     required
                   />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Giriş yapılıyor...
@@ -132,9 +120,11 @@ export default function LoginPage() {
               </Button>
 
               <div className="text-center text-sm text-muted-foreground">
-                <p>Demo Kullanıcı:</p>
-                <p>Email: admin@asb.com</p>
-                <p>Şifre: admin123</p>
+                <p>Hesabınız yok mu? {' '}
+                  <Link href="/auth/register" className="text-primary hover:underline">
+                    Kayıt olun
+                  </Link>
+                </p>
               </div>
             </form>
 

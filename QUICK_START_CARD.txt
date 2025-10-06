@@ -1,0 +1,140 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║     _    ____  ____     ____  __  __ ____                           ║
+║    / \  / ___|| __ )   |  _ \|  \/  |___ \                          ║
+║   / _ \ \___ \|  _ \   | |_) | |\/| | __) |                         ║
+║  / ___ \ ___) | |_) |  |  __/| |  | |/ __/                          ║
+║ /_/   \_\____/|____/   |_|   |_|  |_|_____|                         ║
+║                                                                      ║
+║              Alice Semantic Bridge - PM2 Quick Start                ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 🚀 QUICK START (First Time)                                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+  1. Run setup wizard (one-time):
+     > setup-installer.bat
+
+  2. Start all services:
+     > pm2-start-all.bat
+
+  3. Open application:
+     > http://localhost:3001
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 📋 DAILY OPERATIONS                                                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Start:    pm2-start-all.bat
+  Stop:     pm2-stop-all.bat
+  Restart:  pm2-restart.bat
+  Status:   pm2-status.bat
+  Health:   pm2-health.bat
+  Logs:     pm2-logs.bat
+  Monitor:  pm2-monitor.bat
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 🎮 ESSENTIAL PM2 COMMANDS                                           │
+└─────────────────────────────────────────────────────────────────────┘
+
+  pm2 list              List all processes
+  pm2 logs              View all logs (realtime)
+  pm2 monit             Real-time monitoring
+  pm2 restart all       Restart all services
+  pm2 reload all        Zero-downtime reload
+  pm2 stop all          Stop all services
+  pm2 save              Save process list
+  pm2 resurrect         Restore saved processes
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 🔍 MONITORING                                                       │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Quick Check:        pm2 list
+  Detailed Info:      pm2 describe asb-backend
+  Real-time Stats:    pm2 monit
+  View Errors:        pm2 logs --err
+  Last 50 lines:      pm2 logs --lines 50
+  Backend only:       pm2 logs asb-backend
+  Frontend only:      pm2 logs asb-frontend
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ ⚡ TROUBLESHOOTING                                                  │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Services won't start:
+    1. netstat -ano | findstr "8083"
+    2. taskkill /PID <pid> /F
+    3. pm2-start-all.bat
+
+  Check what's wrong:
+    1. pm2-health.bat
+    2. pm2 logs --err --lines 100
+    3. pm2 monit
+
+  Emergency restart:
+    1. pm2 stop all
+    2. pm2 delete all
+    3. pm2 flush
+    4. pm2-start-all.bat
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 📊 SERVICES                                                         │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Backend API:   http://localhost:8083
+  Frontend:      http://localhost:3001
+  Health Check:  http://localhost:8083/health
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 📚 DOCUMENTATION                                                    │
+└─────────────────────────────────────────────────────────────────────┘
+
+  PM2_README.md              System overview (30 pages)
+  PM2_DEPLOYMENT_GUIDE.md    Full deployment guide (47 pages)
+  PM2_QUICK_REFERENCE.md     Command cheat sheet (15 pages)
+  PM2_SETUP_SUMMARY.md       Setup summary & checklist
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ ⚙️  CONFIGURATION FILES                                             │
+└─────────────────────────────────────────────────────────────────────┘
+
+  ecosystem.config.js        PM2 configuration
+  backend/.env               Backend environment
+  frontend/.env.local        Frontend environment
+  logs/                      Log files directory
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ 🆘 SUPPORT                                                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Check logs:        pm2-logs.bat
+  Health check:      pm2-health.bat
+  Documentation:     PM2_README.md
+  PM2 Official:      https://pm2.keymetrics.io/docs/
+  Email:             devops@asemb.ai
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ ✅ SUCCESS INDICATORS                                               │
+└─────────────────────────────────────────────────────────────────────┘
+
+  ✓ pm2 list shows all "online"
+  ✓ pm2-health.bat passes all checks
+  ✓ http://localhost:3001 loads
+  ✓ No errors in: pm2 logs --err
+  ✓ Memory usage < 80%
+  ✓ Response time < 200ms
+
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║  💡 TIP: Print this card and keep it next to your desk!             ║
+║                                                                      ║
+║  🎯 Most Common Command: pm2-status.bat                             ║
+║                                                                      ║
+║  🚀 For production: pm2-setup-startup.bat (auto-start on boot)      ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Version: 1.0.0 | Last Updated: 2025-10-06 | ASB DevOps Team

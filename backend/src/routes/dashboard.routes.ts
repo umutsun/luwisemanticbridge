@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import LightRAGService from '../services/lightrag.service';
 import axios from 'axios';
 import OpenAI from 'openai';
 import { getDatabaseSettings, getCustomerPool, getAiSettings } from '../config/database.config';
@@ -31,16 +30,7 @@ ragAnythingRouter.use(async (req, res) => {
   }
 });
 
-// --- LightRAG Service Setup ---
-const getLightRAG = async (): Promise<LightRAGService> => {
-  const { lightRAGService, pgPool, redis } = require('../server');
-  if (lightRAGService) return lightRAGService;
-  
-  console.log('⚠️ Creating new LightRAG instance (fallback)');
-  const newInstance = new LightRAGService(pgPool, redis);
-  await newInstance.initialize();
-  return newInstance;
-};
+// LightRAG service disabled
 
 // --- Embeddings Management Routes ---
 
@@ -169,45 +159,12 @@ router.get('/api/v2/settings/ai', async (req: Request, res: Response) => {
   }
 });
 
-// Test LightRAG embedding
+// LightRAG test endpoint disabled
 router.post('/api/v2/embeddings/test-lightrag', async (req: Request, res: Response) => {
-  try {
-    const { text, provider = 'auto' } = req.body;
-    const { LightRAGService } = require('../services/lightrag.service');
-    const { redis } = require('../server');  // Get redis from server module
-
-    if (!text) {
-      return res.status(400).json({
-        error: 'Text is required for testing'
-      });
-    }
-
-    console.log('🧪 Testing LightRAG embedding with provider:', provider);
-
-    // Initialize LightRAG service
-    const lightragService = new LightRAGService(asembPool, redis);
-
-    // Initialize the service (this will load API keys from database)
-    await lightragService.initialize();
-
-    // Test embedding creation
-    const embedding = await lightragService.createEmbedding(text);
-
-    console.log(`✅ LightRAG embedding created successfully. Dimension: ${embedding.length}`);
-
-    res.json({
-      success: true,
-      embeddingDimension: embedding.length,
-      provider: lightragService['currentProvider'],
-      sampleValues: embedding.slice(0, 5) // Show first 5 values for verification
-    });
-  } catch (error) {
-    console.error('❌ LightRAG test failed:', error);
-    res.status(500).json({
-      error: 'LightRAG embedding test failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+  res.status(503).json({
+    error: 'LightRAG service is disabled',
+    message: 'This endpoint has been disabled as LightRAG is no longer supported'
+  });
 });
 
 router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Response) => {
@@ -850,23 +807,8 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                                    embeddingVector = generateLocalEmbedding(textContent);
                                    console.log(`✅ Local embedding generated successfully`);
                                } else if (embeddingMethod === 'lightrag') {
-                                   console.log(`🔗 Using LightRAG for embedding...`);
-                                   try {
-                                       const lightrag = await getLightRAG();
-                                       // Try to use LightRAG with available provider
-                                       // If OpenAI quota is exceeded, it will automatically fallback to DeepSeek or local
-                                       embeddingVector = await lightrag.createEmbedding(textContent);
-                                       console.log(`✅ LightRAG embedding generated successfully using ${lightrag['currentProvider']}`);
-                                       
-                                       // If provider is 'none', fallback to local
-                                       if (lightrag['currentProvider'] === 'none') {
-                                           console.log(`⚠️ LightRAG has no provider available, using local embeddings`);
-                                           embeddingVector = generateLocalEmbedding(textContent);
-                                       }
-                                   } catch (error) {
-                                       console.error(`❌ LightRAG embedding failed, falling back to local:`, error);
-                                       embeddingVector = generateLocalEmbedding(textContent);
-                                   }
+                                   console.log(`⚠️ LightRAG is disabled, falling back to local embeddings`);
+                                   embeddingVector = generateLocalEmbedding(textContent);
                                } else if (embeddingProvider === 'e5-mistral') {
                                    console.log(`🤖 Using E5-Mistral-7B for embedding...`);
                                    try {
@@ -1230,21 +1172,32 @@ router.get('/api/test-openai', async (req: Request, res: Response) => {
 router.get('/api/dashboard', async (req: Request, res: Response) => {
   try {
     const { pgPool, redis } = require('../server');
-    const lightrag = await getLightRAG();
+
+    // LightRAG disabled
+    let lightragStats = { initialized: false, documentCount: 0, error: 'Service disabled' };
 
     let documentsCount = 0, conversationsCount = 0, messagesCount = 0, dbSize = 0;
 
     try {
+      if (!pgPool || !pgPool.query) {
+        throw new Error('pgPool is not available');
+      }
       const convResult = await pgPool.query(`SELECT COUNT(*) as count FROM conversations`);
       conversationsCount = convResult.rows[0].count || 0;
     } catch (err) { /* ignore */ }
 
     try {
+      if (!pgPool || !pgPool.query) {
+        throw new Error('pgPool is not available');
+      }
       const msgResult = await pgPool.query(`SELECT COUNT(*) as count FROM messages`);
       messagesCount = msgResult.rows[0].count || 0;
     } catch (err) { /* ignore */ }
 
     try {
+      if (!pgPool || !pgPool.query) {
+        throw new Error('pgPool is not available');
+      }
       const sizeResult = await pgPool.query(`SELECT pg_database_size(current_database()) as db_size`);
       dbSize = sizeResult.rows[0].db_size || 0;
     } catch (err) { /* ignore */ }
@@ -1259,13 +1212,21 @@ router.get('/api/dashboard', async (req: Request, res: Response) => {
       }
     } catch (err) { /* ignore */ }
 
-    const lightragStats = await lightrag.getStats();
-
-    const recentActivity = await pgPool.query(`
-      SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
-      FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id
-      GROUP BY c.id ORDER BY c.created_at DESC LIMIT 10
-    `);
+    // Get recent activity with error handling
+    let recentActivity = [];
+    try {
+      if (!pgPool || !pgPool.query) {
+        throw new Error('pgPool is not available');
+      }
+      const activityResult = await pgPool.query(`
+        SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
+        FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id
+        GROUP BY c.id ORDER BY c.created_at DESC LIMIT 10
+      `);
+      recentActivity = activityResult.rows;
+    } catch (err) {
+      console.error('Failed to get recent activity:', err);
+    }
 
     const formattedSize = dbSize > 1073741824 ? `${(dbSize / 1073741824).toFixed(2)} GB` : `${(dbSize / 1048576).toFixed(2)} MB`;
 
@@ -1273,10 +1234,16 @@ router.get('/api/dashboard', async (req: Request, res: Response) => {
       database: { documents: documentsCount, conversations: conversationsCount, messages: messagesCount, size: formattedSize },
       redis: redisStats,
       lightrag: lightragStats,
-      recentActivity: recentActivity.rows
+      recentActivity: recentActivity,
+      timestamp: new Date().toISOString()
     });
   } catch (error: any) {
-    res.status(500).json({ error: 'Failed to get dashboard stats' });
+    console.error('Dashboard API error:', error);
+    res.status(500).json({
+      error: 'Failed to get dashboard stats',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
@@ -1309,16 +1276,25 @@ router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
         let documentsCount = 0, conversationsCount = 0, messagesCount = 0, dbSize = 0;
 
         try {
+          if (!pgPool || !pgPool.query) {
+            throw new Error('pgPool is not available');
+          }
           const convResult = await pgPool.query(`SELECT COUNT(*) as count FROM conversations`);
           conversationsCount = convResult.rows[0].count || 0;
         } catch (err) { /* ignore */ }
 
         try {
+          if (!pgPool || !pgPool.query) {
+            throw new Error('pgPool is not available');
+          }
           const msgResult = await pgPool.query(`SELECT COUNT(*) as count FROM messages`);
           messagesCount = msgResult.rows[0].count || 0;
         } catch (err) { /* ignore */ }
 
         try {
+          if (!pgPool || !pgPool.query) {
+            throw new Error('pgPool is not available');
+          }
           const sizeResult = await pgPool.query(`SELECT pg_database_size(current_database()) as db_size`);
           dbSize = sizeResult.rows[0].db_size || 0;
         } catch (err) { /* ignore */ }
@@ -1333,16 +1309,15 @@ router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
           }
         } catch (err) { /* ignore */ }
 
-        // Get LightRAG stats
-        let lightragStats = { initialized: false, documentCount: 0 };
-        try {
-          const lightrag = await getLightRAG();
-          lightragStats = await lightrag.getStats();
-        } catch (err) { /* ignore */ }
+        // LightRAG disabled
+        let lightragStats = { initialized: false, documentCount: 0, error: 'Service disabled' };
 
         // Get recent activity
         let recentActivity = [];
         try {
+          if (!pgPool || !pgPool.query) {
+            throw new Error('pgPool is not available');
+          }
           const activityResult = await pgPool.query(`
             SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
             FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id

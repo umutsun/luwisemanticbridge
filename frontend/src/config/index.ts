@@ -58,12 +58,12 @@ export const API = {
 // Server Configuration
 export const SERVER = {
   DEFAULT_PORTS: {
-    BACKEND: 8083,
-    FRONTEND: 3000,
+    BACKEND: parseInt(process.env.NEXT_PUBLIC_API_PORT || '8083', 10),
+    FRONTEND: parseInt(process.env.NEXT_PUBLIC_PORT || '3000', 10),
     REDIS: 6379,
   },
   HOSTS: {
-    LOCALHOST: 'localhost',
+    LOCALHOST: process.env.NEXT_PUBLIC_API_HOST || 'localhost',
   },
 } as const;
 

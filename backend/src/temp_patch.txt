@@ -1,0 +1,5 @@
+export interface ServicePortConfig { 
+  api: { host: string; port: string; }; 
+  redis: { host: string; port: number; db: number; password?: string; }; 
+  postgres: { host: string; port: number; database: string; user: string; password?: string; }; 
+} 

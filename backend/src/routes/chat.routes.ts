@@ -107,4 +107,35 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get more related results with pagination
+ */
+router.post('/api/v2/chat/related', async (req: Request, res: Response) => {
+  try {
+    const {
+      query,
+      excludeIds = [],
+      offset = 0,
+      limit = 7
+    } = req.body;
+
+    if (!query || query.trim() === '') {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    console.log(`Getting related results: query="${query}", offset=${offset}, limit=${limit}, exclude=${excludeIds.length} items`);
+
+    const results = await ragChat.getRelatedTopicsPaginated(query, excludeIds, offset, limit);
+
+    res.json({
+      results,
+      hasMore: results.length === limit,
+      offset: offset + results.length
+    });
+  } catch (error: any) {
+    console.error('Get related results error:', error);
+    res.status(500).json({ error: 'Failed to get related results' });
+  }
+});
+
 export default router;

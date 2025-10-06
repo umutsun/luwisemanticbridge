@@ -70,7 +70,7 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
       return;
     }
 
-    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3002';
+    const socketUrl = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_WEBSOCKET_URL?.replace('ws://', 'http://') || 'http://localhost:8083';
     const socket = io(socketUrl, {
       reconnection: true,
       reconnectionDelay: 1000,
@@ -302,7 +302,7 @@ export class WebSocketManager {
   connect(url?: string): void {
     if (this.socket?.connected) return;
 
-    const socketUrl = url || process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3002';
+    const socketUrl = url || process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_WEBSOCKET_URL?.replace('ws://', 'http://') || 'http://localhost:8083';
     this.socket = io(socketUrl, {
       reconnection: true,
       reconnectionDelay: 1000,

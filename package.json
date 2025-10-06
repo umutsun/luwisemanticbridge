@@ -28,9 +28,10 @@
     "docker:update": "docker-compose -f docker-compose.dev.yml --env-file .env.asemb pull && docker-compose -f docker-compose.dev.yml --env-file .env.asemb up --build -d"
   },
   "dependencies": {
-    "pm2": "^5.3.0"
+    "axios": "^1.12.2",
+    "pm2": "^5.3.0",
+    "redis": "^5.8.3"
   },
-  "devDependencies": {},
   "keywords": [
     "multi-agent",
     "semantic-bridge",

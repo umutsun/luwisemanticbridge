@@ -1,50 +1,147 @@
 import { OpenAI } from 'openai';
 import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
-import { asembPool } from '../server'; // Import asembPool
+import { asembPool } from '../config/database.config'; // Import asembPool
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+interface EmbeddingSettings {
+  provider: string;
+  model: string;
+  openaiApiKey?: string;
+  googleApiKey?: string;
+}
 
 export class SemanticSearchService {
   private pool = pool;
   private customerPool: Pool;
   private openai: OpenAI | null = null;
   private useOpenAI: boolean = false;
+  private embeddingSettings: EmbeddingSettings = {
+    provider: 'openai',
+    model: 'text-embedding-ada-002'
+  };
 
   constructor() {
 
     // Initialize customer database pool
     this.customerPool = new Pool({
-      connectionString: process.env.RAG_CHATBOT_DATABASE_URL || process.env.CUSTOMER_DB_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/rag_chatbot'
+      connectionString: process.env.DATABASE_URL || `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || ''}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`
     });
 
-    // Initialize OpenAI
-    if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith('sk-')) {
-      try {
-        this.openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY
-        });
-        this.useOpenAI = true;
-        console.log('✅ OpenAI API initialized');
-      } catch (error) {
-        console.log('⚠️  OpenAI API initialization failed:', error);
-      }
+    // Initialize embedding providers asynchronously (fire and forget)
+    // We'll handle the async initialization in the generateEmbedding method
+    this.initializeEmbeddingProviders().catch(error => {
+      console.error('Failed to initialize embedding providers:', error);
+    });
+  }
+
+  /**
+   * Load embedding settings from database and initialize providers
+   */
+  private async loadEmbeddingSettings(): Promise<void> {
+    try {
+      const result = await asembPool.query(
+        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        [
+          'embedding_provider', 'embedding_model', 'openai_api_key', 'google_api_key',
+          'llmSettings.embeddingProvider', 'llmSettings.embeddingModel',
+          'embeddings.provider', 'embeddings.model', 'openai.apiKey', 'google.apiKey'
+        ]
+      );
+
+      const settings = result.rows.reduce((acc: any, row: any) => {
+        // Map different key formats to a consistent naming scheme
+        if (row.key === 'embedding_provider' || row.key === 'llmSettings.embeddingProvider' || row.key === 'embeddings.provider') {
+          acc.embeddingprovider = row.value;
+        } else if (row.key === 'embedding_model' || row.key === 'llmSettings.embeddingModel' || row.key === 'embeddings.model') {
+          acc.embeddingmodel = row.value;
+        } else if (row.key === 'openai_api_key' || row.key === 'openai.apiKey') {
+          acc.openaiapi = row.value;
+        } else if (row.key === 'google_api_key' || row.key === 'google.apiKey') {
+          acc.googleapi = row.value;
+        } else {
+          // Fallback for other keys
+          const key = row.key.replace('_key', '').replace('.', '');
+          acc[key] = row.value;
+        }
+        return acc;
+      }, {});
+
+      this.embeddingSettings = {
+        provider: settings.embeddingprovider || 'google',
+        model: settings.embeddingmodel || 'text-embedding-004',
+        openaiApiKey: settings.openaiapi || process.env.OPENAI_API_KEY,
+        googleApiKey: settings.googleapi || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
+      };
+
+      console.log('✅ Embedding settings loaded:', {
+        provider: this.embeddingSettings.provider,
+        model: this.embeddingSettings.model,
+        hasGoogleKey: !!this.embeddingSettings.googleApiKey,
+        hasOpenAIKey: !!this.embeddingSettings.openaiApiKey
+      });
+    } catch (error) {
+      console.warn('⚠️ Failed to load embedding settings from database, using defaults:', error);
+      // Fallback to environment variables
+      this.embeddingSettings = {
+        provider: process.env.EMBEDDING_PROVIDER || 'google',
+        model: process.env.EMBEDDING_MODEL || 'text-embedding-004',
+        openaiApiKey: process.env.OPENAI_API_KEY,
+        googleApiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
+      };
     }
   }
 
   /**
-   * Generate embedding for a text using Google or OpenAI
+   * Initialize embedding providers based on settings
+   */
+  private async initializeEmbeddingProviders(): Promise<void> {
+    await this.loadEmbeddingSettings();
+
+    // Initialize OpenAI if available
+    if (this.embeddingSettings.openaiApiKey && this.embeddingSettings.openaiApiKey.startsWith('sk-')) {
+      try {
+        this.openai = new OpenAI({
+          apiKey: this.embeddingSettings.openaiApiKey
+        });
+        this.useOpenAI = true;
+        console.log('✅ OpenAI API initialized for embeddings');
+      } catch (error) {
+        console.log('⚠️  OpenAI API initialization failed:', error);
+      }
+    } else {
+      this.useOpenAI = false;
+      console.log('📝 OpenAI API key not available');
+    }
+  }
+
+  /**
+   * Refresh embedding settings (call this when settings are updated)
+   */
+  async refreshEmbeddingSettings(): Promise<void> {
+    await this.initializeEmbeddingProviders();
+  }
+
+  /**
+   * Generate embedding for a text using configured provider
    */
   async generateEmbedding(text: string): Promise<number[]> {
-    // Try Google embeddings first if API key is available
-    if (process.env.GOOGLE_API_KEY) {
+    // Always refresh settings to ensure we have the latest
+    await this.loadEmbeddingSettings();
+
+    console.log(`🎯 Using embedding provider: ${this.embeddingSettings.provider}, model: ${this.embeddingSettings.model} (reloaded)`);
+
+    // Use Google embeddings if configured as provider
+    if (this.embeddingSettings.provider === 'google' && this.embeddingSettings.googleApiKey) {
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${process.env.GOOGLE_API_KEY}`, {
+        const model = this.embeddingSettings.model === 'text-embedding-004' ? 'text-embedding-004' : 'text-embedding-004';
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${this.embeddingSettings.googleApiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'models/text-embedding-004',
+            model: `models/${model}`,
             content: { parts: [{ text }] }
           })
         });
@@ -58,11 +155,12 @@ export class SemanticSearchService {
       }
     }
 
-    // Fallback to OpenAI
-    if (this.useOpenAI && this.openai) {
+    // Use OpenAI embeddings if configured as provider
+    if (this.embeddingSettings.provider === 'openai' && this.useOpenAI && this.openai) {
       try {
+        const model = this.embeddingSettings.model || 'text-embedding-ada-002';
         const response = await this.openai.embeddings.create({
-          model: 'text-embedding-ada-002',
+          model: model,
           input: text
         });
         return response.data[0].embedding;
@@ -103,95 +201,150 @@ export class SemanticSearchService {
   }
 
   /**
-   * Perform keyword search on available tables
+   * Perform keyword search on available tables with enhanced error handling
    */
   async keywordSearch(query: string, limit: number = 10) {
     const queryId = `keywordSearch_${query.substring(0, 10)}_${Date.now()}`;
     console.time(queryId);
     try {
-      let allResults = [];
+      let allResults: any[] = [];
 
-      // Try to search in unified_embeddings table first
+      // Search in all customer database tables with better distribution
+      const tables = [
+        { name: TABLE_NAMES.SORUCEVAP, type: 'sorucevap', priority: 1 },
+        { name: TABLE_NAMES.OZELGELER, type: 'ozelgeler', priority: 2 },
+        { name: TABLE_NAMES.MAKALELER, type: 'makaleler', priority: 3 },
+        { name: TABLE_NAMES.DANISTAYKARARLARI, type: 'danistaykararlari', priority: 4 }
+      ];
+
+      for (const table of tables) {
+        try {
+          let searchQuery = '';
+          
+          if (table.type === 'sorucevap') {
+            searchQuery = `
+              SELECT
+                id::text as id,
+                'SORUCEVAP - ' || LEFT(question, 100) as title,
+                'sorucevap' as source_table,
+                id::text as source_id,
+                LEFT(answer, 500) as excerpt,
+                ${table.priority} as priority
+              FROM ${table.name}
+              WHERE question ILIKE $1 OR answer ILIKE $1
+              ORDER BY id DESC
+              LIMIT $2
+            `;
+          } else if (table.type === 'ozelgeler') {
+            searchQuery = `
+              SELECT 
+                id::text as id,
+                'ÖZELGE - ' || LEFT(subject, 100) as title,
+                'ozelgeler' as source_table,
+                id::text as source_id,
+                LEFT(content, 500) as excerpt,
+                ${table.priority} as priority
+              FROM ${table.name}
+              WHERE subject ILIKE $1 OR content ILIKE $1
+              ORDER BY id DESC
+              LIMIT $2
+            `;
+          } else if (table.type === 'makaleler') {
+            searchQuery = `
+              SELECT 
+                id::text as id,
+                'MAKALE - ' || LEFT(baslik, 100) as title,
+                'makaleler' as source_table,
+                id::text as source_id,
+                LEFT(icerik, 500) as excerpt,
+                ${table.priority} as priority
+              FROM ${table.name}
+              WHERE baslik ILIKE $1 OR icerik ILIKE $1
+              ORDER BY id DESC
+              LIMIT $2
+            `;
+          } else if (table.type === 'danistaykararlari') {
+            searchQuery = `
+              SELECT 
+                id::text as id,
+                'DANIŞTAY - ' || LEFT(konu, 100) as title,
+                'danistaykararlari' as source_table,
+                id::text as source_id,
+                LEFT(karar, 500) as excerpt,
+                ${table.priority} as priority
+              FROM ${table.name}
+              WHERE konu ILIKE $1 OR karar ILIKE $1
+              ORDER BY id DESC
+              LIMIT $2
+            `;
+          }
+
+          const result = await this.customerPool.query(searchQuery, [
+            `%${query}%`,
+            Math.ceil(limit / tables.length) // Distribute limit among tables
+          ]);
+          
+          allResults = [...allResults, ...result.rows];
+          console.log(`Found ${result.rows.length} results from ${table.name}`);
+        } catch (error) {
+          console.log(`${table.name} table not accessible for search`);
+        }
+      }
+
+      // Also try unified_embeddings table if available
       try {
-        const unifiedQuery = `
-          SELECT
-            id::text as id,
-            COALESCE(metadata->>'title', 'Document ' || id) as title,
-            metadata->>'table' as source_table,
-            source_id::text as source_id,
-            LEFT(content, 500) as excerpt,
-            1 as priority
-          FROM unified_embeddings
-          WHERE content ILIKE $1 OR (metadata->>'title') ILIKE $1
-          LIMIT $2
-        `;
-        const unifiedResult = await asembPool.query(unifiedQuery, [
-          `%${query}%`,
-          limit
-        ]);
-        allResults = [...allResults, ...unifiedResult.rows];
-        console.log(`Found ${unifiedResult.rows.length} results from unified_embeddings`);
+        if (asembPool) {
+          const unifiedQuery = `
+            SELECT
+              id::text as id,
+              COALESCE(metadata->>'title', 'Document ' || id) as title,
+              metadata->>'table' as source_table,
+              source_id::text as source_id,
+              LEFT(content, 500) as excerpt,
+              5 as priority
+            FROM unified_embeddings
+            WHERE content ILIKE $1 OR (metadata->>'title') ILIKE $1
+            LIMIT $2
+          `;
+          const unifiedResult = await asembPool.query(unifiedQuery, [
+            `%${query}%`,
+            Math.ceil(limit / 2)
+          ]);
+          allResults = [...allResults, ...unifiedResult.rows];
+          console.log(`Found ${unifiedResult.rows.length} results from unified_embeddings`);
+        }
       } catch (error) {
-        console.error('Error accessing unified_embeddings:', error);
-        console.log('unified_embeddings table not accessible, trying other tables...');
-      }
-
-      // If no results, try scraped_data table
-      if (allResults.length === 0) {
-        try {
-          const scrapedQuery = `
-            SELECT
-              id::text as id,
-              COALESCE(title, 'Document ' || id) as title,
-              'scraped_data' as source_table,
-              id::text as source_id,
-              COALESCE(LEFT(content, 500), LEFT(description, 500)) as excerpt,
-              2 as priority
-            FROM scraped_data
-            WHERE title ILIKE $1 OR content ILIKE $1 OR description ILIKE $1
-            LIMIT $2
-          `;
-          const scrapedResult = await this.pool.query(scrapedQuery, [
-            `%${query}%`,
-            limit
-          ]);
-          allResults = [...allResults, ...scrapedResult.rows];
-          console.log(`Found ${scrapedResult.rows.length} results from scraped_data`);
-        } catch (error) {
-          console.log('scraped_data table not accessible...');
-        }
-      }
-
-      // If still no results, try documents table
-      if (allResults.length === 0) {
-        try {
-          const documentsQuery = `
-            SELECT
-              id::text as id,
-              COALESCE(title, 'Document ' || id) as title,
-              'documents' as source_table,
-              id::text as source_id,
-              COALESCE(LEFT(content, 500), LEFT(summary, 500)) as excerpt,
-              3 as priority
-            FROM documents
-            WHERE title ILIKE $1 OR content ILIKE $1 OR summary ILIKE $1
-            LIMIT $2
-          `;
-          const documentsResult = await this.pool.query(documentsQuery, [
-            `%${query}%`,
-            limit
-          ]);
-          allResults = [...allResults, ...documentsResult.rows];
-          console.log(`Found ${documentsResult.rows.length} results from documents`);
-        } catch (error) {
-          console.log('documents table not accessible...');
-        }
+        console.log('unified_embeddings table not accessible...');
       }
 
       console.timeEnd(queryId);
-      return allResults.map(row => ({
+      
+      // Sort by priority first, then by relevance score
+      const sortedResults = allResults.sort((a, b) => {
+        // Primary sort: by priority (lower number = higher priority)
+        if (a.priority !== b.priority) {
+          return a.priority - b.priority;
+        }
+
+        // Secondary sort: by title/content relevance
+        const queryLower = query.toLowerCase();
+        const aTitle = (a.title || '').toLowerCase();
+        const bTitle = (b.title || '').toLowerCase();
+        const aExcerpt = (a.excerpt || '').toLowerCase();
+        const bExcerpt = (b.excerpt || '').toLowerCase();
+
+        // Check if query appears in title or excerpt
+        const aRelevance = (aTitle.includes(queryLower) ? 2 : 0) +
+                           (aExcerpt.includes(queryLower) ? 1 : 0);
+        const bRelevance = (bTitle.includes(queryLower) ? 2 : 0) +
+                           (bExcerpt.includes(queryLower) ? 1 : 0);
+
+        return bRelevance - aRelevance;
+      }).slice(0, limit);
+      
+      return sortedResults.map(row => ({
         ...row,
-        score: 100 - (row.priority * 10) // Score based on priority
+        score: Math.max(90, 100 - (row.priority * 8)) // Score based on priority, minimum 90
       }));
     } catch (error) {
       console.timeEnd(queryId);
@@ -201,23 +354,28 @@ export class SemanticSearchService {
   }
 
   /**
-   * Perform semantic search using rag_data.documents table
+   * Perform semantic search using unified_embeddings table
    */
   async semanticSearch(query: string, limit: number = 10) {
     const embeddingId = `semanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
     const queryId = `semanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
     try {
-      // Check if rag_data.documents exists and has data
-      const embeddingCheck = await this.pool.query(`
-        SELECT COUNT(*) as count 
-        FROM rag_data.documents 
+      // Check if asembPool is available and unified_embeddings has data
+      if (!asembPool) {
+        console.log('❌ asembPool not available, using keyword search');
+        return this.keywordSearch(query, limit);
+      }
+
+      const embeddingCheck = await asembPool.query(`
+        SELECT COUNT(*) as count
+        FROM unified_embeddings
         WHERE embedding IS NOT NULL
       `);
 
       const hasEmbeddings = parseInt(embeddingCheck.rows[0].count) > 0;
 
       if (!hasEmbeddings) {
-        console.log('No embeddings in rag_data.documents, using keyword search');
+        console.log('No embeddings in unified_embeddings, using keyword search');
         return this.keywordSearch(query, limit);
       }
 
@@ -226,104 +384,29 @@ export class SemanticSearchService {
       const queryEmbedding = await this.generateEmbedding(query);
       console.timeEnd(embeddingId);
       
-      // Enhanced semantic search with better metadata
-      const searchQuery = `
-        SELECT 
-          d.id::text as id,
-          d.title,
-          d.content as excerpt,
-          UPPER(d.source_table) as source_table,
-          d.source_id,
-          d.metadata,
-          1 - (d.embedding <=> $1::vector) as similarity_score,
-          CASE 
-            WHEN d.content ILIKE $3 THEN 0.2
-            WHEN d.title ILIKE $3 THEN 0.15
-            ELSE 0
-          END as keyword_boost
-        FROM rag_data.documents d
-        WHERE d.embedding IS NOT NULL
-          AND (1 - (d.embedding <=> $1::vector)) > 0.5  -- Increased to 50% minimum similarity
-        ORDER BY 
-          (1 - (d.embedding <=> $1::vector)) + 
-          CASE 
-            WHEN d.content ILIKE $3 THEN 0.2
-            WHEN d.title ILIKE $3 THEN 0.15
-            ELSE 0
-          END DESC
-        LIMIT $2
-      `;
-
-      console.time(queryId);
-      const result = await this.pool.query(searchQuery, [
-        JSON.stringify(queryEmbedding),
-        limit,
-        `%${query}%`
-      ]);
-      console.timeEnd(queryId);
-
-      return result.rows.map(row => ({
-        ...row,
-        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 100),
-        relevanceScore: parseFloat(row.similarity_score),
-        content: row.excerpt
-      }));
-    } catch (error) {
-      console.timeEnd(queryId); // Ensure timer ends on error
-      console.error('Semantic search error:', error);
-      // Fallback to unified semantic search
-      return this.unifiedSemanticSearch(query, limit);
-    }
-  }
-
-  /**
-   * Perform semantic search using unified_embeddings table
-   */
-  async unifiedSemanticSearch(query: string, limit: number = 10) {
-    const embeddingId = `unifiedSemanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
-    const queryId = `unifiedSemanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
-
-    try {
-      // Check if unified_embeddings exists and has data
-      const embeddingCheck = await asembPool.query(`
-        SELECT COUNT(*) as count
-        FROM unified_embeddings
-        WHERE embedding IS NOT NULL
-      `);
-      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count) > 0;
-
-      if (!hasEmbeddings) {
-        console.log('No embeddings in unified_embeddings, falling back to keyword search');
-        return this.keywordSearch(query, limit);
-      }
-
-      // Generate embedding for query
-      console.time(embeddingId);
-      const queryEmbedding = await this.generateEmbedding(query);
-      console.timeEnd(embeddingId);
-
-      // Search in unified_embeddings table with minimum similarity threshold
+      // Enhanced semantic search using unified_embeddings
       const searchQuery = `
         SELECT
           ue.id::text as id,
+          COALESCE(ue.metadata->>'title', ue.content::text) as title,
           ue.content as excerpt,
-          ue.metadata->>'table' as source_table,
+          COALESCE(ue.metadata->>'table', 'unknown') as source_table,
           ue.source_id,
+          ue.metadata,
           1 - (ue.embedding <=> $1::vector) as similarity_score,
           CASE
-            WHEN ue.content ILIKE $3 THEN 0.3
-            WHEN ue.metadata->>'table' ILIKE $3 THEN 0.2
+            WHEN ue.content ILIKE $3 THEN 0.15
+            WHEN ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND ue.source_type = 'database'
-          AND (1 - (ue.embedding <=> $1::vector)) > 0.65  -- 65% minimum similarity threshold
+          AND (1 - (ue.embedding <=> $1::vector)) > 0.3  -- 30% minimum similarity threshold (increased from 5%)
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
-            WHEN ue.content ILIKE $3 THEN 0.3
-            WHEN ue.metadata->>'table' ILIKE $3 THEN 0.2
+            WHEN ue.content ILIKE $3 THEN 0.15
+            WHEN ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
           END DESC
         LIMIT $2
@@ -339,51 +422,206 @@ export class SemanticSearchService {
 
       return result.rows.map(row => ({
         ...row,
-        title: `${row.source_table} - ID: ${row.source_id}`,
-        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 100),
+        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 125), // Increased multiplier
         relevanceScore: parseFloat(row.similarity_score),
         content: row.excerpt
       }));
     } catch (error) {
-      console.error('Unified semantic search error:', error);
+      console.timeEnd(queryId); // Ensure timer ends on error
+      console.error('Semantic search error:', error);
+      // Fallback to keyword search
+      return this.keywordSearch(query, limit);
+    }
+  }
+
+  /**
+   * Perform semantic search using unified_embeddings table with enhanced error handling
+   */
+  async unifiedSemanticSearch(query: string, limit: number = 10) {
+    const embeddingId = `unifiedSemanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
+    const queryId = `unifiedSemanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
+
+    try {
+      // Check if asembPool is available and connected
+      if (!asembPool) {
+        console.error('❌ asembPool is not available');
+        return this.keywordSearch(query, limit);
+      }
+
+      // Check if unified_embeddings exists and has data
+      const embeddingCheck = await asembPool.query(`
+        SELECT COUNT(*) as count
+        FROM unified_embeddings
+        WHERE embedding IS NOT NULL
+      `);
+      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count) > 0;
+
+      if (!hasEmbeddings) {
+        console.log('⚠️ No embeddings in unified_embeddings, falling back to keyword search');
+        return this.keywordSearch(query, limit);
+      }
+
+      // Generate embedding for query
+      console.time(embeddingId);
+      const queryEmbedding = await this.generateEmbedding(query);
+      console.timeEnd(embeddingId);
+
+      // Search in unified_embeddings table with minimum similarity threshold
+      const searchQuery = `
+        SELECT
+          ue.id::text as id,
+          ue.content as excerpt,
+          ue.source_table,
+          ue.source_id,
+          1 - (ue.embedding <=> $1::vector) as similarity_score,
+          CASE
+            WHEN ue.content ILIKE $3 THEN 0.2
+            WHEN ue.source_table ILIKE $3 THEN 0.15
+            ELSE 0
+          END as keyword_boost
+        FROM unified_embeddings ue
+        WHERE ue.embedding IS NOT NULL
+          AND (1 - (ue.embedding <=> $1::vector)) > 0.3  -- 30% minimum similarity threshold (increased from 5%)
+        ORDER BY
+          (1 - (ue.embedding <=> $1::vector)) +
+          CASE
+            WHEN ue.content ILIKE $3 THEN 0.2
+            WHEN ue.source_table ILIKE $3 THEN 0.15
+            ELSE 0
+          END DESC
+        LIMIT $2
+      `;
+
+      console.time(queryId);
+      const result = await asembPool.query(searchQuery, [
+        JSON.stringify(queryEmbedding),
+        limit,
+        `%${query}%`
+      ]);
       console.timeEnd(queryId);
+
+      return result.rows.map(row => ({
+        ...row,
+        title: row.source_table ? `${row.source_table} - ID: ${row.source_id}` : `Document - ID: ${row.source_id}`,
+        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 125), // Increased multiplier
+        relevanceScore: parseFloat(row.similarity_score),
+        content: row.excerpt
+      }));
+    } catch (error) {
+      console.error('❌ Unified semantic search error:', error);
+      console.timeEnd(queryId);
+
+      // Check if this is a connection issue
+      if (error instanceof Error) {
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('connection') || errorMessage.includes('timeout') || errorMessage.includes('pool')) {
+          console.log('⚠️ Database connection issue detected, using keyword search fallback');
+        } else {
+          console.log('⚠️ Database query error, using keyword search fallback');
+        }
+      }
+
       // Fallback to keyword search instead of recursive call
       return this.keywordSearch(query, limit);
     }
   }
 
   /**
-   * Perform hybrid search (keyword + semantic)
+   * Perform hybrid search (keyword + semantic) with enhanced error handling
    */
   async hybridSearch(query: string, limit: number = 10) {
+    const searchId = `hybridSearch_${query.substring(0, 10)}_${Date.now()}`;
+    console.time(searchId);
+
     try {
-      // Try unified semantic search first, as it's the primary source
-      const unifiedResults = await this.unifiedSemanticSearch(query, limit);
-
-      if (unifiedResults && unifiedResults.length > 0) {
-        console.log(`Found ${unifiedResults.length} results via unified semantic search`);
-        return unifiedResults.map((result) => ({
-          ...result,
-          keyword_score: 0,
-          semantic_score: result.score / 100,
-          similarity_score: result.score / 100,
-          combined_score: result.score / 100,
-        }));
+      console.log(`Starting hybrid search for: "${query}"`);
+      
+      // Get results from all sources with better distribution
+      let allResults: any[] = [];
+      
+      // 1. Try unified semantic search first
+      try {
+        const unifiedResults = await this.unifiedSemanticSearch(query, Math.ceil(limit / 2));
+        if (unifiedResults && unifiedResults.length > 0) {
+          console.log(`✅ Found ${unifiedResults.length} results via unified semantic search`);
+          allResults = [...allResults, ...unifiedResults.map((result) => ({
+            ...result,
+            keyword_score: 0,
+            semantic_score: result.score / 100,
+            similarity_score: result.score / 100,
+            combined_score: result.score / 100,
+            source_type: 'unified'
+          }))];
+        }
+      } catch (error) {
+        console.log('Unified semantic search failed, continuing with other sources');
       }
-
-      // Fallback to keyword search if no unified results
-      console.log('No unified semantic results, falling back to keyword search');
-      const keywordResults = await this.keywordSearch(query, limit);
-
-      return keywordResults.map((result) => ({
-        ...result,
-        keyword_score: result.score / 100,
-        semantic_score: 0,
-        similarity_score: 0,
-        combined_score: result.score / 100,
-      }));
+      
+      // 2. Add keyword search results from all tables
+      try {
+        const keywordResults = await this.keywordSearch(query, Math.ceil(limit / 2));
+        if (keywordResults && keywordResults.length > 0) {
+          console.log(`✅ Found ${keywordResults.length} results via keyword search`);
+          allResults = [...allResults, ...keywordResults.map((result) => ({
+            ...result,
+            keyword_score: result.score / 100,
+            semantic_score: 0,
+            similarity_score: 0,
+            combined_score: result.score / 100,
+            source_type: 'keyword'
+          }))];
+        }
+      } catch (error) {
+        console.log('Keyword search failed, continuing with other sources');
+      }
+      
+      // 3. If still no results, try direct table searches
+      if (allResults.length === 0) {
+        console.log('No results from unified or keyword search, trying direct table searches');
+        
+        const tables = [
+          { name: TABLE_NAMES.SORUCEVAP, type: 'sorucevap' },
+          { name: TABLE_NAMES.OZELGELER, type: 'ozelgeler' },
+          { name: TABLE_NAMES.MAKALELER, type: 'makaleler' },
+          { name: TABLE_NAMES.DANISTAYKARARLARI, type: 'danistaykararlari' }
+        ];
+        
+        for (const table of tables) {
+          try {
+            const sourceResults = await this.searchBySource(table.type, query, 5);
+            if (sourceResults && sourceResults.length > 0) {
+              console.log(`Found ${sourceResults.length} results from ${table.name}`);
+              allResults = [...allResults, ...sourceResults.map((result) => ({
+                ...result,
+                score: result.score || 70, // Default score for direct search
+                keyword_score: 0.7,
+                semantic_score: 0,
+                similarity_score: 0,
+                combined_score: 0.7,
+                source_type: 'direct'
+              }))];
+            }
+          } catch (error) {
+            console.log(`Direct search on ${table.name} failed`);
+          }
+        }
+      }
+      
+      // Sort by combined score and limit results
+      const sortedResults = allResults
+        .sort((a, b) => b.combined_score - a.combined_score)
+        .slice(0, limit);
+      
+      console.timeEnd(searchId);
+      console.log(`Returning ${sortedResults.length} hybrid search results`);
+      
+      return sortedResults;
     } catch (error) {
-      console.error('Hybrid search error:', error);
+      console.timeEnd(searchId);
+      console.error('❌ Hybrid search error:', error);
+
+      // Last resort fallback - return empty results but don't crash
+      console.log('⚠️ All search methods failed, returning empty results');
       return [];
     }
   }
@@ -444,6 +682,34 @@ export class SemanticSearchService {
             LIMIT $2
           `;
           break;
+        case 'makaleler':
+          searchQuery = `
+            SELECT 
+              id::text as id,
+              'MAKALE - ' || LEFT(baslik, 100) as title,
+              'makaleler' as source_table,
+              id::text as source_id,
+              LEFT(icerik, 500) as excerpt
+            FROM ${TABLE_NAMES.MAKALELER}
+            WHERE baslik ILIKE $1 OR icerik ILIKE $1
+            ORDER BY id DESC
+            LIMIT $2
+          `;
+          break;
+        case 'danistaykararlari':
+          searchQuery = `
+            SELECT 
+              id::text as id,
+              'DANIŞTAY - ' || LEFT(konu, 100) as title,
+              'danistaykararlari' as source_table,
+              id::text as source_id,
+              LEFT(karar, 500) as excerpt
+            FROM ${TABLE_NAMES.DANISTAYKARARLARI}
+            WHERE konu ILIKE $1 OR karar ILIKE $1
+            ORDER BY id DESC
+            LIMIT $2
+          `;
+          break;
         default:
           return [];
       }
@@ -483,7 +749,11 @@ export class SemanticSearchService {
         // Try customer pool first (where the tables are)
         result = await this.customerPool.query(statsQuery);
       } catch (error) {
-        console.log('Could not get stats from customer database:', error.message);
+        if (error instanceof Error) {
+          console.log('Could not get stats from customer database:', error.message);
+        } else {
+          console.log('An unknown error occurred while getting stats from the customer database.');
+        }
         // Fallback to empty result
         result = { rows: [] };
       }

@@ -1,0 +1,43 @@
+# Windows Optimized Frontend Dockerfile
+FROM node:20-alpine
+
+# Install development dependencies and network tools
+RUN apk add --no-cache \
+    curl \
+    wget \
+    netcat-openbsd \
+    bind-tools \
+    && npm install -g nodemon
+
+# Set working directory
+WORKDIR /app
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies with legacy peer deps flag
+RUN npm install --legacy-peer-deps
+
+# Copy application files
+COPY . .
+
+# Create necessary directories and set permissions
+RUN mkdir -p /workspaces /config /app/.next && \
+    chown -R nextjs:nodejs /app /workspaces /config /app/.next
+
+# Expose port
+EXPOSE 3000
+
+# Switch to non-root user
+USER nextjs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
+
+# Start the application in development mode
+CMD ["npm", "run", "dev"]

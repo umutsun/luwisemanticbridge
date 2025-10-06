@@ -1,33 +1,40 @@
 version: '3.8'
 
 services:
-  # PostgreSQL with pgvector extension
+  # =====================================================
+  # PostgreSQL Database
+  # =====================================================
   postgres:
-    image: pgvector/pgvector:pg16
-    container_name: asemb-postgres
+    image: postgres:15-alpine
+    container_name: asb-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: asemb_user
-      POSTGRES_PASSWORD: asemb_password_2025
-      POSTGRES_DB: asemb
+      POSTGRES_DB: ${POSTGRES_DB:-asemb}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U asemb_user"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - asemb-network
+      - asb-network
 
-  # Redis for caching and queuing
+  # =====================================================
+  # Redis Cache
+  # =====================================================
   redis:
     image: redis:7-alpine
-    container_name: asemb-redis
-    command: redis-server --appendonly yes
+    container_name: asb-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -36,163 +43,152 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - asemb-network
+      - asb-network
 
-  # Neo4j for graph operations (optional)
-  neo4j:
-    image: neo4j:5-community
-    container_name: asemb-neo4j
-    profiles:
-      - with-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/your_neo4j_password
-      NEO4J_PLUGINS: '["graph-data-science", "apoc"]'
-      NEO4J_dbms_memory_pagecache_size: 1G
-      NEO4J_dbms_memory_heap_max__size: 1G
-    ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-    networks:
-      - asemb-network
-
-  # FastAPI Server
-  api:
+  # =====================================================
+  # Backend API (Node.js)
+  # =====================================================
+  backend:
     build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: asemb-api
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DATABASE_URL: postgresql://asemb_user:asemb_password_2025@postgres:5432/asemb
-      POSTGRES_HOST: postgres
-      REDIS_HOST: redis
-      POSTGRES_USER: asemb_user
-      POSTGRES_PASSWORD: asemb_password_2025
-      POSTGRES_DB: asemb
-      NEO4J_URI: bolt://neo4j:7687
-    ports:
-      - "3001:3000"
-    volumes:
-      - ./api:/app
-      - ./config:/config
-      - ./workspaces:/workspaces
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: asb-backend
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: node server.js
-    networks:
-      - asemb-network
-
-  # n8n (for development/testing)
-  n8n:
-    image: n8nio/n8n:stable
-    container_name: asemb-n8n
-    profiles:
-      - with-n8n
     environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=admin
-      - N8N_BASIC_AUTH_PASSWORD=admin
-      - N8N_HOST=0.0.0.0
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_ENV=development
-      - WEBHOOK_URL=http://n8n:5678/
-      - DB_TYPE=redis
-      - DB_REDIS_HOST=asemb-redis
-      - DB_REDIS_PORT=6379
-      - DB_REDIS_DB=2
+      NODE_ENV: production
+      PORT: 8083
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-asemb}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:6379
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      ENABLE_WEBSOCKET: "true"
+      WEBSOCKET_PORT: 8083
+      CORS_ORIGINS: http://localhost:3001,http://frontend:3001
     ports:
-      - "5678:5678"
+      - "8083:8083"
     volumes:
-      - n8n_data:/home/node/.n8n
-      - ./dist:/home/node/.n8n/custom
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - asemb-network
+      - asb-network
 
-  # Dashboard (Next.js) - Optional
-  dashboard:
+  # =====================================================
+  # Frontend (Next.js)
+  # =====================================================
+  frontend:
     build:
-      context: ./dashboard
+      context: ./frontend
       dockerfile: Dockerfile
-    container_name: asemb-dashboard
-    profiles:
-      - with-dashboard
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://api:3000
-    ports:
-      - "3002:3000"
-    volumes:
-      - ./dashboard:/app
-      - /app/node_modules
-      - /app/.next
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8083
+        NEXT_PUBLIC_WEBSOCKET_URL: ws://localhost:8083
+    container_name: asb-frontend
+    restart: unless-stopped
     depends_on:
-      - api
-    command: npm run dev
+      - backend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8083}
+      NEXT_PUBLIC_WEBSOCKET_URL: ${NEXT_PUBLIC_WEBSOCKET_URL:-ws://localhost:8083}
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
-      - asemb-network
+      - asb-network
 
-  # Adminer for database management (development only)
+  # =====================================================
+  # Nginx Reverse Proxy (Optional)
+  # =====================================================
+  nginx:
+    image: nginx:alpine
+    container_name: asb-nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - asb-network
+    profiles:
+      - with-nginx
+
+  # =====================================================
+  # Adminer (Database Management UI) - Development Only
+  # =====================================================
   adminer:
     image: adminer:latest
-    container_name: asemb-adminer
-    profiles:
-      - dev-tools
+    container_name: asb-adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
     ports:
       - "8080:8080"
     environment:
       ADMINER_DEFAULT_SERVER: postgres
     networks:
-      - asemb-network
-
-  # RedisInsight for Redis management (development only)
-  redis-insight:
-    image: redislabs/redisinsight:latest
-    container_name: asemb-redis-insight
+      - asb-network
     profiles:
-      - dev-tools
-    ports:
-      - "8001:8001"
-    volumes:
-      - redis_insight:/db
-    networks:
-      - asemb-network
+      - development
 
-  # RAG-anything Service
-  rag-anything-service:
-    build:
-      context: ./RAG-anything
-      dockerfile: Dockerfile
-    container_name: asemb-rag-anything
+  # =====================================================
+  # Redis Commander (Redis Management UI) - Development Only
+  # =====================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: asb-redis-commander
+    restart: unless-stopped
+    depends_on:
+      - redis
     ports:
-      - "8002:8002"
-    volumes:
-      - ./RAG-anything:/app
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     networks:
-      - asemb-network
+      - asb-network
+    profiles:
+      - development
 
+# =====================================================
+# Volumes
+# =====================================================
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
-  neo4j_data:
-    driver: local
-  neo4j_logs:
-    driver: local
-  n8n_data:
-    driver: local
-  redis_insight:
+  nginx_logs:
     driver: local
 
+# =====================================================
+# Networks
+# =====================================================
 networks:
-  asemb-network:
+  asb-network:
     driver: bridge
-    name: asemb-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

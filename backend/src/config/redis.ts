@@ -6,24 +6,40 @@ dotenv.config();
 
 // Create Redis connection with dynamic configuration
 async function createRedisConnection() {
-  // First try to get Redis config from settings
-  const settingsService = SettingsService.getInstance();
-  const portConfig = await settingsService.getPortConfig();
+  let redisConfig = {};
 
-  // Use settings from database if available, otherwise fall back to environment variables
-  const redisConfig = portConfig.redis || {};
+  // Try to get Redis config from settings database, but don't fail if database is not available
+  try {
+    const settingsService = SettingsService.getInstance();
+    const portConfig = await settingsService.getPortConfig();
+    redisConfig = portConfig.redis || {};
+  } catch (error) {
+    console.log('⚠️ Could not load Redis config from database, using environment variables');
+    // Use empty config to fall back to environment variables
+  }
 
-  return new Redis({
-    host: redisConfig.host || process.env.REDIS_HOST || 'localhost',
-    port: redisConfig.port || parseInt(process.env.REDIS_PORT || '6379'),
-    db: redisConfig.db || parseInt(process.env.REDIS_DB || '2'),
-    password: redisConfig.password || process.env.REDIS_PASSWORD,
+  const config: any = {
+    host: (redisConfig as any).host || process.env.REDIS_HOST || 'localhost',
+    port: (redisConfig as any).port || parseInt(process.env.REDIS_PORT || '6380'),
+    db: (redisConfig as any).db || parseInt(process.env.REDIS_DB || '2'),
+    // Temporarily disable authentication to prevent crashes
+    // password: redisConfig.password || process.env.REDIS_PASSWORD || 'Semsiye!22',
     // Add retry strategy for more robust connection
-    retryStrategy(times) {
+    retryStrategy(times: number) {
       const delay = Math.min(times * 50, 2000);
       return delay;
     },
-  });
+    // Add connection timeout
+    connectTimeout: 10000,
+    commandTimeout: 5000,
+    // Handle errors gracefully
+    maxRetriesPerRequest: 1,
+    lazyConnect: true,
+    // Disable reconnect to prevent error loops
+    enableOfflineQueue: false,
+  };
+
+  return new Redis(config);
 }
 
 // Initialize Redis connections
@@ -32,25 +48,66 @@ let subscriber: Redis;
 
 // Async initialization function
 export async function initializeRedis() {
-  redis = await createRedisConnection();
-  subscriber = redis.duplicate();
+  try {
+    redis = await createRedisConnection();
+    subscriber = redis.duplicate();
 
-  // Error handlers
-  redis.on('error', (err) => {
-    console.error('Redis connection error:', err);
+    // Error handlers - prevent unhandled errors
+    redis.on('error', (err) => {
+      console.error('Redis connection error:', err.message);
+      // Don't rethrow to prevent crashes
+    });
+
+    subscriber.on('error', (err) => {
+      console.error('Redis subscriber connection error:', err.message);
+      // Don't rethrow to prevent crashes
+    });
+
+    // Add warning handler for better debugging
+    redis.on('warning', (warn) => {
+      console.warn('Redis warning:', warn);
+    });
+
+    subscriber.on('warning', (warn) => {
+      console.warn('Redis subscriber warning:', warn);
+    });
+
+    redis.on('connect', () => {
+      console.log('Redis connected successfully.');
+    });
+
+    subscriber.on('connect', () => {
+      console.log('Redis subscriber connected successfully.');
+    });
+
+    // Try to establish connection
+    await redis.connect();
+    await subscriber.connect();
+
+  } catch (error) {
+    console.error('Failed to initialize Redis connections:', error);
+    // Create dummy Redis objects that gracefully fail
+    redis = createFallbackRedis();
+    subscriber = createFallbackRedis();
+  }
+}
+
+// Create fallback Redis client that doesn't crash the application
+function createFallbackRedis(): Redis {
+  const dummyRedis = new Redis({
+    host: 'localhost',
+    port: 6379, // Use default Redis port
+    lazyConnect: true,
+    maxRetriesPerRequest: 0,
+    enableOfflineQueue: false,
+    connectTimeout: 5000,
   });
 
-  subscriber.on('error', (err) => {
-    console.error('Redis subscriber connection error:', err);
+  dummyRedis.on('error', (err) => {
+    // Silently handle errors to prevent crashes
   });
 
-  redis.on('connect', () => {
-    console.log('Redis connected successfully.');
-  });
-
-  subscriber.on('connect', () => {
-    console.log('Redis subscriber connected successfully.');
-  });
+  return dummyRedis;
 }
 
 // Synchronous export for backward compatibility

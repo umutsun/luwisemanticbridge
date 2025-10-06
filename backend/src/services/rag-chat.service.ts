@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { semanticSearch, SemanticSearchService } from './semantic-search.service';
 import claudeService from './claude.service';
 import geminiService from './gemini.service';
+import deepseekService from './deepseek.service';
 import pool from '../config/database';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
@@ -10,6 +11,7 @@ import { TIMEOUTS } from '../config';
 // Settings service interface
 interface SettingsService {
   getSetting(key: string): Promise<string | null>;
+  getApiKey(keyName: string): Promise<string | null>;
 }
 
 // Settings service using the existing chatbot_settings table
@@ -26,6 +28,60 @@ class SettingsServiceImpl implements SettingsService {
       return result.rows[0]?.setting_value || null;
     } catch (error) {
       console.error('Error fetching setting:', error);
+      return null;
+    }
+  }
+
+  async getApiKey(keyName: string): Promise<string | null> {
+    try {
+      // Try different key formats for API keys
+      const keyMappings = {
+        'google.apiKey': ['google_api_key', 'googleApiKey', 'GOOGLE_API_KEY'],
+        'openai.apiKey': ['openai_api_key', 'openaiApiKey', 'OPENAI_API_KEY'],
+        'claude.apiKey': ['claude_api_key', 'claudeApiKey', 'CLAUDE_API_KEY'],
+        'deepseek.apiKey': ['deepseek_api_key', 'deepseekApiKey', 'DEEPSEEK_API_KEY']
+      };
+
+      const possibleKeys = keyMappings[keyName] || [keyName];
+
+      // First try settings table
+      for (const key of possibleKeys) {
+        const result = await this.pool.query(
+          'SELECT value FROM settings WHERE key = $1',
+          [key]
+        );
+
+        if (result.rows[0]?.value) {
+          const value = result.rows[0].value;
+          // Check if it's a JSON object with apiKey property
+          try {
+            const parsed = JSON.parse(value);
+            if (typeof parsed === 'object' && parsed.apiKey) {
+              return parsed.apiKey;
+            }
+            return value;
+          } catch {
+            // Return as-is if not JSON
+            return value;
+          }
+        }
+      }
+
+      // Fallback to chatbot_settings table
+      for (const key of possibleKeys) {
+        const result = await this.pool.query(
+          'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+          [key]
+        );
+
+        if (result.rows[0]?.setting_value) {
+          return result.rows[0].setting_value;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching API key:', error);
       return null;
     }
   }
@@ -74,7 +130,7 @@ export class RAGChatService {
   private pool = pool;
   private openai: OpenAI | null = null;
   private useOpenAI: boolean = false;
-  private aiProviderPriority: string[] = ['gemini', 'claude', 'openai', 'fallback'];
+  private aiProviderPriority: string[] = ['claude', 'openai', 'gemini', 'deepseek', 'fallback'];
   private fallbackEnabled: boolean;
   private defaultTemperature: number = 0.1;
   private defaultMaxTokens: number = 4096;
@@ -135,7 +191,7 @@ export class RAGChatService {
     }
 
     // Default priority
-    return ['gemini', 'claude', 'openai', 'fallback'];
+    return ['claude', 'openai', 'gemini', 'deepseek', 'fallback'];
   }
 
   /**
@@ -250,73 +306,97 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         }
       }
 
-      console.log(`Searching in ${useUnifiedEmbeddings ? 'unified_embeddings' : 'rag_data.documents'} with pgvector...`);
+      console.log(`Performing semantic search with pgvector...`);
 
+      // Use semantic search to find related content
       let allResults = [];
       if (useUnifiedEmbeddings) {
-        allResults = await semanticSearch.unifiedSemanticSearch(message, 20);
+        allResults = await semanticSearch.unifiedSemanticSearch(message, 30);
       } else {
-        allResults = await semanticSearch.hybridSearch(message, 20);
+        allResults = await semanticSearch.hybridSearch(message, 30);
       }
 
-      // Adaptive filtering based on query complexity and results distribution
-      let searchResults = allResults;
-      const avgScore = allResults.reduce((sum, r) => sum + (r.score || (r.similarity_score * 100) || 0), 0) / allResults.length;
-      const maxScore = Math.max(...allResults.map(r => r.score || (r.similarity_score * 100) || 0));
+      // Get minimum similarity threshold from database (default 10%)
+      const minThreshold = parseFloat(await settingsService.getSetting('semantic_search_threshold') || '10');
 
-      // Dynamic threshold based on results quality - more strict filtering
-      let threshold = 65; // Base threshold increased
-      if (maxScore > 85) threshold = 70; // High quality results available
-      if (maxScore < 60) threshold = 55; // Low quality results, be more lenient
-      if (allResults.length < 5) threshold = Math.min(threshold, 60); // Few results, be more inclusive
+      // Filter by threshold and sort by similarity score
+      let searchResults = allResults
+        .filter(result => {
+          const score = result.score || (result.similarity_score * 100) || 0;
+          return score >= minThreshold;
+        })
+        .sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
+          return scoreB - scoreA; // Highest similarity first
+        });
 
-      searchResults = allResults.filter(result => {
-        const score = result.score || (result.similarity_score * 100) || 0;
-        return score >= threshold;
-      });
+      console.log(`Found ${searchResults.length} results with similarity >= ${minThreshold}%`);
 
-      console.log(`Filtered ${searchResults.length} sources from ${allResults.length} (>${threshold}% relevance, avg: ${avgScore.toFixed(1)}%, max: ${maxScore}%)`);
-
-      // Ensure we have at least some results
+      // If no results meet threshold, take top results anyway
       if (searchResults.length === 0 && allResults.length > 0) {
-        console.log('No sources above threshold, taking top matches');
-        searchResults = allResults.slice(0, Math.min(10, allResults.length));
+        searchResults = allResults.slice(0, 10);
+        console.log('No results above threshold, showing top matches');
       }
 
-      // Kaynakları score'a göre sırala (yüksek score önce)
-      searchResults.sort((a, b) => {
-        const scoreA = a.score || (a.similarity_score * 100) || 0;
-        const scoreB = b.score || (b.similarity_score * 100) || 0;
-        return scoreB - scoreA;
-      });
-
-      // 3. Prepare context from search results
-      const context = this.prepareEnhancedContext(searchResults);
-
-      // 4. Get conversation history
+      // 3. Get conversation history
       const history = await this.getConversationHistory(convId, 5);
 
-      // 5. Generate response with settings from database and options
+      // 4. Generate simple response focused on the found topics
       const temperature = options.temperature !== undefined ? options.temperature : this.defaultTemperature;
       const maxTokens = options.maxTokens !== undefined ? options.maxTokens : this.defaultMaxTokens;
-      console.log(`Using temperature: ${temperature}, maxTokens: ${maxTokens}`);
-      const response = await this.generateResponse(message, context, history, temperature, options, searchResults, maxTokens);
 
-      // 6. Save messages to database
+      // Create a simple context with titles and scores
+      const simpleContext = searchResults.slice(0, 5).map((r, idx) => {
+        const score = Math.round(r.score || (r.similarity_score * 100) || 0);
+        const title = r.title || `Kaynak ${idx + 1}`;
+        return `${idx + 1}. %${score} - ${title}`;
+      }).join('\n');
+
+      // Generate response
+      const response = await this.generateResponse(message, simpleContext, history, temperature, options, searchResults, maxTokens);
+
+      // 5. Save messages to database
       await this.saveMessage(convId, 'user', message);
       await this.saveMessage(convId, 'assistant', response.content, searchResults);
 
-      // 7. Format sources for frontend
+      // 6. Format sources for frontend with natural language summaries
       const formattedSources = await this.formatSources(searchResults);
 
-      // 8. Get related topics (different from sources used in response)
-      const relatedTopics = await this.getRelatedTopics(message, searchResults, 7);
+      // 7. Get additional related topics (excluding already shown ones)
+      const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
+      const shownIds = searchResults.slice(0, 3).map(s => s.id?.toString() || s.source_id?.toString());
+      const relatedTopics = await this.getRelatedTopics(message, searchResults.slice(0, 3), relatedResultsLimit);
 
-      return {
+      // Multilingual provider names
+    const getProviderDisplayName = (provider: string, language: string = 'tr') => {
+      const providerNames = {
+        tr: {
+          'Claude': 'Claude',
+          'Gemini': 'Gemini',
+          'OpenAI': 'OpenAI',
+          'Demo': 'Demo'
+        },
+        en: {
+          'Claude': 'Claude',
+          'Gemini': 'Gemini',
+          'OpenAI': 'OpenAI',
+          'Demo': 'Demo'
+        }
+      };
+
+      return providerNames[language]?.[provider] || provider;
+    };
+
+    return {
         response: response.content,
         sources: formattedSources,
         relatedTopics: relatedTopics,
-        conversationId: convId
+        conversationId: convId,
+        provider: response.provider,
+        model: response.model || response.provider,
+        providerDisplayName: getProviderDisplayName(response.provider || '', options.language || 'tr'),
+        language: options.language || 'tr'
       };
     } catch (error) {
       console.error('RAG chat error:', error);
@@ -478,9 +558,13 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
   /**
    * Format sources for better UI display
+   * Optimized to avoid blocking on LLM content generation
    */
   private async formatSources(searchResults: any[]): Promise<any[]> {
     const formattedResults = [];
+    const enableLLMGeneration = true; // Always enable LLM generation for better questions
+
+    console.log(`🔄 Formatting ${searchResults.length} sources with LLM generation: ${enableLLMGeneration}`);
 
     for (let idx = 0; idx < searchResults.length; idx++) {
       const r = searchResults[idx];
@@ -505,15 +589,18 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
       const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
 
-      // Generate LLM-processed content and question (if enabled)
+      // Use fallback content by default for faster response
       let processedContent = cleanExcerpt;
       let generatedQuestion = `${cleanTitle} hakkında detaylı bilgi verir misiniz?`;
 
-      if (process.env.ENABLE_LLM_CONTENT_GENERATION !== 'false') {
+      // Only generate LLM content if explicitly enabled (opt-in)
+      if (enableLLMGeneration) {
         try {
+          console.time(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
           const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
           processedContent = llmResult.processedContent;
           generatedQuestion = llmResult.generatedQuestion;
+          console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
         } catch (error) {
           console.warn('LLM content generation failed, using fallback:', error);
         }
@@ -523,13 +610,13 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         id: r.id,
         title: cleanTitle,
         excerpt: this.truncateExcerpt(cleanExcerpt, 250),
-        content: processedContent,  // LLM-processed content instead of raw excerpt
-        question: generatedQuestion,  // LLM-generated question
+        content: processedContent,
+        question: generatedQuestion,
         category: category,
         sourceTable: r.source_table || 'documents',
         citation: citation,
         score: score,
-        relevance: score,  // Send numeric value for frontend
+        relevance: score,
         relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
         databaseInfo: {
           table: r.source_table || 'documents',
@@ -538,13 +625,15 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         },
         index: idx + 1,
         metadata: r.metadata || {},
-        // Add additional metrics
-        priority: idx + 1,  // Priority based on order
+        priority: idx + 1,
         hasContent: !!(r.content || r.excerpt),
-        contentLength: (r.content || r.excerpt || '').length
+        contentLength: (r.content || r.excerpt || '').length,
+        // Add flag indicating if LLM enrichment was applied
+        enriched: enableLLMGeneration
       });
     }
 
+    console.log(`✅ Formatted ${formattedResults.length} sources successfully`);
     return formattedResults;
   }
 
@@ -553,6 +642,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
    */
   private async generateContentAndQuestion(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
     try {
+      console.log(`🤖 Attempting to generate question for: ${title.substring(0, 30)}...`);
       console.time(`LLM processing for: ${title.substring(0, 30)}...`);
       // Clean the excerpt first
       const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
@@ -560,101 +650,54 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // Get language setting from database
       const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
 
-      // Use Gemini for content processing (faster and free)
-      if (process.env.GOOGLE_API_KEY) {
-        // Create prompt based on language setting
+      // Create a simple prompt for the selected chat model
       const prompt = responseLanguage === 'en' ? `
-Process the following title and content to improve readability and generate a specific question:
+Process the title and content below. Respond in this exact format:
 
-TITLE: ${title}
-CONTENT: ${cleanExcerpt}
-
-TASKS:
-1. Improve the content for better readability while preserving meaning
-2. Generate a specific question based on the UNIQUE content, not just the title
-
-RULES:
-- Keep the improved content concise and clear
-- The question MUST be about the specific details in the content
-- Keep questions as SHORT as possible (maximum 10-12 words)
-- Use direct question format (e.g., "What requirements...", "When is...", "How much...")
-- For legal content: Ask about implementation, requirements, or exceptions
-- For tax content: Ask about rates, procedures, or calculations
-- For Q&A content: Ask about similar scenarios or applications
-- Make each question unique based on the content's specific details
-- DO NOT use generic templates like "Tell me more about [title]"
-- DO NOT use markdown formatting like **
-
-RESPONSE:
 IMPROVED CONTENT:
-[improved content]
+[Write a clear, 1-2 sentence summary of the content]
 
 QUESTION:
-[specific question about the content]
+[Ask a specific question about the content details, max 10 words]
+
+Title: ${title}
+Content: ${cleanExcerpt}
 ` : `
-Aşağıdaki başlığı ve içeriği işleyerek okunabilirliğini artır ve spesifik bir soru üret:
+Aşağıdaki başlığı ve içeriği işle. Tam olarak bu formatla yanıtla:
 
-BAŞLIK: ${title}
-İÇERİK: ${cleanExcerpt}
-
-GÖREVLER:
-1. İçeriği anlamı koruyarak daha okunaklı hale getir
-2. Sadece başlığa değil, İÇERİĞİN ÖZELİNDE spesifik bir soru üret
-
-KURALLAR:
-- İyileştirilmiş içeriği kısa ve açık tut
-- Soru KESİNLİKLE içeriğin spesifik detayları hakkında olmalı
-- Soruyu MÜMKÜNCE KISA tut (maksimum 10-12 kelime)
-- Doğrudan soru formatında kullan (örn: "Hangi şartlar...", "Ne zaman...", "Kaç para...")
-- Yasal içerik için: uygulama, şartlar veya istisnalar hakkında sor
-- Vergi içerik için: oranlar, prosedürler veya hesaplama hakkında sor
-- Her soruyu içeriğin spesifik detaylarına göre BENZERSİZ yap
-- "[başlık] hakkında daha fazla bilgi edinin" gibi GENERIC kalıplar KULLANMA
-- ** gibi markdown formatları KULLANMA
-
-CEVAP:
 İYİLEŞTİRİLMİŞ İÇERİK:
-[iyileştirilmiş içerik]
+[İçeriğin net, 1-2 cümlelik özetini yaz]
 
 SORU:
-[içeriğe özgü spesifik soru]
+[İçerik detayları hakkında spesifik bir soru sor, maksimum 10 kelime]
+
+Başlık: ${title}
+İçerik: ${cleanExcerpt}
 `;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 500
-            }
-          }),
-          signal: AbortSignal.timeout(TIMEOUTS.LLM_CALL) // Configurable timeout for each Gemini call
-        });
+      // Use the selected chat model (same as for chat responses)
+      try {
+        const response = await this.generateResponse(prompt, '', [], 0.3, {}, [], 500);
 
-        if (response.ok) {
-          const data = await response.json();
-          const result = data.candidates[0].content.parts[0].text;
-
+        if (response && response.content) {
           // Parse the response based on language
-          const contentMatch = result.match(
+          const contentMatch = response.content.match(
             responseLanguage === 'en'
-              ? /IMPROVED CONTENT:\s*(.*?)(?=\nGENERATED QUESTION:|$)/s
-              : /İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nÜRETİLMİŞ SORU:|$)/s
+              ? /IMPROVED CONTENT:\s*(.*?)(?=\nQUESTION:|$)/s
+              : /İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nSORU:|$)/s
           );
-          const questionMatch = result.match(
+          const questionMatch = response.content.match(
             responseLanguage === 'en'
               ? /QUESTION:\s*(.*)/s
               : /SORU:\s*(.*)/s
           );
 
-          // Clean the content - remove markdown formatting and unwanted text
+          // Clean the content
           let processedContent = contentMatch ? contentMatch[1].trim() : cleanExcerpt;
           processedContent = processedContent.replace(/^\*\*+/g, '').replace(/\*\*+$/g, '').replace(/\*\*\*/g, '').trim();
 
-          // Clean the question - remove any unwanted prefixes and markdown
-          let generatedQuestion = questionMatch ? questionMatch[1].trim() : `${title} hakkında daha fazla bilgi edinin.`;
+          // Clean the question
+          let generatedQuestion = questionMatch ? questionMatch[1].trim() : `${title} hakkında bilgi verir misiniz?`;
           generatedQuestion = generatedQuestion.replace(/^\*\*+/g, '').replace(/^Üretilmiş Soru:\s*/i, '').trim();
 
           return {
@@ -662,7 +705,8 @@ SORU:
             generatedQuestion
           };
         }
-        console.timeEnd(`LLM processing for: ${title.substring(0, 30)}...`);
+      } catch (error) {
+        console.warn('Selected chat model failed, trying fallback:', error);
       }
 
       // Fallback to simple processing
@@ -737,10 +781,21 @@ SORU:
             }
             break;
 
+          case 'deepseek':
+            if (deepseekService.isAvailable()) {
+              response = await deepseekService.generateResponse(query, context, history, temperature, options.systemPrompt, maxTokens);
+              successfulProvider = 'DeepSeek';
+              console.log('✅ DeepSeek successful');
+            } else {
+              throw new Error('DeepSeek API not available');
+            }
+            break;
+
           case 'fallback':
             response = this.generateDemoResponse(query, context);
             successfulProvider = 'Demo';
-            console.log('✅ Demo response generated');
+            response.isFallback = true;
+            console.log('✅ Demo response generated (Fallback)');
             break;
 
           default:
@@ -791,9 +846,12 @@ SORU:
       // Use default model
     }
 
+    // Get system prompt from database
+    const systemPromptFromDB = await this.getSystemPrompt();
+
     // Check if we have sources but no good context
     const hasSourcesButNoContext = searchResults && searchResults.length > 0 && (!context || context.length < 100);
-    
+
     // If we have sources but limited context, enrich the prompt with source summaries
     let sourcesSummary = '';
     if (hasSourcesButNoContext && searchResults) {
@@ -807,39 +865,20 @@ SORU:
         sourcesSummary += `${idx + 1}. %${score} - ${title}: ${truncatedExcerpt}\n`;
       });
     }
-    
-    const defaultSystemPrompt = `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
 
-GÖREV:
-- Aşağıdaki bağlamda verilen bilgilere dayanarak ANLAMLI ve AKICI bir metin oluştur
-- Cevabını 2-3 paragraf halinde organize et:
-  • İlk paragraf: Konunun genel çerçevesi ve temel bilgiler
-  • İkinci paragraf: Detaylar, örnekler ve uygulamalar
-  • Üçüncü paragraf (gerekirse): Önemli noktalar, istisnalar veya dikkat edilmesi gerekenler
+    const defaultSystemPrompt = systemPromptFromDB;
 
-- DİL ve ÜSLUP:
-  • Profesyonel ama anlaşılır bir dil kullan
-  • Teknik terimleri açıklayarak kullan
-  • Madde madde sıralama yerine akıcı paragraflar oluştur
-  • "Buna göre", "Bu kapsamda", "Öte yandan" gibi bağlaçlarla metni akıcı hale getir
-  • KAYNAK BELİRTME: Metin içinde kaynak numarası belirtme (Kaynak 1, Kaynak 2 gibi yazma)
+    // Append context information to the system prompt
+    const finalSystemPrompt = systemPrompt || defaultSystemPrompt;
 
-- KAYNAK YETERSİZLİĞİ DURUMU:
-  • Eğer bağlamda direkt cevap bulamazsan ama ilgili kaynaklar varsa: "Bu konuda direkt bilgi bulamadım ama şunlar ilgili olabilir:" diye BAŞLA
-  • İlk 3-5 en yüksek skorlu kaynağı kendi cümlelerinle ÖZETLE (sadece kaynakları listeleme!)
-  • Özeti şu şekilde yap: "Bulduğum ilgili bilgiler arasında: [kaynak1 özeti]. Ayrıca: [kaynak2 özeti]. Konuyla ilgili olarak şunlar da dikkat çekici: [kaynak3 özeti]"
-  • Skorları yüksek olan kaynaklara daha çok ağırlık ver
-  • Sadece tamamen alakasız veya boş sonuçlar geldiğinde "Bu konuda veritabanımda bilgi bulunmuyor" de
-
-- Tahmin yapma, sadece verilen bağlamdaki bilgileri kullan
+    // Add context to the prompt
+    const contextPrompt = finalSystemPrompt + `
 
 Bağlam (en ilgiliden başlayarak sıralı):
 ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili spesifik bilgi bulunamadı.'}${sourcesSummary}`;
 
-    const finalSystemPrompt = systemPrompt || defaultSystemPrompt;
-
     const messages: any[] = [
-      { role: 'system', content: finalSystemPrompt },
+      { role: 'system', content: contextPrompt },
       ...history.map(h => ({ role: h.role, content: h.content })),
       { role: 'user', content: query }
     ];
@@ -1015,7 +1054,9 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
    */
   async getRelatedTopics(query: string, usedSources: any[], limit: number = 7): Promise<any[]> {
     try {
-      console.log(`🔍 Searching for related topics: "${query}" (limit: ${limit}, excluding ${usedSources.length} sources)`);
+      // Get relevance threshold from database
+      const relevanceThreshold = parseFloat(await settingsService.getSetting('related_results_threshold') || '15');
+      console.log(`🔍 Searching for related topics: "${query}" (limit: ${limit}, threshold: ${relevanceThreshold}%, excluding ${usedSources.length} sources)`);
 
       // Get IDs of sources already used in response to avoid duplicates
       const excludeIds = usedSources.map(source => source.id?.toString() || source.sourceId?.toString()).filter(Boolean);
@@ -1050,7 +1091,7 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
         const resultId = result.id || result.source_id;
 
         // Exclude used IDs and apply relevance threshold
-        return score >= 35 && !excludeIds.includes(resultId?.toString());
+        return score >= relevanceThreshold && !excludeIds.includes(resultId?.toString());
       });
 
       // Sort by relevance score and limit results
@@ -1062,10 +1103,13 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
         })
         .slice(0, limit);
 
-      console.log(`Filtered to ${sortedResults.length} related topics (score >= 35%, excluded ${excludeIds.length} items)`);
+      console.log(`Filtered to ${sortedResults.length} related topics (score >= 15%, excluded ${excludeIds.length} items)`);
 
-      // Format results for frontend
-      const formattedResults = sortedResults.map((result, index) => {
+      // Format results for frontend with LLM-generated summaries
+      const formattedResults = [];
+
+      for (let idx = 0; idx < sortedResults.length; idx++) {
+        const result = sortedResults[idx];
         const score = result.score || (result.similarity_score * 100) || 0;
         const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
 
@@ -1078,7 +1122,7 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
         else if (sourceTable.toUpperCase().includes('MEVZUAT')) category = 'Mevzuat';
 
         // Generate a meaningful title
-        let title = result.title || `${category} - Kaynak ${index + 1}`;
+        let title = result.title || `${category} - Kaynak ${idx + 1}`;
 
         // Clean up title prefixes
         title = title
@@ -1095,10 +1139,25 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
           title = title.substring(0, 77) + '...';
         }
 
-        return {
-          id: result.id || result.source_id || `related-${Date.now()}-${index}`,
+        const cleanExcerpt = this.stripHtml(result.excerpt || result.content || '');
+
+        // Generate LLM-processed content and question for related topics
+        let processedContent = cleanExcerpt;
+        let generatedQuestion = `${title} hakkında detaylı bilgi verir misiniz?`;
+
+        try {
+          console.log(`🤖 Processing related topic: ${title.substring(0, 30)}...`);
+          const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
+          processedContent = llmResult.processedContent;
+          generatedQuestion = llmResult.generatedQuestion;
+        } catch (error) {
+          console.warn('LLM processing for related topic failed, using fallback:', error);
+        }
+
+        formattedResults.push({
+          id: result.id || result.source_id || `related-${Date.now()}-${idx}`,
           title: title,
-          excerpt: result.excerpt || result.content || '',
+          excerpt: processedContent, // Use LLM-processed content
           category: category,
           sourceTable: sourceTable,
           score: Math.round(score),
@@ -1110,16 +1169,157 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
             id: result.source_id,
             hasMetadata: !!result.metadata
           },
-          priority: index + 1,
+          priority: idx + 1,
           hasContent: !!(result.content || result.excerpt),
-          contentLength: (result.content || result.excerpt || '').length
-        };
-      });
+          contentLength: (result.content || result.excerpt || '').length,
+          question: generatedQuestion, // Add generated question
+          enriched: true // Mark as LLM-enriched
+        });
+      }
 
       return formattedResults;
     } catch (error) {
       console.error('Error getting related topics:', error);
       // Return empty array on error
+      return [];
+    }
+  }
+
+  /**
+   * Get related topics with pagination for "Load More" functionality
+   */
+  async getRelatedTopicsPaginated(
+    query: string,
+    excludeIds: string[] = [],
+    offset: number = 0,
+    limit: number = 7
+  ): Promise<any[]> {
+    try {
+      // Get relevance threshold from database
+      const relevanceThreshold = parseFloat(await settingsService.getSetting('related_results_threshold') || '15');
+      console.log(`🔍 Getting paginated related results: query="${query}", offset=${offset}, limit=${limit}, threshold=${relevanceThreshold}%`);
+
+      // Check if we should use unified embeddings or rag_data
+      let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+
+      // Check database setting if not set in environment
+      if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
+        try {
+          const result = await pool.query(
+            "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
+          );
+          useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
+        } catch (error) {
+          // Default to false if setting not found
+        }
+      }
+
+      // Get more results to account for filtering
+      const fetchLimit = limit + 20;
+      let searchResults = [];
+
+      if (useUnifiedEmbeddings) {
+        searchResults = await semanticSearch.unifiedSemanticSearch(query, fetchLimit + offset);
+      } else {
+        searchResults = await semanticSearch.hybridSearch(query, fetchLimit + offset);
+      }
+
+      console.log(`Found ${searchResults.length} raw results for paginated related topics`);
+
+      // Filter out excluded IDs and low-relevance results
+      const filteredResults = searchResults.filter(result => {
+        const score = result.score || (result.similarity_score * 100) || 0;
+        const resultId = result.id || result.source_id;
+
+        // Exclude used IDs and apply relevance threshold
+        return score >= relevanceThreshold && !excludeIds.includes(resultId?.toString());
+      });
+
+      // Sort by relevance score
+      const sortedResults = filteredResults
+        .sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
+          return scoreB - scoreA;
+        });
+
+      // Apply pagination
+      const paginatedResults = sortedResults.slice(offset, offset + limit);
+
+      console.log(`Returning ${paginatedResults.length} paginated results (offset: ${offset})`);
+
+      // Format results with LLM processing
+      const formattedResults = [];
+
+      for (let idx = 0; idx < paginatedResults.length; idx++) {
+        const result = paginatedResults[idx];
+        const score = result.score || (result.similarity_score * 100) || 0;
+        const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
+
+        // Determine category
+        let category = 'Genel';
+        if (sourceTable.toUpperCase().includes('OZELGE')) category = 'Özelge';
+        else if (sourceTable.toUpperCase().includes('DANISTAY')) category = 'Danıştay Kararı';
+        else if (sourceTable.toUpperCase().includes('MAKALE')) category = 'Makale';
+        else if (sourceTable.toUpperCase().includes('SORUCEVAP')) category = 'Soru-Cevap';
+        else if (sourceTable.toUpperCase().includes('MEVZUAT')) category = 'Mevzuat';
+
+        // Clean title
+        let title = result.title || `${category} - Kaynak ${offset + idx + 1}`;
+        title = title
+          .replace(/^sorucevap -\s*/i, '')
+          .replace(/^ozelgeler -\s*/i, '')
+          .replace(/^danistaykararlari -\s*/i, '')
+          .replace(/^makaleler -\s*/i, '')
+          .replace(/ - ID: \d+/g, '')
+          .replace(/ \(Part \d+\/\d+\)/g, '')
+          .trim();
+
+        if (title.length > 80) {
+          title = title.substring(0, 77) + '...';
+        }
+
+        const cleanExcerpt = this.stripHtml(result.excerpt || result.content || '');
+
+        // Generate LLM-processed content and question
+        let processedContent = cleanExcerpt;
+        let generatedQuestion = `${title} hakkında detaylı bilgi verir misiniz?`;
+
+        try {
+          console.log(`🤖 Processing paginated result: ${title.substring(0, 30)}...`);
+          const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
+          processedContent = llmResult.processedContent;
+          generatedQuestion = llmResult.generatedQuestion;
+        } catch (error) {
+          console.warn('LLM processing for paginated result failed, using fallback:', error);
+        }
+
+        formattedResults.push({
+          id: result.id || result.source_id || `related-${Date.now()}-${offset}-${idx}`,
+          title: title,
+          excerpt: processedContent,
+          category: category,
+          sourceTable: sourceTable,
+          score: Math.round(score),
+          relevanceScore: score,
+          sourceId: result.source_id,
+          metadata: result.metadata || {},
+          databaseInfo: {
+            table: sourceTable,
+            id: result.source_id,
+            hasMetadata: !!result.metadata
+          },
+          priority: offset + idx + 1,
+          hasContent: !!(result.content || result.excerpt),
+          contentLength: (result.content || result.excerpt || '').length,
+          question: generatedQuestion,
+          enriched: true
+        });
+      }
+
+      return formattedResults;
+    } catch (error) {
+      console.error('Error getting paginated related topics:', error);
       return [];
     }
   }

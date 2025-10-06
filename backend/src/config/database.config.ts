@@ -1,27 +1,97 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import { SettingsService, DatabaseConfig, RedisConfig } from '../services/settings.service';
 
 dotenv.config();
 
-// ASEMB System Database - Our application's own database
+// ASEM System Database - Get from .env file
 export const asembDbConfig = {
-  host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
-  database: process.env.ASEMB_DB_NAME || process.env.POSTGRES_DB || 'postgres',
-  user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
-  password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
-  ssl: process.env.ASEMB_DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+  host: process.env.POSTGRES_HOST || 'localhost',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DB || 'asemb',
+  user: process.env.POSTGRES_USER || 'postgres',
+  password: process.env.POSTGRES_PASSWORD || '',
+  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
 };
 
-// Customer Database - For migration/embedding customer's data
-export const customerDbConfig = {
-  host: process.env.CUSTOMER_DB_HOST || process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.CUSTOMER_DB_PORT || process.env.POSTGRES_PORT || '5432'),
-  database: process.env.CUSTOMER_DB_NAME || 'rag_chatbot',
-  user: process.env.CUSTOMER_DB_USER || process.env.POSTGRES_USER || 'postgres',
-  password: process.env.CUSTOMER_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
-  ssl: process.env.CUSTOMER_DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-};
+
+// Dynamic configurations from ASEMB database
+let customerDbConfig: DatabaseConfig;
+let redisConfig: RedisConfig;
+let llmProviders: any;
+let appConfig: any;
+
+// Initialize all configurations from environment variables
+export async function initializeConfigs(): Promise<void> {
+  console.log('⚠️ Using configurations from environment variables');
+
+  // Set configurations from environment
+  customerDbConfig = {
+    host: process.env.POSTGRES_HOST || 'localhost',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    database: process.env.POSTGRES_DB || 'asemb',
+    user: process.env.POSTGRES_USER || 'postgres',
+    password: process.env.POSTGRES_PASSWORD || '',
+    ssl: process.env.POSTGRES_SSL === 'true'
+  };
+
+  redisConfig = {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6380'),
+    db: parseInt(process.env.REDIS_DB || '2'),
+    password: process.env.REDIS_PASSWORD || 'Semsiye!22'
+  };
+
+  llmProviders = {
+    primary: process.env.LLM_PROVIDER || 'openai',
+    fallback_enabled: process.env.AI_FALLBACK_ENABLED === 'true',
+    fallback_provider: process.env.AI_FALLBACK_PROVIDER || 'claude',
+    openai: {
+      api_key: process.env.OPENAI_API_KEY || '',
+      api_base: process.env.OPENAI_API_BASE || null
+    },
+    claude: {
+      api_key: process.env.CLAUDE_API_KEY || ''
+    },
+    gemini: {
+      api_key: process.env.GEMINI_API_KEY || '',
+      project_id: process.env.GOOGLE_PROJECT_ID || ''
+    },
+    deepseek: {
+      api_key: process.env.DEEPSEEK_API_KEY || ''
+    },
+    huggingface: {
+      api_key: process.env.HUGGINGFACE_API_KEY || ''
+    }
+  };
+
+  appConfig = {
+    port: process.env.API_PORT || '8083',
+    cors_origin: process.env.CORS_ORIGINS || 'http://localhost:3000',
+    log_level: process.env.LOG_LEVEL || 'info',
+    rate_limit_window: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
+    rate_limit_max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100')
+  };
+
+  console.log('✅ All configurations loaded from environment variables');
+}
+
+// Export functions to get current configurations
+export function getCustomerDbConfig(): DatabaseConfig {
+  return customerDbConfig;
+}
+
+export function getRedisConfig(): RedisConfig {
+  return redisConfig;
+}
+
+export function getLLMProviders(): any {
+  return llmProviders;
+}
+
+export function getAppConfig(): any {
+  return appConfig;
+}
 
 // ASEMB System Database Pool
 export const asembPool = new Pool({
@@ -34,9 +104,9 @@ export const asembPool = new Pool({
 // Customer Database Pool (created dynamically)
 let customerPool: Pool | null = null;
 
-export function getCustomerPool(config?: any): Pool {
+export function getCustomerPool(config?: DatabaseConfig): Pool {
   if (!customerPool || config) {
-    const dbConfig = config || customerDbConfig;
+    const dbConfig = config || getCustomerDbConfig();
     customerPool = new Pool({
       ...dbConfig,
       max: 10,
@@ -133,6 +203,69 @@ export async function initializeAsembDatabase() {
       )
     `);
 
+    // Insert default settings if they don't exist
+    await client.query(`
+      INSERT INTO settings (key, value, category, description) VALUES
+      ('asemb_database', $1, 'database', 'ASEMB system database configuration'),
+      ('customer_database', $2, 'database', 'Customer database configuration'),
+      ('redis_config', $3, 'database', 'Redis configuration'),
+      ('llm_providers', $4, 'ai', 'LLM provider configurations'),
+      ('app_config', $5, 'application', 'Application configuration')
+      ON CONFLICT (key) DO NOTHING
+    `, [
+      JSON.stringify({
+        host: process.env.POSTGRES_HOST || 'localhost',
+        port: parseInt(process.env.POSTGRES_PORT || '5432'),
+        database: process.env.POSTGRES_DB || 'asemb',
+        user: process.env.POSTGRES_USER || 'postgres',
+        password: process.env.POSTGRES_PASSWORD || '',
+        ssl: process.env.POSTGRES_SSL === 'true'
+      }),
+      JSON.stringify({
+        host: process.env.POSTGRES_HOST || 'localhost',
+        port: parseInt(process.env.POSTGRES_PORT || '5432'),
+        database: process.env.POSTGRES_DB || 'asemb',
+        user: process.env.POSTGRES_USER || 'postgres',
+        password: process.env.POSTGRES_PASSWORD || '',
+        ssl: process.env.POSTGRES_SSL === 'true'
+      }),
+      JSON.stringify({
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        db: parseInt(process.env.REDIS_DB || '2'),
+        password: process.env.REDIS_PASSWORD || null
+      }),
+      JSON.stringify({
+        primary: process.env.LLM_PROVIDER || 'openai',
+        fallback_enabled: process.env.AI_FALLBACK_ENABLED === 'true',
+        fallback_provider: process.env.AI_FALLBACK_PROVIDER || 'claude',
+        openai: {
+          api_key: process.env.OPENAI_API_KEY || '',
+          api_base: process.env.OPENAI_API_BASE || null
+        },
+        claude: {
+          api_key: process.env.CLAUDE_API_KEY || ''
+        },
+        gemini: {
+          api_key: process.env.GEMINI_API_KEY || '',
+          project_id: process.env.GOOGLE_PROJECT_ID || ''
+        },
+        deepseek: {
+          api_key: process.env.DEEPSEEK_API_KEY || ''
+        },
+        huggingface: {
+          api_key: process.env.HUGGINGFACE_API_KEY || ''
+        }
+      }),
+      JSON.stringify({
+        port: process.env.API_PORT || '8083',
+        cors_origin: process.env.CORS_ORIGINS || 'http://localhost:3000',
+        log_level: process.env.LOG_LEVEL || 'info',
+        rate_limit_window: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000'),
+        rate_limit_max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100')
+      })
+    ]);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS activity_log (
         id SERIAL PRIMARY KEY,
@@ -185,7 +318,7 @@ export async function getDatabaseSettings() {
   try {
     client = await asembPool.connect();
     const result = await client.query(`
-      SELECT value FROM settings WHERE key = 'customer_database'
+      SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'customer_database'
     `);
     
     if (result.rows.length > 0) {
@@ -207,7 +340,7 @@ export async function getAiSettings() {
   try {
     client = await asembPool.connect();
     const result = await client.query(`
-      SELECT value FROM settings WHERE key = 'ai_settings'
+      SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'ai_settings'
     `);
     
     if (result.rows.length > 0 && result.rows[0].value) {

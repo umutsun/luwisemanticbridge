@@ -13,7 +13,7 @@ async function addDeepSeekKey() {
 
     // Get current AI settings
     const checkResult = await client.query(`
-      SELECT value FROM settings WHERE key = 'ai_settings'
+      SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'ai_settings'
     `);
 
     let aiSettings = {};

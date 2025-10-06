@@ -1,21 +1,17 @@
 import { Router, Request, Response } from 'express';
-import { Pool } from 'pg';
+import { asembPool } from '../config/database.config';
+const axios = require('axios');
 
 const router = Router();
-
-// Use the main database connection
-const pgPool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb'
-});
 
 // Get all settings
 router.get('/all', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query('SELECT setting_key, setting_value FROM chatbot_settings');
+    const result = await asembPool.query('SELECT key, value FROM settings');
 
     const settings: { [key: string]: string } = {};
     result.rows.forEach(row => {
-      settings[row.setting_key] = row.setting_value;
+      settings[row.key] = row.value;
     });
 
     res.json(settings);
@@ -28,7 +24,7 @@ router.get('/all', async (req: Request, res: Response) => {
 // Get configuration in nested format (for frontend)
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query('SELECT setting_key, setting_value FROM chatbot_settings');
+    const result = await asembPool.query('SELECT key, value FROM settings');
 
     const config: any = {
       app: {},
@@ -50,20 +46,103 @@ router.get('/', async (req: Request, res: Response) => {
       logging: {}
     };
 
+    // Load configuration from environment (.env.asemb)
+    config.database = {
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: parseInt(process.env.POSTGRES_PORT || '5432'),
+      name: process.env.POSTGRES_DB || 'asemb',
+      user: process.env.POSTGRES_USER || 'postgres',
+      password: process.env.POSTGRES_PASSWORD || '',
+      ssl: false,
+      maxConnections: 20
+    };
+
+    config.redis = {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || '',
+      db: parseInt(process.env.REDIS_DB || '2')
+    };
+
+    // Initialize API keys from environment
+    config.openai = {
+      apiKey: process.env.OPENAI_API_KEY || '',
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+      maxTokens: 4096,
+      temperature: 0.7
+    };
+
+    config.google = {
+      apiKey: process.env.GEMINI_API_KEY || '',
+      projectId: process.env.GOOGLE_PROJECT_ID || ''
+    };
+
+    config.anthropic = {
+      apiKey: process.env.CLAUDE_API_KEY || '',
+      model: 'claude-3-opus-20240229',
+      maxTokens: 4096
+    };
+
+    config.deepseek = {
+      apiKey: process.env.DEEPSEEK_API_KEY || '',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-coder'
+    };
+
+    config.huggingface = {
+      apiKey: process.env.HUGGINGFACE_API_KEY || '',
+      model: 'sentence-transformers/all-MiniLM-L6-v2',
+      endpoint: 'https://api-inference.huggingface.co/models/'
+    };
+
+    config.n8n = {
+      url: process.env.N8N_WEBHOOK_URL || 'http://localhost:5678',
+      apiKey: process.env.N8N_API_KEY || ''
+    };
+
+    // Initialize embeddings configuration
+    config.embeddings = {
+      provider: process.env.EMBEDDING_PROVIDER || 'openai',
+      model: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+      batchSize: parseInt(process.env.EMBEDDING_BATCH_SIZE || '100'),
+      maxTokens: parseInt(process.env.EMBEDDING_MAX_TOKENS || '8192'),
+      dimension: parseInt(process.env.EMBEDDING_DIMENSION || '1536'),
+      enabled: process.env.EMBEDDINGS_ENABLED !== 'false',
+      useLocal: process.env.USE_LOCAL_EMBEDDINGS === 'true',
+      localModel: process.env.LOCAL_EMBEDDING_MODEL || 'all-MiniLM-L6-v2'
+    };
+
+    config.app = {
+      name: process.env.COMPOSE_PROJECT_NAME || 'Alice Semantic Bridge',
+      description: 'AI-Powered Knowledge Management System',
+      logoUrl: '',
+      locale: 'tr'
+    };
+
     // Initialize API key objects to ensure they exist
-    config.openai.apiKey = '';
-    config.google.apiKey = '';
-    config.anthropic.apiKey = '';
-    config.huggingface.apiKey = '';
+    config.openai.apiKey = config.openai.apiKey || '';
+    config.google.apiKey = config.google.apiKey || '';
+    config.anthropic.apiKey = config.anthropic.apiKey || '';
+    config.huggingface.apiKey = config.huggingface.apiKey || '';
 
     result.rows.forEach(row => {
-      const key = row.setting_key;
-      const value = row.setting_value;
+      const key = row.key;
+      const value = row.value;
 
       // Special handling for ai_settings
       if (key === 'ai_settings') {
         try {
-          const aiSettings = JSON.parse(value);
+          let aiSettings;
+          // Check if value is already an object or needs to be parsed from JSON string
+          if (typeof value === 'object') {
+            aiSettings = value;
+          } else if (typeof value === 'string' && value !== '[object Object]') {
+            aiSettings = JSON.parse(value);
+          } else {
+            // Skip invalid ai_settings
+            return;
+          }
           // Map to the expected structure
           if (aiSettings.openaiApiKey) {
             config.openai.apiKey = aiSettings.openaiApiKey;
@@ -159,11 +238,11 @@ router.put('/', async (req: Request, res: Response) => {
 
     // Save all settings
     for (const update of updates) {
-      await pgPool.query(
-        `INSERT INTO chatbot_settings (setting_key, setting_value)
+      await asembPool.query(
+        `INSERT INTO settings (key, value)
          VALUES ($1, $2)
-         ON CONFLICT (setting_key)
-         DO UPDATE SET setting_value = $2`,
+         ON CONFLICT (key)
+         DO UPDATE SET value = $2`,
         [update.key, update.value]
       );
     }
@@ -179,8 +258,8 @@ router.put('/', async (req: Request, res: Response) => {
 router.get('/:key', async (req: Request, res: Response) => {
   try {
     const { key } = req.params;
-    const result = await pgPool.query(
-      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+    const result = await asembPool.query(
+      'SELECT value FROM settings WHERE key = $1',
       [key]
     );
     
@@ -188,7 +267,7 @@ router.get('/:key', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Setting not found' });
     }
     
-    res.json({ value: result.rows[0].setting_value });
+    res.json({ value: result.rows[0].value });
   } catch (error) {
     console.error('Error fetching setting:', error);
     res.status(500).json({ error: 'Failed to fetch setting' });
@@ -199,28 +278,48 @@ router.get('/:key', async (req: Request, res: Response) => {
 router.put('/:key', async (req: Request, res: Response) => {
   try {
     const { key } = req.params;
-    const { value } = req.body;
-    
+    let { value } = req.body;
+
+    // Handle case where value might be wrapped or null
+    if (value === null || value === undefined) {
+      return res.status(400).json({ error: 'Value cannot be null or undefined' });
+    }
+
+    // If value is already a string and looks like JSON, parse and stringify to validate
+    if (typeof value === 'string') {
+      try {
+        // Try to parse as JSON to validate, then stringify back
+        const parsed = JSON.parse(value);
+        value = JSON.stringify(parsed);
+      } catch {
+        // If it's not valid JSON, keep as is
+        value = String(value);
+      }
+    } else {
+      // If it's an object or other type, stringify it
+      value = JSON.stringify(value);
+    }
+
     // Check if setting exists
-    const checkResult = await pgPool.query(
-      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+    const checkResult = await asembPool.query(
+      'SELECT key FROM settings WHERE key = $1',
       [key]
     );
-    
+
     if (checkResult.rows.length === 0) {
       // Insert new setting
-      await pgPool.query(
-        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+      await asembPool.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2)',
         [key, value]
       );
     } else {
       // Update existing setting
-      await pgPool.query(
-        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+      await asembPool.query(
+        'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
         [value, key]
       );
     }
-    
+
     res.json({ success: true, key, value });
   } catch (error) {
     console.error('Error updating setting:', error);
@@ -232,26 +331,26 @@ router.put('/:key', async (req: Request, res: Response) => {
 router.get('/database/config', async (req: Request, res: Response) => {
   try {
     const keys = ['db_host', 'db_port', 'db_name', 'db_user', 'db_password'];
-    const result = await pgPool.query(
-      'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key = ANY($1)',
+    const result = await asembPool.query(
+      'SELECT key, value FROM settings WHERE key = ANY($1)',
       [keys]
     );
     
     const config: { [key: string]: string } = {
-      host: '91.99.229.96',
-      port: '5432',
-      database: 'asemb',
-      username: 'postgres',
-      password: 'Semsiye!22'
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: process.env.POSTGRES_PORT || '5432',
+      database: process.env.POSTGRES_DB || 'asemb',
+      username: process.env.POSTGRES_USER || 'postgres',
+      password: process.env.POSTGRES_PASSWORD || ''
     };
     
     result.rows.forEach(row => {
-      switch(row.setting_key) {
-        case 'db_host': config.host = row.setting_value; break;
-        case 'db_port': config.port = row.setting_value; break;
-        case 'db_name': config.database = row.setting_value; break;
-        case 'db_user': config.username = row.setting_value; break;
-        case 'db_password': config.password = row.setting_value; break;
+      switch(row.key) {
+        case 'db_host': config.host = row.value; break;
+        case 'db_port': config.port = row.value; break;
+        case 'db_name': config.database = row.value; break;
+        case 'db_user': config.username = row.value; break;
+        case 'db_password': config.password = row.value; break;
       }
     });
     
@@ -272,21 +371,21 @@ router.post('/openai-api-key', async (req: Request, res: Response) => {
     }
     
     // Check if setting exists
-    const checkResult = await pgPool.query(
-      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+    const checkResult = await asembPool.query(
+      'SELECT key FROM settings WHERE key = $1',
       ['openai_api_key']
     );
     
     if (checkResult.rows.length === 0) {
       // Insert new setting
-      await pgPool.query(
-        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+      await asembPool.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2)',
         ['openai_api_key', apiKey]
       );
     } else {
       // Update existing setting
-      await pgPool.query(
-        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+      await asembPool.query(
+        'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
         [apiKey, 'openai_api_key']
       );
     }
@@ -301,8 +400,8 @@ router.post('/openai-api-key', async (req: Request, res: Response) => {
 // Get OpenAI API key
 router.get('/openai-api-key', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query(
-      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+    const result = await asembPool.query(
+      'SELECT value FROM settings WHERE key = $1',
       ['openai_api_key']
     );
     
@@ -310,7 +409,7 @@ router.get('/openai-api-key', async (req: Request, res: Response) => {
       return res.json({ apiKey: '' });
     }
     
-    res.json({ apiKey: result.rows[0].setting_value });
+    res.json({ apiKey: result.rows[0].value });
   } catch (error) {
     console.error('Error fetching OpenAI API key:', error);
     res.status(500).json({ error: 'Failed to fetch OpenAI API key' });
@@ -371,7 +470,7 @@ router.post('/embedding', async (req: Request, res: Response) => {
     const settings = [
       { key: 'embedding_provider', value: embeddingProvider || 'openai' },
       { key: 'embedding_model', value: embeddingModel || 'text-embedding-3-small' },
-      { key: 'ollama_base_url', value: ollamaBaseUrl || 'http://localhost:11434' },
+      { key: 'ollama_base_url', value: ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434' },
       { key: 'ollama_embedding_model', value: ollamaEmbeddingModel || 'nomic-embed-text' },
       { key: 'huggingface_api_key', value: huggingfaceApiKey || '' },
       { key: 'mistral_api_key', value: mistralApiKey || '' },
@@ -384,21 +483,21 @@ router.post('/embedding', async (req: Request, res: Response) => {
 
     for (const setting of settings) {
       // Check if setting exists
-      const checkResult = await pgPool.query(
-        'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+      const checkResult = await asembPool.query(
+        'SELECT key FROM settings WHERE key = $1',
         [setting.key]
       );
 
       if (checkResult.rows.length === 0) {
         // Insert new setting
-        await pgPool.query(
-          'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+        await asembPool.query(
+          'INSERT INTO settings (key, value) VALUES ($1, $2)',
           [setting.key, setting.value]
         );
       } else {
         // Update existing setting
-        await pgPool.query(
-          'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+        await asembPool.query(
+          'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
           [setting.value, setting.key]
         );
       }
@@ -440,15 +539,15 @@ router.get('/embedding', async (req: Request, res: Response) => {
       'embedding_cache'
     ];
 
-    const result = await pgPool.query(
-      'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key = ANY($1)',
+    const result = await asembPool.query(
+      'SELECT key, value FROM settings WHERE key = ANY($1)',
       [keys]
     );
 
     const settings: any = {
       provider: 'openai',
       model: 'text-embedding-3-small',
-      ollamaBaseUrl: 'http://localhost:11434',
+      ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
       ollamaEmbeddingModel: 'nomic-embed-text',
       huggingfaceApiKey: '',
       chunkSize: 1000,
@@ -459,36 +558,36 @@ router.get('/embedding', async (req: Request, res: Response) => {
     };
 
     result.rows.forEach(row => {
-      switch(row.setting_key) {
+      switch(row.key) {
         case 'embedding_provider':
-          settings.provider = row.setting_value;
+          settings.provider = row.value;
           break;
         case 'embedding_model':
-          settings.model = row.setting_value;
+          settings.model = row.value;
           break;
         case 'ollama_base_url':
-          settings.ollamaBaseUrl = row.setting_value;
+          settings.ollamaBaseUrl = row.value;
           break;
         case 'ollama_embedding_model':
-          settings.ollamaEmbeddingModel = row.setting_value;
+          settings.ollamaEmbeddingModel = row.value;
           break;
         case 'huggingface_api_key':
-          settings.huggingfaceApiKey = row.setting_value;
+          settings.huggingfaceApiKey = row.value;
           break;
         case 'embedding_chunk_size':
-          settings.chunkSize = parseInt(row.setting_value) || 1000;
+          settings.chunkSize = parseInt(row.value) || 1000;
           break;
         case 'embedding_chunk_overlap':
-          settings.chunkOverlap = parseInt(row.setting_value) || 200;
+          settings.chunkOverlap = parseInt(row.value) || 200;
           break;
         case 'embedding_batch_size':
-          settings.batchSize = parseInt(row.setting_value) || 10;
+          settings.batchSize = parseInt(row.value) || 10;
           break;
         case 'embedding_normalize':
-          settings.normalizeEmbeddings = row.setting_value === 'true';
+          settings.normalizeEmbeddings = row.value === 'true';
           break;
         case 'embedding_cache':
-          settings.cacheEmbeddings = row.setting_value !== 'false';
+          settings.cacheEmbeddings = row.value !== 'false';
           break;
       }
     });
@@ -518,12 +617,12 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
     switch(embeddingProvider) {
       case 'openai':
         // Get OpenAI API key from settings
-        const openaiKeyResult = await pgPool.query(
-          'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+        const openaiKeyResult = await asembPool.query(
+          'SELECT value FROM settings WHERE key = $1',
           ['openai_api_key']
         );
 
-        if (!openaiKeyResult.rows.length || !openaiKeyResult.rows[0].setting_value) {
+        if (!openaiKeyResult.rows.length || !openaiKeyResult.rows[0].value) {
           return res.json({
             success: false,
             error: 'OpenAI API key bulunamadı. Lütfen AI Services sekmesinden ekleyin.'
@@ -531,7 +630,7 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
         }
 
         const openai = new (require('openai'))({
-          apiKey: openaiKeyResult.rows[0].setting_value
+          apiKey: openaiKeyResult.rows[0].value
         });
 
         await openai.embeddings.create({
@@ -546,11 +645,9 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
         break;
 
       case 'ollama':
-        const axios = require('axios');
-
         // Test Ollama connection
         try {
-          const response = await axios.post(`${ollamaBaseUrl || 'http://localhost:11434'}/api/embeddings`, {
+          const response = await axios.post(`${ollamaBaseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/embeddings`, {
             model: embeddingModel || 'nomic-embed-text',
             prompt: 'test connection'
           });
@@ -564,10 +661,10 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
             throw new Error('Invalid response from Ollama');
           }
         } catch (ollamaError) {
-          testResult = {
+          return res.status(500).json({
             success: false,
             error: `Ollama'ya bağlanılamadı. Lütfen Ollama'nın çalıştığından ve modelin yüklü olduğundan emin olun.`
-          };
+          });
         }
         break;
 
@@ -580,10 +677,10 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
         break;
 
       default:
-        testResult = {
+        return res.status(400).json({
           success: false,
           error: 'Geçersiz embedding provider.'
-        };
+        });
     }
 
     res.json(testResult);
@@ -599,10 +696,10 @@ router.post('/embedding/test', async (req: Request, res: Response) => {
 // Get prompts configuration
 router.get('/config/prompts', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query(
-      `SELECT setting_key, setting_value FROM chatbot_settings
-       WHERE setting_key LIKE '%prompt%'
-       OR setting_key IN ('temperature', 'max_tokens')`
+    const result = await asembPool.query(
+      `SELECT key, value FROM settings
+       WHERE key LIKE '%prompt%'
+       OR key IN ('temperature', 'max_tokens')`
     );
 
     const prompts: any = {
@@ -614,7 +711,7 @@ router.get('/config/prompts', async (req: Request, res: Response) => {
     };
 
     result.rows.forEach(row => {
-      prompts[row.setting_key] = row.setting_value;
+      prompts[row.key] = row.value;
     });
 
     res.json(prompts);
@@ -631,44 +728,44 @@ router.post('/config/prompts', async (req: Request, res: Response) => {
 
     // Save system prompt
     if (prompt !== undefined) {
-      await pgPool.query(
-        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+      await asembPool.query(
+        `INSERT INTO settings (key, value, description)
          VALUES ('system_prompt', $1, 'System prompt for AI assistant')
-         ON CONFLICT (setting_key)
-         DO UPDATE SET setting_value = $1`,
+         ON CONFLICT (key)
+         DO UPDATE SET value = $1`,
         [prompt]
       );
     }
 
     // Save temperature
     if (temperature !== undefined) {
-      await pgPool.query(
-        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+      await asembPool.query(
+        `INSERT INTO settings (key, value, description)
          VALUES ('temperature', $1, 'Temperature for AI responses')
-         ON CONFLICT (setting_key)
-         DO UPDATE SET setting_value = $1`,
+         ON CONFLICT (key)
+         DO UPDATE SET value = $1`,
         [temperature.toString()]
       );
     }
 
     // Save max tokens
     if (maxTokens !== undefined) {
-      await pgPool.query(
-        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+      await asembPool.query(
+        `INSERT INTO settings (key, value, description)
          VALUES ('max_tokens', $1, 'Maximum tokens for AI responses')
-         ON CONFLICT (setting_key)
-         DO UPDATE SET setting_value = $1`,
+         ON CONFLICT (key)
+         DO UPDATE SET value = $1`,
         [maxTokens.toString()]
       );
     }
 
     // Save prompt name if provided
     if (name) {
-      await pgPool.query(
-        `INSERT INTO chatbot_settings (setting_key, setting_value, description)
+      await asembPool.query(
+        `INSERT INTO settings (key, value, description)
          VALUES ('prompt_name', $1, 'Name of the custom prompt')
-         ON CONFLICT (setting_key)
-         DO UPDATE SET setting_value = $1`,
+         ON CONFLICT (key)
+         DO UPDATE SET value = $1`,
         [name]
       );
     }
@@ -696,16 +793,16 @@ router.post('/config/prompts', async (req: Request, res: Response) => {
 router.get('/services/postgres/status', async (req: Request, res: Response) => {
   try {
     const start = Date.now();
-    await pgPool.query('SELECT 1');
+    await asembPool.query('SELECT 1');
     const responseTime = Date.now() - start;
 
     res.json({
       status: 'connected',
       responseTime,
-      maxConnections: pgPool.options.max || 20,
-      totalConnections: pgPool.totalCount,
-      idleConnections: pgPool.idleCount,
-      waitingConnections: pgPool.waitingCount
+      maxConnections: asembPool.options.max || 20,
+      totalConnections: asembPool.totalCount,
+      idleConnections: asembPool.idleCount,
+      waitingConnections: asembPool.waitingCount
     });
   } catch (error) {
     res.json({
@@ -771,8 +868,8 @@ router.get('/ai', async (req: Request, res: Response) => {
       'gemini_api_key'
     ];
 
-    const result = await pgPool.query(
-      'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key = ANY($1)',
+    const result = await asembPool.query(
+      'SELECT key, value FROM settings WHERE key = ANY($1)',
       [keys]
     );
 
@@ -793,45 +890,45 @@ router.get('/ai', async (req: Request, res: Response) => {
     };
 
     result.rows.forEach(row => {
-      switch(row.setting_key) {
+      switch(row.key) {
         case 'active_chat_model':
-          settings.activeChatModel = row.setting_value;
+          settings.activeChatModel = row.value;
           break;
         case 'active_embedding_model':
-          settings.activeEmbeddingModel = row.setting_value;
+          settings.activeEmbeddingModel = row.value;
           break;
         case 'temperature':
-          settings.temperature = parseFloat(row.setting_value);
+          settings.temperature = parseFloat(row.value);
           break;
         case 'top_p':
-          settings.topP = parseFloat(row.setting_value);
+          settings.topP = parseFloat(row.value);
           break;
         case 'max_tokens':
-          settings.maxTokens = parseInt(row.setting_value);
+          settings.maxTokens = parseInt(row.value);
           break;
         case 'presence_penalty':
-          settings.presencePenalty = parseFloat(row.setting_value);
+          settings.presencePenalty = parseFloat(row.value);
           break;
         case 'frequency_penalty':
-          settings.frequencyPenalty = parseFloat(row.setting_value);
+          settings.frequencyPenalty = parseFloat(row.value);
           break;
         case 'rag_weight':
-          settings.ragWeight = parseInt(row.setting_value);
+          settings.ragWeight = parseInt(row.value);
           break;
         case 'llm_knowledge_weight':
-          settings.llmKnowledgeWeight = parseInt(row.setting_value);
+          settings.llmKnowledgeWeight = parseInt(row.value);
           break;
         case 'stream_response':
-          settings.streamResponse = row.setting_value === 'true';
+          settings.streamResponse = row.value === 'true';
           break;
         case 'system_prompt':
-          settings.systemPrompt = row.setting_value;
+          settings.systemPrompt = row.value;
           break;
         case 'response_style':
-          settings.responseStyle = row.setting_value;
+          settings.responseStyle = row.value;
           break;
         case 'response_language':
-          settings.language = row.setting_value;
+          settings.language = row.value;
           break;
       }
     });
@@ -884,21 +981,21 @@ router.post('/ai', async (req: Request, res: Response) => {
 
     for (const setting of settings) {
       // Check if setting exists
-      const checkResult = await pgPool.query(
-        'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+      const checkResult = await asembPool.query(
+        'SELECT key FROM settings WHERE key = $1',
         [setting.key]
       );
 
       if (checkResult.rows.length === 0) {
         // Insert new setting
-        await pgPool.query(
-          'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+        await asembPool.query(
+          'INSERT INTO settings (key, value) VALUES ($1, $2)',
           [setting.key, setting.value]
         );
       } else {
         // Update existing setting
-        await pgPool.query(
-          'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+        await asembPool.query(
+          'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
           [setting.value, setting.key]
         );
       }
@@ -927,21 +1024,21 @@ router.post('/gemini-api-key', async (req: Request, res: Response) => {
     }
 
     // Check if setting exists
-    const checkResult = await pgPool.query(
-      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+    const checkResult = await asembPool.query(
+      'SELECT key FROM settings WHERE key = $1',
       ['gemini_api_key']
     );
 
     if (checkResult.rows.length === 0) {
       // Insert new setting
-      await pgPool.query(
-        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+      await asembPool.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2)',
         ['gemini_api_key', apiKey]
       );
     } else {
       // Update existing setting
-      await pgPool.query(
-        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+      await asembPool.query(
+        'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
         [apiKey, 'gemini_api_key']
       );
     }
@@ -956,8 +1053,8 @@ router.post('/gemini-api-key', async (req: Request, res: Response) => {
 // Get Gemini API key
 router.get('/gemini-api-key', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query(
-      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+    const result = await asembPool.query(
+      'SELECT value FROM settings WHERE key = $1',
       ['gemini_api_key']
     );
 
@@ -965,7 +1062,7 @@ router.get('/gemini-api-key', async (req: Request, res: Response) => {
       return res.json({ apiKey: '' });
     }
 
-    res.json({ apiKey: result.rows[0].setting_value });
+    res.json({ apiKey: result.rows[0].value });
   } catch (error) {
     console.error('Error fetching Gemini API key:', error);
     res.status(500).json({ error: 'Failed to fetch Gemini API key' });
@@ -975,8 +1072,8 @@ router.get('/gemini-api-key', async (req: Request, res: Response) => {
 // AI Provider Priority endpoints
 router.get('/ai-provider-priority', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query(
-      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+    const result = await asembPool.query(
+      'SELECT value FROM settings WHERE key = $1',
       ['ai_provider_priority']
     );
 
@@ -988,7 +1085,7 @@ router.get('/ai-provider-priority', async (req: Request, res: Response) => {
     }
 
     res.json({
-      priority: JSON.parse(result.rows[0].setting_value)
+      priority: JSON.parse(result.rows[0].value)
     });
   } catch (error) {
     console.error('Error fetching AI provider priority:', error);
@@ -1006,21 +1103,21 @@ router.post('/ai-provider-priority', async (req: Request, res: Response) => {
     }
 
     // Check if setting exists
-    const checkResult = await pgPool.query(
-      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+    const checkResult = await asembPool.query(
+      'SELECT key FROM settings WHERE key = $1',
       ['ai_provider_priority']
     );
 
     if (checkResult.rows.length === 0) {
       // Insert new setting
-      await pgPool.query(
-        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+      await asembPool.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2)',
         ['ai_provider_priority', JSON.stringify(priority)]
       );
     } else {
       // Update existing setting
-      await pgPool.query(
-        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+      await asembPool.query(
+        'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
         [JSON.stringify(priority), 'ai_provider_priority']
       );
     }
@@ -1039,8 +1136,8 @@ router.post('/ai-provider-priority', async (req: Request, res: Response) => {
 // Gemini model endpoints
 router.get('/gemini-model', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query(
-      'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+    const result = await asembPool.query(
+      'SELECT value FROM settings WHERE key = $1',
       ['gemini_model']
     );
 
@@ -1052,7 +1149,7 @@ router.get('/gemini-model', async (req: Request, res: Response) => {
     }
 
     res.json({
-      model: result.rows[0].setting_value
+      model: result.rows[0].value
     });
   } catch (error) {
     console.error('Error fetching Gemini model:', error);
@@ -1071,21 +1168,21 @@ router.post('/gemini-model', async (req: Request, res: Response) => {
     }
 
     // Check if setting exists
-    const checkResult = await pgPool.query(
-      'SELECT setting_key FROM chatbot_settings WHERE setting_key = $1',
+    const checkResult = await asembPool.query(
+      'SELECT key FROM settings WHERE key = $1',
       ['gemini_model']
     );
 
     if (checkResult.rows.length === 0) {
       // Insert new setting
-      await pgPool.query(
-        'INSERT INTO chatbot_settings (setting_key, setting_value) VALUES ($1, $2)',
+      await asembPool.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2)',
         ['gemini_model', model]
       );
     } else {
       // Update existing setting
-      await pgPool.query(
-        'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+      await asembPool.query(
+        'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
         [model, 'gemini_model']
       );
     }
@@ -1109,14 +1206,14 @@ router.get('/services/status', async (req: Request, res: Response) => {
     // PostgreSQL status
     try {
       const start = Date.now();
-      await pgPool.query('SELECT 1');
+      await asembPool.query('SELECT 1');
       services.postgres = {
         status: 'connected',
         responseTime: Date.now() - start,
-        maxConnections: pgPool.options.max || 20,
-        totalConnections: pgPool.totalCount,
-        idleConnections: pgPool.idleCount,
-        waitingConnections: pgPool.waitingCount
+        maxConnections: asembPool.options.max || 20,
+        totalConnections: asembPool.totalCount,
+        idleConnections: asembPool.idleCount,
+        waitingConnections: asembPool.waitingCount
       };
     } catch (error: any) {
       services.postgres = {
@@ -1160,12 +1257,12 @@ router.get('/services/status', async (req: Request, res: Response) => {
 
     // Check embedding service
     try {
-      const embeddingResult = await pgPool.query(
-        'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+      const embeddingResult = await asembPool.query(
+        'SELECT value FROM settings WHERE key = $1',
         ['embedding_provider']
       );
 
-      const embeddingProvider = embeddingResult.rows[0]?.setting_value || 'openai';
+      const embeddingProvider = embeddingResult.rows[0]?.value || 'openai';
       services.embedding = {
         status: 'configured',
         provider: embeddingProvider
@@ -1179,14 +1276,14 @@ router.get('/services/status', async (req: Request, res: Response) => {
 
     // Check LLM services
     try {
-      const llmResult = await pgPool.query(
-        'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ($1, $2, $3)',
-        ['openai_api_key', 'gemini_api_key', 'claude_api_key']
+      const llmResult = await asembPool.query(
+        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
+        ['openai_api_key', 'gemini_api_key', 'claude_api_key', 'deepseek_api_key']
       );
 
       const llmServices: { [key: string]: boolean } = {};
       llmResult.rows.forEach(row => {
-        llmServices[row.setting_key] = !!row.setting_value;
+        llmServices[row.key] = !!row.value;
       });
 
       services.llm = {
@@ -1194,7 +1291,8 @@ router.get('/services/status', async (req: Request, res: Response) => {
         providers: {
           openai: !!llmServices.openai_api_key,
           gemini: !!llmServices.gemini_api_key,
-          claude: !!llmServices.claude_api_key
+          claude: !!llmServices.claude_api_key,
+          deepseek: !!llmServices.deepseek_api_key
         }
       };
     } catch (error) {
@@ -1234,7 +1332,7 @@ router.post('/services/:service/:action', async (req: Request, res: Response) =>
 
       case 'postgres':
         if (action === 'test') {
-          await pgPool.query('SELECT 1');
+          await asembPool.query('SELECT 1');
           res.json({ success: true, message: 'PostgreSQL connection test successful' });
         } else {
           res.status(400).json({ error: 'Invalid action for PostgreSQL' });
@@ -1260,7 +1358,7 @@ router.get('/test/:service', async (req: Request, res: Response) => {
   try {
     switch(service) {
       case 'postgres':
-        await pgPool.query('SELECT 1');
+        await asembPool.query('SELECT 1');
         res.json({ success: true, message: 'PostgreSQL connection successful' });
         break;
 
@@ -1272,26 +1370,26 @@ router.get('/test/:service', async (req: Request, res: Response) => {
 
       case 'embedding':
         // Test embedding service
-        const embeddingResult = await pgPool.query(
-          'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+        const embeddingResult = await asembPool.query(
+          'SELECT value FROM settings WHERE key = $1',
           ['embedding_provider']
         );
 
-        const provider = embeddingResult.rows[0]?.setting_value || 'openai';
+        const provider = embeddingResult.rows[0]?.value || 'openai';
         res.json({ success: true, message: `Embedding service configured with: ${provider}` });
         break;
 
       case 'llm':
         // Test LLM services
-        const llmResult = await pgPool.query(
-          'SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ($1, $2, $3)',
-          ['openai_api_key', 'gemini_api_key', 'claude_api_key']
+        const llmResult = await asembPool.query(
+          'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
+          ['openai_api_key', 'gemini_api_key', 'claude_api_key', 'deepseek_api_key']
         );
 
         const providers: string[] = [];
         llmResult.rows.forEach(row => {
-          if (row.setting_value) {
-            providers.push(row.setting_key.replace('_api_key', ''));
+          if (row.value) {
+            providers.push(row.key.replace('_api_key', ''));
           }
         });
 
@@ -1309,6 +1407,140 @@ router.get('/test/:service', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Connection test failed'
+    });
+  }
+});
+
+// Refresh embedding settings
+router.post('/embeddings/refresh', async (req: Request, res: Response) => {
+  try {
+    const { SemanticSearchService } = require('../services/semantic-search.service');
+    const semanticSearch = new SemanticSearchService();
+
+    await semanticSearch.refreshEmbeddingSettings();
+
+    res.json({
+      success: true,
+      message: 'Embedding settings refreshed successfully'
+    });
+  } catch (error: any) {
+    console.error('Error refreshing embedding settings:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to refresh embedding settings'
+    });
+  }
+});
+
+// Test API key - Generic endpoint for multiple providers
+router.post('/test/:provider', async (req: Request, res: Response) => {
+  const { provider } = req.params;
+  const { apiKey } = req.body;
+
+  if (!apiKey) {
+    return res.status(400).json({ success: false, error: 'API key is required' });
+  }
+
+  try {
+    switch(provider) {
+      case 'openai':
+        const openai = new (require('openai'))({ apiKey });
+        await openai.models.list(); // Simple API call to test the key
+        res.json({ success: true, message: 'OpenAI API key is valid' });
+        break;
+
+      case 'google':
+        // Test Google API key
+        await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        res.json({ success: true, message: 'Google API key is valid' });
+        break;
+
+      case 'anthropic':
+        // Test Anthropic API key
+        const Anthropic = require('@anthropic-ai/sdk');
+        const anthropic = new Anthropic({ apiKey });
+        await anthropic.messages.create({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'test' }]
+        });
+        res.json({ success: true, message: 'Anthropic API key is valid' });
+        break;
+      case 'deepseek':
+        // Test DeepSeek API key
+        await axios.post('https://api.deepseek.com/v1/chat/completions', {
+          model: 'deepseek-chat',
+          messages: [{ role: 'user', content: 'test' }],
+          max_tokens: 1
+        }, {
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        res.json({ success: true, message: 'DeepSeek API key is valid' });
+        break;
+
+      default:
+        res.status(400).json({ success: false, error: 'Unsupported provider' });
+    }
+  } catch (error: any) {
+    console.error(`${provider} API test failed:`, error);
+
+    if (error.status === 401 || error.response?.status === 401) {
+      res.status(401).json({ success: false, error: `Invalid ${provider} API key` });
+    } else if (error.status === 429 || error.response?.status === 429) {
+      res.status(429).json({ success: false, error: `${provider} API quota exceeded` });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: error.message || error.response?.data?.error?.message || 'API test failed'
+      });
+    }
+  }
+});
+
+// Initialize default settings
+router.post('/initialize-defaults', async (req: Request, res: Response) => {
+  try {
+    // Default embeddings settings
+    const defaultEmbeddingSettings = [
+      { key: 'embedding_chunk_size', value: '1000', description: 'Default chunk size for text embeddings' },
+      { key: 'embedding_chunk_overlap', value: '200', description: 'Default chunk overlap for text embeddings' },
+      { key: 'embedding_batch_size', value: '10', description: 'Default batch size for embedding generation' },
+      { key: 'embedding_normalize', value: 'true', description: 'Whether to normalize embeddings' },
+      { key: 'embedding_cache', value: 'true', description: 'Whether to cache embeddings' },
+      { key: 'embedding_provider', value: 'openai', description: 'Default embedding provider' },
+      { key: 'embedding_model', value: 'text-embedding-3-small', description: 'Default embedding model' }
+    ];
+
+    // Insert defaults if they don't exist
+    for (const setting of defaultEmbeddingSettings) {
+      const checkResult = await asembPool.query(
+        'SELECT key FROM settings WHERE key = $1',
+        [setting.key]
+      );
+
+      if (checkResult.rows.length === 0) {
+        await asembPool.query(
+          `INSERT INTO settings (key, value, description)
+           VALUES ($1, $2, $3)`,
+          [setting.key, setting.value, setting.description]
+        );
+        console.log(`✅ Initialized default setting: ${setting.key} = ${setting.value}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Default settings initialized successfully',
+      initialized: defaultEmbeddingSettings.length
+    });
+  } catch (error) {
+    console.error('Error initializing default settings:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to initialize default settings'
     });
   }
 });

@@ -45,9 +45,10 @@ class RAGDashboard {
           <details class="advanced-options">
             <summary>Advanced Options</summary>
             <div class="options-content">
-              <label for="rag-temperature">Temperature:</label>
+              <label for="rag-temperature">RAG Temperature:</label>
               <input type="range" id="rag-temperature" min="0" max="1" step="0.1" value="0.3">
               <span id="temp-value">0.3</span>
+              <small class="text-gray-500">Temperature for RAG queries only</small>
             </div>
           </details>
         </div>

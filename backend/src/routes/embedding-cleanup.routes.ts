@@ -9,10 +9,9 @@ const router = Router();
 
 // Redis connection for cleanup operations
 const redis = new Redis({
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  host: process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.REDIS_PORT || '6380'),
   db: parseInt(process.env.REDIS_DB || '2'),
-  retryDelayOnFailover: 100,
   maxRetriesPerRequest: 3
 });
 
@@ -72,7 +71,7 @@ router.get('/check-consistency', async (req: Request, res: Response) => {
     const staleThreshold = new Date(Date.now() - 60 * 60 * 1000); // 1 hour
     let hasStaleProgress = false;
 
-    for (const record of progressResult.rows) {
+    for (const record of progressResult.rows as any[]) {
       if (record.status === 'processing' && new Date(record.updated_at) < staleThreshold) {
         hasStaleProgress = true;
         issues.push({
@@ -99,7 +98,7 @@ router.get('/check-consistency', async (req: Request, res: Response) => {
     const actualEmbeddings = parseInt(embeddingResult.rows[0]?.total || '0');
 
     // Check 4: Progress vs actual count mismatch
-    for (const record of progressResult.rows) {
+    for (const record of progressResult.rows as any[]) {
       if (record.status === 'completed') {
         const tableResult = await pool.query(`
           SELECT COUNT(*) as count
@@ -195,7 +194,7 @@ router.post('/cleanup', async (req: Request, res: Response) => {
     }
 
     // Step 2: Clean database progress table (if it exists)
-    let deleteResult = { rowCount: 0 };
+    let deleteResult: { rowCount: number | null } = { rowCount: 0 };
     try {
       deleteResult = await pool.query(`
         DELETE FROM embedding_progress
@@ -211,7 +210,7 @@ router.post('/cleanup', async (req: Request, res: Response) => {
     console.log(`[Embedding Cleanup] Deleted ${results.dbRecords} old progress records`);
 
     // Step 3: Reset stale progress records (if table exists)
-    let resetResult = { rowCount: 0 };
+    let resetResult: { rowCount: number | null } = { rowCount: 0 };
     try {
       resetResult = await pool.query(`
         UPDATE embedding_progress

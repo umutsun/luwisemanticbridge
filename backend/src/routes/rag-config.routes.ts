@@ -549,7 +549,7 @@ router.post('/related-topics', async (req: Request, res: Response) => {
     console.log(`Found ${searchResults.length} raw results for related topics`);
 
     // Filter out excluded IDs and apply relevance threshold
-    const filteredResults = searchResults.filter(result => {
+    const filteredResults = searchResults.filter((result: any) => {
       const score = result.score || (result.similarity_score * 100) || 0;
       const resultId = result.id || result.source_id;
 
@@ -559,7 +559,7 @@ router.post('/related-topics', async (req: Request, res: Response) => {
 
     // Sort by relevance score and limit results
     const sortedResults = filteredResults
-      .sort((a, b) => {
+      .sort((a: any, b: any) => {
         const scoreA = a.score || (a.similarity_score * 100) || 0;
         const scoreB = b.score || (b.similarity_score * 100) || 0;
         return scoreB - scoreA;
@@ -569,7 +569,7 @@ router.post('/related-topics', async (req: Request, res: Response) => {
     console.log(`Filtered to ${sortedResults.length} related topics (score >= 40%, excluded ${excludeIds.length} items)`);
 
     // Format results for frontend
-    const formattedResults = sortedResults.map((result, index) => {
+    const formattedResults = sortedResults.map((result: any, index: any) => {
       const score = result.score || (result.similarity_score * 100) || 0;
       const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
 

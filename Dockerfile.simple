@@ -1,0 +1,46 @@
+# Simple unified container for Alice Semantic Bridge
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache curl
+
+# Copy package files
+COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
+
+# Install dependencies
+WORKDIR /app/backend
+RUN npm install
+
+WORKDIR /app/frontend
+RUN npm install
+
+# Copy source code
+WORKDIR /app
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+
+# Create startup script
+RUN echo '#!/bin/sh\n\
+echo "Starting Alice Semantic Bridge..."\n\
+\n\
+# Start Backend\n\
+cd /app/backend\n\
+npm run dev &\n\
+\n\
+# Start Frontend\n\
+cd /app/frontend\n\
+npm run dev &\n\
+\n\
+echo "Services started!"\n\
+echo "Frontend: http://localhost:3000"\n\
+echo "Backend: http://localhost:8083"\n\
+\n\
+wait' > /app/start.sh
+
+RUN chmod +x /app/start.sh
+
+EXPOSE 3000 8083
+CMD ["/app/start.sh"]

@@ -1,80 +1,40 @@
 services:
-  # PostgreSQL with pgvector
+  alice-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: alice-semantic-bridge
+    ports:
+      - "3000:3000"
+      - "8083:8083"
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_PORT=5433
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Semsiye!22
+      - POSTGRES_DB=asemb
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - /app/backend/node_modules
+      - /app/frontend/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: asemb-postgres
+    container_name: alice-postgres
     environment:
-      POSTGRES_USER: asemb_user
-      POSTGRES_PASSWORD: asemb_password_2025
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Semsiye!22
       POSTGRES_DB: asemb
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - asemb-network
-
-  # Redis
-  redis:
-    image: redis:7-alpine
-    container_name: asemb-redis
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - asemb-network
-
-  # API Service - Directly from source
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: asemb-api
-    environment:
-      - NODE_ENV=development
-      - PORT=8083
-      - DATABASE_URL=postgresql://asemb_user:asemb_password_2025@postgres:5432/asemb
-      - REDIS_HOST=redis
-    ports:
-      - "8084:8083"
-    volumes:
-      - ./api:/app
-      - ./config:/config
-      - /app/node_modules
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - asemb-network
-    command: npm run dev
-
-  # Frontend Service - Directly from source
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: asemb-frontend
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8084
-    ports:
-      - "3005:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    depends_on:
-      - api
-    networks:
-      - asemb-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-
-networks:
-  asemb-network:
-    driver: bridge

@@ -108,12 +108,108 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const fetchConfig = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/config');
+      // Fetch from backend settings instead of local config file
+      const response = await fetch('http://localhost:8083/api/v2/settings/?t=' + Date.now(), {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) {
-        throw new Error('Failed to fetch configuration');
+        throw new Error('Failed to fetch configuration from backend');
       }
       const data = await response.json();
-      setConfig(data);
+
+      // Transform backend settings to match Config interface
+      const transformedConfig = {
+        app: {
+          name: data.app?.name || 'Alice Semantic Bridge',
+          description: data.app?.description || 'AI-Powered Knowledge Management System',
+          version: data.app?.version || '1.0.0',
+          locale: data.app?.locale || 'tr'
+        },
+        database: data.database || {
+          host: 'localhost',
+          port: 5432,
+          name: 'alice_semantic_bridge',
+          user: 'postgres',
+          password: 'postgres',
+          ssl: false,
+          maxConnections: 20,
+        },
+        redis: data.redis || {
+          host: 'localhost',
+          port: 6379,
+          password: '',
+          db: 0,
+        },
+        openai: data.openai || {
+          apiKey: '',
+          model: 'gpt-4-turbo-preview',
+          embeddingModel: 'text-embedding-3-small',
+          maxTokens: 4096,
+          temperature: 0.7,
+        },
+        anthropic: data.anthropic || {
+          apiKey: '',
+          model: 'claude-3-opus-20240229',
+          maxTokens: 4096,
+        },
+        deepseek: data.deepseek || {
+          apiKey: '',
+          baseUrl: 'https://api.deepseek.com',
+          model: 'deepseek-coder',
+        },
+        ollama: data.ollama || {
+          baseUrl: 'http://localhost:11434',
+          model: 'llama2',
+          embeddingModel: 'nomic-embed-text',
+        },
+        huggingface: data.huggingface || {
+          apiKey: '',
+          model: 'sentence-transformers/all-MiniLM-L6-v2',
+          endpoint: 'https://api-inference.huggingface.co/models/',
+        },
+        n8n: data.n8n || {
+          url: 'http://localhost:5678',
+          apiKey: '',
+        },
+        scraper: data.scraper || {
+          timeout: 30000,
+          maxConcurrency: 3,
+          userAgent: 'ASB Web Scraper',
+        },
+        embeddings: data.embeddings || {
+          chunkSize: 1000,
+          chunkOverlap: 200,
+          batchSize: 10,
+          provider: 'openai',
+        },
+        dataSource: data.dataSource || {
+          useLocalDb: true,
+          localDbPercentage: 100,
+          externalApiPercentage: 0,
+          hybridMode: false,
+          prioritySource: 'local',
+        },
+        llmSettings: data.llmSettings || {
+          temperature: 0.1,
+          topP: 0.9,
+          maxTokens: 2048,
+          presencePenalty: 0,
+          frequencyPenalty: 0,
+          ragWeight: 95,
+          llmKnowledgeWeight: 5,
+          streamResponse: true,
+          systemPrompt: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver.',
+          activeChatModel: 'openai/gpt-4-turbo-preview',
+          activeEmbeddingModel: 'openai/text-embedding-3-small',
+          responseStyle: 'professional',
+          language: 'tr',
+        }
+      };
+
+      setConfig(transformedConfig);
       setError(null);
     } catch (err) {
       console.error('Error fetching config:', err);

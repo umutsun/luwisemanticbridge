@@ -1,0 +1,79 @@
+# Alice Semantic Bridge - Unified Container
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    make \
+    g++ \
+    postgresql-client \
+    curl \
+    redis
+
+# Copy package files
+COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
+COPY RAG-anything/requirements.txt ./RAG-anything/
+
+# Install backend dependencies
+WORKDIR /app/backend
+RUN npm install
+
+# Install frontend dependencies
+WORKDIR /app/frontend
+RUN npm install
+
+# Install Python dependencies for RAG service
+WORKDIR /app/RAG-anything
+RUN pip3 install -r requirements.txt
+
+# Copy source code
+WORKDIR /app
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+COPY RAG-anything/ ./RAG-anything/
+# Environment file will be mounted as volume
+
+# Create startup script
+RUN echo '#!/bin/sh\n\
+echo "Starting Alice Semantic Bridge Services..."\n\
+\n\
+# Start PostgreSQL in background (if needed)\n\
+# Wait for PostgreSQL\n\
+echo "Waiting for services..."\n\
+sleep 5\n\
+\n\
+# Start Redis in background\n\
+redis-server --requirepass redis_password_2025 --daemonize yes\n\
+\n\
+# Start RAG Anything service\n\
+cd /app/RAG-anything\n\
+uvicorn main:app --host 0.0.0.0 --port 8002 &\n\
+\n\
+# Start Backend API\n\
+cd /app/backend\n\
+npm run dev &\n\
+\n\
+# Start Frontend\n\
+cd /app/frontend\n\
+npm run dev &\n\
+\n\
+echo "All services started!"\n\
+echo "Frontend: http://localhost:3000"\n\
+echo "Backend API: http://localhost:8083"\n\
+echo "RAG Service: http://localhost:8002"\n\
+\n\
+# Keep container running\n\
+wait' > /app/start.sh
+
+RUN chmod +x /app/start.sh
+
+# Expose ports
+EXPOSE 3000 8083 8002 6379
+
+# Start all services
+CMD ["/app/start.sh"]

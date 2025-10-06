@@ -197,7 +197,7 @@ export class AdvancedScraperService {
     
     try {
       // Set viewport and user agent
-      await page.setViewport({ width: 1920, height: 1080 });
+      await page.setViewportSize({ width: 1920, height: 1080 });
       await page.setExtraHTTPHeaders({
         'Accept-Language': 'en-US,en;q=0.9'
       });
@@ -517,14 +517,15 @@ export class AdvancedScraperService {
       });
       
       // Also check for sitemap index
-      $('sitemap > loc').each(async (_, el) => {
+      const sitemapIndexElements = $('sitemap > loc').get();
+      for (const el of sitemapIndexElements) {
         const sitemapLoc = $(el).text();
         if (sitemapLoc) {
           try {
             const subResponse = await axios.get(sitemapLoc, { timeout: 10000 });
             const sub$ = cheerio.load(subResponse.data, { xmlMode: true });
-            sub$('url > loc').each((_, el) => {
-              const loc = sub$(el).text();
+            sub$('url > loc').each((_, subEl) => {
+              const loc = sub$(subEl).text();
               if (loc) {
                 urls.push(loc);
               }
@@ -533,7 +534,7 @@ export class AdvancedScraperService {
             // Ignore sub-sitemap errors
           }
         }
-      });
+      }
       
     } catch {
       // No sitemap found or error accessing it

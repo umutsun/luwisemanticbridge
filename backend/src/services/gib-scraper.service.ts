@@ -34,7 +34,6 @@ export class GibScraperService {
           '--window-size=1920,1080',
           '--lang=tr-TR,tr'
         ],
-        ignoreHTTPSErrors: true,
         defaultViewport: {
           width: 1920,
           height: 1080

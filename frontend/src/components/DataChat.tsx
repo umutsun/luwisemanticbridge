@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useSocketIO } from '@/hooks/useSocketIO';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -84,8 +85,37 @@ export default function DataChat() {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeModel, setActiveModel] = useState<string>('Claude 3');
+
+  // WebSocket connection - Connect to backend port, not frontend port
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  console.log('DataChat: Connecting to WebSocket at:', backendUrl);
+  const { socket, isConnected } = useSocketIO(backendUrl);
+
+  // Fetch active model from settings
+  useEffect(() => {
+    const fetchModel = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/api/v2/settings/`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.llmSettings?.activeChatModel) {
+            const modelName = data.llmSettings.activeChatModel.split('/').pop() || data.llmSettings.activeChatModel;
+            setActiveModel(modelName);
+          }
+        }
+      } catch (error) {
+        console.log('Failed to fetch model settings');
+      }
+    };
+
+    fetchModel();
+    const interval = setInterval(fetchModel, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, [backendUrl]);
+
   const [dataSources, setDataSources] = useState<DataSource[]>([
-    { id: '1', name: 'LightRAG Knowledge Base', type: 'database', connected: true, recordCount: 1234 },
+    { id: '1', name: 'Database Knowledge Base', type: 'database', connected: true, recordCount: 1234 },
     { id: '2', name: 'Document Collection', type: 'document', connected: true, recordCount: 567 },
     { id: '3', name: 'Vector Database', type: 'database', connected: true, recordCount: 8901 }
   ]);
@@ -206,9 +236,17 @@ export default function DataChat() {
             <div className="relative">
               <Bot className="h-8 w-8 text-primary" />
               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+              {isConnected && (
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full" />
+              )}
             </div>
             <div>
-              <CardTitle>Veri Sohbet Asistanı</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Veri Sohbet Asistanı</CardTitle>
+                <Badge variant="secondary" className="text-xs">
+                  {activeModel}
+                </Badge>
+              </div>
               <CardDescription>
                 Verilerinizle doğal dilde iletişim kurun
               </CardDescription>

@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  alice-semantic-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.unified
+    container_name: alice-semantic-bridge
+    ports:
+      - "3000:3000"  # Frontend
+      - "8083:8083"  # Backend API
+      - "8002:8002"  # RAG Service
+      - "6379:6379"  # Redis
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_HOST=host.docker.internal
+      - POSTGRES_PORT=5433
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Semsiye!22
+      - POSTGRES_DB=asemb
+      - REDIS_HOST=localhost
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis_password_2025
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./RAG-anything:/app/RAG-anything
+      - /app/backend/node_modules
+      - /app/frontend/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # External PostgreSQL (running on host)
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: alice-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Semsiye!22
+      POSTGRES_DB: asemb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

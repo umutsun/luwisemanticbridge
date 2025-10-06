@@ -48,25 +48,27 @@ const nextConfig = {
   // External packages for server components
   serverExternalPackages: ['puppeteer', 'cheerio'],
 
-  // Environment variables
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083',
-  },
-
   // Rewrite API requests to backend
   async rewrites() {
+    const backendPort = process.env.NEXT_PUBLIC_API_PORT || '8083';
+    const backendUrl = `http://localhost:${backendPort}`;
+
     return [
       {
         source: '/api/dashboard/:path*',
-        destination: 'http://localhost:8083/api/dashboard/:path*',
+        destination: `${backendUrl}/api/dashboard/:path*`,
       },
       {
         source: '/api/config/:path*',
-        destination: 'http://localhost:8083/api/v2/config/:path*',
+        destination: `${backendUrl}/api/v2/config/:path*`,
+      },
+      {
+        source: '/api/health',
+        destination: `${backendUrl}/health`,
       },
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8083/api/v2/:path*',
+        destination: `${backendUrl}/api/v2/:path*`,
       },
     ];
   },

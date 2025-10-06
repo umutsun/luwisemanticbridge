@@ -1,7 +1,7 @@
 export const API_CONFIG = {
-  baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083',
-  port: process.env.NEXT_PUBLIC_API_PORT || '3001',
-  wsUrl: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001',
+  baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`,
+  port: process.env.NEXT_PUBLIC_API_PORT || '8083',
+  wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}${process.env.NEXT_PUBLIC_WEBSOCKET_PATH || '/socket.io'}`,
 
   endpoints: {
     // Dashboard
@@ -22,15 +22,12 @@ export const API_CONFIG = {
     // Scraper
     scraper: '/api/v2/scraper',
 
-    // LightRAG
-    lightrag: '/api/v2/lightrag',
-    query: '/api/v2/lightrag/query',
-
     // Search
     search: '/api/v2/search',
 
     // Config
     config: '/api/v2/config',
+    settings: '/api/v2/settings/',
 
     // Health
     health: '/api/v2/health',

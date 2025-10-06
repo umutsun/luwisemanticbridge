@@ -2,8 +2,8 @@ import { Pool } from 'pg';
 import Redis from 'ioredis';
 import OpenAI from 'openai';
 import * as ExcelJS from 'exceljs';
-import * as pdf from 'pdf-parse';
-import * as csv from 'csv-parser';
+const pdf = require('pdf-parse');
+const csv = require('csv-parser');
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
@@ -150,7 +150,7 @@ export class RAGAnythingService {
     
     // Split by pages
     const pages = data.text.split('\n\n');
-    return pages.filter(p => p.trim().length > 0);
+    return pages.filter((p: any) => p.trim().length > 0);
   }
   
   // Process CSV files
@@ -160,7 +160,7 @@ export class RAGAnythingService {
       
       fs.createReadStream(filePath)
         .pipe(csv())
-        .on('data', (row) => {
+        .on('data', (row: any) => {
           const text = Object.values(row).join(' ').trim();
           if (text) content.push(text);
         })

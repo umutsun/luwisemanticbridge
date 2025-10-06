@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,11 +29,9 @@ import {
   CheckCircle2,
   Settings,
   ChevronDown,
-  Search,
-  Link2
+  Search
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
-import Link from 'next/link';
 import SourceCitation from '@/components/SourceCitation';
 import SemanticSearchResult from '@/components/SemanticSearchResult';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
@@ -121,6 +120,34 @@ const getSourceTableBadgeColor = (sourceTable?: string) => {
 };
 
 export default function ChatInterface() {
+  const [dbHealthLoading, setDbHealthLoading] = useState(true);
+  const [isDatabaseHealthy, setIsDatabaseHealthy] = useState(false);
+
+  // Check database health on component mount
+  useEffect(() => {
+    const checkDatabaseHealth = async () => {
+      setDbHealthLoading(true);
+      try {
+        const response = await fetch(config.getApiUrl('/api/v2/health/system'));
+        if (response.ok) {
+          const healthData = await response.json();
+          // Check if database is connected
+          const asemDbStatus = healthData.services?.asemb_database?.status || healthData.services?.database?.status;
+          setIsDatabaseHealthy(asemDbStatus === 'healthy' || asemDbStatus === 'connected');
+        } else {
+          setIsDatabaseHealthy(false);
+        }
+      } catch (error) {
+        console.error('Failed to check database health:', error);
+        setIsDatabaseHealthy(false);
+      } finally {
+        setDbHealthLoading(false);
+      }
+    };
+
+    checkDatabaseHealth();
+  }, []);
+
   // Extract minimal meaningful keywords from title
   const getSemanticKeywords = (source: Record<string, unknown>) => {
     const keywords: string[] = [];
@@ -221,7 +248,8 @@ export default function ChatInterface() {
     logoUrl: '',
     welcomeMessage: '',
     placeholder: 'Sorunuzu yazın...',
-    primaryColor: '#3B82F6'
+    primaryColor: '#3B82F6',
+    activeChatModel: 'deepseek/deepseek-chat'
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -272,24 +300,30 @@ export default function ChatInterface() {
       setSuggestedQuestions(questions);
     });
     
-    // Fetch chatbot settings
-    fetch('http://localhost:8083/api/v2/chatbot/settings')
-      .then(res => res.json())
-      .then(data => {
+    // Fetch chatbot settings and active model
+    Promise.all([
+      fetch(config.getApiUrl('/api/v2/chatbot/settings')),
+      fetch(config.getApiUrl('/api/v2/settings/'))
+    ])
+      .then(async ([chatbotRes, settingsRes]) => {
+        const chatbotData = chatbotRes.ok ? await chatbotRes.json() : {};
+        const settingsData = settingsRes.ok ? await settingsRes.json() : {};
+
         setChatbotSettings({
-          title: data.title || 'ASB Hukuki Asistan',
-          subtitle: data.subtitle || 'Yapay Zeka Asistanınız',
-          logoUrl: data.logoUrl || '',
-          welcomeMessage: data.welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
-          placeholder: data.placeholder || 'Sorunuzu yazın...',
-          primaryColor: data.primaryColor || '#3B82F6'
+          title: chatbotData.title || 'ASB Hukuki Asistan',
+          subtitle: chatbotData.subtitle || 'Yapay Zeka Asistanınız',
+          logoUrl: chatbotData.logoUrl || '',
+          welcomeMessage: chatbotData.welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
+          placeholder: chatbotData.placeholder || 'Sorunuzu yazın...',
+          primaryColor: chatbotData.primaryColor || '#3B82F6',
+          activeChatModel: settingsData.llmSettings?.activeChatModel || 'deepseek/deepseek-chat'
         });
         setSettingsLoaded(true);
-        
+
         // Update initial message with dynamic welcome message
         setMessages(prev => [{
           ...prev[0],
-          content: data.welcomeMessage || prev[0].content
+          content: chatbotData.welcomeMessage || prev[0].content
         }]);
       })
       .catch(err => {
@@ -301,7 +335,8 @@ export default function ChatInterface() {
           logoUrl: '',
           welcomeMessage: 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
           placeholder: 'Sorunuzu yazın...',
-          primaryColor: '#3B82F6'
+          primaryColor: '#3B82F6',
+          activeChatModel: 'deepseek/deepseek-chat'
         });
         setSettingsLoaded(true);
       });
@@ -439,6 +474,51 @@ export default function ChatInterface() {
     }
   };
 
+  // Show loading screen while checking database health
+  if (dbHealthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="text-center">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Sistem başlatılıyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error screen if database is not healthy
+  if (!isDatabaseHealthy) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="mb-4">
+            <Database className="h-12 w-12 text-red-500 mx-auto" />
+          </div>
+          <h2 className="text-xl font-semibold text-red-700 dark:text-red-400 mb-2">
+            Veritabanı Bağlantısı Hatası
+          </h2>
+          <p className="text-muted-foreground mb-4">
+            Veritabanı bağlantısı kurulamadı. Sistemi kullanabilmek için veritabanı bağlantısının aktif olması gerekir.
+          </p>
+          <div className="space-y-2">
+            <Button
+              onClick={() => window.location.reload()}
+              variant="outline"
+              className="w-full"
+            >
+              Tekrar Dene
+            </Button>
+            <Link href="/dashboard">
+              <Button variant="ghost" className="w-full">
+                Dashboard'a Git
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
       {/* Header */}
@@ -469,8 +549,28 @@ export default function ChatInterface() {
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Active Model Display */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-lg">
+              <Brain className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">
+                {(() => {
+                  const modelMap: { [key: string]: string } = {
+                    'deepseek/deepseek-chat': 'Deepseek',
+                    'deepseek-chat': 'Deepseek',
+                    'openai/gpt-4-turbo-preview': 'GPT-4 Turbo',
+                    'openai/gpt-4': 'GPT-4',
+                    'openai/gpt-3.5-turbo': 'GPT-3.5',
+                    'google/gemini-pro': 'Gemini Pro',
+                    'anthropic/claude-3-opus': 'Claude 3 Opus',
+                    'anthropic/claude-3-sonnet': 'Claude 3 Sonnet'
+                  };
+                  const activeModel = chatbotSettings.activeChatModel || 'google/gemini-pro';
+                  return modelMap[activeModel] || activeModel.split('/')[1] || activeModel;
+                })()}
+              </span>
+            </div>
             <Link href="/dashboard">
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" className="font-light">
                 Yönetim Paneli
               </Button>
             </Link>
@@ -573,7 +673,7 @@ export default function ChatInterface() {
                           <>
                             <div className="flex items-start gap-2">
                               {message.role === 'user' && message.isFromSource && (
-                                <Link2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
                               )}
                               <p className="text-sm whitespace-pre-wrap flex-1">{message.content}</p>
                             </div>

@@ -293,8 +293,8 @@ export default function SettingsPage() {
       chunkSize: 1000,
       chunkOverlap: 200,
       batchSize: 10,
-      provider: 'openai',
-      model: 'text-embedding-3-small',
+      provider: 'google',
+      model: 'google/text-embedding-004',
       normalizeEmbeddings: true,
       cacheEmbeddings: true,
     },
@@ -306,8 +306,8 @@ export default function SettingsPage() {
       prioritySource: 'local',
     },
     llmSettings: {
-      embeddingProvider: 'openai',
-      embeddingModel: 'openai/text-embedding-ada-002',
+      embeddingProvider: 'google',
+      embeddingModel: 'google/text-embedding-004',
       ollamaBaseUrl: 'http://localhost:11434',
       ollamaEmbeddingModel: 'nomic-embed-text',
       temperature: 0.1,
@@ -319,7 +319,7 @@ export default function SettingsPage() {
       llmKnowledgeWeight: 5,
       streamResponse: true,
       systemPrompt: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver. Context dışında bilgi verme.',
-      activeChatModel: 'google/gemini-pro',
+      activeChatModel: 'deepseek/deepseek-chat',
       activeEmbeddingModel: 'google/text-embedding-004',
       responseStyle: 'professional',
       language: 'tr',
@@ -366,14 +366,44 @@ export default function SettingsPage() {
 
   const fetchConfig = async () => {
     try {
-      const url = getApiUrl('config');
+      const url = getApiUrl('settings');
       const response = await fetch(url);
 
       if (response.ok) {
         const data = await response.json();
 
-        // Use data directly from API - no hardcoded defaults
-        setConfig(data);
+        // Ensure required properties have default values if missing from API
+        const enrichedConfig = {
+          ...data,
+          dataSource: {
+            useLocalDb: data.dataSource?.useLocalDb ?? true,
+            localDbPercentage: data.dataSource?.localDbPercentage ?? 100,
+            externalApiPercentage: data.dataSource?.externalApiPercentage ?? 0,
+            hybridMode: data.dataSource?.hybridMode ?? false,
+            prioritySource: data.dataSource?.prioritySource ?? 'local',
+          },
+          llmSettings: {
+            embeddingProvider: data.llmSettings?.embeddingProvider ?? 'google',
+            embeddingModel: data.llmSettings?.embeddingModel ?? 'google/text-embedding-004',
+            ollamaBaseUrl: data.llmSettings?.ollamaBaseUrl ?? 'http://localhost:11434',
+            ollamaEmbeddingModel: data.llmSettings?.ollamaEmbeddingModel ?? 'nomic-embed-text',
+            temperature: data.llmSettings?.temperature ?? 0.1,
+            topP: data.llmSettings?.topP ?? 0.9,
+            maxTokens: data.llmSettings?.maxTokens ?? 2048,
+            presencePenalty: data.llmSettings?.presencePenalty ?? 0,
+            frequencyPenalty: data.llmSettings?.frequencyPenalty ?? 0,
+            ragWeight: data.llmSettings?.ragWeight ?? 95,
+            llmKnowledgeWeight: data.llmSettings?.llmKnowledgeWeight ?? 5,
+            streamResponse: data.llmSettings?.streamResponse ?? true,
+            systemPrompt: data.llmSettings?.systemPrompt ?? 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver. Context dışında bilgi verme.',
+            activeChatModel: data.llmSettings?.activeChatModel ?? 'deepseek/deepseek-chat',
+            activeEmbeddingModel: data.llmSettings?.activeEmbeddingModel ?? 'google/text-embedding-004',
+            responseStyle: data.llmSettings?.responseStyle ?? 'professional',
+            language: data.llmSettings?.language ?? 'tr',
+          },
+        };
+
+        setConfig(enrichedConfig);
       }
     } catch (error) {
       console.error('Failed to fetch config:', error);
@@ -465,10 +495,16 @@ export default function SettingsPage() {
     if (config.llmSettings.temperature < 0 || config.llmSettings.temperature > 2) errors.push('Temperature must be between 0 and 2');
     if (config.llmSettings.maxTokens < 256 || config.llmSettings.maxTokens > 8192) errors.push('Max tokens must be between 256 and 8192');
     if (config.llmSettings.topP < 0 || config.llmSettings.topP > 1) errors.push('Top P must be between 0 and 1');
-    if (config.llmSettings.ragWeight + config.llmSettings.llmKnowledgeWeight !== 100) errors.push('RAG weight + LLM knowledge weight must equal 100');
 
-    // Validate data source
-    if (config.dataSource.localDbPercentage + config.dataSource.externalApiPercentage !== 100) {
+    // Validate RAG weights - handle undefined values
+    const ragWeight = config.llmSettings.ragWeight ?? 95;
+    const llmKnowledgeWeight = config.llmSettings.llmKnowledgeWeight ?? 5;
+    if (ragWeight + llmKnowledgeWeight !== 100) errors.push('RAG weight + LLM knowledge weight must equal 100');
+
+    // Validate data source - handle undefined values
+    const localDbPercentage = config.dataSource.localDbPercentage ?? 100;
+    const externalApiPercentage = config.dataSource.externalApiPercentage ?? 0;
+    if (localDbPercentage + externalApiPercentage !== 100) {
       errors.push('Local DB percentage + External API percentage must equal 100');
     }
 
@@ -508,7 +544,7 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl('config'), {
+      const response = await fetch(getApiUrl('settings'), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1394,6 +1430,32 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2">
+                    <Label className="text-sm font-medium">DeepSeek</Label>
+                    <div className="relative">
+                      <Input
+                        placeholder="sk-..."
+                        type={showPassword.deepseekKey ? 'text' : 'password'}
+                        value={config.deepseek.apiKey}
+                        onChange={(e) => updateConfig('deepseek.apiKey', e.target.value)}
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2"
+                        onClick={() => togglePasswordVisibility('deepseekKey')}
+                      >
+                        {showPassword.deepseekKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label className="text-sm font-medium">HuggingFace</Label>
                     <div className="relative">
                       <Input
@@ -1446,6 +1508,7 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="deepseek/deepseek-chat">DeepSeek Chat</SelectItem>
                         <SelectItem value="openai/gpt-4-turbo-preview">OpenAI GPT-4 Turbo</SelectItem>
                         <SelectItem value="openai/gpt-4">OpenAI GPT-4</SelectItem>
                         <SelectItem value="openai/gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</SelectItem>
