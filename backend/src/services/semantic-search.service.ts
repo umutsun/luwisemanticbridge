@@ -22,6 +22,7 @@ export class SemanticSearchService {
     provider: 'openai',
     model: 'text-embedding-ada-002'
   };
+  private similarityThreshold: number = 0.001; // Default threshold
 
   constructor() {
 
@@ -35,6 +36,30 @@ export class SemanticSearchService {
     this.initializeEmbeddingProviders().catch(error => {
       console.error('Failed to initialize embedding providers:', error);
     });
+  }
+
+  /**
+   * Load RAG settings from database
+   */
+  private async loadRAGSettings(): Promise<void> {
+    try {
+      const result = await asembPool.query(
+        'SELECT key, value FROM settings WHERE key IN ($1, $2)',
+        ['ragSettings.similarityThreshold', 'similarity_threshold']
+      );
+
+      result.rows.forEach(row => {
+        if (row.key === 'ragSettings.similarityThreshold' || row.key === 'similarity_threshold') {
+          const threshold = parseFloat(row.value);
+          if (!isNaN(threshold) && threshold >= 0 && threshold <= 1) {
+            this.similarityThreshold = threshold;
+            console.log(`✅ Similarity threshold loaded: ${this.similarityThreshold}`);
+          }
+        }
+      });
+    } catch (error) {
+      console.warn('⚠️ Failed to load RAG settings from database, using defaults:', error);
+    }
   }
 
   /**
@@ -98,6 +123,7 @@ export class SemanticSearchService {
    * Initialize embedding providers based on settings
    */
   private async initializeEmbeddingProviders(): Promise<void> {
+    await this.loadRAGSettings();
     await this.loadEmbeddingSettings();
 
     // Initialize OpenAI if available
@@ -401,7 +427,7 @@ export class SemanticSearchService {
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) > 0.001  -- 0.1% minimum similarity threshold (very low to get more results)
+          AND (1 - (ue.embedding <=> $1::vector)) > $2  -- Dynamic similarity threshold from settings
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
@@ -416,7 +442,8 @@ export class SemanticSearchService {
       const result = await asembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
         limit,
-        `%${query}%`
+        `%${query}%`,
+        this.similarityThreshold
       ]);
       console.timeEnd(queryId);
 
@@ -481,7 +508,7 @@ export class SemanticSearchService {
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) > 0.001  -- 0.1% minimum similarity threshold (very low to get more results)
+          AND (1 - (ue.embedding <=> $1::vector)) > $2  -- Dynamic similarity threshold from settings
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
@@ -496,7 +523,8 @@ export class SemanticSearchService {
       const result = await asembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
         limit,
-        `%${query}%`
+        `%${query}%`,
+        this.similarityThreshold
       ]);
       console.timeEnd(queryId);
 

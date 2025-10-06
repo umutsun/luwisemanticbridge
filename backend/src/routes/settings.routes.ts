@@ -42,6 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
       embeddings: {},
       dataSource: {},
       llmSettings: {},
+      ragSettings: {},
       security: {},
       logging: {}
     };
@@ -111,6 +112,15 @@ router.get('/', async (req: Request, res: Response) => {
       enabled: process.env.EMBEDDINGS_ENABLED !== 'false',
       useLocal: process.env.USE_LOCAL_EMBEDDINGS === 'true',
       localModel: process.env.LOCAL_EMBEDDING_MODEL || 'all-MiniLM-L6-v2'
+    };
+
+    // Initialize RAG settings
+    config.ragSettings = {
+      similarityThreshold: parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || '0.001'),
+      maxResults: parseInt(process.env.RAG_MAX_RESULTS || '10'),
+      minResults: parseInt(process.env.RAG_MIN_RESULTS || '3'),
+      enableHybridSearch: process.env.RAG_ENABLE_HYBRID_SEARCH !== 'false',
+      enableKeywordBoost: process.env.RAG_ENABLE_KEYWORD_BOOST !== 'false'
     };
 
     config.app = {

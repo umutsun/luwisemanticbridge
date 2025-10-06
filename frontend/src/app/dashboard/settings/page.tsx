@@ -192,6 +192,13 @@ interface Config {
     presencePenalty: number;
     frequencyPenalty: number;
     ragWeight: number;
+  };
+  ragSettings: {
+    similarityThreshold: number;
+    maxResults: number;
+    minResults: number;
+    enableHybridSearch: boolean;
+    enableKeywordBoost: boolean;
     llmKnowledgeWeight: number;
     streamResponse: boolean;
     systemPrompt: string;
@@ -324,6 +331,13 @@ export default function SettingsPage() {
       responseStyle: 'professional',
       language: 'tr',
     },
+    ragSettings: {
+      similarityThreshold: 0.001,
+      maxResults: 10,
+      minResults: 3,
+      enableHybridSearch: true,
+      enableKeywordBoost: true,
+    },
     security: {
       enableAuth: false,
       jwtSecret: '',
@@ -400,6 +414,13 @@ export default function SettingsPage() {
             activeEmbeddingModel: data.llmSettings?.activeEmbeddingModel ?? 'google/text-embedding-004',
             responseStyle: data.llmSettings?.responseStyle ?? 'professional',
             language: data.llmSettings?.language ?? 'tr',
+          },
+          ragSettings: {
+            similarityThreshold: data.ragSettings?.similarityThreshold ?? 0.001,
+            maxResults: data.ragSettings?.maxResults ?? 10,
+            minResults: data.ragSettings?.minResults ?? 3,
+            enableHybridSearch: data.ragSettings?.enableHybridSearch ?? true,
+            enableKeywordBoost: data.ragSettings?.enableKeywordBoost ?? true,
           },
         };
 
@@ -700,6 +721,13 @@ export default function SettingsPage() {
           activeEmbeddingModel: 'google/text-embedding-004',
           responseStyle: 'professional',
           language: 'tr',
+        },
+        ragSettings: {
+          similarityThreshold: 0.001,
+          maxResults: 10,
+          minResults: 3,
+          enableHybridSearch: true,
+          enableKeywordBoost: true,
         },
         security: {
           enableAuth: false,
@@ -1011,7 +1039,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-10 gap-1">
+        <TabsList className="grid w-full grid-cols-11 gap-1">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="services">Services</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>
@@ -1020,6 +1048,7 @@ export default function SettingsPage() {
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="chatbot">Chatbot</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
+          <TabsTrigger value="rag">RAG</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="advanced">Advanced</TabsTrigger>
         </TabsList>
@@ -2242,6 +2271,119 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="rag">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                RAG Settings
+              </CardTitle>
+              <CardDescription>
+                Configure Retrieval-Augmented Generation parameters
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Search Configuration</h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="similarityThreshold">
+                      Similarity Threshold: {(config.ragSettings?.similarityThreshold || 0.001).toFixed(3)}
+                    </Label>
+                    <Slider
+                      id="similarityThreshold"
+                      value={[config.ragSettings?.similarityThreshold || 0.001]}
+                      onValueChange={(value) => updateConfig('ragSettings.similarityThreshold', value[0])}
+                      min={0.001}
+                      max={0.5}
+                      step={0.001}
+                      className="w-full"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Minimum similarity score for vector search results (0.001 = very permissive, 0.1 = strict)
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="maxResults">Max Results: {config.ragSettings?.maxResults || 10}</Label>
+                    <Slider
+                      id="maxResults"
+                      value={[config.ragSettings?.maxResults || 10]}
+                      onValueChange={(value) => updateConfig('ragSettings.maxResults', value[0])}
+                      min={1}
+                      max={50}
+                      step={1}
+                      className="w-full"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Maximum number of documents to retrieve
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="minResults">Min Results: {config.ragSettings?.minResults || 3}</Label>
+                    <Slider
+                      id="minResults"
+                      value={[config.ragSettings?.minResults || 3]}
+                      onValueChange={(value) => updateConfig('ragSettings.minResults', value[0])}
+                      min={1}
+                      max={20}
+                      step={1}
+                      className="w-full"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Minimum number of results required before falling back to keyword search
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Search Options</h3>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="enableHybridSearch">Enable Hybrid Search</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Combine vector search with keyword search for better results
+                    </p>
+                  </div>
+                  <Switch
+                    id="enableHybridSearch"
+                    checked={config.ragSettings?.enableHybridSearch ?? true}
+                    onCheckedChange={(checked) => updateConfig('ragSettings.enableHybridSearch', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="enableKeywordBoost">Enable Keyword Boost</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Boost scores when query keywords appear in results
+                    </p>
+                  </div>
+                  <Switch
+                    id="enableKeywordBoost"
+                    checked={config.ragSettings?.enableKeywordBoost ?? true}
+                    onCheckedChange={(checked) => updateConfig('ragSettings.enableKeywordBoost', checked)}
+                  />
+                </div>
+              </div>
+
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Tip:</strong> Lower similarity threshold values will return more results but may include less relevant documents.
+                  Start with 0.01 and adjust based on your needs.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
