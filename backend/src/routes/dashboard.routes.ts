@@ -3,7 +3,7 @@ import axios from 'axios';
 import OpenAI from 'openai';
 import { getDatabaseSettings, getCustomerPool, getAiSettings } from '../config/database.config';
 import { asembPool } from '../server'; // Import the centralized pool
-import { requireAdmin, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 const router = Router();
 const ragAnythingRouter = Router();
@@ -1170,7 +1170,7 @@ router.get('/api/test-openai', async (req: Request, res: Response) => {
 });
 
 // --- Main Dashboard Route ---
-router.get('/api/dashboard', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { pgPool, redis } = require('../server');
 

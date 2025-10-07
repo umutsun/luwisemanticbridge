@@ -25,17 +25,27 @@ export default function RegisterPage() {
       <div className="w-full max-w-md px-6 my-12">
         <div className="mb-3">
           <div className="flex flex-col items-center">
-            <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent mb-1">
-              {config?.app?.name}
-            </h1>
-            <p className="text-muted-foreground text-sm text-left max-w-sm">
-              {config?.app?.description}
-            </p>
+            {!config?.app?.name ? (
+              // Loading skeleton animation
+              <div className="w-full max-w-sm space-y-2">
+                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent mb-1">
+                  {config.app.name}
+                </h1>
+                <p className="text-muted-foreground text-sm text-left max-w-sm">
+                  {config.app.description}
+                </p>
+              </>
+            )}
           </div>
         </div>
 
         <Card className="shadow-lg border-0">
-          <CardContent>
+          <CardContent className="pt-6">
             <RegisterForm />
             <div className="text-center text-sm text-muted-foreground mt-6">
               <p>Zaten hesabınız var mı? {' '}

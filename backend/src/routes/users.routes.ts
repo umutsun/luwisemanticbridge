@@ -254,6 +254,102 @@ router.delete('/:id', verifyAdmin, async (req: Request, res: Response) => {
   }
 });
 
+// Update user profile (authenticated user)
+router.put('/profile', async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const { name, email } = req.body;
+
+    if (!name && !email) {
+      return res.status(400).json({ error: 'Name or email is required' });
+    }
+
+    let query = 'UPDATE users SET updated_at = NOW()';
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (name) {
+      query += `, name = $${paramIndex++}`;
+      values.push(name);
+    }
+
+    if (email) {
+      // Check if email is already taken by another user
+      const emailCheck = await pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, decoded.userId]);
+      if (emailCheck.rows.length > 0) {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+      query += `, email = $${paramIndex++}`;
+      values.push(email);
+    }
+
+    query += ' WHERE id = $' + paramIndex++ + ' RETURNING id, name, email, role, status, email_verified, created_at, updated_at';
+    values.push(decoded.userId);
+
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ user: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// Change password (authenticated user)
+router.post('/change-password', async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    }
+
+    // Get current user
+    const userResult = await pool.query('SELECT password FROM users WHERE id = $1', [decoded.userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [hashedNewPassword, decoded.userId]);
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
 // Get user statistics (admin only)
 router.get('/stats/overview', verifyAdmin, async (req: Request, res: Response) => {
   try {

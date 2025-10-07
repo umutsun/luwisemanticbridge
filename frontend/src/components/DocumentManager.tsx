@@ -79,14 +79,17 @@ export default function DocumentManager() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Fetch documents from LightRAG
+  // Fetch documents from backend
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/lightrag/documents');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/documents`);
       if (response.ok) {
         const data = await response.json();
         setDocuments(data.documents || []);
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
@@ -104,39 +107,39 @@ export default function DocumentManager() {
     setSuccess('');
 
     try {
-      const document = {
-        title: newTitle,
-        content: newContent,
-        metadata: {
-          source: newUrl ? 'url' : 'manual',
-          url: newUrl || undefined,
-          timestamp: new Date().toISOString(),
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newTitle,
+          content: newContent,
           type: 'text'
-        }
-      };
-
-      const response = await fetch('/api/lightrag/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents: [document] })
-      });
-
-      if (!response.ok) {
-        throw new Error('Doküman eklenemedi');
-      }
-
-      // Process with embeddings
-      const embedResponse = await fetch('/api/embeddings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: newContent,
-          metadata: { title: newTitle, source: newUrl || 'manual' }
         })
       });
 
-      if (embedResponse.ok) {
-        setSuccess('Doküman başarıyla eklendi ve işlendi');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Doküman eklenemedi');
+      }
+
+      const result = await response.json();
+
+      // Try to create embeddings for the document
+      try {
+        const embedResponse = await fetch(`${baseUrl}/api/v2/documents/${result.document.id}/embeddings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (embedResponse.ok) {
+          setSuccess('Doküman başarıyla eklendi ve embedding oluşturuldu');
+        } else {
+          setSuccess('Doküman eklendi (embedding oluşturulamadı)');
+        }
+      } catch (embedErr) {
+        console.warn('Embedding creation failed:', embedErr);
+        setSuccess('Doküman eklendi (embedding oluşturulamadı)');
       }
 
       // Reset form
@@ -144,11 +147,11 @@ export default function DocumentManager() {
       setNewContent('');
       setNewUrl('');
       setNewFile(null);
-      
+
       // Refresh documents list
       await fetchDocuments();
     } catch (err) {
-      setError('Doküman eklenemedi');
+      setError(err instanceof Error ? err.message : 'Doküman eklenemedi');
       console.error(err);
     } finally {
       setUploading(false);
@@ -159,14 +162,36 @@ export default function DocumentManager() {
   const handleFileUpload = async (file: File) => {
     setUploading(true);
     setError('');
-    
+
     try {
-      const text = await file.text();
-      setNewTitle(file.name);
-      setNewContent(text);
-      setSuccess('Dosya içeriği yüklendi. Şimdi dokümanı ekleyebilirsiniz.');
+      // For files that need server processing (PDF, Office docs), use backend upload
+      if (file.type.includes('pdf') || file.type.includes('officedocument') || file.type.includes('msword') || file.type.includes('spreadsheet')) {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${baseUrl}/api/v2/documents/upload`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setSuccess('Dosya başarıyla yüklendi ve işlendi');
+          await fetchDocuments(); // Refresh the document list
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Dosya yüklenemedi');
+        }
+      } else {
+        // For text files, read directly
+        const text = await file.text();
+        setNewTitle(file.name);
+        setNewContent(text);
+        setSuccess('Dosya içeriği yüklendi. Şimdi dokümanı ekleyebilirsiniz.');
+      }
     } catch (err) {
-      setError('Dosya okunamadı');
+      setError(err instanceof Error ? err.message : 'Dosya işlenemedi');
       console.error(err);
     } finally {
       setUploading(false);
@@ -178,16 +203,20 @@ export default function DocumentManager() {
     if (!confirm('Bu dokümanı silmek istediğinizden emin misiniz?')) return;
 
     try {
-      const response = await fetch(`/api/lightrag/documents/${id}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/documents/${id}`, {
         method: 'DELETE'
       });
 
       if (response.ok) {
         setDocuments(documents.filter(d => d.id !== id));
         setSuccess('Doküman silindi');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Doküman silinemedi');
       }
     } catch (err) {
-      setError('Doküman silinemedi');
+      setError(err instanceof Error ? err.message : 'Doküman silinemedi');
       console.error(err);
     }
   };
@@ -197,19 +226,27 @@ export default function DocumentManager() {
     if (!editingDocument) return;
 
     try {
-      const response = await fetch(`/api/lightrag/documents/${editingDocument.id}`, {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/documents/${editingDocument.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingDocument)
+        body: JSON.stringify({
+          title: editingDocument.title,
+          content: editingDocument.content,
+          type: editingDocument.metadata?.type || 'text'
+        })
       });
 
       if (response.ok) {
         await fetchDocuments();
         setEditingDocument(null);
         setSuccess('Doküman güncellendi');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Doküman güncellenemedi');
       }
     } catch (err) {
-      setError('Doküman güncellenemedi');
+      setError(err instanceof Error ? err.message : 'Doküman güncellenemedi');
       console.error(err);
     }
   };
@@ -454,7 +491,7 @@ export default function DocumentManager() {
                   <div className="flex gap-2">
                     <Input
                       type="file"
-                      accept=".txt,.md,.json"
+                      accept=".txt,.md,.json,.pdf,.doc,.docx,.xls,.xlsx,.csv"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -464,6 +501,9 @@ export default function DocumentManager() {
                       }}
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Desteklenen formatlar: Text (.txt, .md, .json, .csv), PDF (.pdf), Word (.doc, .docx), Excel (.xls, .xlsx)
+                  </p>
                 </div>
 
                 <div className="flex gap-2">
@@ -516,7 +556,7 @@ export default function DocumentManager() {
                       if (!newUrl) return;
                       setUploading(true);
                       try {
-                        const response = await fetch('/api/scraper', {
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ url: newUrl })

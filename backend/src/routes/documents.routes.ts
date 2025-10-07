@@ -39,7 +39,7 @@ const upload = multer({
 });
 
 // Initialize documents table
-router.post('/api/v2/documents/init', async (req: Request, res: Response) => {
+router.post('/init', async (req: Request, res: Response) => {
   try {
     // First drop the table if it exists to ensure clean state
     await pool.query('DROP TABLE IF EXISTS documents CASCADE');
@@ -72,7 +72,7 @@ router.post('/api/v2/documents/init', async (req: Request, res: Response) => {
 });
 
 // Get all documents
-router.get('/api/v2/documents', async (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     // First ensure table exists
     await pool.query(`
@@ -120,7 +120,7 @@ router.get('/api/v2/documents', async (req: Request, res: Response) => {
 });
 
 // Upload document
-router.post('/api/v2/documents/upload', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -190,7 +190,7 @@ router.post('/api/v2/documents/upload', upload.single('file'), async (req: Reque
 });
 
 // Add document manually
-router.post('/api/v2/documents', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { title, content, type = 'text' } = req.body;
 
@@ -233,14 +233,60 @@ router.post('/api/v2/documents', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error adding document:', error);
-    res.status(500).json({ 
-      error: 'Failed to add document' 
+    res.status(500).json({
+      error: 'Failed to add document'
+    });
+  }
+});
+
+// Get document statistics (must come before /:id route)
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    // Ensure table exists first
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT,
+        type VARCHAR(50),
+        size INTEGER,
+        file_path TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const stats = await pool.query(`
+      SELECT
+        COUNT(*) as total,
+        SUM(size) as total_size,
+        COUNT(CASE WHEN metadata->>'embeddings' = 'true' THEN 1 END) as with_embeddings,
+        COUNT(DISTINCT type) as unique_types
+      FROM documents
+    `);
+
+    const typeDistribution = await pool.query(`
+      SELECT type, COUNT(*) as count
+      FROM documents
+      GROUP BY type
+      ORDER BY count DESC
+    `);
+
+    res.json({
+      stats: stats.rows[0],
+      typeDistribution: typeDistribution.rows
+    });
+  } catch (error) {
+    console.error('Error fetching document stats:', error);
+    res.status(500).json({
+      error: 'Failed to fetch statistics'
     });
   }
 });
 
 // Get single document
-router.get('/api/v2/documents/:id', async (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -278,7 +324,7 @@ router.get('/api/v2/documents/:id', async (req: Request, res: Response) => {
 });
 
 // Update document
-router.put('/api/v2/documents/:id', async (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { title, content, type } = req.body;
@@ -330,7 +376,7 @@ router.put('/api/v2/documents/:id', async (req: Request, res: Response) => {
 });
 
 // Delete document
-router.delete('/api/v2/documents/:id', async (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -370,7 +416,7 @@ router.delete('/api/v2/documents/:id', async (req: Request, res: Response) => {
 });
 
 // Create embeddings for a document
-router.post('/api/v2/documents/:id/embeddings', async (req: Request, res: Response) => {
+router.post('/:id/embeddings', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -407,7 +453,7 @@ router.post('/api/v2/documents/:id/embeddings', async (req: Request, res: Respon
 });
 
 // Delete embeddings for a document
-router.delete('/api/v2/documents/:id/embeddings', async (req: Request, res: Response) => {
+router.delete('/:id/embeddings', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -426,7 +472,7 @@ router.delete('/api/v2/documents/:id/embeddings', async (req: Request, res: Resp
 });
 
 // Search documents by similarity
-router.post('/api/v2/documents/search', async (req: Request, res: Response) => {
+router.post('/search', async (req: Request, res: Response) => {
   try {
     const { query, limit = 5 } = req.body;
     
@@ -444,37 +490,6 @@ router.post('/api/v2/documents/search', async (req: Request, res: Response) => {
     console.error('Error searching documents:', error);
     res.status(500).json({ 
       error: error.message || 'Failed to search documents' 
-    });
-  }
-});
-
-// Get document statistics
-router.get('/api/v2/documents/stats', async (req: Request, res: Response) => {
-  try {
-    const stats = await pool.query(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(size) as total_size,
-        COUNT(CASE WHEN metadata->>'embeddings' = 'true' THEN 1 END) as with_embeddings,
-        COUNT(DISTINCT type) as unique_types
-      FROM documents
-    `);
-
-    const typeDistribution = await pool.query(`
-      SELECT type, COUNT(*) as count
-      FROM documents
-      GROUP BY type
-      ORDER BY count DESC
-    `);
-
-    res.json({
-      stats: stats.rows[0],
-      typeDistribution: typeDistribution.rows
-    });
-  } catch (error) {
-    console.error('Error fetching document stats:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch statistics' 
     });
   }
 });

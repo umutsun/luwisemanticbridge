@@ -304,11 +304,31 @@ export default function WebScraperPage() {
                       <Select value={scrapeOptions.mode} onValueChange={(value) => setScrapeOptions({...scrapeOptions, mode: value})}>
                         <SelectTrigger id="mode" className="h-9 w-full"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="auto">Auto</SelectItem>
-                          <SelectItem value="static">Static</SelectItem>
-                          <SelectItem value="dynamic">Dynamic</SelectItem>
+                          <SelectItem value="auto">
+                            <div className="flex flex-col">
+                              <span>🤖 Auto (Recommended)</span>
+                              <span className="text-xs text-muted-foreground font-normal">Smart selection • 4-20s</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="static">
+                            <div className="flex flex-col">
+                              <span>⚡ Static (Fastest)</span>
+                              <span className="text-xs text-muted-foreground font-normal">Basic HTML • ~4s</span>
+                            </div>
+                          </SelectItem>
+                          <SelectItem value="dynamic">
+                            <div className="flex flex-col">
+                              <span>🌐 Dynamic (JavaScript)</span>
+                              <span className="text-xs text-muted-foreground font-normal">Modern sites • ~20s</span>
+                            </div>
+                          </SelectItem>
                         </SelectContent>
                       </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {scrapeOptions.mode === 'auto' && 'Automatically selects the best method based on website type'}
+                        {scrapeOptions.mode === 'static' && 'Perfect for simple HTML sites, blogs, documentation'}
+                        {scrapeOptions.mode === 'dynamic' && 'Best for modern sites with JavaScript, React, Vue'}
+                      </p>
                     </div>
                     <div>
                       <Label htmlFor="extractMode" className="text-xs">Extract Mode</Label>
@@ -324,7 +344,25 @@ export default function WebScraperPage() {
                   </div>
                   <div>
                     <Label htmlFor="customSelectors" className="text-xs">Custom CSS Selectors</Label>
-                    <Textarea id="customSelectors" placeholder=".content\n#main" value={scrapeOptions.customSelectors} onChange={(e) => setScrapeOptions({...scrapeOptions, customSelectors: e.target.value})} className="h-20 text-xs font-mono" />
+                    <Textarea id="customSelectors" placeholder="h1\n.content\n#main\narticle p" value={scrapeOptions.customSelectors} onChange={(e) => setScrapeOptions({...scrapeOptions, customSelectors: e.target.value})} className="h-20 text-xs font-mono" />
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: "h1"})}>
+                        h1
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: ".content"})}>
+                        .content
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: "#main"})}>
+                        #main
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: "article"})}>
+                        article
+                      </Button>
+                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: ".product-title, .product-price"})}>
+                        Products
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Enter CSS selectors (one per line) to extract specific content</p>
                   </div>
                   <div>
                     <Label htmlFor="prioritySelectors" className="text-xs">Priority Selectors</Label>
@@ -339,6 +377,23 @@ export default function WebScraperPage() {
                       <Switch id="generateEmbeddings" checked={scrapeOptions.generateEmbeddings} onCheckedChange={(checked) => setScrapeOptions({...scrapeOptions, generateEmbeddings: checked})} />
                       <Label htmlFor="generateEmbeddings" className="text-xs cursor-pointer">Create Embeddings</Label>
                     </div>
+                  </div>
+                  <div className="mt-2 p-2 bg-muted/50 rounded-lg">
+                    <div className="flex items-center justify-between text-xs">
+                      <span>Performance Preview:</span>
+                      <div className="flex items-center gap-2">
+                        {scrapeOptions.mode === 'auto' && <Badge variant="outline">🤖 Smart</Badge>}
+                        {scrapeOptions.mode === 'static' && <Badge variant="outline">⚡ Fast</Badge>}
+                        {scrapeOptions.mode === 'dynamic' && <Badge variant="outline">🌐 Full</Badge>}
+                        {scrapeOptions.customSelectors && <Badge variant="outline">🎯 Custom</Badge>}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {scrapeOptions.mode === 'auto' && 'Estimated: 4-20 seconds • Best compatibility'}
+                      {scrapeOptions.mode === 'static' && 'Estimated: ~4 seconds • HTML only'}
+                      {scrapeOptions.mode === 'dynamic' && 'Estimated: ~20 seconds • JavaScript support'}
+                      {scrapeOptions.customSelectors && ' • Custom selectors active'}
+                    </p>
                   </div>
                 </div>
               </div>

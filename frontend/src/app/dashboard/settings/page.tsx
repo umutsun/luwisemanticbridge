@@ -62,7 +62,8 @@ import {
   Lock,
   Unlock,
   Eye,
-  EyeOff
+  EyeOff,
+  Send
 } from 'lucide-react';
 
 interface SystemPrompt {
@@ -423,6 +424,9 @@ export default function SettingsPage() {
   });
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showPassword, setShowPassword] = useState<{[key: string]: boolean}>({});
+  const [testEmail, setTestEmail] = useState('');
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<{success: boolean; message: string} | null>(null);
 
   const defaultPrompt = 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver. Context dışında bilgi verme.';
 
@@ -1177,9 +1181,8 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-11 gap-1">
+        <TabsList className="grid w-full grid-cols-10 gap-1">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="services">Services</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>
           <TabsTrigger value="ai-services">AI Services</TabsTrigger>
           <TabsTrigger value="embeddings">Embeddings</TabsTrigger>
@@ -1253,70 +1256,7 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="services" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {['lightrag', 'embedder', 'fastapi', 'streamlit'].map((service) => (
-              <Card key={service}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium capitalize">
-                      {service}
-                    </CardTitle>
-                    <Badge
-                      variant={serviceStatus[service] ? 'default' : 'secondary'}
-                      className={
-                        serviceStatus[service]
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }
-                    >
-                      {serviceStatus[service] ? 'Running' : 'Stopped'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleServiceAction(service, 'start')}
-                      disabled={serviceLoading[service] || serviceStatus[service]}
-                      className="flex-1"
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      Start
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleServiceAction(service, 'stop')}
-                      disabled={serviceLoading[service] || !serviceStatus[service]}
-                      className="flex-1"
-                    >
-                      <Square className="h-3 w-3 mr-1" />
-                      Stop
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <Alert>
-            <Terminal className="h-4 w-4" />
-            <AlertDescription>
-              <div className="space-y-1">
-                <div><strong>Service Commands:</strong></div>
-                <div>• LightRAG: python backend/lightrag_service.py --port 8083</div>
-                <div>• Embedder: python backend/embedder_service.py --port 8086</div>
-                <div>• FastAPI: uvicorn backend.main:app --port 8080 --reload</div>
-                <div>• Streamlit: streamlit run backend/streamlit_app.py --server.port 8085</div>
-                <div>• Docker: docker-compose up -d</div>
-              </div>
-            </AlertDescription>
-          </Alert>
-        </TabsContent>
-
+  
         <TabsContent value="database">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
@@ -1343,7 +1283,7 @@ export default function SettingsPage() {
                       <SelectItem value="postgresql">
                         <div className="flex items-center gap-2">
                           <Database className="h-4 w-4" />
-                          PostgreSQL + pgvector (Recommended)
+                          PostgreSQL (Recommended)
                         </div>
                       </SelectItem>
                       <SelectItem value="mysql">
@@ -1813,50 +1753,23 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="embeddingProvider">Provider</Label>
-                    <Select
-                      value={config.embeddings.provider}
-                      onValueChange={(value) => updateConfig('embeddings.provider', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="openai">OpenAI</SelectItem>
-                        <SelectItem value="ollama">Ollama</SelectItem>
-                        <SelectItem value="huggingface">HuggingFace</SelectItem>
-                        <SelectItem value="google">Google</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="normalizeEmbeddings"
+                        checked={config.embeddings.normalizeEmbeddings}
+                        onCheckedChange={(checked) => updateConfig('embeddings.normalizeEmbeddings', checked)}
+                      />
+                      <Label htmlFor="normalizeEmbeddings">Normalize Embeddings</Label>
+                    </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="normalizeEmbeddings"
-                      checked={config.embeddings.normalizeEmbeddings}
-                      onCheckedChange={(checked) => updateConfig('embeddings.normalizeEmbeddings', checked)}
-                    />
-                    <Label htmlFor="normalizeEmbeddings">Normalize Embeddings</Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="cacheEmbeddings"
-                      checked={config.embeddings.cacheEmbeddings}
-                      onCheckedChange={(checked) => updateConfig('embeddings.cacheEmbeddings', checked)}
-                    />
-                    <Label htmlFor="cacheEmbeddings">Cache Embeddings</Label>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="embeddingModel">Model</Label>
-                    <Input
-                      id="embeddingModel"
-                      value={config.embeddings.model}
-                      onChange={(e) => updateConfig('embeddings.model', e.target.value)}
-                    />
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="cacheEmbeddings"
+                        checked={config.embeddings.cacheEmbeddings}
+                        onCheckedChange={(checked) => updateConfig('embeddings.cacheEmbeddings', checked)}
+                      />
+                      <Label htmlFor="cacheEmbeddings">Cache Embeddings</Label>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2059,6 +1972,56 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Test Email Connection */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wifi className="h-5 w-5" />
+                  Test Connection
+                </CardTitle>
+                <CardDescription>
+                  Test your SMTP configuration
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="testEmail">Test Email Address</Label>
+                  <Input
+                    id="testEmail"
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="test@example.com"
+                  />
+                </div>
+                <Button
+                  onClick={handleTestEmail}
+                  disabled={!testEmail || testingEmail}
+                  className="w-full"
+                >
+                  {testingEmail ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Send Test Email
+                    </>
+                  )}
+                </Button>
+                {emailTestResult && (
+                  <Alert className={emailTestResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className={emailTestResult.success ? "text-green-800" : "text-red-800"}>
+                      {emailTestResult.message}
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
           </div>

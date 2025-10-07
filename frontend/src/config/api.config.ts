@@ -29,27 +29,42 @@ const config = {
     
     // Dashboard endpoints
     dashboard: {
-      stats: '/api/dashboard/stats',
-      activity: '/api/dashboard/activity',
-      settings: '/api/dashboard/settings',
+      stats: '/api/v2/dashboard',
+      status: '/api/v2/dashboard/status',
+      activity: '/api/v2/dashboard/activity',
+      settings: '/api/v2/dashboard/settings',
     },
-    
+
     // Scraper endpoints
     scraper: {
-      scrape: '/api/scraper/scrape',
-      status: '/api/scraper/status',
-      history: '/api/scraper/history',
+      scrape: '/api/v2/scraper',
+      status: '/api/v2/scraper/status',
+      history: '/api/v2/scraper/history',
+      sessions: '/api/v2/scraper/sessions',
+    },
+
+    // Documents endpoints
+    documents: {
+      list: '/api/v2/documents',
+      upload: '/api/v2/documents/upload',
+      search: '/api/v2/documents/search',
+      stats: '/api/v2/documents/stats',
     },
     
     // Embeddings endpoints
     embeddings: {
-      generate: '/api/embeddings/generate',
-      search: '/api/embeddings/search',
-      update: '/api/embeddings/update',
+      generate: '/api/v2/embeddings/generate',
+      search: '/api/v2/embeddings/search',
+      update: '/api/v2/embeddings/update',
+      stats: '/api/v2/embeddings/stats',
+      progress: '/api/v2/embeddings/progress',
     },
-    
+
     // Health check
-    health: '/api/health',
+    health: {
+      system: '/api/v2/health/system',
+      basic: '/api/v2/health',
+    },
   },
   
   // Helper function to get full URL

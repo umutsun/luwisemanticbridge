@@ -50,7 +50,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   useEffect(() => {
     refreshQuestions();
     // Fetch chatbot settings
-    fetch('http://localhost:8083/api/v2/chatbot/settings')
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chatbot/settings`)
       .then(res => res.json())
       .then(data => {
         if (data.placeholder) {

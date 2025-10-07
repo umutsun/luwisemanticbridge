@@ -78,7 +78,7 @@ export const API = {
       ACTIVITY: '/api/v2/activity',
       AUTH: '/api/v2/auth',
       USERS: '/api/v2/users',
-      HEALTH: '/health',
+      HEALTH: '/api/v2/health',
     },
   },
   RESPONSE_LIMITS: {

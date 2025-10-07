@@ -27,7 +27,6 @@ import embeddingsV2Routes from './routes/embeddings-v2.routes';
 import embeddingProgressRoutes from './routes/embedding-progress.routes';
 import settingsRoutes from './routes/settings.routes';
 import migrationCheckRoutes from './routes/migration-check.routes';
-import ragConfigRoutes from './routes/rag-config.routes';
 import activityRoutes from './routes/activity.routes';
 import ragAnythingRoutes from './routes/raganything.routes';
 import authRoutes from './routes/auth.routes';
@@ -48,7 +47,7 @@ const app: Application = express();
 const httpServer = createServer(app);
 
 // Parse CORS origins from environment variable - use CORS_ORIGINS from .env.asemb
-const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3004`).split(',').map(origin => origin.trim());
+const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`).split(',').map(origin => origin.trim());
 
 // Initialize Socket.io if WebSocket is enabled
 console.log('🔌 WebSocket Configuration:', {
@@ -113,7 +112,7 @@ app.use((req, res, next) => {
   console.log(`CORS Debug - Request received: ${req.method} ${req.url}, Origin: ${origin}`);
 
   // Parse CORS origins from environment variable
-  const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3004`).split(',').map(o => o.trim());
+  const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`).split(',').map(o => o.trim());
 
   // Check if origin is in allowed list
   const isOriginAllowed = origin && corsOrigins.includes(origin);
@@ -181,18 +180,17 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
 // API Routes
 app.use(searchRoutes);
 app.use(chatRoutes);
-app.use(dashboardRoutes);
-app.use(API.ENDPOINTS.V2.SCRAPER, scraperRoutes);
+app.use('/api/v2/dashboard', dashboardRoutes);
+app.use('/api/v2/scraper', scraperRoutes);
 app.use('/api/v2/chatbot', chatbotSettingsRoutes);
 app.use(historyRoutes);
-app.use(documentsRoutes);
+app.use('/api/v2/documents', documentsRoutes);
 app.use(API.ENDPOINTS.V2.MIGRATION, migrationRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingsV2Routes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingProgressRoutes);
 app.use(API.ENDPOINTS.V2.SETTINGS, settingsRoutes);
 app.use('/api/v2/config', settingsRoutes);
 app.use('/api/v2/migration-check', migrationCheckRoutes);
-app.use(API.ENDPOINTS.V2.RAG, ragConfigRoutes);
 app.use(API.ENDPOINTS.V2.ACTIVITY, activityRoutes);
 app.use('/api/v2/raganything', ragAnythingRoutes);
 app.use(API.ENDPOINTS.V2.AUTH, authRoutes);

@@ -27,6 +27,9 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
+// API endpoint'leri
+const API_BASE_URL = "http://localhost:8083";
+
 interface QueryResult {
   answer?: string;
   results?: any[];
@@ -59,8 +62,8 @@ export default function UnifiedQueryPage() {
   const fetchSystemStats = async () => {
     try {
       const [lightragRes, dashboardRes] = await Promise.all([
-        fetch('/api/v2/lightrag/stats'),
-        fetch('/api/dashboard')
+        fetch(`${API_BASE_URL}/api/v2/lightrag/stats`),
+        fetch(`${API_BASE_URL}/api/v2/dashboard`)
       ]);
       
       const lightrag = await lightragRes.json();
@@ -98,10 +101,10 @@ export default function UnifiedQueryPage() {
       // Determine endpoint based on mode
       switch (queryMode) {
         case 'lightrag':
-          endpoint = '/api/v2/lightrag/query';
+          endpoint = `${API_BASE_URL}/api/v2/lightrag/query`;
           break;
         case 'semantic':
-          endpoint = '/api/v2/search/semantic';
+          endpoint = `${API_BASE_URL}/api/v2/search/semantic`;
           body = {
             query: query.trim(),
             limit: topK[0],
@@ -109,7 +112,7 @@ export default function UnifiedQueryPage() {
           };
           break;
         case 'hybrid':
-          endpoint = '/api/v2/search/hybrid';
+          endpoint = `${API_BASE_URL}/api/v2/search/hybrid`;
           body = {
             query: query.trim(),
             limit: topK[0],
@@ -118,10 +121,10 @@ export default function UnifiedQueryPage() {
           };
           break;
         case 'raganything':
-          endpoint = '/api/v2/raganything/query';
+          endpoint = `${API_BASE_URL}/api/v2/raganything/query`;
           break;
         default:
-          endpoint = '/api/v2/chat';
+          endpoint = `${API_BASE_URL}/api/v2/chat`;
       }
 
       const startTime = Date.now();

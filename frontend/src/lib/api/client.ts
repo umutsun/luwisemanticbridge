@@ -37,8 +37,12 @@ class ApiClient {
       (config) => {
         // Add auth token if available
         const token = this.getToken();
+        console.log('[ApiClient] Token for request:', token ? `${token.substring(0, 20)}...` : 'none');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+          console.log('[ApiClient] Added Authorization header');
+        } else {
+          console.log('[ApiClient] No token found in localStorage');
         }
 
         // Add request timestamp
@@ -140,24 +144,30 @@ class ApiClient {
   public setToken(token: string): void {
     this.token = token;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', token);
+      localStorage.setItem('token', token);
     }
   }
 
   public getToken(): string | null {
-    if (this.token) return this.token;
-    
-    if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('auth_token');
+    if (this.token) {
+      console.log('[ApiClient] getToken: Using cached token');
+      return this.token;
     }
-    
+
+    if (typeof window !== 'undefined') {
+      this.token = localStorage.getItem('token');
+      console.log('[ApiClient] getToken: Retrieved from localStorage:', this.token ? `${this.token.substring(0, 20)}...` : 'none');
+    } else {
+      console.log('[ApiClient] getToken: window is undefined');
+    }
+
     return this.token;
   }
 
   public clearToken(): void {
     this.token = null;
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
     }
   }
 

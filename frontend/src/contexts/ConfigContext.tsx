@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { fetchWithAuth, setStoredToken } from '@/lib/auth-fetch';
 
 interface Config {
   app: {
@@ -105,16 +106,23 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchConfig = async () => {
+  const fetchConfig = async (authToken?: string) => {
     try {
       setLoading(true);
-      // Fetch from backend settings instead of local config file
-      const response = await fetch('http://localhost:8083/api/v2/settings/?t=' + Date.now(), {
+
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+
+      if (authToken) {
+        setStoredToken(authToken);
+      }
+
+      const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings/?t=${Date.now()}`, {
         headers: {
           'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+          'Pragma': 'no-cache',
+        },
       });
+
       if (!response.ok) {
         throw new Error('Failed to fetch configuration from backend');
       }
@@ -221,16 +229,19 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = async (newConfig: Config) => {
     try {
-      const response = await fetch('/api/config', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(newConfig),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to update configuration');
       }
-      
+
       const result = await response.json();
       setConfig(result.config);
       setError(null);
@@ -242,17 +253,90 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    fetchConfig();
+    // Only try to fetch config if there's a token (user is authenticated)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+    if (token) {
+      fetchConfig(token);
+    } else {
+      // Set loading to false if no token (user not authenticated)
+      setLoading(false);
+      // Set a default config for non-authenticated users (show app name, etc.)
+      setConfig({
+        app: {
+          name: 'Mali Müşavir Asistanı',
+          description: 'AI-Powered Knowledge Management System',
+          version: '1.0.0',
+          locale: 'tr'
+        }
+      });
+    }
+  }, []);
+
+  // Listen for token changes to automatically refresh config
+  useEffect(() => {
+    const handleTokenChange = (e: StorageEvent | CustomEvent) => {
+      if ('key' in e) {
+        // Storage event - user logged in/out in another tab
+        if (e.key === 'token') {
+          const token = e.newValue;
+          if (token) {
+            fetchConfig(token);
+          } else {
+            // Token removed - set default config
+            setLoading(false);
+            setConfig({
+              app: {
+                name: 'Mali Müşavir Asistanı',
+                description: 'AI-Powered Knowledge Management System',
+                version: '1.0.0',
+                locale: 'tr'
+              }
+            });
+          }
+        }
+      } else {
+        // Custom event - user logged in/out in same tab
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        if (token) {
+          fetchConfig(token);
+        } else {
+          setLoading(false);
+          setConfig({
+            app: {
+              name: 'Mali Müşavir Asistanı',
+              description: 'AI-Powered Knowledge Management System',
+              version: '1.0.0',
+              locale: 'tr'
+            }
+          });
+        }
+      }
+    };
+
+    // Listen for storage events (cross-tab changes)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleTokenChange);
+      // Listen for custom token change events (same-tab changes)
+      window.addEventListener('tokenChanged', handleTokenChange as EventListener);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleTokenChange);
+        window.removeEventListener('tokenChanged', handleTokenChange as EventListener);
+      }
+    };
   }, []);
 
   return (
     <ConfigContext.Provider 
-      value={{ 
-        config, 
-        loading, 
-        error, 
-        refreshConfig: fetchConfig,
-        updateConfig 
+      value={{
+        config,
+        loading,
+        error,
+        refreshConfig: (authToken?: string) => fetchConfig(authToken),
+        updateConfig
       }}
     >
       {children}
@@ -267,3 +351,4 @@ export function useConfig() {
   }
   return context;
 }
+

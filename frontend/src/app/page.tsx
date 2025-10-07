@@ -35,6 +35,7 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import SourceCitation from '@/components/SourceCitation';
 import SemanticSearchResult from '@/components/SemanticSearchResult';
+import { useAuth } from '@/contexts/AuthProvider';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
 import {
   SearchResult,
@@ -121,6 +122,7 @@ const getSourceTableBadgeColor = (sourceTable?: string) => {
 };
 
 export default function ChatInterface() {
+  const { token } = useAuth();
   const [dbHealthLoading, setDbHealthLoading] = useState(true);
   const [isDatabaseHealthy, setIsDatabaseHealthy] = useState(false);
 
@@ -384,6 +386,7 @@ export default function ChatInterface() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ message: messageContent }),
       });

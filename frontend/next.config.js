@@ -54,25 +54,14 @@ const nextConfig = {
     const backendUrl = `http://localhost:${backendPort}`;
 
     return [
-      {
-        source: '/api/dashboard/:path*',
-        destination: `${backendUrl}/api/dashboard/:path*`,
-      },
-      {
-        source: '/api/config/:path*',
-        destination: `${backendUrl}/api/v2/config/:path*`,
-      },
+      // Only rewrite specific legacy endpoints
       {
         source: '/api/health/system',
         destination: `${backendUrl}/api/v2/health/system`,
       },
       {
         source: '/api/health',
-        destination: `${backendUrl}/health`,
-      },
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/v2/:path*`,
+        destination: `${backendUrl}/api/v2/health`,
       },
     ];
   },

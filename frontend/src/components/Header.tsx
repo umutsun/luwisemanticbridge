@@ -229,7 +229,6 @@ export default function Header() {
       { href: '/dashboard', label: 'Yönetim Paneli', icon: Home },
       { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
       { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
-      { href: '/dashboard/rag', label: 'RAG Ayarları', icon: Brain },
       { href: '/dashboard/embeddings-manager', label: 'Embeddings Manager', icon: Database },
       { href: '/dashboard/scraper', label: 'Web Scraper', icon: Globe },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }

@@ -1862,4 +1862,193 @@ router.post('/migrate-mysql', async (req: Request, res: Response) => {
   }
 });
 
+// RAG Chat endpoint (moved from rag-config)
+router.post('/chat', async (req: Request, res: Response) => {
+  try {
+    const { message, conversationId, useRag = true } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // Get settings
+    const settingsResult = await asembPool.query(`
+      SELECT key, value
+      FROM settings
+      WHERE key IN ('ai_provider', 'openai_api_key', 'claude_api_key',
+                     'gemini_api_key', 'system_prompt', 'temperature', 'max_tokens')
+    `);
+
+    const settings: { [key: string]: any } = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.key] = row.value;
+    });
+
+    let context = '';
+
+    // If RAG is enabled, search for relevant documents
+    if (useRag) {
+      try {
+        const { semanticSearch } = require('../services/semantic-search.service');
+        const searchResults = await semanticSearch.hybridSearch(message, 5);
+
+        if (searchResults && searchResults.length > 0) {
+          context = searchResults.map((r: any, i: number) =>
+            `[Kaynak ${i + 1}]: ${JSON.stringify(r)}`
+          ).join('\n\n');
+        }
+      } catch (searchError) {
+        console.error('Search error:', searchError);
+      }
+    }
+
+    // Prepare the prompt
+    const systemPrompt = settings.system_prompt || `Sen bir yardımcı asistansın.`;
+
+    const fullPrompt = useRag && context
+      ? `${systemPrompt}\n\nBağlam:\n${context}\n\nKullanıcı Sorusu: ${message}`
+      : message;
+
+    let response = '';
+    const provider = settings.ai_provider || 'openai';
+
+    try {
+      // Try primary provider
+      if (provider === 'openai' && settings.openai_api_key) {
+        const OpenAI = require('openai');
+        const openai = new OpenAI({ apiKey: settings.openai_api_key });
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4-turbo-preview',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: useRag && context ? `Bağlam:\n${context}\n\nSoru: ${message}` : message }
+          ],
+          temperature: parseFloat(settings.temperature) || 0.1,
+          max_tokens: parseInt(settings.max_tokens) || 2048
+        });
+        response = completion.choices[0].message.content || '';
+      }
+      // Add other providers as needed
+    } catch (error) {
+      console.error('AI provider error:', error);
+      response = 'Üzgünüm, bir hata oluştu.';
+    }
+
+    res.json({
+      response,
+      context: useRag ? context : null,
+      provider: settings.ai_provider
+    });
+  } catch (error) {
+    console.error('Chat error:', error);
+    res.status(500).json({ error: 'Chat failed' });
+  }
+});
+
+// Related topics search (moved from rag-config)
+router.post('/related-topics', async (req: Request, res: Response) => {
+  try {
+    const { query, limit = 7, excludeIds = [] } = req.body;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    // Use semantic search to find related content
+    const { semanticSearch } = require('../services/semantic-search.service');
+
+    let searchResults = [];
+    try {
+      searchResults = await semanticSearch.hybridSearch(query, limit + 5);
+    } catch (error) {
+      console.error('Semantic search error:', error);
+      return res.json({ query, results: [], totalFound: 0 });
+    }
+
+    // Filter out excluded IDs and apply relevance threshold
+    const filteredResults = searchResults.filter((result: any) => {
+      const score = result.score || (result.similarity_score * 100) || 0;
+      const resultId = result.id || result.source_id;
+
+      // Exclude specified IDs and low-relevance results
+      return score >= 40 && !excludeIds.includes(resultId?.toString());
+    });
+
+    // Sort by relevance score and limit results
+    const sortedResults = filteredResults
+      .sort((a: any, b: any) => {
+        const scoreA = a.score || (a.similarity_score * 100) || 0;
+        const scoreB = b.score || (b.similarity_score * 100) || 0;
+        return scoreB - scoreA;
+      })
+      .slice(0, limit);
+
+    // Format results for frontend
+    const formattedResults = sortedResults.map((result: any, index: any) => {
+      const score = result.score || (result.similarity_score * 100) || 0;
+      const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
+
+      // Determine category based on source table and content
+      let category = 'Genel';
+      if (sourceTable.toUpperCase().includes('OZELGE')) category = 'Özelge';
+      else if (sourceTable.toUpperCase().includes('DANISTAY')) category = 'Danıştay Kararı';
+      else if (sourceTable.toUpperCase().includes('MAKALE')) category = 'Makale';
+      else if (sourceTable.toUpperCase().includes('SORUCEVAP')) category = 'Soru-Cevap';
+      else if (sourceTable.toUpperCase().includes('MEVZUAT')) category = 'Mevzuat';
+
+      // Generate a meaningful title
+      let title = result.title || `${category} - Kaynak ${index + 1}`;
+
+      // Clean up title prefixes
+      title = title
+        .replace(/^sorucevap -\s*/i, '')
+        .replace(/^ozelgeler -\s*/i, '')
+        .replace(/^danistaykararlari -\s*/i, '')
+        .replace(/^makaleler -\s*/i, '')
+        .replace(/ - ID: \d+/g, '')
+        .replace(/ \(Part \d+\/\d+\)/g, '')
+        .trim();
+
+      // Truncate long titles
+      if (title.length > 80) {
+        title = title.substring(0, 77) + '...';
+      }
+
+      return {
+        id: result.id || result.source_id || `related-${Date.now()}-${index}`,
+        title: title,
+        excerpt: result.excerpt || result.content || '',
+        category: category,
+        sourceTable: sourceTable,
+        score: Math.round(score),
+        relevanceScore: score,
+        sourceId: result.source_id,
+        metadata: result.metadata || {},
+        databaseInfo: {
+          table: sourceTable,
+          id: result.source_id,
+          hasMetadata: !!result.metadata
+        },
+        priority: index + 1,
+        hasContent: !!(result.content || result.excerpt),
+        contentLength: (result.content || result.excerpt || '').length
+      };
+    });
+
+    res.json({
+      query,
+      results: formattedResults,
+      totalFound: formattedResults.length,
+      searchMethod: 'hybrid_search'
+    });
+
+  } catch (error) {
+    console.error('Related topics search error:', error);
+    res.status(500).json({
+      error: 'Failed to search related topics',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;

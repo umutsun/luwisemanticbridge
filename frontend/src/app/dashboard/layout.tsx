@@ -9,6 +9,7 @@ import { ConfigProvider } from '@/contexts/ConfigContext';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import config from '@/config/api.config';
+import { setStoredToken } from '@/lib/auth-fetch';
 
 interface User {
   id: string;
@@ -54,8 +55,26 @@ export default function DashboardLayout({
   };
 
   const checkAuth = () => {
-    const token = localStorage.getItem('asb_token');
-    const userData = localStorage.getItem('asb_user');
+    let token = localStorage.getItem('token');
+    let userData = localStorage.getItem('user');
+
+    const legacyToken = localStorage.getItem('asb_token');
+    if (!token && legacyToken) {
+      setStoredToken(legacyToken);
+      token = legacyToken;
+    }
+    if (legacyToken) {
+      localStorage.removeItem('asb_token');
+    }
+
+    const legacyUser = localStorage.getItem('asb_user');
+    if (!userData && legacyUser) {
+      localStorage.setItem('user', legacyUser);
+      userData = legacyUser;
+    }
+    if (legacyUser) {
+      localStorage.removeItem('asb_user');
+    }
 
     if (!token || !userData) {
       router.push('/login');
@@ -73,13 +92,12 @@ export default function DashboardLayout({
   };
 
   const handleLogout = () => {
-    // Clear localStorage
-    localStorage.removeItem('asb_token');
-    localStorage.removeItem('asb_user');
-    
-    // Clear cookie
+    setStoredToken(null);
+    localStorage.removeItem('user');
+
+    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
     document.cookie = 'asb_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
-    
+
     router.push('/login');
   };
 
@@ -137,3 +155,4 @@ export default function DashboardLayout({
     </ProtectedRoute>
   );
 }
+

@@ -3,10 +3,14 @@
  * Target: <200ms response time with caching, retries, and performance monitoring
  */
 
-// import config from '../config/api.config';
+import config from '@/config/api.config';
 
-// Base API URL from environment or config
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const resolveUrl = (endpoint: string): string => {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://') || endpoint.startsWith('ws://')) {
+    return endpoint;
+  }
+  return config.getApiUrl(endpoint);
+};
 
 interface RequestOptions extends Omit<RequestInit, 'cache'> {
   timeout?: number;
@@ -75,7 +79,7 @@ export async function apiRequest<T = unknown>(
   options: RequestOptions = {}
 ): Promise<T> {
   const startTime = performance.now();
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+  const url = resolveUrl(endpoint);
   const { retries = 1, cache: customCache = false, ...fetchOptions } = options;
   const cacheKey = `${fetchOptions.method || 'GET'}_${url}_${JSON.stringify(fetchOptions.body || {})}`;
   
@@ -201,7 +205,7 @@ export const api = {
   documents: {
     list: () => apiGet('/api/v2/documents'),
     upload: (formData: FormData) => 
-      fetch(`${API_BASE_URL}/api/v2/documents/upload`, {
+      fetch(resolveUrl('/api/v2/documents/upload'), {
         method: 'POST',
         body: formData,
       }).then(res => res.json()),

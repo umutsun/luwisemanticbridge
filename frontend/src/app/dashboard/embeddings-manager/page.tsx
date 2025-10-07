@@ -1312,12 +1312,12 @@ export default function EmbeddingsManagerPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 max-w-2xl">
-          <TabsTrigger value="overview">RAG Status</TabsTrigger>
-          <TabsTrigger value="migration">Embedding Operations</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
-          <TabsTrigger value="statistics">Statistics</TabsTrigger>
-          <TabsTrigger value="search">Test & Search</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 max-w-4xl">
+          <TabsTrigger value="overview" className="text-xs sm:text-sm">RAG Status</TabsTrigger>
+          <TabsTrigger value="migration" className="text-xs sm:text-sm">Embedding Operations</TabsTrigger>
+          <TabsTrigger value="history" className="text-xs sm:text-sm">History</TabsTrigger>
+          <TabsTrigger value="statistics" className="text-xs sm:text-sm">Statistics</TabsTrigger>
+          <TabsTrigger value="search" className="text-xs sm:text-sm">Test & Search</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-6">
             {/* Summary Statistics */}
