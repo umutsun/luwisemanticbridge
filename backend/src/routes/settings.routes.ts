@@ -1,8 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { asembPool } from '../config/database.config';
+import { authenticateToken } from '../middleware/auth.middleware';
 const axios = require('axios');
 
 const router = Router();
+
+// Apply authentication middleware to all routes
+router.use(authenticateToken);
 
 // Get all settings
 router.get('/all', async (req: Request, res: Response) => {
@@ -1397,6 +1401,63 @@ router.get('/test/:service', async (req: Request, res: Response) => {
         res.json({ success: true, message: 'PostgreSQL connection successful' });
         break;
 
+      case 'mysql':
+        // Get current database configuration
+        const dbConfigResult = await asembPool.query(
+          "SELECT value FROM settings WHERE key = 'database_config'"
+        );
+
+        if (dbConfigResult.rows.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Database configuration not found'
+          });
+        }
+
+        let dbConfig;
+        try {
+          dbConfig = JSON.parse(dbConfigResult.rows[0].value);
+        } catch {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid database configuration format'
+          });
+        }
+
+        // If database type is MySQL, test MySQL connection
+        if (dbConfig.type === 'mysql') {
+          const mysql = require('mysql2/promise');
+
+          try {
+            const mysqlConnection = await mysql.createConnection({
+              host: dbConfig.host,
+              port: dbConfig.port || 3306,
+              user: dbConfig.user,
+              password: dbConfig.password,
+              database: dbConfig.name
+            });
+
+            // Test connection with a simple query
+            await mysqlConnection.execute('SELECT 1');
+            await mysqlConnection.end();
+
+            res.json({
+              success: true,
+              message: 'MySQL connection successful. Ready for migration to PostgreSQL.'
+            });
+          } catch (mysqlError) {
+            res.status(500).json({
+              success: false,
+              message: `MySQL connection failed: ${mysqlError instanceof Error ? mysqlError.message : 'Unknown error'}`
+            });
+          }
+        } else {
+          // For PostgreSQL, test the existing connection
+          await asembPool.query('SELECT 1');
+          res.json({ success: true, message: 'PostgreSQL connection successful' });
+        }
+        break;
+
       case 'redis':
         const { redis } = require('../server');
         await redis.ping();
@@ -1604,6 +1665,199 @@ router.post('/initialize-defaults', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to initialize default settings'
+    });
+  }
+});
+
+// MySQL to PostgreSQL migration
+router.post('/migrate-mysql', async (req: Request, res: Response) => {
+  try {
+    const { mysqlConfig } = req.body;
+
+    if (!mysqlConfig) {
+      return res.status(400).json({
+        error: 'MySQL configuration is required'
+      });
+    }
+
+    // Import mysql2 dynamically
+    const mysql = require('mysql2/promise');
+
+    // Connect to MySQL database
+    const mysqlConnection = await mysql.createConnection({
+      host: mysqlConfig.host,
+      port: mysqlConfig.port || 3306,
+      user: mysqlConfig.user,
+      password: mysqlConfig.password,
+      database: mysqlConfig.database
+    });
+
+    console.log('✅ Connected to MySQL database for migration');
+
+    // Check for common tables to migrate
+    const tablesToCheck = [
+      'documents',
+      'embeddings',
+      'conversations',
+      'messages',
+      'users',
+      'settings'
+    ];
+
+    let totalMigrated = 0;
+    const migrationResults = [];
+
+    // Get PostgreSQL tables structure
+    const pgTables = await asembPool.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+    `);
+
+    const pgTableNames = pgTables.rows.map(row => row.table_name);
+
+    for (const tableName of tablesToCheck) {
+      try {
+        // Check if table exists in MySQL
+        const [mysqlTableCheck] = await mysqlConnection.execute(
+          `SHOW TABLES LIKE ?`,
+          [tableName]
+        );
+
+        if (mysqlTableCheck.length === 0) {
+          console.log(`⚠️ Table '${tableName}' not found in MySQL, skipping`);
+          continue;
+        }
+
+        // Check if corresponding table exists in PostgreSQL
+        const pgTableExists = pgTableNames.includes(tableName);
+
+        if (!pgTableExists) {
+          console.log(`⚠️ PostgreSQL table '${tableName}' does not exist, skipping migration`);
+          continue;
+        }
+
+        // Get row count from MySQL
+        const [countResult] = await mysqlConnection.execute(
+          `SELECT COUNT(*) as count FROM ${tableName}`
+        );
+        const mysqlRowCount = countResult[0].count;
+
+        if (mysqlRowCount === 0) {
+          console.log(`ℹ️ Table '${tableName}' in MySQL is empty, skipping`);
+          continue;
+        }
+
+        console.log(`🔄 Starting migration of table '${tableName}' (${mysqlRowCount} rows)`);
+
+        // Get data from MySQL
+        const [mysqlData] = await mysqlConnection.execute(
+          `SELECT * FROM ${tableName}`
+        );
+
+        // Get column information from PostgreSQL table
+        const pgColumns = await asembPool.query(`
+          SELECT column_name, data_type
+          FROM information_schema.columns
+          WHERE table_name = $1 AND table_schema = 'public'
+        `, [tableName]);
+
+        const pgColumnNames = pgColumns.rows.map(row => row.column_name);
+
+        // Filter and transform data for PostgreSQL
+        const transformedData = mysqlData.map(row => {
+          const transformedRow = {};
+          Object.keys(row).forEach(key => {
+            if (pgColumnNames.includes(key)) {
+              // Convert data types as needed
+              let value = row[key];
+
+              // Handle Buffer data (common in MySQL for binary/JSON)
+              if (Buffer.isBuffer(value)) {
+                try {
+                  value = JSON.parse(value.toString());
+                } catch {
+                  value = value.toString();
+                }
+              }
+
+              // Handle MySQL JSON fields
+              if (typeof value === 'object' && value !== null && value.type === 'Buffer') {
+                try {
+                  value = JSON.parse(Buffer.from(value.data).toString());
+                } catch {
+                  value = null;
+                }
+              }
+
+              transformedRow[key] = value;
+            }
+          });
+          return transformedRow;
+        });
+
+        // Insert data into PostgreSQL in batches
+        const batchSize = 100;
+        let migratedCount = 0;
+
+        for (let i = 0; i < transformedData.length; i += batchSize) {
+          const batch = transformedData.slice(i, i + batchSize);
+
+          if (batch.length === 0) continue;
+
+          // Build dynamic INSERT query
+          const columns = Object.keys(batch[0]);
+          const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+
+          const insertQuery = `
+            INSERT INTO ${tableName} (${columns.join(', ')})
+            VALUES (${placeholders})
+            ON CONFLICT DO NOTHING
+          `;
+
+          for (const row of batch) {
+            const values = columns.map(col => row[col]);
+            await asembPool.query(insertQuery, values);
+            migratedCount++;
+          }
+        }
+
+        totalMigrated += migratedCount;
+        migrationResults.push({
+          table: tableName,
+          migrated: migratedCount,
+          total: mysqlRowCount
+        });
+
+        console.log(`✅ Migrated ${migratedCount} rows from '${tableName}'`);
+
+      } catch (error) {
+        console.error(`❌ Error migrating table '${tableName}':`, error);
+        migrationResults.push({
+          table: tableName,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+
+    // Close MySQL connection
+    await mysqlConnection.end();
+
+    console.log(`🎉 Migration completed. Total records migrated: ${totalMigrated}`);
+
+    res.json({
+      success: true,
+      message: 'MySQL to PostgreSQL migration completed',
+      totalMigrated,
+      results: migrationResults
+    });
+
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Migration failed',
+      message: 'Failed to migrate data from MySQL to PostgreSQL'
     });
   }
 });

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserPlus, Search, Filter, Crown, Edit, Trash2, Key, ToggleLeft, ToggleRight } from 'lucide-react';
+import apiConfig from '@/config/api.config';
 
 interface User {
   id: string;
@@ -65,7 +66,7 @@ export default function UsersPage() {
         return;
       }
 
-      const response = await fetch('/api/v2/admin/users', {
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/users'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -95,7 +96,7 @@ export default function UsersPage() {
         return;
       }
 
-      const response = await fetch('/api/v2/admin/users', {
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/users'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -135,7 +136,7 @@ export default function UsersPage() {
         return;
       }
 
-      const response = await fetch(`/api/v2/admin/users/${userId}`, {
+      const response = await fetch(apiConfig.getApiUrl(`/api/v2/users/${userId}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

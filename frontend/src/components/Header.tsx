@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import config from '@/config/api.config';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -49,6 +48,7 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
 import { getAppSettings } from '@/lib/api/settings';
+import { API_BASE_URL } from '@/config/api.config';
 
 
 interface SystemStatus {
@@ -87,7 +87,7 @@ export default function Header() {
   const pathname = usePathname();
   const { t } = useTranslation();
   const { config } = useConfig();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -121,11 +121,15 @@ export default function Header() {
     }
 
     try {
-      // Use direct environment variable to avoid config import issues
-      // Get detailed system health from backend using Next.js rewrites
+      // Use API_BASE_URL for proper cross-origin requests
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
       const [dashboardResponse, healthResponse] = await Promise.all([
-        fetch('/api/dashboard'),
-        fetch('/api/health/system')
+        fetch(`${API_BASE_URL}/api/v2/dashboard`, { headers }),
+        fetch(`${API_BASE_URL}/api/v2/health/system`, { headers })
       ]);
 
       if (dashboardResponse.ok && healthResponse.ok) {
@@ -217,20 +221,19 @@ export default function Header() {
   };
 
   const menuItems = [
-    { href: '/dashboard', label: t('header.menu.overview'), icon: Home },
-    { href: '/dashboard/system-monitor', label: 'Sistem Monitörü', icon: Activity },
-    { href: '/dashboard/audit-logs', label: 'Denetim Logları', icon: Shield },
+    // For all users - chat focused
+    { href: '/', label: 'Chat', icon: Brain },
+
+    // Admin only - dashboard access
     ...(currentUser?.role === 'admin' ? [
-        { href: '/dashboard/audit-settings', label: 'Denetim Ayarları', icon: Settings2 },
-        { href: '/dashboard/rbac', label: 'Rol Yönetimi', icon: Shield }
-      ] : []),
-    { href: '/dashboard/query', label: t('header.menu.ragQuery'), icon: Search },
-    { href: '/dashboard/documents', label: t('header.menu.documents'), icon: FileText },
-    { href: '/dashboard/embeddings-manager', label: t('header.menu.embeddingsManager'), icon: Cpu },
-    { href: '/dashboard/scraper', label: t('header.menu.scraper'), icon: Globe },
-    { href: '/dashboard/activity', label: t('header.menu.activities'), icon: Activity },
-    ...(currentUser?.role === 'admin' ? [{ href: '/dashboard/users', label: t('header.menu.users'), icon: Users }] : []),
-    { href: '/', label: t('header.menu.chatbot'), icon: Brain },
+      { href: '/dashboard', label: 'Yönetim Paneli', icon: Home },
+      { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
+      { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
+      { href: '/dashboard/rag', label: 'RAG Ayarları', icon: Brain },
+      { href: '/dashboard/embeddings-manager', label: 'Embeddings Manager', icon: Database },
+      { href: '/dashboard/scraper', label: 'Web Scraper', icon: Globe },
+      { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
+    ] : [])
   ];
 
   // Count active services
@@ -352,7 +355,7 @@ export default function Header() {
           </Sheet>
 
           {/* Logo - Responsive */}
-          <Link href="/dashboard" className="flex items-center gap-2 lg:gap-3 hover:opacity-80 transition-opacity">
+          <Link href="/" className="flex items-center gap-2 lg:gap-3 hover:opacity-80 transition-opacity">
             {config?.app?.logoUrl ? (
               <img 
                 src={config.app.logoUrl} 
@@ -519,6 +522,13 @@ export default function Header() {
                     <p className="text-sm font-medium">{user.name}</p>
                     <p className="text-xs text-muted-foreground">{user.email}</p>
                   </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile" className="cursor-pointer flex items-center gap-2">
+                      <User className="h-4 w-4 mr-2" />
+                      Profilim
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={logout} className="cursor-pointer">
                     <LogOut className="h-4 w-4 mr-2" />

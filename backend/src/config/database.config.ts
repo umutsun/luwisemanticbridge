@@ -117,6 +117,69 @@ export function getCustomerPool(config?: DatabaseConfig): Pool {
   return customerPool;
 }
 
+// Settings-based Database Pool for Embeddings Manager
+let settingsBasedPool: Pool | null = null;
+
+export async function getSettingsBasedPool(): Promise<Pool> {
+  if (settingsBasedPool) {
+    return settingsBasedPool;
+  }
+
+  try {
+    // Read database configuration from settings
+    const client = await asembPool.connect();
+    try {
+      const result = await client.query(`
+        SELECT value FROM settings
+        WHERE key = 'customer_database'
+      `);
+
+      if (result.rows.length > 0 && result.rows[0].value) {
+        const dbConfig = result.rows[0].value;
+        console.log('📊 Creating database pool from settings:', {
+          host: dbConfig.host,
+          port: dbConfig.port,
+          database: dbConfig.database
+        });
+
+        settingsBasedPool = new Pool({
+          host: dbConfig.host,
+          port: dbConfig.port,
+          database: dbConfig.database,
+          user: dbConfig.user,
+          password: dbConfig.password,
+          ssl: dbConfig.ssl || false,
+          max: 10,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 30000,
+        });
+
+        return settingsBasedPool;
+      } else {
+        console.log('⚠️ No customer_database settings found, using default config');
+        // Fallback to default customer database config
+        settingsBasedPool = getCustomerPool();
+        return settingsBasedPool;
+      }
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('❌ Error reading database settings:', error);
+    // Fallback to default customer database config
+    settingsBasedPool = getCustomerPool();
+    return settingsBasedPool;
+  }
+}
+
+// Function to reset the settings-based pool (when settings change)
+export function resetSettingsBasedPool(): void {
+  if (settingsBasedPool) {
+    settingsBasedPool.end();
+    settingsBasedPool = null;
+  }
+}
+
 // Test database connection
 export async function testDatabaseConnection(config: any): Promise<{ success: boolean; error?: string }> {
   const testPool = new Pool({

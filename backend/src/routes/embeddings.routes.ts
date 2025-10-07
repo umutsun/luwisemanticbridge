@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import OpenAI from 'openai';
 import Redis from 'ioredis';
 import crypto from 'crypto';
-import { getDatabaseSettings } from '../config/database.config';
+import { getDatabaseSettings, getSettingsBasedPool, resetSettingsBasedPool } from '../config/database.config';
 
 // ASEMB database - where unified_embeddings table is stored
 const asembPool = new Pool({
@@ -19,18 +19,33 @@ const redis = new Redis({
   db: parseInt(process.env.REDIS_DB || '0')
 });
 
-// Source database (rag_chatbot) - where we read data from
-const sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
-  new Pool({
-    connectionString: process.env.RAG_CHATBOT_DATABASE_URL
-  }) :
-  new Pool({
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: 'rag_chatbot',
-    user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'postgres'
-  });
+// Source database (rag_chatbot) - where we read data from (dynamic from settings)
+let sourcePool: Pool | null = null;
+
+async function getSourcePool(): Promise<Pool> {
+  if (!sourcePool) {
+    // Try to get database from settings first
+    try {
+      sourcePool = await getSettingsBasedPool();
+      console.log('📊 Using settings-based database pool for embeddings manager');
+    } catch (error) {
+      console.error('❌ Failed to create settings-based pool, using fallback:', error);
+      // Fallback to environment variables or default rag_chatbot
+      sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
+        new Pool({
+          connectionString: process.env.RAG_CHATBOT_DATABASE_URL
+        }) :
+        new Pool({
+          host: process.env.POSTGRES_HOST || 'localhost',
+          port: parseInt(process.env.POSTGRES_PORT || '5432'),
+          database: 'rag_chatbot',
+          user: process.env.POSTGRES_USER || 'postgres',
+          password: process.env.POSTGRES_PASSWORD || 'postgres'
+        });
+    }
+  }
+  return sourcePool;
+}
 
 // Target database (asemb) - where we write embeddings to
 const targetPool = new Pool({
@@ -1462,8 +1477,9 @@ router.post('/generate', async (req: Request, res: Response) => {
 // Get available tables from database
 router.get('/tables', async (req: Request, res: Response) => {
   try {
+    const sourcePool = await getSourcePool();
     const tablesWithMeta = [];
-    
+
     // Get target tables from settings - only these tables should be shown
     let targetTables = [
       { name: 'ozelgeler', displayName: 'Özelgeler' },
@@ -1472,7 +1488,7 @@ router.get('/tables', async (req: Request, res: Response) => {
       { name: 'danistaykararlari', displayName: 'Danıştay Kararları' },
       { name: 'chat_history', displayName: 'Sohbet Geçmişi' }
     ];
-    
+
     let databaseName = 'rag_chatbot'; // Default database name
 
     try {
@@ -1513,33 +1529,33 @@ router.get('/tables', async (req: Request, res: Response) => {
     } catch (err) {
       console.log('Using default target tables and database name');
     }
-    
+
     for (const table of targetTables) {
       const tableName = table.name;
       const displayName = table.displayName;
-      
+
       try {
         // Check if table exists in SOURCE database
         const tableCheck = await sourcePool.query(
           `SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
+            SELECT FROM information_schema.tables
+            WHERE table_schema = 'public'
             AND table_name = $1
           )`,
           [tableName]
         );
-        
+
         if (!tableCheck.rows[0].exists) continue;
-        
+
         // Get count from SOURCE database
         const countResult = await sourcePool.query(
           `SELECT COUNT(*) as count FROM public."${tableName}"`
         );
         const count = parseInt(countResult.rows[0].count);
-        
+
         // Skip empty tables
         if (count === 0) continue;
-        
+
         // Get actual embedded count from unified_embeddings table
         let embeddedCount = 0;
         try {
@@ -1559,17 +1575,17 @@ router.get('/tables', async (req: Request, res: Response) => {
         } catch (err) {
           console.error(`Error getting embedded count for ${tableName}:`, err);
         }
-        
+
         // Get text columns count from SOURCE database
         const columnsResult = await sourcePool.query(
-          `SELECT COUNT(*) as count 
-           FROM information_schema.columns 
-           WHERE table_name = $1 
+          `SELECT COUNT(*) as count
+           FROM information_schema.columns
+           WHERE table_name = $1
            AND table_schema = 'public'
            AND data_type IN ('text', 'character varying', 'varchar')`,
           [tableName]
         );
-        
+
         tablesWithMeta.push({
           name: tableName,
           displayName: displayName,
@@ -1662,6 +1678,9 @@ async function processMigration(tables: string[], batchSize: number, migrationId
     console.log(`🔧 Debug mode enabled - detailed logging active`);
     console.log(`📊 Batch size: ${batchSize}, Migration ID: ${migrationId}, Resume: ${isResume}`);
 
+    // Get dynamic source pool from settings
+    const sourcePool = await getSourcePool();
+
     // Add initial delay to make progress visible in UI
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -1669,7 +1688,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
     let totalToProcess = 0;
     for (const table of tables) {
       // Ensure embedding column exists in SOURCE database
-      await ensureEmbeddingColumn(table);
+      await ensureEmbeddingColumn(table, sourcePool);
 
       // Count records that need embeddings (not yet in unified_embeddings)
       const displayNames: { [key: string]: string } = {
@@ -2426,23 +2445,23 @@ async function processMigration(tables: string[], batchSize: number, migrationId
 }
 
 // Ensure table has embedding column
-async function ensureEmbeddingColumn(tableName: string) {
+async function ensureEmbeddingColumn(tableName: string, pool: Pool) {
   try {
     // Check if column exists in SOURCE database
     const checkQuery = `
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = $1 
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = $1
         AND column_name = 'embedding'
         AND table_schema = 'public'
     `;
-    
-    const result = await sourcePool.query(checkQuery, [tableName]);
-    
+
+    const result = await pool.query(checkQuery, [tableName]);
+
     if (result.rows.length === 0) {
       // Add embedding column with vector type to SOURCE database
-      await sourcePool.query(`
-        ALTER TABLE public."${tableName}" 
+      await pool.query(`
+        ALTER TABLE public."${tableName}"
         ADD COLUMN IF NOT EXISTS embedding vector(1536)
       `);
       console.log(`Added embedding column to table ${tableName}`);

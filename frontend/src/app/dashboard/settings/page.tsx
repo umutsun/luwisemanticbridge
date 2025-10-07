@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getApiUrl, buildApiUrl, API_CONFIG } from '../../../lib/config';
 import { useToast } from '../../../hooks/use-toast';
+import { useAuth } from '../../../contexts/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -99,6 +100,7 @@ interface Config {
     locale: string;
   };
   database: {
+    type: string;
     host: string;
     port: number;
     name: string;
@@ -247,6 +249,7 @@ interface Config {
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  const { token } = useAuth();
   const [config, setConfig] = useState<Config>({
     app: {
       name: 'Alice Semantic Bridge',
@@ -255,6 +258,7 @@ export default function SettingsPage() {
       locale: 'tr'
     },
     database: {
+      type: 'postgresql',
       host: 'localhost',
       port: 5432,
       name: 'alice_semantic_bridge',
@@ -425,7 +429,14 @@ export default function SettingsPage() {
   const fetchConfig = async () => {
     try {
       const url = getApiUrl('settings');
-      const response = await fetch(url);
+      const headers: Record<string, string> = {};
+
+      // Add authorization token if available
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(url, { headers });
 
       if (response.ok) {
         const data = await response.json();
@@ -532,6 +543,52 @@ export default function SettingsPage() {
     setTesting(null);
   };
 
+  const migrateFromMySQL = async () => {
+    setTesting('migration');
+    try {
+      const response = await fetch('/api/v2/settings/migrate-mysql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          mysqlConfig: {
+            host: config.database.host,
+            port: config.database.port,
+            database: config.database.name,
+            user: config.database.user,
+            password: config.database.password
+          }
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        toast({
+          title: 'Migration Successful',
+          description: `Successfully migrated ${result.migratedRecords || 0} records from MySQL to PostgreSQL`,
+        });
+        // Refresh the page to show updated status
+        setTimeout(() => window.location.reload(), 2000);
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Migration Failed',
+          description: error.message || 'Failed to migrate from MySQL',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Migration Error',
+        description: 'Failed to connect to migration service',
+        variant: 'destructive',
+      });
+    }
+    setTesting(null);
+  };
+
   const validateConfig = () => {
     const errors: string[] = [];
 
@@ -613,6 +670,7 @@ export default function SettingsPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(config),
       });
@@ -629,6 +687,7 @@ export default function SettingsPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             prompts: prompts.map(p => ({
@@ -643,6 +702,7 @@ export default function SettingsPage() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify(chatbotSettings),
         });
@@ -874,7 +934,11 @@ export default function SettingsPage() {
 
   const fetchPrompts = async () => {
     try {
-      const response = await fetch(getApiUrl('prompts'));
+      const response = await fetch(getApiUrl('prompts'), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setPrompts(data.prompts || []);
@@ -896,7 +960,11 @@ export default function SettingsPage() {
 
   const fetchChatbotSettings = async () => {
     try {
-      const response = await fetch(getApiUrl('chatbotSettings'));
+      const response = await fetch(getApiUrl('chatbotSettings'), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
       const data = await response.json();
 
       setChatbotSettings({
@@ -923,7 +991,11 @@ export default function SettingsPage() {
 
   const fetchAISettings = async () => {
     try {
-      const response = await fetch(getApiUrl('aiSettings'));
+      const response = await fetch(getApiUrl('aiSettings'), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
       const data = await response.json();
 
       if (data.llmSettings) {
@@ -1251,13 +1323,46 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Database className="h-5 w-5" />
-                  PostgreSQL + pgvector
+                  Database Configuration
                 </CardTitle>
                 <CardDescription>
-                  Database connection settings
+                  Configure primary database for vector storage and search
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dbType">Database Type</Label>
+                  <Select
+                    value={config.database.type || 'postgresql'}
+                    onValueChange={(value) => updateConfig('database.type', value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select database type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="postgresql">
+                        <div className="flex items-center gap-2">
+                          <Database className="h-4 w-4" />
+                          PostgreSQL + pgvector (Recommended)
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="mysql">
+                        <div className="flex items-center gap-2">
+                          <Database className="h-4 w-4" />
+                          MySQL (with Migration Support)
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {config.database.type === 'mysql' && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        MySQL databases will be migrated to PostgreSQL for optimal vector search performance.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="dbHost">Host</Label>
@@ -1336,18 +1441,35 @@ export default function SettingsPage() {
                     onChange={(e) => updateConfig('database.maxConnections', parseInt(e.target.value))}
                   />
                 </div>
-                <Button
-                  onClick={() => testConnection('database')}
-                  disabled={testing === 'database'}
-                  className="w-full"
-                >
-                  {testing === 'database' ? (
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Activity className="h-4 w-4 mr-2" />
+                <div className="space-y-2">
+                  <Button
+                    onClick={() => testConnection(config.database.type || 'postgresql')}
+                    disabled={testing === 'database'}
+                    className="w-full"
+                  >
+                    {testing === 'database' ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Activity className="h-4 w-4 mr-2" />
+                    )}
+                    Test Connection
+                  </Button>
+                  {config.database.type === 'mysql' && (
+                    <Button
+                      onClick={() => migrateFromMySQL()}
+                      disabled={testing === 'migration'}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {testing === 'migration' ? (
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Package className="h-4 w-4 mr-2" />
+                      )}
+                      Migrate from MySQL to PostgreSQL
+                    </Button>
                   )}
-                  Test Connection
-                </Button>
+                </div>
               </CardContent>
             </Card>
 
