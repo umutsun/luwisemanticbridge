@@ -10,22 +10,26 @@ module.exports = {
     // ==========================================
     {
       name: 'asb-backend',
-      script: 'node_modules/.bin/ts-node',
+      script: 'node_modules/ts-node/dist/bin.js',
       args: 'src/server.ts',
       cwd: './backend',
       instances: 1,
       exec_mode: 'fork',
       watch: false, // Production'da false
       max_memory_restart: '1G',
-      
+
       // Environment
       env: {
         NODE_ENV: 'development',
         PORT: 8083,
+        API_PORT: 8083,
+        BACKEND_PORT: 8083
       },
       env_production: {
         NODE_ENV: 'production',
         PORT: 8083,
+        API_PORT: 8083,
+        BACKEND_PORT: 8083
       },
 
       // Logging
@@ -54,7 +58,7 @@ module.exports = {
     {
       name: 'asb-frontend',
       script: 'node_modules/.bin/next',
-      args: 'start -p 3001',
+      args: 'start -p 3000',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
@@ -64,14 +68,18 @@ module.exports = {
       // Environment
       env: {
         NODE_ENV: 'development',
-        PORT: 3001,
+        PORT: 3000,
+        NEXT_PUBLIC_PORT: 3000,
         NEXT_PUBLIC_API_URL: 'http://localhost:8083',
+        NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
         NEXT_PUBLIC_WEBSOCKET_URL: 'ws://localhost:8083',
       },
       env_production: {
         NODE_ENV: 'production',
-        PORT: 3001,
+        PORT: 3000,
+        NEXT_PUBLIC_PORT: 3000,
         NEXT_PUBLIC_API_URL: 'http://localhost:8083',
+        NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
         NEXT_PUBLIC_WEBSOCKET_URL: 'ws://localhost:8083',
       },
 
@@ -137,23 +145,23 @@ module.exports = {
   // ==========================================
   deploy: {
     production: {
-      user: 'ubuntu',
-      host: ['your-server.com'],
+      user: 'root',
+      host: ['asemb.luwi.dev'],
       ref: 'origin/main',
       repo: 'git@github.com:your-org/alice-semantic-bridge.git',
       path: '/var/www/alice-semantic-bridge',
-      'post-deploy': 'npm install && pm2 reload ecosystem.config.js --env production',
+      'post-deploy': 'npm install && npm run build && npm run build:backend && pm2 reload ecosystem.config.js --env production',
       env: {
         NODE_ENV: 'production',
       },
     },
     staging: {
-      user: 'ubuntu',
-      host: ['staging-server.com'],
+      user: 'root',
+      host: ['asemb.luwi.dev'],
       ref: 'origin/develop',
       repo: 'git@github.com:your-org/alice-semantic-bridge.git',
       path: '/var/www/alice-semantic-bridge-staging',
-      'post-deploy': 'npm install && pm2 reload ecosystem.config.js --env staging',
+      'post-deploy': 'npm install && npm run build && npm run build:backend && pm2 reload ecosystem.config.js --env staging',
       env: {
         NODE_ENV: 'staging',
       },
