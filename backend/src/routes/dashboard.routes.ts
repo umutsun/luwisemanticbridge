@@ -1609,4 +1609,275 @@ router.get('/api/v2/embeddings/stats-by-model', async (req: Request, res: Respon
   }
 });
 
+// --- Chat Statistics Routes ---
+
+/**
+ * Get overall chat statistics
+ */
+router.get('/api/v2/chat/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const client = await asembPool.connect();
+
+    try {
+      // Get total chat statistics
+      const totalStats = await client.query(`
+        SELECT
+          COUNT(DISTINCT c.id) as total_conversations,
+          COUNT(DISTINCT c.user_id) as total_users,
+          COUNT(m.id) as total_messages,
+          COUNT(CASE WHEN m.role = 'user' THEN 1 END) as total_user_messages,
+          COUNT(CASE WHEN m.role = 'assistant' THEN 1 END) as total_assistant_messages,
+          AVG(CASE WHEN m.role = 'user' THEN LENGTH(m.content) END) as avg_message_length,
+          DATE_TRUNC('day', MAX(c.created_at)) as last_activity_date
+        FROM conversations c
+        LEFT JOIN messages m ON m.conversation_id = c.id
+      `);
+
+      // Get daily chat activity for last 30 days
+      const dailyActivity = await client.query(`
+        SELECT
+          DATE(m.created_at) as date,
+          COUNT(DISTINCT c.id) as conversations,
+          COUNT(m.id) as messages,
+          COUNT(DISTINCT c.user_id) as active_users
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.created_at >= CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY DATE(m.created_at)
+        ORDER BY date DESC
+        LIMIT 30
+      `);
+
+      // Get top users by activity
+      const topUsers = await client.query(`
+        SELECT
+          u.id,
+          u.name,
+          u.email,
+          COUNT(DISTINCT c.id) as conversations,
+          COUNT(m.id) as messages,
+          MAX(m.created_at) as last_message_date
+        FROM users u
+        LEFT JOIN conversations c ON c.user_id = u.id
+        LEFT JOIN messages m ON m.conversation_id = c.id
+        WHERE c.id IS NOT NULL
+        GROUP BY u.id, u.name, u.email
+        ORDER BY messages DESC
+        LIMIT 10
+      `);
+
+      // Get hourly activity pattern
+      const hourlyPattern = await client.query(`
+        SELECT
+          EXTRACT(HOUR FROM m.created_at) as hour,
+          COUNT(m.id) as message_count,
+          COUNT(DISTINCT c.id) as conversation_count,
+          COUNT(DISTINCT c.user_id) as user_count
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        GROUP BY EXTRACT(HOUR FROM m.created_at)
+        ORDER BY hour
+      `);
+
+      res.json({
+        overview: totalStats.rows[0] || {},
+        daily_activity: dailyActivity.rows,
+        top_users: topUsers.rows,
+        hourly_pattern: hourlyPattern.rows
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('Error fetching chat stats:', error);
+    res.status(500).json({ error: 'Failed to fetch chat statistics' });
+  }
+});
+
+/**
+ * Get semantic analysis insights
+ */
+router.get('/api/v2/chat/semantic-insights', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const client = await asembPool.connect();
+
+    try {
+      // Get semantic insights from usage tracking
+      const semanticInsights = await client.query(`
+        SELECT
+          DATE(created_at) as date,
+          COUNT(CASE WHEN metadata->>'type' = 'chat_query' THEN 1 END) as total_queries,
+          COUNT(CASE WHEN metadata->>'semanticAnalysis' IS NOT NULL THEN 1 END) as semantic_analyzed,
+          AVG(
+            CASE
+              WHEN metadata->>'semanticAnalysis' IS NOT NULL
+              THEN (metadata->'semanticAnalysis'->>'responseLength')::numeric
+              ELSE NULL
+            END
+          ) as avg_response_length,
+          COUNT(CASE WHEN metadata->'semanticAnalysis'->>'userInsights' = 'true' THEN 1 END) as insights_enabled
+        FROM user_usage_tracking
+        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+          AND metadata->>'type' = 'chat_query'
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+        LIMIT 30
+      `);
+
+      // Get top topics from semantic analysis
+      const topTopics = await client.query(`
+        SELECT
+          metadata->'semanticAnalysis'->>'intent' as intent,
+          COUNT(*) as count,
+          AVG(
+            CASE
+              WHEN metadata->'semanticAnalysis' IS NOT NULL
+              THEN (metadata->'semanticAnalysis'->>'responseLength')::numeric
+              ELSE NULL
+            END
+          ) as avg_response_length
+        FROM user_usage_tracking
+        WHERE metadata->>'type' = 'chat_query'
+          AND metadata->'semanticAnalysis' IS NOT NULL
+        GROUP BY metadata->'semanticAnalysis'->>'intent'
+        ORDER BY count DESC
+        LIMIT 10
+      `);
+
+      // Get sentiment analysis
+      const sentimentAnalysis = await client.query(`
+        SELECT
+          metadata->'semanticAnalysis'->>'sentiment' as sentiment,
+          COUNT(*) as count,
+          ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
+        FROM user_usage_tracking
+        WHERE metadata->>'type' = 'chat_query'
+          AND metadata->'semanticAnalysis' IS NOT NULL
+          AND metadata->'semanticAnalysis'->>'sentiment' IS NOT NULL
+        GROUP BY metadata->'semanticAnalysis'->>'sentiment'
+        ORDER BY count DESC
+      `);
+
+      res.json({
+        daily_insights: semanticInsights.rows,
+        top_topics: topTopics.rows,
+        sentiment_distribution: sentimentAnalysis.rows
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('Error fetching semantic insights:', error);
+    res.status(500).json({ error: 'Failed to fetch semantic insights' });
+  }
+});
+
+/**
+ * Get user engagement metrics
+ */
+router.get('/api/v2/chat/user-engagement', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const client = await asembPool.connect();
+
+    try {
+      // User retention metrics
+      const userRetention = await client.query(`
+        SELECT
+          DATE_TRUNC('week', c.created_at) as week,
+          COUNT(DISTINCT c.user_id) as new_users,
+          COUNT(DISTINCT CASE WHEN messages_sent > 1 THEN c.user_id END) as returning_users,
+          AVG(messages_sent) as avg_messages_per_user
+        FROM (
+          SELECT
+            c.user_id,
+            c.created_at,
+            COUNT(m.id) as messages_sent
+          FROM conversations c
+          LEFT JOIN messages m ON m.conversation_id = c.id
+          GROUP BY c.user_id, c.id, c.created_at
+        ) c
+        WHERE c.created_at >= CURRENT_DATE - INTERVAL '90 days'
+        GROUP BY DATE_TRUNC('week', c.created_at)
+        ORDER BY week DESC
+        LIMIT 12
+      `);
+
+      // User activity distribution
+      const activityDistribution = await client.query(`
+        SELECT
+          activity_level,
+          user_count,
+          ROUND(user_count * 100.0 / SUM(user_count) OVER(), 2) as percentage
+        FROM (
+          SELECT
+            CASE
+              WHEN message_count = 1 THEN 'Tek Mesaj'
+              WHEN message_count BETWEEN 2 AND 5 THEN 'Düşük Aktif'
+              WHEN message_count BETWEEN 6 AND 20 THEN 'Orta Aktif'
+              ELSE 'Yüksek Aktif'
+            END as activity_level,
+            COUNT(*) as user_count
+          FROM (
+            SELECT
+              u.id,
+              COUNT(m.id) as message_count
+            FROM users u
+            LEFT JOIN conversations c ON c.user_id = u.id
+            LEFT JOIN messages m ON m.conversation_id = c.id
+            WHERE m.role = 'user'
+            GROUP BY u.id
+          ) user_stats
+          GROUP BY activity_level
+          ORDER BY message_count
+        ) activity_stats
+      `);
+
+      // Conversation depth analysis
+      const conversationDepth = await client.query(`
+        SELECT
+          message_range,
+          conversation_count,
+          ROUND(conversation_count * 100.0 / SUM(conversation_count) OVER(), 2) as percentage
+        FROM (
+          SELECT
+            CASE
+              WHEN message_count <= 2 THEN 'Kısa (1-2 mesaj)'
+              WHEN message_count <= 5 THEN 'Orta (3-5 mesaj)'
+              WHEN message_count <= 10 THEN 'Uzun (6-10 mesaj)'
+              ELSE 'Çok Uzun (10+ mesaj)'
+            END as message_range,
+            COUNT(*) as conversation_count
+          FROM (
+            SELECT
+              c.id,
+              COUNT(m.id) as message_count
+            FROM conversations c
+            LEFT JOIN messages m ON m.conversation_id = c.id
+            GROUP BY c.id
+          ) conv_stats
+          GROUP BY message_range
+        ) depth_stats
+        ORDER BY
+          CASE message_range
+            WHEN 'Kısa (1-2 mesaj)' THEN 1
+            WHEN 'Orta (3-5 mesaj)' THEN 2
+            WHEN 'Uzun (6-10 mesaj)' THEN 3
+            WHEN 'Çok Uzun (10+ mesaj)' THEN 4
+          END
+      `);
+
+      res.json({
+        user_retention: userRetention.rows,
+        activity_distribution: activityDistribution.rows,
+        conversation_depth: conversationDepth.rows
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('Error fetching user engagement metrics:', error);
+    res.status(500).json({ error: 'Failed to fetch user engagement metrics' });
+  }
+});
+
 export default router;

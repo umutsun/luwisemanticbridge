@@ -28,17 +28,29 @@ import {
   Brain,
   Search,
   Zap,
+  CheckCircle2,
+  XCircle,
+  Clock,
   Eye,
+  Hash,
+  Filter,
+  CheckSquare,
+  Square,
+  Play,
+  Activity,
   X,
   Copy,
   ExternalLink,
   CheckCircle
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface ScrapedPage {
   id: string;
@@ -89,6 +101,23 @@ export default function WebScraperPage() {
   const [scraping, setScraping] = useState(false);
   const [selectedPage, setSelectedPage] = useState<ScrapedPage | null>(null);
   const [lastScrapedData, setLastScrapedData] = useState<any>(null);
+
+  // New states for enhanced functionality
+  const [selectedPages, setSelectedPages] = useState<string[]>([]);
+  const [embedStatusFilter, setEmbedStatusFilter] = useState<'all' | 'embedded' | 'not_embedded' | 'error'>('all');
+  const [scrapeProgress, setScrapeProgress] = useState<{
+    status: 'idle' | 'scraping' | 'success' | 'error';
+    progress: number;
+    chunks: number;
+    size: number;
+    message: string;
+  }>({
+    status: 'idle',
+    progress: 0,
+    chunks: 0,
+    size: 0,
+    message: ''
+  });
 
   useEffect(() => {
     initTables();
@@ -151,6 +180,78 @@ export default function WebScraperPage() {
     toast({ title: t('scraper.toasts.copied') });
   };
 
+  // New helper functions for enhanced functionality
+  const getEmbeddingStatus = (page: ScrapedPage) => {
+    // This would need to be implemented based on your backend API
+    // For now, using mock logic
+    if (page.token_count > 0) return 'embedded';
+    if (page.content_length > 0) return 'not_embedded';
+    return 'error';
+  };
+
+  const togglePageSelection = (pageId: string) => {
+    setSelectedPages(prev =>
+      prev.includes(pageId)
+        ? prev.filter(id => id !== pageId)
+        : [...prev, pageId]
+    );
+  };
+
+  const toggleAllPagesSelection = () => {
+    if (selectedPages.length === filteredPages.length) {
+      setSelectedPages([]);
+    } else {
+      setSelectedPages(filteredPages.map(page => page.id));
+    }
+  };
+
+  const handleBulkEmbedding = async () => {
+    if (selectedPages.length === 0) {
+      toast({ variant: "destructive", title: "No pages selected for embedding" });
+      return;
+    }
+
+    const pagesToEmbed = selectedPages.filter(pageId => {
+      const page = filteredPages.find(p => p.id === pageId);
+      return getEmbeddingStatus(page!) === 'not_embedded';
+    });
+
+    if (pagesToEmbed.length === 0) {
+      toast({ variant: "destructive", title: "No unembedded pages selected" });
+      return;
+    }
+
+    // Process embeddings for selected pages
+    for (const pageId of pagesToEmbed) {
+      const page = filteredPages.find(p => p.id === pageId);
+      if (page) {
+        await handleCreateEmbeddings(page.id, page.title);
+      }
+    }
+
+    setSelectedPages([]);
+    toast({
+      title: "Bulk embedding completed",
+      description: `Processed ${pagesToEmbed.length} pages`
+    });
+  };
+
+  const getFilteredPages = () => {
+    return filteredPages.filter(page => {
+      const status = getEmbeddingStatus(page);
+      switch (embedStatusFilter) {
+        case 'embedded':
+          return status === 'embedded';
+        case 'not_embedded':
+          return status === 'not_embedded';
+        case 'error':
+          return status === 'error';
+        default:
+          return true;
+      }
+    });
+  };
+
   const handleScrape = async () => {
     if (!url) {
       toast({ variant: "destructive", title: t('scraper.toasts.enterUrl') });
@@ -163,6 +264,13 @@ export default function WebScraperPage() {
       return;
     }
     setScraping(true);
+    setScrapeProgress({
+      status: 'scraping',
+      progress: 10,
+      chunks: 0,
+      size: 0,
+      message: 'Starting scrape...'
+    });
     try {
       const customSelectorsArray = scrapeOptions.customSelectors.split('\n').map(s => s.trim()).filter(s => s.length > 0);
       const prioritySelectorsArray = scrapeOptions.prioritySelectors.split('\n').map(s => s.trim()).filter(s => s.length > 0);
@@ -179,16 +287,48 @@ export default function WebScraperPage() {
       });
       const data = await response.json();
       if (response.ok) {
+        setScrapeProgress({
+          status: 'success',
+          progress: 100,
+          chunks: data.metrics?.chunksCreated || 0,
+          size: data.metrics?.contentLength || 0,
+          message: 'Scrape completed successfully!'
+        });
         toast({ title: t('scraper.toasts.scrapeSuccess', { title: data.title }) });
         setLastScrapedData(data);
         fetchScrapedPages();
         fetchHistory();
         setUrl('');
+
+        // Reset progress after delay
+        setTimeout(() => {
+          setScrapeProgress({
+            status: 'idle',
+            progress: 0,
+            chunks: 0,
+            size: 0,
+            message: ''
+          });
+        }, 3000);
       } else {
+        setScrapeProgress({
+          status: 'error',
+          progress: 0,
+          chunks: 0,
+          size: 0,
+          message: data.error || 'Scrape failed'
+        });
         toast({ variant: "destructive", title: data.error || t('scraper.toasts.scrapeFailed') });
       }
     } catch (error: any) {
       console.error('Scraping error:', error);
+      setScrapeProgress({
+        status: 'error',
+        progress: 0,
+        chunks: 0,
+        size: 0,
+        message: 'Network error occurred'
+      });
       toast({ variant: "destructive", title: t('scraper.toasts.networkError') });
     } finally {
       setScraping(false);
@@ -302,23 +442,23 @@ export default function WebScraperPage() {
                     <div>
                       <Label htmlFor="mode" className="text-xs">Scraping Mode</Label>
                       <Select value={scrapeOptions.mode} onValueChange={(value) => setScrapeOptions({...scrapeOptions, mode: value})}>
-                        <SelectTrigger id="mode" className="h-9 w-full"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="mode" className="h-10 w-full py-2"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="auto">
                             <div className="flex flex-col">
-                              <span>🤖 Auto (Recommended)</span>
+                              <span>Auto (Recommended)</span>
                               <span className="text-xs text-muted-foreground font-normal">Smart selection • 4-20s</span>
                             </div>
                           </SelectItem>
                           <SelectItem value="static">
                             <div className="flex flex-col">
-                              <span>⚡ Static (Fastest)</span>
+                              <span>Static (Fastest)</span>
                               <span className="text-xs text-muted-foreground font-normal">Basic HTML • ~4s</span>
                             </div>
                           </SelectItem>
                           <SelectItem value="dynamic">
                             <div className="flex flex-col">
-                              <span>🌐 Dynamic (JavaScript)</span>
+                              <span>Dynamic (JavaScript)</span>
                               <span className="text-xs text-muted-foreground font-normal">Modern sites • ~20s</span>
                             </div>
                           </SelectItem>
@@ -333,7 +473,7 @@ export default function WebScraperPage() {
                     <div>
                       <Label htmlFor="extractMode" className="text-xs">Extract Mode</Label>
                       <Select value={scrapeOptions.extractMode} onValueChange={(value) => setScrapeOptions({...scrapeOptions, extractMode: value})}>
-                        <SelectTrigger id="extractMode" className="h-9 w-full"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="extractMode" className="h-10 w-full py-2"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="best">Best</SelectItem>
                           <SelectItem value="all">All</SelectItem>
@@ -397,6 +537,57 @@ export default function WebScraperPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Animated Progress Bar */}
+              {scrapeProgress.status !== 'idle' && (
+                <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium">
+                      {scrapeProgress.status === 'scraping' && '🔄 Scraping...'}
+                      {scrapeProgress.status === 'success' && '✅ Completed!'}
+                      {scrapeProgress.status === 'error' && '❌ Error occurred'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{scrapeProgress.progress}%</span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${
+                        scrapeProgress.status === 'success' ? 'bg-green-500' :
+                        scrapeProgress.status === 'error' ? 'bg-red-500' :
+                        'bg-blue-500'
+                      }`}
+                      style={{ width: `${scrapeProgress.progress}%` }}
+                    />
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-white dark:bg-gray-800 rounded p-2">
+                      <div className="text-lg font-bold text-blue-600">{scrapeProgress.chunks}</div>
+                      <div className="text-xs text-muted-foreground">Chunks</div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 rounded p-2">
+                      <div className="text-lg font-bold text-green-600">
+                        {(scrapeProgress.size / 1024).toFixed(1)}KB
+                      </div>
+                      <div className="text-xs text-muted-foreground">Size</div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 rounded p-2">
+                      <div className="text-lg font-bold text-purple-600">{scrapeProgress.progress}</div>
+                      <div className="text-xs text-muted-foreground">Progress</div>
+                    </div>
+                  </div>
+
+                  {scrapeProgress.message && (
+                    <p className="text-xs text-center mt-2 text-muted-foreground">
+                      {scrapeProgress.message}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Button onClick={handleScrape} disabled={scraping || !url} className="w-full mt-4">
                 {scraping ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t('scraper.scrapingButton')}</>) : (<><Zap className="mr-2 h-4 w-4" />{t('scraper.scrapeButton')}</>)}
               </Button>
@@ -404,61 +595,185 @@ export default function WebScraperPage() {
           </CardContent>
         </Card>
 
-        {/* Right Column: Tabs for Last Scrape and History */}
+        {/* Right Column: Scraped Pages Management */}
         <Card>
-          <Tabs defaultValue="last_scrape" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="last_scrape">Son Scrape</TabsTrigger>
-              <TabsTrigger value="history">Geçmiş</TabsTrigger>
-            </TabsList>
-            <TabsContent value="last_scrape">
-              <CardContent className="pt-4">
-                {lastScrapedData ? (
-                  <div className="space-y-3">
-                    <h3 className="font-medium truncate" title={lastScrapedData.title}>{lastScrapedData.title}</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div><span className="text-muted-foreground">Length:</span><p className="font-medium">{lastScrapedData.metrics?.contentLength || 0} chars</p></div>
-                      <div><span className="text-muted-foreground">Chunks:</span><p className="font-medium">{lastScrapedData.metrics?.chunksCreated || 0}</p></div>
-                    </div>
-                    <div><Label className="text-xs">URL</Label><p className="text-xs text-muted-foreground truncate">{lastScrapedData.url}</p></div>
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Content Preview:</h4>
-                      <div className="bg-muted/50 rounded-lg p-3 max-h-[250px] overflow-y-auto">
-                        <pre className="text-xs whitespace-pre-wrap font-mono">{lastScrapedData.contentPreview || 'No content'}</pre>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground text-center">
-                    <FileText className="h-12 w-12 mb-3" />
-                    <p className="text-sm">No content scraped yet</p>
-                    <p className="text-xs mt-1">Your last scrape result will appear here.</p>
-                  </div>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg">Scraped Pages</CardTitle>
+                <Badge variant="secondary">{getFilteredPages().length}</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Filter */}
+                <Select value={embedStatusFilter} onValueChange={(value) => setEmbedStatusFilter(value as any)}>
+                  <SelectTrigger className="w-[150px] h-8">
+                    <Filter className="h-4 w-4 mr-1" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Pages</SelectItem>
+                    <SelectItem value="embedded">✅ Embedded</SelectItem>
+                    <SelectItem value="not_embedded">⏳ Not Embedded</SelectItem>
+                    <SelectItem value="error">❌ Error</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Bulk Actions */}
+                {selectedPages.length > 0 && (
+                  <Button onClick={handleBulkEmbedding} variant="outline" size="sm" className="h-8">
+                    <Brain className="h-4 w-4 mr-1" />
+                    Embed Selected ({selectedPages.length})
+                  </Button>
                 )}
-              </CardContent>
-            </TabsContent>
-            <TabsContent value="history">
-              <div className="max-h-[420px] overflow-y-auto">
+
+                {/* Refresh */}
+                <Button onClick={fetchScrapedPages} variant="outline" size="icon" className="h-8 w-8">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : getFilteredPages().length === 0 ? (
+              <div className="text-center py-12">
+                <Globe className="mx-auto h-12 w-12 text-muted-foreground" />
+                <p className="mt-2 text-muted-foreground">No scraped pages found</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[500px]">
                 <Table>
                   <TableHeader>
-                    <TableRow><TableHead>URL</TableHead><TableHead>Status</TableHead></TableRow>
+                    <TableRow>
+                      <TableHead className="w-[40px]">
+                        <Checkbox
+                          checked={selectedPages.length === getFilteredPages().length}
+                          onCheckedChange={toggleAllPagesSelection}
+                        />
+                      </TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead className="w-[100px]">Status</TableHead>
+                      <TableHead className="w-[80px]">Size</TableHead>
+                      <TableHead className="w-[80px]">Chunks</TableHead>
+                      <TableHead className="w-[100px]">Date</TableHead>
+                      <TableHead className="text-right w-[120px]">Actions</TableHead>
+                    </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {history.length > 0 ? history.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="font-medium truncate text-xs" title={entry.source_url}>{entry.source_url}</TableCell>
-                        <TableCell>
-                          <Badge variant={entry.status === 'success' ? 'success' : 'destructive'}>{entry.status}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    )) : (
-                      <TableRow><TableCell colSpan={2} className="text-center">No history found.</TableCell></TableRow>
-                    )}
+                    {getFilteredPages().map((page) => {
+                      const embedStatus = getEmbeddingStatus(page);
+                      const isSelected = selectedPages.includes(page.id);
+                      const isEmbedding = embeddingProgress[page.id];
+
+                      return (
+                        <TableRow key={page.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => togglePageSelection(page.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-[300px]">
+                              <p className="font-medium truncate" title={page.title}>
+                                {page.title || 'Untitled'}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate" title={page.url}>
+                                {page.url}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              {embedStatus === 'embedded' && (
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                              )}
+                              {embedStatus === 'not_embedded' && (
+                                <Clock className="h-4 w-4 text-yellow-500" />
+                              )}
+                              {embedStatus === 'error' && (
+                                <XCircle className="h-4 w-4 text-red-500" />
+                              )}
+                              <Badge
+                                variant={
+                                  embedStatus === 'embedded' ? 'success' :
+                                  embedStatus === 'not_embedded' ? 'outline' : 'destructive'
+                                }
+                                className="text-xs"
+                              >
+                                {embedStatus === 'embedded' ? 'Embedded' :
+                                 embedStatus === 'not_embedded' ? 'Not Embedded' : 'Error'}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Hash className="h-3 w-3" />
+                              <span className="text-sm">
+                                {(page.content_length / 1024).toFixed(1)}KB
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Hash className="h-3 w-3" />
+                              <span className="text-sm">{page.chunk_count}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              <span className="text-sm">
+                                {new Date(page.created_at).toLocaleDateString('tr-TR')}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setSelectedPage(page)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {embedStatus === 'not_embedded' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleCreateEmbeddings(page.id, page.title)}
+                                  disabled={isEmbedding}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  {isEmbedding ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Brain className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeletePage(page.id)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
-              </div>
-            </TabsContent>
-          </Tabs>
+              </ScrollArea>
+            )}
+          </CardContent>
         </Card>
       </div>
 

@@ -89,8 +89,26 @@ router.get('/', async (req: Request, res: Response) => {
       )
     `);
 
+    // Also ensure document_embeddings table exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS document_embeddings (
+        id SERIAL PRIMARY KEY,
+        document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+        chunk_text TEXT NOT NULL,
+        embedding vector(1536),
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const result = await pool.query(
-      'SELECT * FROM documents ORDER BY created_at DESC'
+      `SELECT d.*,
+              CASE
+                WHEN EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id) THEN true
+                ELSE false
+              END as has_embeddings
+       FROM documents d
+       ORDER BY d.created_at DESC`
     );
 
     const documents = result.rows.map(doc => ({
@@ -99,12 +117,13 @@ router.get('/', async (req: Request, res: Response) => {
       content: doc.content || '',
       type: doc.type || 'text',
       size: doc.size || 0,
+      hasEmbeddings: doc.has_embeddings,
       metadata: {
         source: doc.file_path,
         created_at: doc.created_at,
         updated_at: doc.updated_at,
-        chunks: doc.metadata?.chunks || 0,
-        embeddings: doc.metadata?.embeddings || false,
+        chunks: doc.has_embeddings ? 1 : 0, // Simplified for now
+        embeddings: doc.has_embeddings ? 1 : 0,
         ...doc.metadata
       }
     }));

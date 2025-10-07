@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { 
+import {
   FileText,
   Upload,
   Trash2,
@@ -42,13 +42,25 @@ import {
   Calendar,
   Hash,
   FolderOpen,
-  CheckCircle
+  CheckCircle,
+  Brain,
+  AlertCircle,
+  PlayCircle,
+  PauseCircle,
+  BarChart3,
+  Database
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface Document {
   id: string;
   title: string;
   content: string;
+  type?: string;
+  size?: number;
+  hasEmbeddings?: boolean;
   metadata: {
     source?: string;
     url?: string;
@@ -56,6 +68,10 @@ interface Document {
     type?: string;
     chunks?: number;
     embeddings?: number;
+    created_at?: string;
+    updated_at?: string;
+    mimeType?: string;
+    uploadDate?: string;
   };
   created_at: string;
   updated_at?: string;
@@ -69,13 +85,21 @@ export default function DocumentManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [editingDocument, setEditingDocument] = useState<Document | null>(null);
-  
+
   // Form states
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newFile, setNewFile] = useState<File | null>(null);
-  
+
+  // Batch operations states
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [batchEmbedding, setBatchEmbedding] = useState(false);
+  const [embeddingProgress, setEmbeddingProgress] = useState(0);
+  const [embeddingStatus, setEmbeddingStatus] = useState('');
+  const [filterEmbedding, setFilterEmbedding] = useState<'all' | 'embedded' | 'not-embedded'>('all');
+  const [embeddingProvider, setEmbeddingProvider] = useState('openai');
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -252,10 +276,108 @@ export default function DocumentManager() {
   };
 
   // Search documents
-  const filteredDocuments = documents.filter(doc =>
-    doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    doc.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredDocuments = documents.filter(doc => {
+    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         doc.content.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesEmbeddingFilter = filterEmbedding === 'all' ||
+                                 (filterEmbedding === 'embedded' && doc.hasEmbeddings) ||
+                                 (filterEmbedding === 'not-embedded' && !doc.hasEmbeddings);
+
+    return matchesSearch && matchesEmbeddingFilter;
+  });
+
+  // Batch operations functions
+  const toggleDocumentSelection = (docId: string) => {
+    setSelectedDocuments(prev =>
+      prev.includes(docId)
+        ? prev.filter(id => id !== docId)
+        : [...prev, docId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDocuments.length === filteredDocuments.length) {
+      setSelectedDocuments([]);
+    } else {
+      setSelectedDocuments(filteredDocuments.map(doc => doc.id));
+    }
+  };
+
+  const handleBatchEmbedding = async () => {
+    if (selectedDocuments.length === 0) {
+      setError('Lütfen en az bir doküman seçin');
+      return;
+    }
+
+    setBatchEmbedding(true);
+    setEmbeddingProgress(0);
+    setEmbeddingStatus('');
+    setError('');
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+    const totalDocuments = selectedDocuments.length;
+    let processedDocuments = 0;
+
+    try {
+      for (const docId of selectedDocuments) {
+        const doc = documents.find(d => d.id === docId);
+        if (!doc || doc.hasEmbeddings) {
+          processedDocuments++;
+          setEmbeddingProgress((processedDocuments / totalDocuments) * 100);
+          continue;
+        }
+
+        setEmbeddingStatus(`"${doc.title}" için embedding oluşturuluyor...`);
+
+        const response = await fetch(`${baseUrl}/api/v2/documents/${docId}/embeddings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+          processedDocuments++;
+          setEmbeddingProgress((processedDocuments / totalDocuments) * 100);
+        } else {
+          console.warn(`Embedding failed for document ${docId}`);
+          processedDocuments++;
+          setEmbeddingProgress((processedDocuments / totalDocuments) * 100);
+        }
+      }
+
+      setSuccess(`${selectedDocuments.length} doküman için embedding işlemi tamamlandı`);
+      setSelectedDocuments([]);
+      await fetchDocuments();
+    } catch (error) {
+      setError('Toplu embedding işlemi sırasında hata oluştu');
+      console.error(error);
+    } finally {
+      setBatchEmbedding(false);
+      setEmbeddingStatus('');
+      setEmbeddingProgress(0);
+    }
+  };
+
+  const handleDeleteEmbeddings = async (docId: string) => {
+    if (!confirm('Bu dokümanın embedding\'lerini silmek istediğinizden emin misiniz?')) return;
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/documents/${docId}/embeddings`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setSuccess('Embedding\'ler silindi');
+        await fetchDocuments();
+      } else {
+        throw new Error('Embedding\'ler silinemedi');
+      }
+    } catch (error) {
+      setError('Embedding\'ler silinemedi');
+      console.error(error);
+    }
+  };
 
   useEffect(() => {
     fetchDocuments();
@@ -310,15 +432,80 @@ export default function DocumentManager() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Doküman ara..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
+                {/* Batch Operations Controls */}
+                {selectedDocuments.length > 0 && (
+                  <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={selectedDocuments.length === filteredDocuments.length}
+                            onCheckedChange={toggleSelectAll}
+                          />
+                          <span className="text-sm font-medium">
+                            {selectedDocuments.length} doküman seçildi
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleBatchEmbedding}
+                            disabled={batchEmbedding}
+                          >
+                            {batchEmbedding ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Brain className="h-4 w-4 mr-2" />
+                            )}
+                            Toplu Embedding
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedDocuments([])}
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Seçimi Temizle
+                          </Button>
+                        </div>
+                      </div>
+                      {batchEmbedding && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span>{embeddingStatus || 'İşleniyor...'}</span>
+                            <span>{Math.round(embeddingProgress)}%</span>
+                          </div>
+                          <Progress value={embeddingProgress} className="h-2" />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Search and Filter Bar */}
+                <div className="flex gap-4 items-center">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Doküman ara..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Durum:</span>
+                    <Select value={filterEmbedding} onValueChange={(value: any) => setFilterEmbedding(value)}>
+                      <SelectTrigger className="w-[150px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        <SelectItem value="embedded">Embedding Var</SelectItem>
+                        <SelectItem value="not-embedded">Embedding Yok</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {/* Documents Table */}
@@ -331,9 +518,16 @@ export default function DocumentManager() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={selectedDocuments.length === filteredDocuments.length && filteredDocuments.length > 0}
+                              onCheckedChange={toggleSelectAll}
+                            />
+                          </TableHead>
                           <TableHead>Başlık</TableHead>
                           <TableHead>Kaynak</TableHead>
                           <TableHead>Chunks</TableHead>
+                          <TableHead>Embedding</TableHead>
                           <TableHead>Durum</TableHead>
                           <TableHead>Tarih</TableHead>
                           <TableHead className="text-right">İşlemler</TableHead>
@@ -342,13 +536,22 @@ export default function DocumentManager() {
                       <TableBody>
                         {filteredDocuments.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center text-muted-foreground">
+                            <TableCell colSpan={8} className="text-center text-muted-foreground">
                               Henüz doküman bulunmuyor
                             </TableCell>
                           </TableRow>
                         ) : (
                           filteredDocuments.map((doc) => (
-                            <TableRow key={doc.id}>
+                            <TableRow
+                              key={doc.id}
+                              className={doc.hasEmbeddings ? 'bg-green-50 dark:bg-green-950/20' : ''}
+                            >
+                              <TableCell>
+                                <Checkbox
+                                  checked={selectedDocuments.includes(doc.id)}
+                                  onCheckedChange={() => toggleDocumentSelection(doc.id)}
+                                />
+                              </TableCell>
                               <TableCell>
                                 <div className="max-w-[250px]">
                                   <p className="font-medium truncate">{doc.title}</p>
@@ -371,6 +574,19 @@ export default function DocumentManager() {
                                 </div>
                               </TableCell>
                               <TableCell>
+                                {doc.hasEmbeddings ? (
+                                  <div className="flex items-center gap-1 text-green-600">
+                                    <CheckCircle className="h-4 w-4" />
+                                    <span className="text-sm">Var</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-orange-600">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <span className="text-sm">Yok</span>
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
                                 <Badge variant={
                                   doc.status === 'processed' ? 'success' :
                                   doc.status === 'error' ? 'destructive' : 'secondary'
@@ -388,6 +604,38 @@ export default function DocumentManager() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-1">
+                                  {!doc.hasEmbeddings && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={async () => {
+                                        try {
+                                          const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+                                          const response = await fetch(`${baseUrl}/api/v2/documents/${doc.id}/embeddings`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' }
+                                          });
+                                          if (response.ok) {
+                                            setSuccess('Embedding oluşturuldu');
+                                            await fetchDocuments();
+                                          }
+                                        } catch (error) {
+                                          setError('Embedding oluşturulamadı');
+                                        }
+                                      }}
+                                    >
+                                      <Brain className="h-4 w-4 text-blue-600" />
+                                    </Button>
+                                  )}
+                                  {doc.hasEmbeddings && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDeleteEmbeddings(doc.id)}
+                                    >
+                                      <Database className="h-4 w-4 text-red-600" />
+                                    </Button>
+                                  )}
                                   <Dialog>
                                     <DialogTrigger asChild>
                                       <Button

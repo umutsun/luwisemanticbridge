@@ -36,7 +36,9 @@ import {
   Bell,
   Terminal,
   Database,
-  Cpu
+  Cpu,
+  Users,
+  Send
 } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
@@ -199,6 +201,10 @@ export default function DashboardPage() {
   const [consoleHeight, setConsoleHeight] = useState(400);
   const [wsConnected, setWsConnected] = useState(false);
 
+  // Chat statistics state
+  const [chatStats, setChatStats] = useState<any>(null);
+  const [chatStatsLoading, setChatStatsLoading] = useState(true);
+
   // Real-time resources data for animations
   const [realtimeResources, setRealtimeResources] = useState({
     cpu: 24,
@@ -263,6 +269,34 @@ export default function DashboardPage() {
     }, 2000); // Update every 2 seconds
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch chat statistics
+  useEffect(() => {
+    const fetchChatStats = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/v2/chat/stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setChatStats(data);
+        } else {
+          console.error('Failed to fetch chat stats:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching chat stats:', error);
+      } finally {
+        setChatStatsLoading(false);
+      }
+    };
+
+    fetchChatStats();
   }, []);
 
   const fetchSystemStatus = async () => {
@@ -648,6 +682,96 @@ export default function DashboardPage() {
       
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-8">
+        {/* Chat Statistics Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Total Conversations */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <h3 className="text-sm font-semibold tracking-tight">Toplam Konuşma</h3>
+                </div>
+                <MessageSquare className="h-4 w-4 text-green-500/70" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {chatStatsLoading ? (
+                  <div className="h-8 bg-muted rounded animate-pulse" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {chatStats?.overview?.total_conversations || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {chatStats?.overview?.total_users || 0} kullanıcı
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Total Messages */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <h3 className="text-sm font-semibold tracking-tight">Toplam Mesaj</h3>
+                </div>
+                <Send className="h-4 w-4 text-blue-500/70" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {chatStatsLoading ? (
+                  <div className="h-8 bg-muted rounded animate-pulse" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {chatStats?.overview?.total_messages?.toLocaleString() || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Ort. {Math.round(chatStats?.overview?.avg_message_length || 0)} karakter
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Active Users */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                  <h3 className="text-sm font-semibold tracking-tight">Aktif Kullanıcılar</h3>
+                </div>
+                <Users className="h-4 w-4 text-purple-500/70" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {chatStatsLoading ? (
+                  <div className="h-8 bg-muted rounded animate-pulse" />
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">
+                      {chatStats?.overview?.total_users || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {chatStats?.daily_activity?.[0]?.active_users || 0} bugün aktif
+                    </div>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Development Tools Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Notifications - Minimal Card */}
