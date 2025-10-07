@@ -1480,17 +1480,11 @@ router.get('/tables', async (req: Request, res: Response) => {
     const sourcePool = await getSourcePool();
     const tablesWithMeta = [];
 
-    // Get target tables from settings - only these tables should be shown
-    let targetTables = [
-      { name: 'ozelgeler', displayName: 'Özelgeler' },
-      { name: 'makaleler', displayName: 'Makaleler' },
-      { name: 'sorucevap', displayName: 'Soru-Cevap' },
-      { name: 'danistaykararlari', displayName: 'Danıştay Kararları' },
-      { name: 'chat_history', displayName: 'Sohbet Geçmişi' }
-    ];
+    // Get target tables from settings dynamically
+    const targetTables = await getTargetTables();
 
+    // Get database name from settings dynamically
     let databaseName = 'rag_chatbot'; // Default database name
-
     try {
       // Get database name from customer_database settings
       const dbSettings = await getDatabaseSettings();
@@ -1514,21 +1508,11 @@ router.get('/tables', async (req: Request, res: Response) => {
           databaseName = dbSettings;
         }
       }
-
-      const settingsResult = await targetPool.query(
-        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'migration_target_tables'"
-      );
-      if (settingsResult.rows[0]?.setting_value) {
-        const tableNames = JSON.parse(settingsResult.rows[0].setting_value);
-        // Map to display names
-        targetTables = tableNames.map((name: string) => ({
-          name,
-          displayName: name.charAt(0).toUpperCase() + name.slice(1)
-        }));
-      }
     } catch (err) {
-      console.log('Using default target tables and database name');
+      console.log('Using default database name');
     }
+
+    console.log(`📊 Getting tables from database: ${databaseName}`);
 
     for (const table of targetTables) {
       const tableName = table.name;
@@ -1613,6 +1597,37 @@ router.get('/tables', async (req: Request, res: Response) => {
 // Helper function to create migration history
 async function createMigrationHistory(tables: string[], batchSize: number): Promise<string> {
   try {
+    // Get dynamic source pool and database info from settings
+    const sourcePool = await getSourcePool();
+
+    // Get database name from settings
+    let databaseName = 'rag_chatbot'; // Default fallback
+    try {
+      const dbSettings = await getDatabaseSettings();
+      if (dbSettings && typeof dbSettings === 'object') {
+        databaseName = dbSettings.databaseName ||
+                       dbSettings.dbName ||
+                       dbSettings.name ||
+                       dbSettings.database ||
+                       'rag_chatbot';
+      } else if (dbSettings && typeof dbSettings === 'string') {
+        try {
+          const parsed = JSON.parse(dbSettings);
+          databaseName = parsed.databaseName ||
+                         parsed.dbName ||
+                         parsed.name ||
+                         parsed.database ||
+                         'rag_chatbot';
+        } catch {
+          databaseName = dbSettings;
+        }
+      }
+    } catch (err) {
+      console.log('Using default database name for migration history');
+    }
+
+    console.log(`📊 Creating migration history for database: ${databaseName}`);
+
     // Count total records from SOURCE database
     let totalRecords = 0;
     for (const table of tables) {
@@ -1621,26 +1636,26 @@ async function createMigrationHistory(tables: string[], batchSize: number): Prom
       );
       totalRecords += parseInt(countResult.rows[0].count);
     }
-    
+
     // Let PostgreSQL generate the UUID
     const result = await pgPool.query(`
       INSERT INTO migration_history (
-        source_type, source_name, database_name, table_name, 
+        source_type, source_name, database_name, table_name,
         total_records, batch_size, status, model_used, metadata
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING migration_id::text
     `, [
       'database',
       tables.join(', '),
-      'rag_chatbot',
+      databaseName, // Use dynamic database name from settings
       tables.join(', '),
       totalRecords,
       batchSize,
       'processing',
       'text-embedding-ada-002',
-      JSON.stringify({ tables, startTime: new Date() })
+      JSON.stringify({ tables, startTime: new Date(), databaseName })
     ]);
-    
+
     return result.rows[0].migration_id;
   } catch (error) {
     console.error('Error creating migration history:', error);
@@ -1648,23 +1663,77 @@ async function createMigrationHistory(tables: string[], batchSize: number): Prom
   }
 }
 
+// Helper function to get target tables from settings
+async function getTargetTables(): Promise<{ name: string; displayName: string }[]> {
+  try {
+    // Try to get target tables from chatbot_settings first
+    const settingsResult = await targetPool.query(
+      "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'migration_target_tables'"
+    );
+
+    if (settingsResult.rows[0]?.setting_value) {
+      const tableNames = JSON.parse(settingsResult.rows[0].setting_value);
+      console.log(`📊 Using target tables from settings:`, tableNames);
+      // Map to display names
+      return tableNames.map((name: string) => ({
+        name,
+        displayName: name.charAt(0).toUpperCase() + name.slice(1)
+      }));
+    }
+  } catch (err) {
+    console.log('⚠️ Could not read target tables from settings, using defaults');
+  }
+
+  // Fallback to default tables
+  const defaultTables = [
+    { name: 'ozelgeler', displayName: 'Özelgeler' },
+    { name: 'makaleler', displayName: 'Makaleler' },
+    { name: 'sorucevap', displayName: 'Soru-Cevap' },
+    { name: 'danistaykararlari', displayName: 'Danıştay Kararları' },
+    { name: 'chat_history', displayName: 'Sohbet Geçmişi' }
+  ];
+
+  console.log(`📊 Using default target tables:`, defaultTables.map(t => t.name));
+  return defaultTables;
+}
+
+// Helper function to get display name for a table name
+function getDisplayName(tableName: string, targetTables: { name: string; displayName: string }[]): string {
+  // First check if it's in our dynamic target tables
+  const tableConfig = targetTables.find(t => t.name === tableName);
+  if (tableConfig) {
+    return tableConfig.displayName;
+  }
+
+  // Fallback to hardcoded mappings for backward compatibility
+  const displayMappings: { [key: string]: string } = {
+    'ozelgeler': 'Özelgeler',
+    'makaleler': 'Makaleler',
+    'sorucevap': 'Soru-Cevap',
+    'danistaykararlari': 'Danıştay Kararları',
+    'chat_history': 'Sohbet Geçmişi'
+  };
+
+  return displayMappings[tableName] || tableName;
+}
+
 // Helper function to update migration history
 async function updateMigrationHistory(
-  migrationId: string, 
-  status: string, 
+  migrationId: string,
+  status: string,
   errorMessage?: string
 ) {
   try {
     const updateQuery = `
-      UPDATE migration_history 
-      SET status = $1::VARCHAR, 
+      UPDATE migration_history
+      SET status = $1::VARCHAR,
           error_message = $2::TEXT,
           completed_at = CASE WHEN $1::VARCHAR IN ('completed', 'failed') THEN NOW() ELSE NULL END,
           duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))::INTEGER,
           updated_at = NOW()
       WHERE migration_id = $3::UUID
     `;
-    
+
     await pgPool.query(updateQuery, [status, errorMessage || null, migrationId]);
   } catch (error) {
     console.error('Error updating migration history:', error);
@@ -1678,8 +1747,9 @@ async function processMigration(tables: string[], batchSize: number, migrationId
     console.log(`🔧 Debug mode enabled - detailed logging active`);
     console.log(`📊 Batch size: ${batchSize}, Migration ID: ${migrationId}, Resume: ${isResume}`);
 
-    // Get dynamic source pool from settings
+    // Get dynamic source pool and target tables from settings
     const sourcePool = await getSourcePool();
+    const targetTables = await getTargetTables();
 
     // Add initial delay to make progress visible in UI
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1690,16 +1760,8 @@ async function processMigration(tables: string[], batchSize: number, migrationId
       // Ensure embedding column exists in SOURCE database
       await ensureEmbeddingColumn(table, sourcePool);
 
-      // Count records that need embeddings (not yet in unified_embeddings)
-      const displayNames: { [key: string]: string } = {
-        'ozelgeler': 'Özelgeler',
-        'makaleler': 'Makaleler',
-        'sorucevap': 'Soru-Cevap',
-        'danistaykararlari': 'Danıştay Kararları',
-        'chat_history': 'Sohbet Geçmişi'
-      };
-
-      const sourceTableName = displayNames[table] || table;
+      // Get display name dynamically
+      const sourceTableName = getDisplayName(table, targetTables);
 
       // Get total records in table
       const totalResult = await sourcePool.query(
