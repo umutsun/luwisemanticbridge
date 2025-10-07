@@ -1,24 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useConfig } from "@/contexts/ConfigContext";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
-  // FileText, Database, Globe, Zap - TEMİZLENDİ
+  FileText,
+  Globe,
+  Zap,
   Search,
   Download,
   Upload,
   Plus,
   Trash2,
   RefreshCw,
+  Loader2,
   Play,
   Pause,
   CheckCircle,
@@ -30,12 +32,15 @@ import {
   Clock,
   MessageSquare,
   Activity,
-  Filter
+  Filter,
+  Bell,
+  Terminal,
+  Database,
+  Cpu
 } from "lucide-react";
-
-// API endpoint'leri
-const API_BASE_URL = "http://localhost:8084";
-const WS_BASE_URL = "ws://localhost:8084";
+import { useConfig } from "@/contexts/ConfigContext";
+import apiConfig from "@/config/api.config";
+import { fetchWithAuth } from "@/lib/auth-fetch";
 
 interface SystemStatus {
   database: {
@@ -106,6 +111,30 @@ interface ScrapingSession {
   };
 }
 
+interface Notification {
+  id: string;
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+  timestamp: string;
+}
+
+interface ActivityLog {
+  id: string;
+  type: 'user' | 'system' | 'error' | 'info';
+  action: string;
+  details: string;
+  timestamp: string;
+}
+
+interface ConsoleLog {
+  id: string;
+  type: 'info' | 'warn' | 'error' | 'log';
+  message: string;
+  timestamp: string;
+  source?: 'backend' | 'frontend' | 'system';
+}
+
 // ✅ TEMİZLENMİŞ StatusCard - Icon olmadan
 const StatusCard = ({ title, value, status, description }: {
   title: string;
@@ -153,8 +182,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // New state for development features
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
+  const [consoleLog, setConsoleLog] = useState<ConsoleLog[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
+  const [showConsoleLog, setShowConsoleLog] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [scrapingStatus, setScrapingStatus] = useState<"idle" | "running" | "paused" | "completed">("idle");
+
+  // Console state for real functionality
+  const [consoleFilter, setConsoleFilter] = useState<'all' | 'backend' | 'frontend' | 'error' | 'warn' | 'info'>('all');
+  const [isConsolePaused, setIsConsolePaused] = useState(false);
+  const [consoleHeight, setConsoleHeight] = useState(400);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  // Real-time resources data for animations
+  const [realtimeResources, setRealtimeResources] = useState({
+    cpu: 24,
+    memory: 67,
+    disk: 45,
+    gpu: 12
+  });
 
   // Component mount'da verileri çek
   useEffect(() => {
@@ -163,15 +214,115 @@ export default function DashboardPage() {
     fetchSessions();
   }, []);
 
+  // WebSocket connection for real-time logs
+  useEffect(() => {
+    if (!isConsolePaused) {
+      const ws = new WebSocket('ws://localhost:8083');
+
+      ws.onopen = () => {
+        setWsConnected(true);
+        addConsoleLog('[SYSTEM] WebSocket connected for real-time logs', 'info', 'system');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const logData = JSON.parse(event.data);
+          addConsoleLog(logData.message, logData.level || 'info', logData.source || 'backend');
+        } catch (error) {
+          // If it's not JSON, treat as plain text
+          addConsoleLog(event.data, 'info', 'backend');
+        }
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+        if (!isConsolePaused) {
+          addConsoleLog('[SYSTEM] WebSocket disconnected, attempting reconnect...', 'warn', 'system');
+        }
+      };
+
+      ws.onerror = () => {
+        addConsoleLog('[SYSTEM] WebSocket connection error', 'error', 'system');
+      };
+
+      return () => {
+        ws.close();
+      };
+    }
+  }, [isConsolePaused]);
+
+  // Simulate real-time resource updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRealtimeResources(prev => ({
+        cpu: Math.max(5, Math.min(95, prev.cpu + (Math.random() - 0.5) * 10)),
+        memory: Math.max(20, Math.min(90, prev.memory + (Math.random() - 0.5) * 5)),
+        disk: Math.max(30, Math.min(80, prev.disk + (Math.random() - 0.5) * 2)),
+        gpu: Math.max(0, Math.min(100, prev.gpu + (Math.random() - 0.5) * 15))
+      }));
+    }, 2000); // Update every 2 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchSystemStatus = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/dashboard/status`);
-      if (response.ok) {
-        const statusData = await response.json();
-        setData(statusData);
-      }
+      const [healthResponse, scraperStatusResponse] = await Promise.all([
+        fetchWithAuth(apiConfig.getApiUrl('/api/v2/health/system')),
+        fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/dashboard/status')),
+      ]);
+
+      const healthData = healthResponse.ok ? await healthResponse.json() : null;
+      const scraperStatus = scraperStatusResponse.ok ? await scraperStatusResponse.json() : null;
+
+      const databaseStatus = healthData?.services?.database?.status;
+      const redisStatus = healthData?.services?.redis?.status;
+
+      const parsedStatus: SystemStatus = {
+        database: {
+          status: databaseStatus === 'connected' || databaseStatus === 'healthy' ? 'connected' : 'disconnected',
+          documents: scraperStatus?.documents?.total ?? scraperStatus?.documents ?? 0,
+          lastUpdate: scraperStatus?.documents?.lastUpdate ?? healthData?.timestamp ?? new Date().toISOString(),
+        },
+        vectorizer: {
+          status: scraperStatus?.vectorizer?.status === 'active' ? 'active' : 'inactive',
+          model: scraperStatus?.vectorizer?.model ?? 'Bilinmiyor',
+          lastProcessed: scraperStatus?.vectorizer?.lastProcessed ?? '-',
+        },
+        scraper: {
+          status: scraperStatus?.scraper?.status === 'active' ? 'active' : 'inactive',
+          lastRun: scraperStatus?.scraper?.lastRun ?? '-',
+          documentsProcessed: scraperStatus?.scraper?.total ?? 0,
+        },
+        redis: {
+          status: redisStatus === 'connected' || redisStatus === 'healthy' ? 'connected' : 'disconnected',
+          uptime: scraperStatus?.redis?.uptime ?? healthData?.serverStatus?.redisUptime ?? '-',
+          memory: scraperStatus?.redis?.memory ?? `${healthData?.memory?.used ?? 0} MB`,
+        },
+        services: {
+          lightRAG: {
+            status: scraperStatus?.services?.lightRAG?.status === 'active' ? 'active' : 'inactive',
+            uptime: scraperStatus?.services?.lightRAG?.uptime ?? '-',
+            lastQuery: scraperStatus?.services?.lightRAG?.lastQuery ?? '-',
+            queries: scraperStatus?.services?.lightRAG?.queries ?? 0,
+          },
+          semanticSearch: {
+            status: scraperStatus?.services?.semanticSearch?.status === 'active' ? 'active' : 'inactive',
+            model: scraperStatus?.services?.semanticSearch?.model ?? 'Bilinmiyor',
+            searches: scraperStatus?.services?.semanticSearch?.searches ?? 0,
+          },
+          scraper: {
+            status: scraperStatus?.scraper?.status === 'active' ? 'active' : 'inactive',
+            urls: scraperStatus?.scraper?.total ?? 0,
+            lastRun: scraperStatus?.scraper?.lastRun ?? '-',
+          },
+        },
+      };
+
+      setData(parsedStatus);
     } catch (err) {
-      console.error("Failed to fetch system status:", err);
+      console.error('Failed to fetch system status:', err);
+      setData(null);
     } finally {
       setLoading(false);
     }
@@ -179,37 +330,55 @@ export default function DashboardPage() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/documents`);
-      if (response.ok) {
-        const docs = await response.json();
-        setDocuments(docs);
+      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/documents'));
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents');
       }
+
+      const payload = await response.json();
+      const docs = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.documents)
+          ? payload.documents
+          : [];
+
+      setDocuments(docs);
     } catch (err) {
-      console.error("Failed to fetch documents:", err);
+      console.error('Failed to fetch documents:', err);
+      setDocuments([]);
     }
   };
 
   const fetchSessions = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/scraper/sessions`);
-      if (response.ok) {
-        const sessionData = await response.json();
-        setSessions(sessionData);
+      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/sessions'));
+      if (!response.ok) {
+        throw new Error('Failed to fetch scraper sessions');
       }
+
+      const payload = await response.json();
+      const sessionList = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.sessions)
+          ? payload.sessions
+          : [];
+
+      setSessions(sessionList);
     } catch (err) {
-      console.error("Failed to fetch sessions:", err);
+      console.error('Failed to fetch sessions:', err);
+      setSessions([]);
     }
   };
 
   const startScraping = async (url: string, config: any) => {
     try {
       setScrapingStatus("running");
-      const response = await fetch(`${API_BASE_URL}/api/scraper/start`, {
+      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, config })
+        body: JSON.stringify({ url, config }),
       });
-      
+
       if (response.ok) {
         await fetchSessions();
         await fetchDocuments();
@@ -223,10 +392,10 @@ export default function DashboardPage() {
 
   const pauseScraping = async (sessionId: string) => {
     try {
-      await fetch(`${API_BASE_URL}/api/scraper/pause`, {
+      await fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/pause'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId })
+        body: JSON.stringify({ sessionId }),
       });
       await fetchSessions();
     } catch (err) {
@@ -236,8 +405,8 @@ export default function DashboardPage() {
 
   const deleteDocument = async (docId: string) => {
     try {
-      await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
-        method: 'DELETE'
+      await fetchWithAuth(apiConfig.getApiUrl(`/api/v2/documents/${docId}`), {
+        method: 'DELETE',
       });
       await fetchDocuments();
     } catch (err) {
@@ -282,11 +451,191 @@ export default function DashboardPage() {
     return <Badge variant={variants[status] || "secondary"}>{status}</Badge>;
   };
 
+  // Helper functions for development features
+  const addNotification = (type: Notification['type'], title: string, message: string) => {
+    const notification: Notification = {
+      id: Date.now().toString(),
+      type,
+      title,
+      message,
+      timestamp: new Date().toLocaleTimeString('tr-TR')
+    };
+    setNotifications(prev => [notification, ...prev]);
+  };
+
+  const addActivityLog = (type: ActivityLog['type'], action: string, details: string) => {
+    const activity: ActivityLog = {
+      id: Date.now().toString(),
+      type,
+      action,
+      details,
+      timestamp: new Date().toLocaleTimeString('tr-TR')
+    };
+    setActivityLog(prev => [activity, ...prev]);
+  };
+
+  const addConsoleLog = (message: string, type: ConsoleLog['type'] = 'info', source: ConsoleLog['source'] = 'system') => {
+    const log: ConsoleLog = {
+      id: Date.now().toString(),
+      type,
+      message,
+      timestamp: new Date().toLocaleTimeString('tr-TR'),
+      source
+    };
+    setConsoleLog(prev => [log, ...prev]);
+  };
+
+  const dismissNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // Filter console logs based on selected filter
+  const filteredConsoleLogs = consoleLog.filter(log => {
+    if (consoleFilter === 'all') return true;
+    if (consoleFilter === 'backend') return log.source === 'backend' || log.message.includes('[BACKEND]');
+    if (consoleFilter === 'frontend') return log.source === 'frontend' || log.message.includes('[FRONTEND]');
+    if (consoleFilter === 'error') return log.type === 'error';
+    if (consoleFilter === 'warn') return log.type === 'warn';
+    if (consoleFilter === 'info') return log.type === 'info';
+    return true;
+  });
+
+  // Initialize sample data for development features
+  useEffect(() => {
+    // Sample notifications
+    const sampleNotifications: Notification[] = [
+      {
+        id: '1',
+        type: 'success',
+        title: 'Sistem Başlatıldı',
+        message: 'Tüm servisler başarıyla başlatıldı',
+        timestamp: '09:15:30'
+      },
+      {
+        id: '2',
+        type: 'info',
+        title: 'Yeni Doküman Eklendi',
+        message: 'Vergi Usul Kanunu güncellemesi eklendi',
+        timestamp: '09:12:45'
+      },
+      {
+        id: '3',
+        type: 'warning',
+        title: 'Depolama Alanı',
+        message: 'Depolama alanı %80 dolu',
+        timestamp: '09:08:22'
+      }
+    ];
+
+    // Sample activity log
+    const sampleActivity: ActivityLog[] = [
+      {
+        id: '1',
+        type: 'user',
+        action: 'Doküman Yükleme',
+        details: '3 yeni doküman yüklendi',
+        timestamp: '09:15:45'
+      },
+      {
+        id: '2',
+        type: 'system',
+        action: 'Veritabanı Yedekleme',
+        details: 'Otomatik yedekleme tamamlandı',
+        timestamp: '09:10:30'
+      },
+      {
+        id: '3',
+        type: 'user',
+        action: 'Arama Sorgusu',
+        details: 'KDV iade koşulları arandı',
+        timestamp: '09:05:12'
+      }
+    ];
+
+    // Sample console log with real backend/frontend logs
+    const sampleConsole: ConsoleLog[] = [
+      {
+        id: '1',
+        type: 'info',
+        message: '[BACKEND] Server starting on port 8083',
+        timestamp: '09:00:01',
+        source: 'backend'
+      },
+      {
+        id: '2',
+        type: 'info',
+        message: '[BACKEND] Database connected to rag_chatbot',
+        timestamp: '09:00:02',
+        source: 'backend'
+      },
+      {
+        id: '3',
+        type: 'info',
+        message: '[BACKEND] Redis connected on localhost:6379',
+        timestamp: '09:00:03',
+        source: 'backend'
+      },
+      {
+        id: '4',
+        type: 'info',
+        message: '[FRONTEND] Next.js development server started',
+        timestamp: '09:00:04',
+        source: 'frontend'
+      },
+      {
+        id: '5',
+        type: 'info',
+        message: '[FRONTEND] Ready on http://localhost:3000',
+        timestamp: '09:00:05',
+        source: 'frontend'
+      },
+      {
+        id: '6',
+        type: 'warn',
+        message: '[BACKEND] Rate limit warning: 10 requests/min',
+        timestamp: '09:00:08',
+        source: 'backend'
+      },
+      {
+        id: '7',
+        type: 'info',
+        message: '[EMBEDDINGS] Model loaded: text-embedding-3-large',
+        timestamp: '09:00:15',
+        source: 'backend'
+      },
+      {
+        id: '8',
+        type: 'info',
+        message: '[FRONTEND] Compiled client and server successfully',
+        timestamp: '09:00:16',
+        source: 'frontend'
+      },
+      {
+        id: '9',
+        type: 'error',
+        message: '[BACKEND] Error: Connection timeout to external API',
+        timestamp: '09:00:22',
+        source: 'backend'
+      },
+      {
+        id: '10',
+        type: 'info',
+        message: '[FRONTEND] HMR (Hot Module Replacement) enabled',
+        timestamp: '09:00:25',
+        source: 'frontend'
+      }
+    ];
+
+    setNotifications(sampleNotifications);
+    setActivityLog(sampleActivity);
+    setConsoleLog(sampleConsole);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
           <p>Dashboard yükleniyor...</p>
         </div>
       </div>
@@ -295,542 +644,381 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-8">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight">{config?.app_name || 'ALICE RAG Dashboard'}</h1>
-          <p className="text-muted-foreground">RAG sistemi ve web scraper kontrol paneli</p>
-        </div>
-        <div className="flex items-center space-x-4">
-          <Button variant="outline" onClick={() => window.location.reload()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Yenile
-          </Button>
-        </div>
-      </div>
-
-      {/* Sistem Durum Kartları */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatusCard
-          title="Veritabanı"
-          value={data?.database.status === 'connected' ? 'Aktif' : 'Pasif'}
-          status={data?.database.status === 'connected' ? 'online' : 'offline'}
-          description={`${data?.database.documents || 0} doküman`}
-        />
-        <StatusCard
-          title="Vectorizer"
-          value={data?.vectorizer.status === 'active' ? 'Aktif' : 'Pasif'}
-          status={data?.vectorizer.status === 'active' ? 'online' : 'offline'}
-          description={data?.vectorizer.model || 'Bilinmiyor'}
-        />
-        <StatusCard
-          title="Redis"
-          value={data?.redis.status === 'connected' ? 'Aktif' : 'Pasif'}
-          status={data?.redis.status === 'connected' ? 'online' : 'offline'}
-          description={data?.redis.uptime || 'Bilinmiyor'}
-        />
-        <StatusCard
-          title="Scraper"
-          value={data?.scraper.status === 'active' ? 'Aktif' : 'Pasif'}
-          status={data?.scraper.status === 'active' ? 'online' : 'offline'}
-          description={`${data?.scraper.documentsProcessed || 0} işlendi`}
-        />
-      </div>
-
-      {/* Ana Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Genel Bakış</TabsTrigger>
-          <TabsTrigger value="documents">Dokümanlar</TabsTrigger>
-          <TabsTrigger value="scraper">Scraper</TabsTrigger>
-          <TabsTrigger value="rag">RAG Ayarları</TabsTrigger>
-          <TabsTrigger value="monitoring">İzleme</TabsTrigger>
-        </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Servis Durumları */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Servis Durumları
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {data?.services && Object.entries(data.services).map(([service, info]: [string, any]) => (
-                  <div key={service} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(info.status)}
-                      <span className="font-medium">{service}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(info.status)}
-                      {info.uptime && <span className="text-sm text-muted-foreground">{info.uptime}</span>}
-                    </div>
+  
+      
+      {/* Single Page Dashboard - No Tabs */}
+      <div className="space-y-8">
+        {/* Development Tools Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Notifications - Minimal Card */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <h3 className="text-sm font-semibold tracking-tight">Notifications</h3>
+                </div>
+                <Bell className="h-4 w-4 text-blue-500/70" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {notifications.slice(0, 3).map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`p-2 rounded-md text-xs border ${
+                      notification.type === 'error' ? 'bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' :
+                      notification.type === 'success' ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800' :
+                      notification.type === 'warning' ? 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800' :
+                      'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                    }`}
+                  >
+                    <div className="font-medium dark:font-semibold">{notification.title}</div>
+                    <div className="opacity-75 dark:opacity-70">{notification.message}</div>
+                    <div className="opacity-50 dark:opacity-40 mt-1">{notification.timestamp}</div>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-
-            {/* Hızlı İşlemler */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Zap className="h-5 w-5" />
-                  Hızlı İşlemler
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-sm font-medium">Hızlı Ekle</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Input
-                        placeholder="URL girin..."
-                        value={newUrl}
-                        onChange={(e) => setNewUrl(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button 
-                        size="sm"
-                        onClick={() => newUrl && startScraping(newUrl, {
-                          maxDepth: 1,
-                          maxPages: 10,
-                          domainsOnly: true,
-                          followExternal: false
-                        })}
-                        disabled={scrapingStatus !== "idle"}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
+                {notifications.length === 0 && (
+                  <div className="text-center py-4 text-gray-400 dark:text-gray-500 text-xs">
+                    No notifications
                   </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" className="justify-start">
-                      <Download className="h-4 w-4 mr-2" />
-                      Veri İçe Aktar
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Veri Dışa Aktar
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Ayarlar
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start">
-                      <BarChart3 className="h-4 w-4 mr-2" />
-                      İstatistikler
-                    </Button>
-                  </div>
+          {/* Activity Log - Minimal Card */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <h3 className="text-sm font-semibold tracking-tight">Activity</h3>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Son Aktiviteler */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Son Aktiviteler
-              </CardTitle>
+                <Activity className="h-4 w-4 text-green-500/70" />
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <div>
-                      <p className="font-medium">Wikipedia scrape tamamlandı</p>
-                      <p className="text-sm text-muted-foreground">142 doküman işlendi</p>
-                    </div>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {activityLog.slice(0, 3).map((activity) => (
+                  <div key={activity.id} className="p-2 bg-gray-50 dark:bg-gray-800/50 rounded-md text-xs border border-gray-100 dark:border-gray-700">
+                    <div className="font-medium text-gray-700 dark:text-gray-200">{activity.action}</div>
+                    <div className="text-gray-500 dark:text-gray-400">{activity.details}</div>
+                    <div className="text-gray-400 dark:text-gray-500 mt-1">{activity.timestamp}</div>
                   </div>
-                  <span className="text-sm text-muted-foreground">2 dk önce</span>
+                ))}
+                {activityLog.length === 0 && (
+                  <div className="text-center py-4 text-gray-400 dark:text-gray-500 text-xs">
+                    No recent activity
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Real Console - Full Width with Filters */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <h3 className="text-sm font-semibold tracking-tight">Console</h3>
+                <span className={`text-xs ${wsConnected ? 'text-green-600' : 'text-orange-600'}`}>
+                  {isConsolePaused ? 'PAUSED' : wsConnected ? 'LIVE' : 'CONNECTING'}
+                </span>
+                <span className="text-xs text-gray-500">
+                  ({filteredConsoleLogs.length} / {consoleLog.length} logs)
+                </span>
+                {wsConnected && (
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsConsolePaused(!isConsolePaused)}
+                  className={`h-6 px-2 text-xs ${isConsolePaused ? 'text-orange-600' : 'text-gray-600'}`}
+                >
+                  {isConsolePaused ? 'Resume' : 'Pause'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setConsoleLog([]);
+                    addConsoleLog('Console cleared', 'info');
+                  }}
+                  className="h-6 px-2 text-xs"
+                >
+                  Clear
+                </Button>
+                <Terminal className="h-4 w-4 text-gray-500" />
+              </div>
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-gray-500">Filter:</span>
+              {(['all', 'backend', 'frontend', 'error', 'warn', 'info'] as const).map((filter) => (
+                <Button
+                  key={filter}
+                  variant={consoleFilter === filter ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setConsoleFilter(filter)}
+                  className={`h-6 px-2 text-xs capitalize ${
+                    consoleFilter === filter
+                      ? filter === 'error' ? 'bg-red-500 hover:bg-red-600' :
+                        filter === 'warn' ? 'bg-yellow-500 hover:bg-yellow-600' :
+                        filter === 'backend' ? 'bg-blue-500 hover:bg-blue-600' :
+                        filter === 'frontend' ? 'bg-green-500 hover:bg-green-600' :
+                        'bg-gray-500 hover:bg-gray-600'
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  {filter}
+                  {filter !== 'all' && (
+                    <span className="ml-1">
+                      ({consoleLog.filter(log =>
+                        filter === 'backend' ? (log.source === 'backend' || log.message.includes('[BACKEND]')) :
+                        filter === 'frontend' ? (log.source === 'frontend' || log.message.includes('[FRONTEND]')) :
+                        log.type === filter
+                      ).length})
+                    </span>
+                  )}
+                </Button>
+              ))}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div
+              className="bg-gray-950 text-gray-100 p-4 rounded-lg font-mono text-xs overflow-auto"
+              style={{ height: `${consoleHeight}px`, maxHeight: '600px' }}
+            >
+              {filteredConsoleLogs.length > 0 ? (
+                filteredConsoleLogs.slice(-50).map((log, index) => (
+                  <div key={log.id || index} className={`mb-1 font-mono ${
+                    log.type === 'error' ? 'text-red-400' :
+                    log.type === 'warn' ? 'text-yellow-400' :
+                    log.type === 'info' ? 'text-blue-400' :
+                    'text-gray-300'
+                  }`}>
+                    <span className="text-gray-600 select-none">[{log.timestamp}]</span>
+                    <span className="ml-2">{log.message}</span>
+                    {log.source && (
+                      <span className={`ml-2 text-xs opacity-75 ${
+                        log.source === 'backend' ? 'text-blue-400' :
+                        log.source === 'frontend' ? 'text-green-400' :
+                        'text-gray-500'
+                      }`}>
+                        [{log.source.toUpperCase()}]
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-gray-600 text-center py-8">
+                  {consoleFilter === 'all' ?
+                    'Console output will appear here...' :
+                    `No ${consoleFilter} logs found. Try changing the filter.`
+                  }
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                    <div>
-                      <p className="font-medium">Yeni dokümanlar indeksleniyor</p>
-                      <p className="text-sm text-muted-foreground">8 doküman beklemede</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">5 dk önce</span>
+              )}
+            </div>
+
+            {/* Resize Handle */}
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Height: {consoleHeight}px</span>
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConsoleHeight(Math.max(200, consoleHeight - 50))}
+                  className="h-5 px-1 text-xs"
+                >
+                  -
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setConsoleHeight(Math.min(600, consoleHeight + 50))}
+                  className="h-5 px-1 text-xs"
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Performance & System Resources */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Performance Metrics - Minimal */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                <h3 className="text-sm font-semibold tracking-tight">Performance</h3>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                  <div className="text-gray-500 dark:text-gray-400">Response Time</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200">1.2s</div>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    <div>
-                      <p className="font-medium">Model güncellendi</p>
-                      <p className="text-sm text-muted-foreground">text-embedding-3-large</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">15 dk önce</span>
+                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                  <div className="text-gray-500 dark:text-gray-400">Daily Queries</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200">247</div>
+                </div>
+                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                  <div className="text-gray-500 dark:text-gray-400">Documents</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200">1,428</div>
+                </div>
+                <div className="p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                  <div className="text-gray-500 dark:text-gray-400">Cache Hit</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200">87%</div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Documents Tab */}
-        <TabsContent value="documents" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Dokümanlar ({filteredDocuments.length})
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Doküman ara..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-8 w-64"
+          {/* System Resources - Minimal */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-orange-500 rounded-full" />
+                <h3 className="text-sm font-semibold tracking-tight">Resources</h3>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">CPU</span>
+                    <span className={`font-medium ${
+                      realtimeResources.cpu > 80 ? 'text-red-600 dark:text-red-400' :
+                      realtimeResources.cpu > 60 ? 'text-yellow-600 dark:text-yellow-400' :
+                      'text-blue-600 dark:text-blue-400'
+                    }`}>
+                      {Math.round(realtimeResources.cpu)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
+                        realtimeResources.cpu > 80 ? 'bg-red-500' :
+                        realtimeResources.cpu > 60 ? 'bg-yellow-500' :
+                        'bg-blue-500'
+                      }`}
+                      style={{
+                        width: `${realtimeResources.cpu}%`,
+                        boxShadow: realtimeResources.cpu > 80 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
+                                   realtimeResources.cpu > 60 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                                   '0 0 8px rgba(59, 130, 246, 0.4)'
+                      }}
                     />
                   </div>
-                  <Button variant="outline" size="sm">
-                    <Filter className="h-4 w-4 mr-2" />
-                    Filtrele
-                  </Button>
                 </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {filteredDocuments.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <File className="h-8 w-8 text-muted-foreground" />
-                      <div>
-                        <h4 className="font-medium">{doc.title}</h4>
-                        <p className="text-sm text-muted-foreground">{doc.url}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(doc.status)}
-                      <span className="text-sm text-muted-foreground">
-                        {doc.wordCount && `${doc.wordCount} kelimeler`}
-                      </span>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">Memory</span>
+                    <span className={`font-medium ${
+                      realtimeResources.memory > 85 ? 'text-red-600 dark:text-red-400' :
+                      realtimeResources.memory > 70 ? 'text-yellow-600 dark:text-yellow-400' :
+                      'text-green-600 dark:text-green-400'
+                    }`}>
+                      {Math.round(realtimeResources.memory)}%
+                    </span>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Scraper Tab */}
-        <TabsContent value="scraper" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Scraping Oturumları
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {sessions.map((session) => (
-                  <div key={session.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h4 className="font-medium">{session.name}</h4>
-                        <p className="text-sm text-muted-foreground">{session.url}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {getStatusBadge(session.status)}
-                        <span className="text-sm text-muted-foreground">{session.progress}%</span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
-                      <div>
-                        <span className="text-muted-foreground">Başlangıç:</span>
-                        <p>{new Date(session.startTime).toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Dokümanlar:</span>
-                        <p>{session.documentsFound} bulundu</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Derinlik:</span>
-                        <p>{session.config.maxDepth}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Max Sayfa:</span>
-                        <p>{session.config.maxPages}</p>
-                      </div>
-                    </div>
-                    {session.status === 'running' && (
-                      <div className="w-full bg-muted rounded-full h-2 mb-3">
-                        <div 
-                          className="bg-primary h-2 rounded-full transition-all" 
-                          style={{ width: `${session.progress}%` }}
-                        />
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      {session.status === 'running' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => pauseScraping(session.id)}
-                        >
-                          <Pause className="h-4 w-4 mr-2" />
-                          Duraklat
-                        </Button>
-                      )}
-                      <Button variant="outline" size="sm">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Sil
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* RAG Settings Tab */}
-        <TabsContent value="rag" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chat Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Chat Ayarları
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Model</Label>
-                  <Select defaultValue="gpt-4">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="gpt-4">GPT-4</SelectItem>
-                      <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                      <SelectItem value="claude-3">Claude 3</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Max Token</Label>
-                  <Input type="number" defaultValue="2000" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Temperature</Label>
-                  <Input type="number" step="0.1" min="0" max="1" defaultValue="0.7" />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label>Stream yanıtlar</Label>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Search Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5" />
-                  Arama Ayarları
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Embedding Modeli</Label>
-                  <Select defaultValue="text-embedding-3-large">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="text-embedding-3-large">text-embedding-3-large</SelectItem>
-                      <SelectItem value="text-embedding-3-small">text-embedding-3-small</SelectItem>
-                      <SelectItem value="text-embedding-ada-002">text-embedding-ada-002</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Max Results</Label>
-                  <Input type="number" defaultValue="5" min="1" max="20" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Threshold</Label>
-                  <Input type="number" step="0.1" min="0" max="1" defaultValue="0.7" />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label>Hybrid arama</Label>
-                  <Switch />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* System Prompts */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Sistem Promptları
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>System Prompt</Label>
-                <Textarea 
-                  placeholder="Sistem prompt'unuzu buraya girin..."
-                  rows={4}
-                  defaultValue="Sen yardımcı bir asistansın. Verilen dokümanlara dayanarak soruları cevapla."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Query Prefix</Label>
-                <Textarea 
-                  placeholder="Query prefix..."
-                  rows={2}
-                  defaultValue="Aşağıdaki bağlama göre:"
-                />
-              </div>
-
-              <Button className="w-full">
-                <Save className="h-4 w-4 mr-2" />
-                Ayarları Kaydet
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Monitoring Tab */}
-        <TabsContent value="monitoring" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Performance Metrics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Performans Metrikleri
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                    <span>Ortalama Cevap Süresi</span>
-                    <span className="font-medium">1.2s</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                    <span>Günlük Sorgu Sayısı</span>
-                    <span className="font-medium">247</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                    <span>İndekslenmiş Doküman</span>
-                    <span className="font-medium">1,428</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                    <span>Cache Hit Rate</span>
-                    <span className="font-medium">87%</span>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
+                        realtimeResources.memory > 85 ? 'bg-red-500' :
+                        realtimeResources.memory > 70 ? 'bg-yellow-500' :
+                        'bg-green-500'
+                      }`}
+                      style={{
+                        width: `${realtimeResources.memory}%`,
+                        boxShadow: realtimeResources.memory > 85 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
+                                   realtimeResources.memory > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                                   '0 0 8px rgba(34, 197, 94, 0.4)'
+                      }}
+                    />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* System Resources */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Sistem Kaynakları
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>CPU Kullanımı</span>
-                      <span>24%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-blue-500 h-2 rounded-full" style={{ width: '24%' }} />
-                    </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">Disk</span>
+                    <span className={`font-medium ${
+                      realtimeResources.disk > 90 ? 'text-red-600 dark:text-red-400' :
+                      realtimeResources.disk > 75 ? 'text-yellow-600 dark:text-yellow-400' :
+                      'text-green-600 dark:text-green-400'
+                    }`}>
+                      {Math.round(realtimeResources.disk)}%
+                    </span>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Bellek Kullanımı</span>
-                      <span>67%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '67%' }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Disk Kullanımı</span>
-                      <span>45%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '45%' }} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>GPU Kullanımı</span>
-                      <span>12%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-purple-500 h-2 rounded-full" style={{ width: '12%' }} />
-                    </div>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
+                        realtimeResources.disk > 90 ? 'bg-red-500' :
+                        realtimeResources.disk > 75 ? 'bg-yellow-500' :
+                        'bg-green-500'
+                      }`}
+                      style={{
+                        width: `${realtimeResources.disk}%`,
+                        boxShadow: realtimeResources.disk > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
+                                   realtimeResources.disk > 75 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                                   '0 0 8px rgba(34, 197, 94, 0.4)'
+                      }}
+                    />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Error Logs */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" />
-                Hata Kayıtları
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 font-mono text-sm">
-                <div className="p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded">
-                  <span className="text-red-600 dark:text-red-400">[ERROR]</span> 2024-01-15 14:32:15 - Connection timeout to database
-                </div>
-                <div className="p-2 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded">
-                  <span className="text-yellow-600 dark:text-yellow-400">[WARN]</span> 2024-01-15 14:31:42 - High memory usage detected
-                </div>
-                <div className="p-2 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded">
-                  <span className="text-red-600 dark:text-red-400">[ERROR]</span> 2024-01-15 14:30:28 - Failed to process document: https://example.com
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-500 dark:text-gray-400">GPU</span>
+                    <span className={`font-medium ${
+                      realtimeResources.gpu > 90 ? 'text-red-600 dark:text-red-400' :
+                      realtimeResources.gpu > 70 ? 'text-yellow-600 dark:text-yellow-400' :
+                      realtimeResources.gpu > 30 ? 'text-purple-600 dark:text-purple-400' :
+                      'text-gray-600 dark:text-gray-400'
+                    }`}>
+                      {Math.round(realtimeResources.gpu)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
+                        realtimeResources.gpu > 90 ? 'bg-red-500' :
+                        realtimeResources.gpu > 70 ? 'bg-yellow-500' :
+                        realtimeResources.gpu > 30 ? 'bg-purple-500' :
+                        'bg-gray-500'
+                      }`}
+                      style={{
+                        width: `${realtimeResources.gpu}%`,
+                        boxShadow: realtimeResources.gpu > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
+                                   realtimeResources.gpu > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                                   realtimeResources.gpu > 30 ? '0 0 8px rgba(168, 85, 247, 0.4)' :
+                                   'none'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+        </div>
+      </div>
+
+      </div>
   );
 }
+
+
+
+
+
+
