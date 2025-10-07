@@ -1263,7 +1263,7 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
 });
 
 // Delete scraped page
-router.delete('/api/v2/scraper/pages/:id', async (req: Request, res: Response) => {
+router.delete('/pages/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const result = await pgPool.query(`

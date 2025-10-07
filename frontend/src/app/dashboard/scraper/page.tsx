@@ -41,7 +41,8 @@ import {
   X,
   Copy,
   ExternalLink,
-  CheckCircle
+  CheckCircle,
+  Circle
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -100,6 +101,8 @@ export default function WebScraperPage() {
   const [embeddingProgress, setEmbeddingProgress] = useState<Record<string, boolean>>({});
   const [scraping, setScraping] = useState(false);
   const [selectedPage, setSelectedPage] = useState<ScrapedPage | null>(null);
+  const [pageDetails, setPageDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [lastScrapedData, setLastScrapedData] = useState<any>(null);
 
   // New states for enhanced functionality
@@ -167,12 +170,20 @@ export default function WebScraperPage() {
       const response = await fetch(`http://localhost:8083/api/v2/scraper/pages/${pageId}`);
       if (response.ok) {
         const data = await response.json();
+        setPageDetails(data.page);
         setSelectedPage(data.page);
       }
     } catch (error) {
       console.error('Failed to fetch page details:', error);
       toast({ variant: "destructive", title: t('scraper.toasts.pageLoadFailed') });
     }
+  };
+
+  const handlePageClick = async (page: ScrapedPage) => {
+    setSelectedPage(page);
+    setLoadingDetails(true);
+    await fetchPageDetails(page.id);
+    setLoadingDetails(false);
   };
 
   const copyToClipboard = (text: string) => {
@@ -348,16 +359,36 @@ export default function WebScraperPage() {
   };
 
   const handleDeletePage = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this scraped page?')) return;
+
     try {
-      const response = await fetch(`http://localhost:8083/api/v2/scraper/pages/${id}`, { method: 'DELETE' });
+      const response = await fetch(`http://localhost:8083/api/v2/scraper/pages/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
       if (response.ok) {
-        toast({ title: t('scraper.toasts.pageDeleted') });
+        toast({ title: 'Page deleted successfully' });
         fetchScrapedPages();
+        // Clear selected pages if deleted page was selected
+        setSelectedPages(prev => prev.filter(pageId => pageId !== id));
       } else {
-        toast({ variant: "destructive", title: t('scraper.toasts.pageDeleteFailed') });
+        const errorData = await response.json().catch(() => ({}));
+        toast({
+          variant: "destructive",
+          title: 'Failed to delete page',
+          description: errorData.error || 'Unknown error'
+        });
       }
     } catch (error) {
-      toast({ variant: "destructive", title: t('scraper.toasts.networkError') });
+      console.error('Delete error:', error);
+      toast({
+        variant: "destructive",
+        title: 'Network error',
+        description: 'Could not connect to server'
+      });
     }
   };
 
@@ -648,18 +679,9 @@ export default function WebScraperPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[40px]">
-                        <Checkbox
-                          checked={selectedPages.length === getFilteredPages().length}
-                          onCheckedChange={toggleAllPagesSelection}
-                        />
-                      </TableHead>
                       <TableHead>Title</TableHead>
-                      <TableHead className="w-[100px]">Status</TableHead>
-                      <TableHead className="w-[80px]">Size</TableHead>
-                      <TableHead className="w-[80px]">Chunks</TableHead>
-                      <TableHead className="w-[100px]">Date</TableHead>
-                      <TableHead className="text-right w-[120px]">Actions</TableHead>
+                      <TableHead className="w-[120px]">Size/Chunks</TableHead>
+                      <TableHead className="text-right w-[80px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -671,14 +693,12 @@ export default function WebScraperPage() {
                       return (
                         <TableRow key={page.id}>
                           <TableCell>
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => togglePageSelection(page.id)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="max-w-[300px]">
-                              <p className="font-medium truncate" title={page.title}>
+                            <div className="max-w-[360px]">
+                              <p
+                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors"
+                                title={page.title}
+                                onClick={() => handlePageClick(page)}
+                              >
                                 {page.title || 'Untitled'}
                               </p>
                               <p className="text-xs text-muted-foreground truncate" title={page.url}>
@@ -687,60 +707,30 @@ export default function WebScraperPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-col items-center">
+                              <div className="flex items-center gap-1">
+                                <Hash className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs">
+                                  {(page.content_length / 1024).toFixed(1)}KB
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Database className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs">{page.chunk_count}</span>
+                              </div>
                               {embedStatus === 'embedded' && (
-                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                <CheckCircle2 className="h-4 w-4 text-green-500 mt-1" />
                               )}
                               {embedStatus === 'not_embedded' && (
-                                <Clock className="h-4 w-4 text-yellow-500" />
+                                <Circle className="h-4 w-4 text-yellow-500 mt-1" />
                               )}
                               {embedStatus === 'error' && (
-                                <XCircle className="h-4 w-4 text-red-500" />
+                                <XCircle className="h-4 w-4 text-red-500 mt-1" />
                               )}
-                              <Badge
-                                variant={
-                                  embedStatus === 'embedded' ? 'success' :
-                                  embedStatus === 'not_embedded' ? 'outline' : 'destructive'
-                                }
-                                className="text-xs"
-                              >
-                                {embedStatus === 'embedded' ? 'Embedded' :
-                                 embedStatus === 'not_embedded' ? 'Not Embedded' : 'Error'}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Hash className="h-3 w-3" />
-                              <span className="text-sm">
-                                {(page.content_length / 1024).toFixed(1)}KB
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Hash className="h-3 w-3" />
-                              <span className="text-sm">{page.chunk_count}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              <span className="text-sm">
-                                {new Date(page.created_at).toLocaleDateString('tr-TR')}
-                              </span>
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setSelectedPage(page)}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
                               {embedStatus === 'not_embedded' && (
                                 <Button
                                   size="sm"
@@ -748,6 +738,7 @@ export default function WebScraperPage() {
                                   onClick={() => handleCreateEmbeddings(page.id, page.title)}
                                   disabled={isEmbedding}
                                   className="h-8 w-8 p-0"
+                                  title="Create Embeddings"
                                 >
                                   {isEmbedding ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -761,8 +752,9 @@ export default function WebScraperPage() {
                                 variant="ghost"
                                 onClick={() => handleDeletePage(page.id)}
                                 className="h-8 w-8 p-0"
+                                title="Delete Page"
                               >
-                                <Trash2 className="h-4 w-4 text-red-500" />
+                                <Trash2 className="h-4 w-4 text-white hover:text-red-300 transition-colors" />
                               </Button>
                             </div>
                           </TableCell>
@@ -777,96 +769,103 @@ export default function WebScraperPage() {
         </Card>
       </div>
 
-      {/* Bottom Section: Scraped Documents List */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-lg">{t('scraper.scrapedPages')}</CardTitle>
-              <Badge variant="secondary">{filteredPages.length}</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input placeholder={t('scraper.searchPlaceholder')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-8 w-full sm:w-[200px] h-9" />
-              </div>
-              <Button onClick={fetchScrapedPages} variant="outline" size="icon" className="h-9 w-9">
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
-          ) : filteredPages.length === 0 ? (
-            <div className="text-center py-12"><Globe className="mx-auto h-12 w-12 text-muted-foreground" /><p className="mt-2 text-muted-foreground">{t('scraper.noPages')}</p></div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[35%]">{t('scraper.table.title')}</TableHead>
-                    <TableHead className="w-[25%]">{t('scraper.table.url')}</TableHead>
-                    <TableHead>{t('scraper.table.size')}</TableHead>
-                    <TableHead>{t('scraper.table.chunks')}</TableHead>
-                    <TableHead>{t('scraper.table.date')}</TableHead>
-                    <TableHead className="text-right">{t('scraper.table.actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPages.map((page) => (
-                    <TableRow key={page.id}>
-                      <TableCell className="font-medium"><div className="flex items-center gap-2"><FileText className="h-4 w-4 flex-shrink-0" /><span className="truncate" title={page.title || 'Untitled'}>{page.title || 'Untitled'}</span></div></TableCell>
-                      <TableCell><span className="text-xs text-muted-foreground truncate block" title={page.url}>{page.url}</span></TableCell>
-                      <TableCell className="text-sm">{formatFileSize(page.content_length)}</TableCell>
-                      <TableCell className="text-sm text-center">{page.chunk_count || 0}</TableCell>
-                      <TableCell className="text-sm">{new Date(page.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => fetchPageDetails(page.id)} title={t('scraper.actions.viewDetails')}><Eye className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCreateEmbeddings(page.id, page.title)} disabled={embeddingProgress[page.id]} title="Generate Embeddings">
-                            {embeddingProgress[page.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeletePage(page.id)} title={t('scraper.actions.delete')}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {selectedPage && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <Card className="max-w-4xl w-full max-h-[90vh] overflow-auto">
-            <CardHeader className="flex flex-row items-center justify-between sticky top-0 bg-background z-10">
-              <div className="min-w-0">
-                <CardTitle className="truncate">{selectedPage.title}</CardTitle>
-                <CardDescription className="truncate">{selectedPage.url}</CardDescription>
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedPage(null)}><X className="h-4 w-4" /></Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label>{t('scraper.details.content')}</Label>
-                  <div className="bg-muted rounded-lg p-4 max-h-96 overflow-auto mt-1">
-                    <pre className="whitespace-pre-wrap text-sm font-mono">{selectedPage.content}</pre>
+          <div className="max-w-5xl w-full h-[85vh] flex flex-col">
+            <Card className="flex-1 flex flex-col overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between bg-background border-b flex-shrink-0">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="truncate text-lg">{selectedPage.title || 'Untitled'}</CardTitle>
+                  <CardDescription className="truncate flex items-center gap-2 mt-1">
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                    <a
+                      href={selectedPage.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {selectedPage.url}
+                    </a>
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(pageDetails?.content || selectedPage.content || '')}
+                    className="h-8"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => {
+                    setSelectedPage(null);
+                    setPageDetails(null);
+                  }}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                {/* Content Section */}
+                <div className="flex-1 p-6 min-h-0">
+                  {loadingDetails ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                        <p className="text-muted-foreground">Loading scraped content...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col min-h-0">
+                      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                        <Label className="text-base font-semibold">Scraped Content</Label>
+                        <Badge variant="outline" className="text-xs">
+                          {pageDetails?.content_length || selectedPage.content_length || 0} characters
+                        </Badge>
+                      </div>
+
+                      {/* ScrollArea with fixed height */}
+                      <div className="flex-1 min-h-0">
+                        <ScrollArea className="h-full border rounded-lg bg-muted/30">
+                          <div className="p-4">
+                            <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
+                              {pageDetails?.content || selectedPage.content || 'No content available'}
+                            </pre>
+                          </div>
+                        </ScrollArea>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Metadata Section */}
+                <div className="border-t bg-muted/20 p-4 flex-shrink-0">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Size</span>
+                      <p className="font-medium">
+                        {((pageDetails?.content_length || selectedPage.content_length || 0) / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Chunks</span>
+                      <p className="font-medium">{pageDetails?.chunk_count || selectedPage.chunk_count || 0}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Scraping Mode</span>
+                      <p className="font-medium capitalize">{pageDetails?.scraping_mode || selectedPage.scraping_mode || 'N/A'}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Created</span>
+                      <p className="font-medium">{formatDate(pageDetails?.created_at || selectedPage.created_at)}</p>
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                  <div><span className="text-sm text-muted-foreground">{t('scraper.details.length')}</span><p className="font-medium">{selectedPage.content_length} {t('scraper.details.characters')}</p></div>
-                  <div><span className="text-sm text-muted-foreground">{t('scraper.table.chunks')}</span><p className="font-medium">{selectedPage.chunk_count}</p></div>
-                  <div><span className="text-sm text-muted-foreground">{t('scraper.table.mode')}</span><p className="font-medium">{selectedPage.scraping_mode || 'N/A'}</p></div>
-                  <div><span className="text-sm text-muted-foreground">{t('scraper.details.created')}</span><p className="font-medium">{formatDate(selectedPage.created_at)}</p></div>
-                </div>
               </div>
-            </CardContent>
-          </Card>
+            </Card>
+          </div>
         </div>
       )}
     </div>

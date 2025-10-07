@@ -37,7 +37,9 @@ export const API_CONFIG = {
     ragConfig: '/api/v2/rag/config',
     ragSearch: '/api/v2/rag/search',
     ragChat: '/api/v2/rag/chat',
-    prompts: '/api/v2/rag/prompts',
+
+    // Prompts (Settings)
+    prompts: '/api/v2/settings/config/prompts',
 
     // Services
     servicesStatus: '/api/v2/services/status',
@@ -47,7 +49,7 @@ export const API_CONFIG = {
     testConnection: '/api/v2/test',
 
     // AI Settings
-    aiSettings: '/api/v2/rag/ai/settings',
+    aiSettings: '/api/v2/ai/settings',
 
     // Chatbot settings
     chatbotSettings: '/api/v2/chatbot/settings'

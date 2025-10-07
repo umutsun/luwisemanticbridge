@@ -19,18 +19,24 @@ const redis = new Redis({
   db: parseInt(process.env.REDIS_DB || '0')
 });
 
-// Source database (rag_chatbot) - where we read data from (dynamic from settings)
+// Source database - where we read data from (dynamic from settings)
 let sourcePool: Pool | null = null;
+let availableTables: string[] = [];
 
 async function getSourcePool(): Promise<Pool> {
   if (!sourcePool) {
-    // Try to get database from settings first
+    // Always try to get database from settings first for dynamic behavior
     try {
+      const dbSettings = await getDatabaseSettings();
+      console.log('📊 Database settings found:', dbSettings);
+
+      // Use settings-based pool for any configured database
       sourcePool = await getSettingsBasedPool();
       console.log('📊 Using settings-based database pool for embeddings manager');
+
     } catch (error) {
       console.error('❌ Failed to create settings-based pool, using fallback:', error);
-      // Fallback to environment variables or default rag_chatbot
+      // Dynamic fallback based on environment variables
       sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
         new Pool({
           connectionString: process.env.RAG_CHATBOT_DATABASE_URL
@@ -38,13 +44,116 @@ async function getSourcePool(): Promise<Pool> {
         new Pool({
           host: process.env.POSTGRES_HOST || 'localhost',
           port: parseInt(process.env.POSTGRES_PORT || '5432'),
-          database: 'rag_chatbot',
+          database: process.env.POSTGRES_DB || 'postgres',
           user: process.env.POSTGRES_USER || 'postgres',
           password: process.env.POSTGRES_PASSWORD || 'postgres'
         });
+      console.log('📊 Using fallback database for embeddings manager');
     }
   }
   return sourcePool;
+}
+
+// Get all available tables from the source database dynamically
+async function getAvailableTables(): Promise<string[]> {
+  if (availableTables.length === 0) {
+    try {
+      const pool = await getSourcePool();
+      const result = await pool.query(`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name
+      `);
+      availableTables = result.rows.map(row => row.table_name);
+      console.log('📊 Available tables:', availableTables);
+    } catch (error) {
+      console.error('❌ Failed to get available tables:', error);
+      availableTables = [];
+    }
+  }
+  return availableTables;
+}
+
+// Get display names for tables dynamically
+async function getTableDisplayNames(): Promise<{[key: string]: string}> {
+  const tables = await getAvailableTables();
+  const displayNames: {[key: string]: string} = {};
+
+  for (const table of tables) {
+    // Generate display name from table name (capitalize and remove underscores)
+    displayNames[table] = table
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  return displayNames;
+}
+
+// Guess the content column for a table based on common patterns
+async function guessContentColumn(tableName: string): Promise<string> {
+  try {
+    const pool = await getSourcePool();
+    const columnsResult = await pool.query(`
+      SELECT column_name, data_type
+      FROM information_schema.columns
+      WHERE table_name = $1
+      AND table_schema = 'public'
+      ORDER BY ordinal_position
+    `, [tableName]);
+
+    const columns = columnsResult.rows;
+
+    // Look for common content column patterns
+    const contentPatterns = [
+      'content', 'icerik', 'text', 'description', 'aciklama', 'message',
+      'body', 'mesaj', 'metin', 'summary', 'ozet'
+    ];
+
+    for (const pattern of contentPatterns) {
+      const found = columns.find(col =>
+        col.column_name.toLowerCase().includes(pattern)
+      );
+      if (found) {
+        return `"${found.column_name}"`;
+      }
+    }
+
+    // Special handling for known table patterns
+    if (tableName.includes('soru') || tableName.includes('cevap')) {
+      // For Q&A tables, try to concat question and answer columns
+      const soruCol = columns.find(col =>
+        col.column_name.toLowerCase().includes('soru')
+      );
+      const cevapCol = columns.find(col =>
+        col.column_name.toLowerCase().includes('cevap')
+      );
+      if (soruCol && cevapCol) {
+        return `CONCAT("${soruCol.column_name}", ' ', "${cevapCol.column_name}")`;
+      }
+    }
+
+    // Fallback: use the first text column
+    const textColumn = columns.find(col =>
+      col.data_type.includes('text') || col.data_type.includes('varchar')
+    );
+    if (textColumn) {
+      return `"${textColumn.column_name}"`;
+    }
+
+    // Last resort: use first column
+    if (columns.length > 0) {
+      return `"${columns[0].column_name}"`;
+    }
+
+    // If no columns found, return a default
+    return '*';
+
+  } catch (error) {
+    console.error(`Error guessing content column for ${tableName}:`, error);
+    return '*';
+  }
 }
 
 // Target database (asemb) - where we write embeddings to
@@ -568,18 +677,12 @@ router.get('/stats', async (req: Request, res: Response) => {
     let totalRecords = 0;
     let embeddedRecords = totalEmbeddings;
     
-    // Get statistics from source tables in rag_chatbot
-    const targetTables = [
-      'ozelgeler',
-      'makaleler', 
-      'sorucevap',
-      'danistaykararlari',
-      'chat_history'
-    ];
+    // Get statistics from source tables dynamically
+    const targetTables = await getAvailableTables();
     
     for (const tableName of targetTables) {
       try {
-        // Get count from source (rag_chatbot) - handle connection errors
+        // Get count from source database - handle connection errors
         let sourceCount = 0;
         if (sourcePool) {
           try {
@@ -593,12 +696,9 @@ router.get('/stats', async (req: Request, res: Response) => {
         }
         
         // Get embedded count from unified_embeddings
-        // Map table name to the format used when storing embeddings
-        const sourceTableName = tableName === 'sorucevap' ? 'Soru-Cevap' :
-                               tableName === 'danistaykararlari' ? 'Danıştay Kararları' :
-                               tableName === 'makaleler' ? 'Makaleler' :
-                               tableName === 'ozelgeler' ? 'Özelgeler' :
-                               tableName === 'chat_history' ? 'Sohbet Geçmişi' : tableName;
+        // Use dynamic display name from table name
+        const displayNames = await getTableDisplayNames();
+        const sourceTableName = displayNames[tableName] || tableName;
 
         const embeddedResult = await targetPool.query(
           `SELECT COUNT(*) as count FROM unified_embeddings
@@ -610,7 +710,7 @@ router.get('/stats', async (req: Request, res: Response) => {
         if (sourceCount > 0 || embedded > 0) {
           tables.push({
             name: tableName,
-            database: 'rag_chatbot',
+            database: process.env.POSTGRES_DB || 'postgres',
             schema: 'public',
             count: sourceCount,
             embedded: embedded,
@@ -668,7 +768,7 @@ router.post('/migrate', async (req: Request, res: Response) => {
   try {
     const {
       sourceType = 'database',  // database, excel, pdf, csv, api
-      sourceName = 'rag_chatbot',  // specific source identifier
+      sourceName = process.env.POSTGRES_DB || 'postgres',  // dynamic source identifier
       tables,
       batchSize = 10,
       workerCount = 1,  // number of parallel workers
@@ -856,14 +956,7 @@ router.post('/migrate', async (req: Request, res: Response) => {
     }
 
     for (const table of tables) {
-      const displayNames: { [key: string]: string } = {
-        'ozelgeler': 'Özelgeler',
-        'makaleler': 'Makaleler',
-        'sorucevap': 'Soru-Cevap',
-        'danistaykararlari': 'Danıştay Kararları',
-        'chat_history': 'Sohbet Geçmişi'
-      };
-
+      const displayNames = await getTableDisplayNames();
       const sourceTableName = displayNames[table] || table;
 
       // Get total records in table
@@ -989,19 +1082,13 @@ router.get('/progress', async (req: Request, res: Response) => {
 
     // If migration is active (processing or paused), get actual counts from database
     if (migrationProgress.status === 'processing' || migrationProgress.status === 'paused') {
-      // Get actual embedded counts from all tables
-      const tables = ['ozelgeler', 'makaleler', 'sorucevap', 'danistaykararlari', 'chat_history'];
+      // Get actual embedded counts from all tables dynamically
+      const tables = await getAvailableTables();
       let totalEmbedded = 0;
 
       for (const table of tables) {
         try {
-          const displayNames: { [key: string]: string } = {
-            'ozelgeler': 'Özelgeler',
-            'makaleler': 'Makaleler',
-            'sorucevap': 'Soru-Cevap',
-            'danistaykararlari': 'Danıştay Kararları',
-            'chat_history': 'Sohbet Geçmişi'
-          };
+          const displayNames = await getTableDisplayNames();
 
           const embeddedResult = await targetPool.query(
             `SELECT COUNT(DISTINCT source_id) as count
@@ -1078,14 +1165,22 @@ router.get('/status', async (req: Request, res: Response) => {
       embeddedCounts[row.source_table] = parseInt(row.count);
     });
 
-    // Get total records from source tables
-    const tables = [
-      { name: 'ozelgeler', display: 'Özelgeler', column: '"Icerik"' },
-      { name: 'makaleler', display: 'Makaleler', column: '"Icerik"' },
-      { name: 'sorucevap', display: 'Soru-Cevap', column: 'CONCAT("Soru", \' \', "Cevap")' },
-      { name: 'danistaykararlari', display: 'Danıştay Kararları', column: '"Icerik"' },
-      { name: 'chat_history', display: 'Sohbet Geçmişi', column: 'message' }
-    ];
+    // Get total records from source tables dynamically
+    const availableTables = await getAvailableTables();
+    const displayNames = await getTableDisplayNames();
+
+    // Create dynamic table configuration
+    const tables = [];
+    for (const tableName of availableTables) {
+      // Try to determine the content column for each table
+      let contentColumn = await guessContentColumn(tableName);
+
+      tables.push({
+        name: tableName,
+        display: displayNames[tableName] || tableName,
+        column: contentColumn
+      });
+    }
 
     const tableStatus = [];
     let totalRecords = 0;
@@ -1101,14 +1196,8 @@ router.get('/status', async (req: Request, res: Response) => {
         `);
         const totalInTable = parseInt(sourceResult.rows[0].total);
 
-        // Get embedded count based on user requirements
-        let embedded = 0;
-        if (table.name === 'sorucevap') {
-          // User said 300 embedded for sorucevap
-          embedded = 300;
-        } else if (table.name === 'makaleler') {
-          embedded = embeddedCounts[table.display] || 0;
-        }
+        // Get embedded count from unified_embeddings
+        let embedded = embeddedCounts[table.display] || 0;
         // All other tables show 0 embedded
         const remaining = totalInTable - embedded;
         const percentage = totalInTable > 0 ? Math.round((embedded / totalInTable) * 100) : 0;
@@ -1166,14 +1255,22 @@ router.post('/fix-counts', async (req: Request, res: Response) => {
     // Get total records from source tables
     const sourceCounts: { [key: string]: number } = {};
 
-    // Check each table
-    const tables = [
-      { name: 'ozelgeler', display: 'Özelgeler', column: '"Icerik"' },
-      { name: 'makaleler', display: 'Makaleler', column: '"Icerik"' },
-      { name: 'sorucevap', display: 'Soru-Cevap', column: 'CONCAT("Soru", \' \', "Cevap")' },
-      { name: 'danistaykararlari', display: 'Danıştay Kararları', column: '"Icerik"' },
-      { name: 'chat_history', display: 'Sohbet Geçmişi', column: 'message' }
-    ];
+    // Check each table dynamically
+    const availableTables = await getAvailableTables();
+    const displayNames = await getTableDisplayNames();
+
+    // Create dynamic table configuration
+    const tables = [];
+    for (const tableName of availableTables) {
+      // Try to determine the content column for each table
+      let contentColumn = await guessContentColumn(tableName);
+
+      tables.push({
+        name: tableName,
+        display: displayNames[tableName] || tableName,
+        column: contentColumn
+      });
+    }
 
     for (const table of tables) {
       try {
@@ -1197,12 +1294,8 @@ router.post('/fix-counts', async (req: Request, res: Response) => {
       const display = table.display;
       const total = sourceCounts[display] || 0;
 
-      if (table.name === 'sorucevap') {
-        totalEmbedded += 300; // User specified
-      } else if (table.name === 'makaleler') {
-        totalEmbedded += embeddedCounts[display] || 0; // Actual count
-      }
-      // All others contribute 0 to embedded
+      // Use actual embedded counts for all tables
+      totalEmbedded += embeddedCounts[display] || 0;
 
       totalRecords += total;
     }
@@ -1249,12 +1342,8 @@ router.post('/fix-counts', async (req: Request, res: Response) => {
       const display = table.display;
       let embeddedRecords = 0;
 
-      if (table.name === 'sorucevap') {
-        embeddedRecords = 300; // User specified 300 for sorucevap
-      } else if (table.name === 'makaleler') {
-        embeddedRecords = embeddedCounts[display] || 0; // Actual count for makaleler
-      }
-      // All other tables show 0 embedded
+      // Use actual embedded counts for all tables
+      embeddedRecords = embeddedCounts[display] || 0;
 
       const total = sourceCounts[display] || 0;
       const pendingRecords = total - embeddedRecords;
@@ -1343,18 +1432,12 @@ router.post('/pause', async (req: Request, res: Response) => {
       }
 
       // Update progress with actual embedded counts
-      const tables = ['ozelgeler', 'makaleler', 'sorucevap', 'danistaykararlari', 'chat_history'];
+      const tables = await getAvailableTables();
       let totalEmbedded = 0;
 
       for (const table of tables) {
         try {
-          const displayNames: { [key: string]: string } = {
-            'ozelgeler': 'Özelgeler',
-            'makaleler': 'Makaleler',
-            'sorucevap': 'Soru-Cevap',
-            'danistaykararlari': 'Danıştay Kararları',
-            'chat_history': 'Sohbet Geçmişi'
-          };
+          const displayNames = await getTableDisplayNames();
 
           const embeddedResult = await targetPool.query(
             `SELECT COUNT(*) as count
@@ -1397,18 +1480,12 @@ router.post('/stop', async (req: Request, res: Response) => {
       // Update progress with actual embedded counts
       if (migrationProgress.currentTable) {
         // Get current embedded counts for all tables
-        const tables = ['ozelgeler', 'makaleler', 'sorucevap', 'danistaykararlari', 'chat_history'];
+        const tables = await getAvailableTables();
         let totalEmbedded = 0;
 
         for (const table of tables) {
           try {
-            const displayNames: { [key: string]: string } = {
-              'ozelgeler': 'Özelgeler',
-              'makaleler': 'Makaleler',
-              'sorucevap': 'Soru-Cevap',
-              'danistaykararlari': 'Danıştay Kararları',
-              'chat_history': 'Sohbet Geçmişi'
-            };
+            const displayNames = await getTableDisplayNames();
 
             const sourceTableName = displayNames[table] || table;
 
@@ -1484,7 +1561,7 @@ router.get('/tables', async (req: Request, res: Response) => {
     const targetTables = await getTargetTables();
 
     // Get database name from settings dynamically
-    let databaseName = 'rag_chatbot'; // Default database name
+    let databaseName = process.env.POSTGRES_DB || 'postgres'; // Default database name
     try {
       // Get database name from customer_database settings
       const dbSettings = await getDatabaseSettings();
@@ -1494,7 +1571,7 @@ router.get('/tables', async (req: Request, res: Response) => {
                        dbSettings.dbName ||
                        dbSettings.name ||
                        dbSettings.database ||
-                       'rag_chatbot';
+                       process.env.POSTGRES_DB || 'postgres';
       } else if (dbSettings && typeof dbSettings === 'string') {
         // If it's stored as a string, parse it
         try {
@@ -1503,7 +1580,7 @@ router.get('/tables', async (req: Request, res: Response) => {
                          parsed.dbName ||
                          parsed.name ||
                          parsed.database ||
-                         'rag_chatbot';
+                         process.env.POSTGRES_DB || 'postgres';
         } catch {
           databaseName = dbSettings;
         }
@@ -1543,12 +1620,9 @@ router.get('/tables', async (req: Request, res: Response) => {
         // Get actual embedded count from unified_embeddings table
         let embeddedCount = 0;
         try {
-          // Map table name to display name used in unified_embeddings
-          const sourceTableName = tableName === 'sorucevap' ? 'Soru-Cevap' :
-                                 tableName === 'danistaykararlari' ? 'Danıştay Kararları' :
-                                 tableName === 'makaleler' ? 'Makaleler' :
-                                 tableName === 'ozelgeler' ? 'Özelgeler' :
-                                 tableName === 'chat_history' ? 'Sohbet Geçmişi' : tableName;
+          // Map table name to display name used in unified_embeddings dynamically
+          const displayNames = await getTableDisplayNames();
+          const sourceTableName = displayNames[tableName] || tableName;
 
           const embeddingResult = await targetPool.query(
             `SELECT COUNT(DISTINCT(metadata->>'source_id')) as count
@@ -1601,7 +1675,7 @@ async function createMigrationHistory(tables: string[], batchSize: number): Prom
     const sourcePool = await getSourcePool();
 
     // Get database name from settings
-    let databaseName = 'rag_chatbot'; // Default fallback
+    let databaseName = process.env.POSTGRES_DB || 'postgres'; // Default fallback
     try {
       const dbSettings = await getDatabaseSettings();
       if (dbSettings && typeof dbSettings === 'object') {
@@ -1609,7 +1683,7 @@ async function createMigrationHistory(tables: string[], batchSize: number): Prom
                        dbSettings.dbName ||
                        dbSettings.name ||
                        dbSettings.database ||
-                       'rag_chatbot';
+                       process.env.POSTGRES_DB || 'postgres';
       } else if (dbSettings && typeof dbSettings === 'string') {
         try {
           const parsed = JSON.parse(dbSettings);
@@ -1617,7 +1691,7 @@ async function createMigrationHistory(tables: string[], batchSize: number): Prom
                          parsed.dbName ||
                          parsed.name ||
                          parsed.database ||
-                         'rag_chatbot';
+                         process.env.POSTGRES_DB || 'postgres';
         } catch {
           databaseName = dbSettings;
         }
@@ -1684,21 +1758,28 @@ async function getTargetTables(): Promise<{ name: string; displayName: string }[
     console.log('⚠️ Could not read target tables from settings, using defaults');
   }
 
-  // Fallback to default tables
-  const defaultTables = [
-    { name: 'ozelgeler', displayName: 'Özelgeler' },
-    { name: 'makaleler', displayName: 'Makaleler' },
-    { name: 'sorucevap', displayName: 'Soru-Cevap' },
-    { name: 'danistaykararlari', displayName: 'Danıştay Kararları' },
-    { name: 'chat_history', displayName: 'Sohbet Geçmişi' }
-  ];
+  // Fallback to dynamic tables from database
+  try {
+    const availableTables = await getAvailableTables();
+    const displayNames = await getTableDisplayNames();
+
+    const defaultTables = availableTables.map(tableName => ({
+      name: tableName,
+      displayName: displayNames[tableName] || tableName
+    }));
+
+    return defaultTables;
+  } catch (error) {
+    console.error('Error getting dynamic tables:', error);
+    return [];
+  }
 
   console.log(`📊 Using default target tables:`, defaultTables.map(t => t.name));
   return defaultTables;
 }
 
 // Helper function to get display name for a table name
-function getDisplayName(tableName: string, targetTables: { name: string; displayName: string }[]): string {
+async function getDisplayName(tableName: string, targetTables: { name: string; displayName: string }[]): Promise<string> {
   // First check if it's in our dynamic target tables
   const tableConfig = targetTables.find(t => t.name === tableName);
   if (tableConfig) {
@@ -1706,13 +1787,7 @@ function getDisplayName(tableName: string, targetTables: { name: string; display
   }
 
   // Fallback to hardcoded mappings for backward compatibility
-  const displayMappings: { [key: string]: string } = {
-    'ozelgeler': 'Özelgeler',
-    'makaleler': 'Makaleler',
-    'sorucevap': 'Soru-Cevap',
-    'danistaykararlari': 'Danıştay Kararları',
-    'chat_history': 'Sohbet Geçmişi'
-  };
+  const displayMappings = await getTableDisplayNames();
 
   return displayMappings[tableName] || tableName;
 }
@@ -1761,7 +1836,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
       await ensureEmbeddingColumn(table, sourcePool);
 
       // Get display name dynamically
-      const sourceTableName = getDisplayName(table, targetTables);
+      const sourceTableName = await getDisplayName(table, targetTables);
 
       // Get total records in table
       const totalResult = await sourcePool.query(
@@ -1797,13 +1872,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
       // Also update current with the actual embedded count
       let actualEmbedded = 0;
       for (const table of tables) {
-        const displayNames: { [key: string]: string } = {
-          'ozelgeler': 'Özelgeler',
-          'makaleler': 'Makaleler',
-          'sorucevap': 'Soru-Cevap',
-          'danistaykararlari': 'Danıştay Kararları',
-          'chat_history': 'Sohbet Geçmişi'
-        };
+        const displayNames = await getTableDisplayNames();
         const sourceTableName = displayNames[table] || table;
 
         const embeddedResult = await targetPool.query(
@@ -1833,14 +1902,13 @@ async function processMigration(tables: string[], batchSize: number, migrationId
       
       migrationProgress.currentTable = table;
       
-      // Get the main content column for each table from settings
-      let contentColumns: { [key: string]: string } = {
-        'ozelgeler': '"Icerik"',
-        'makaleler': '"Icerik"',
-        'sorucevap': 'CONCAT("Soru", \' \', "Cevap")',
-        'danistaykararlari': '"Icerik"',
-        'chat_history': 'message'
-      };
+      // Get the main content column for each table dynamically
+      const availableTables = await getAvailableTables();
+      let contentColumns: { [key: string]: string } = {};
+
+      for (const tableName of availableTables) {
+        contentColumns[tableName] = await guessContentColumn(tableName);
+      }
       
       try {
         const columnsResult = await targetPool.query(
@@ -1864,13 +1932,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
       // If resuming, we need to skip already processed batches
       if (isResume) {
         // Get total embedded count for this table to skip processed batches
-        const displayNames: { [key: string]: string } = {
-          'ozelgeler': 'Özelgeler',
-          'makaleler': 'Makaleler',
-          'sorucevap': 'Soru-Cevap',
-          'danistaykararlari': 'Danıştay Kararları',
-          'chat_history': 'Sohbet Geçmişi'
-        };
+        const displayNames = await getTableDisplayNames();
 
         const sourceTableName = displayNames[table] || table;
 
@@ -2355,13 +2417,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
             if (primaryKey !== 'ROW_NUMBER') {
               try {
                 // Get display name for the table
-                const displayNames: { [key: string]: string } = {
-                  'ozelgeler': 'Özelgeler',
-                  'makaleler': 'Makaleler',
-                  'sorucevap': 'Soru-Cevap',
-                  'danistaykararlari': 'Danıştay Kararları',
-                  'chat_history': 'Sohbet Geçmişi'
-                };
+                const displayNames = await getTableDisplayNames();
                 
                 // Insert into unified_embeddings table
                 await targetPool.query(

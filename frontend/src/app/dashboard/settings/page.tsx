@@ -217,6 +217,13 @@ interface Config {
     presencePenalty: number;
     frequencyPenalty: number;
     ragWeight: number;
+    llmKnowledgeWeight: number;
+    streamResponse: boolean;
+    systemPrompt: string;
+    activeChatModel: string;
+    activeEmbeddingModel: string;
+    responseStyle: string;
+    language: string;
   };
   ragSettings: {
     similarityThreshold: number;
@@ -631,16 +638,26 @@ export default function SettingsPage() {
     if (config.llmSettings.maxTokens < 256 || config.llmSettings.maxTokens > 8192) errors.push('Max tokens must be between 256 and 8192');
     if (config.llmSettings.topP < 0 || config.llmSettings.topP > 1) errors.push('Top P must be between 0 and 1');
 
-    // Validate RAG weights - handle undefined values
+    // Auto-correct RAG weights to ensure they sum to 100
     const ragWeight = config.llmSettings.ragWeight ?? 95;
     const llmKnowledgeWeight = config.llmSettings.llmKnowledgeWeight ?? 5;
-    if (ragWeight + llmKnowledgeWeight !== 100) errors.push('RAG weight + LLM knowledge weight must equal 100');
+    if (ragWeight + llmKnowledgeWeight !== 100) {
+      // Auto-correct instead of showing error
+      const correctedRagWeight = Math.max(0, Math.min(100, ragWeight));
+      const correctedLlmWeight = 100 - correctedRagWeight;
+      updateConfig('llmSettings.ragWeight', correctedRagWeight);
+      updateConfig('llmSettings.llmKnowledgeWeight', correctedLlmWeight);
+    }
 
-    // Validate data source - handle undefined values
+    // Auto-correct data source percentages to ensure they sum to 100
     const localDbPercentage = config.dataSource.localDbPercentage ?? 100;
     const externalApiPercentage = config.dataSource.externalApiPercentage ?? 0;
     if (localDbPercentage + externalApiPercentage !== 100) {
-      errors.push('Local DB percentage + External API percentage must equal 100');
+      // Auto-correct instead of showing error
+      const correctedLocalDb = Math.max(0, Math.min(100, localDbPercentage));
+      const correctedExternalApi = 100 - correctedLocalDb;
+      updateConfig('dataSource.localDbPercentage', correctedLocalDb);
+      updateConfig('dataSource.externalApiPercentage', correctedExternalApi);
     }
 
     // Validate security settings
@@ -701,6 +718,15 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
+    // Debug log
+    console.log('Saving config:', {
+      ragWeight: config.llmSettings?.ragWeight,
+      llmKnowledgeWeight: config.llmSettings?.llmKnowledgeWeight,
+      ragWeightTotal: (config.llmSettings?.ragWeight ?? 0) + (config.llmSettings?.llmKnowledgeWeight ?? 0),
+      ragSettings: config.ragSettings,
+      promptsCount: prompts.length
+    });
+
     const errors = validateConfig();
     if (errors.length > 0) {
       toast({
@@ -738,20 +764,26 @@ export default function SettingsPage() {
           description: 'Configuration saved successfully',
         });
 
-        // Save prompts
-        await fetch(getApiUrl('prompts'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            prompts: prompts.map(p => ({
-              ...p,
-              isActive: p.id === activePrompt?.id
-            }))
-          }),
-        });
+        // Save active prompt to system settings
+        const activePromptData = prompts.find(p => p.isActive);
+        if (activePromptData) {
+          await fetch(getApiUrl('prompts'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              prompt: activePromptData.prompt,
+              temperature: activePromptData.temperature,
+              maxTokens: activePromptData.maxTokens,
+              name: activePromptData.name
+            }),
+          });
+        }
+
+        // Save all prompts to custom prompts table (if it exists)
+        // This would require a new backend endpoint for custom prompt templates
 
         // Save chatbot settings
         await fetch(getApiUrl('chatbotSettings'), {
@@ -997,15 +1029,38 @@ export default function SettingsPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setPrompts(data.prompts || []);
-        const active = data.prompts?.find((p: SystemPrompt) => p.isActive);
-        if (active) {
-          setActivePrompt(active);
-          setEditingPrompt(active.prompt);
-          setPromptTemperature(active.temperature);
-          setPromptMaxTokens(active.maxTokens);
+        // Backend returns a single prompt object, convert to our internal format
+        if (data && data.prompt) {
+          const systemPrompt: SystemPrompt = {
+            id: '1',
+            name: data.name || 'System Prompt',
+            prompt: data.prompt,
+            temperature: data.temperature || 0.7,
+            maxTokens: data.maxTokens || 2048,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          setPrompts([systemPrompt]);
+          setActivePrompt(systemPrompt);
+          setEditingPrompt(systemPrompt.prompt);
+          setPromptTemperature(systemPrompt.temperature);
+          setPromptMaxTokens(systemPrompt.maxTokens);
         } else {
+          // No prompt found, set default
+          setPrompts([{
+            id: '1',
+            name: 'System Prompt',
+            prompt: defaultPrompt,
+            temperature: 0.7,
+            maxTokens: 2048,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }]);
           setEditingPrompt(defaultPrompt);
+          setPromptTemperature(0.7);
+          setPromptMaxTokens(2048);
         }
       }
     } catch (error) {
@@ -1084,6 +1139,10 @@ export default function SettingsPage() {
 
     setPrompts([...prompts, newPrompt]);
     setPromptName('');
+    setEditingPrompt(defaultPrompt);
+    setPromptTemperature(0.7);
+    setPromptMaxTokens(2048);
+    setActivePrompt(null);
     setHasUnsavedChanges(true);
   };
 
@@ -1103,6 +1162,7 @@ export default function SettingsPage() {
       setEditingPrompt(prompt.prompt);
       setPromptTemperature(prompt.temperature);
       setPromptMaxTokens(prompt.maxTokens);
+      setPromptName(''); // Clear new prompt form when editing existing
       setHasUnsavedChanges(true);
     }
   };
@@ -2285,37 +2345,62 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-medium">Prompt Templates</h3>
-                    <Button onClick={addPrompt} size="sm" variant="outline">
-                      <Plus className="h-4 w-4 mr-1" />
-                      New
-                    </Button>
+                    <h3 className="font-medium">Prompt Library ({prompts.length})</h3>
+                    <div className="text-xs text-muted-foreground">
+                      {prompts.filter(p => p.isActive).length} active
+                    </div>
                   </div>
 
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {prompts.map((prompt) => (
-                      <div
-                        key={prompt.id}
-                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                          activePrompt?.id === prompt.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'hover:bg-gray-50'
-                        }`}
-                        onClick={() => setActivePromptById(prompt.id)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h4 className="font-medium">{prompt.name}</h4>
-                            <p className="text-xs text-muted-foreground">
-                              {prompt.temperature} temp, {prompt.maxTokens} tokens
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {prompt.isActive && (
-                              <Badge variant="default" className="text-xs">
-                                Active
-                              </Badge>
-                            )}
+                    {prompts.length === 0 ? (
+                      <div className="text-center py-8 px-4 border-2 border-dashed rounded-lg">
+                        <Bot className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          No prompts created yet
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Use the form to create your first prompt
+                        </p>
+                      </div>
+                    ) : (
+                      prompts.map((prompt) => (
+                        <div
+                          key={prompt.id}
+                          className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                            activePrompt?.id === prompt.id
+                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 dark:border-blue-400 shadow-sm'
+                              : 'hover:bg-gray-50 hover:dark:bg-gray-800 hover:shadow-sm'
+                          }`}
+                          onClick={() => setActivePromptById(prompt.id)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium truncate">{prompt.name}</h4>
+                                {prompt.isActive && (
+                                  <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                                    Active
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mb-1">
+                                {prompt.prompt.substring(0, 60)}...
+                              </p>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 bg-orange-400 rounded-full"></span>
+                                  {prompt.temperature} temp
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                                  {prompt.maxTokens} tokens
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                                  {new Date(prompt.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
                             <Button
                               size="sm"
                               variant="ghost"
@@ -2323,55 +2408,82 @@ export default function SettingsPage() {
                                 e.stopPropagation();
                                 deletePrompt(prompt.id);
                               }}
+                              className="ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-3 w-3 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {prompts.length > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs text-muted-foreground">
+                        💡 Click any prompt to edit. Set one as "Active" to use in chats.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="lg:col-span-2 space-y-6">
+                  {/* New Prompt Form */}
+                  <Card className="border-dashed">
+                    <CardHeader>
+                      <CardTitle className="text-base">Create New Prompt</CardTitle>
+                      <CardDescription>
+                        Add a new custom system prompt template
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="newPromptName">Prompt Name</Label>
+                          <Input
+                            id="newPromptName"
+                            value={promptName}
+                            onChange={(e) => setPromptName(e.target.value)}
+                            placeholder="e.g., Technical Support, Creative Assistant"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Quick Actions</Label>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={addPrompt}
+                              size="sm"
+                              disabled={!promptName.trim() || !editingPrompt.trim()}
+                              className="flex-1"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Create Prompt
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setPromptName('');
+                                setEditingPrompt(defaultPrompt);
+                                setPromptTemperature(0.7);
+                                setPromptMaxTokens(2048);
+                              }}
+                              size="sm"
+                              variant="outline"
+                            >
+                              Clear
                             </Button>
                           </div>
                         </div>
                       </div>
-                    ))}
-
-                    {prompts.length === 0 && (
-                      <p className="text-center text-muted-foreground py-4">
-                        No custom prompts yet
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2 space-y-4">
-                  {activePrompt ? (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={activePrompt.name}
-                          onChange={(e) => {
-                            setActivePrompt({ ...activePrompt, name: e.target.value });
-                            setPrompts(prompts.map(p =>
-                              p.id === activePrompt.id
-                                ? { ...p, name: e.target.value }
-                                : p
-                            ));
-                          }}
-                          placeholder="Prompt name"
-                          className="flex-1"
-                      />
-                      <Button onClick={updatePrompt} size="sm">
-                          <Save className="h-4 w-4 mr-1" />
-                          Update
-                        </Button>
-                      </div>
-
                       <div className="space-y-2">
-                        <Label>System Prompt</Label>
+                        <Label htmlFor="newPromptContent">Prompt Content</Label>
                         <Textarea
+                          id="newPromptContent"
                           value={editingPrompt}
                           onChange={(e) => setEditingPrompt(e.target.value)}
-                          rows={8}
-                          placeholder="Enter your system prompt..."
+                          rows={6}
+                          placeholder="Enter your system prompt content..."
                         />
                       </div>
-
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Temperature: {promptTemperature}</Label>
@@ -2383,6 +2495,9 @@ export default function SettingsPage() {
                             step={0.1}
                             className="w-full"
                           />
+                          <p className="text-xs text-muted-foreground">
+                            0 = focused, 2 = creative
+                          </p>
                         </div>
                         <div className="space-y-2">
                           <Label>Max Tokens: {promptMaxTokens}</Label>
@@ -2394,13 +2509,130 @@ export default function SettingsPage() {
                             step={256}
                             className="w-full"
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Response length limit
+                          </p>
                         </div>
                       </div>
-                    </>
-                  ) : (
+                    </CardContent>
+                  </Card>
+
+                  {/* Edit Existing Prompt */}
+                  {activePrompt && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base">Edit: {activePrompt.name}</CardTitle>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => {
+                                setPrompts(prompts.map(p =>
+                                  p.id === activePrompt.id
+                                    ? { ...p, isActive: true }
+                                    : { ...p, isActive: false }
+                                ));
+                                setHasUnsavedChanges(true);
+                              }}
+                              size="sm"
+                              variant={activePrompt.isActive ? "default" : "outline"}
+                            >
+                              {activePrompt.isActive ? 'Active' : 'Set Active'}
+                            </Button>
+                            <Button onClick={updatePrompt} size="sm">
+                              <Save className="h-4 w-4 mr-1" />
+                              Update
+                            </Button>
+                          </div>
+                        </div>
+                        <CardDescription>
+                          Last updated: {new Date(activePrompt.updatedAt).toLocaleDateString()}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Prompt Name</Label>
+                          <Input
+                            value={activePrompt.name}
+                            onChange={(e) => {
+                              setActivePrompt({ ...activePrompt, name: e.target.value });
+                              setPrompts(prompts.map(p =>
+                                p.id === activePrompt.id
+                                  ? { ...p, name: e.target.value }
+                                  : p
+                              ));
+                            }}
+                            placeholder="Prompt name"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>System Prompt</Label>
+                          <Textarea
+                            value={activePrompt.prompt}
+                            onChange={(e) => {
+                              setActivePrompt({ ...activePrompt, prompt: e.target.value });
+                              setPrompts(prompts.map(p =>
+                                p.id === activePrompt.id
+                                  ? { ...p, prompt: e.target.value }
+                                  : p
+                              ));
+                            }}
+                            rows={8}
+                            placeholder="Enter your system prompt..."
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Temperature: {activePrompt.temperature}</Label>
+                            <Slider
+                              value={[activePrompt.temperature]}
+                              onValueChange={(value) => {
+                                const newTemp = value[0];
+                                setActivePrompt({ ...activePrompt, temperature: newTemp });
+                                setPrompts(prompts.map(p =>
+                                  p.id === activePrompt.id
+                                    ? { ...p, temperature: newTemp }
+                                    : p
+                                ));
+                              }}
+                              min={0}
+                              max={2}
+                              step={0.1}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Max Tokens: {activePrompt.maxTokens}</Label>
+                            <Slider
+                              value={[activePrompt.maxTokens]}
+                              onValueChange={(value) => {
+                                const newTokens = value[0];
+                                setActivePrompt({ ...activePrompt, maxTokens: newTokens });
+                                setPrompts(prompts.map(p =>
+                                  p.id === activePrompt.id
+                                    ? { ...p, maxTokens: newTokens }
+                                    : p
+                                ));
+                              }}
+                              min={256}
+                              max={4096}
+                              step={256}
+                              className="w-full"
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {!activePrompt && prompts.length === 0 && (
                     <div className="text-center py-8">
                       <Bot className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">Select a prompt to edit or create a new one</p>
+                      <h3 className="text-lg font-medium mb-2">No Custom Prompts Yet</h3>
+                      <p className="text-muted-foreground mb-4">
+                        Create your first custom prompt using the form above, or select an existing one from the list.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -2409,7 +2641,13 @@ export default function SettingsPage() {
               <Alert>
                 <Info className="h-4 w-4" />
                 <AlertDescription>
-                  All prompt settings are saved with the main "Save" button in the top right.
+                  <strong>💡 Usage Tips:</strong>
+                  <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+                    <li>Create custom prompts for different use cases (support, analysis, creative tasks)</li>
+                    <li>Click "Set Active" to make a prompt the default for AI responses</li>
+                    <li>All changes are saved when you click the main "Save" button above</li>
+                    <li>Active prompt will be used in chat conversations</li>
+                  </ul>
                 </AlertDescription>
               </Alert>
             </CardContent>

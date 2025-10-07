@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { pgPool, redis } from '../server';
+import { getDatabaseSettings, getSettingsBasedPool } from '../config/database.config';
 
 const router = Router();
 
@@ -23,9 +24,7 @@ router.get('/progress', async (req: Request, res: Response) => {
     `);
 
     const result = await pgPool.query(`
-      SELECT *,
-             (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-             (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+      SELECT *
       FROM embedding_progress
       WHERE status IN ('pending', 'processing', 'paused')
       ORDER BY
@@ -276,9 +275,7 @@ router.get('/', async (req: Request, res: Response) => {
     } else {
       // No progress in Redis, check database for idle status
       const result = await pgPool.query(`
-        SELECT *,
-               (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-               (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+        SELECT *
         FROM embedding_progress
         WHERE status IN ('processing', 'paused', 'completed')
           AND (status != 'completed' OR
@@ -511,9 +508,7 @@ router.post('/api/embeddings/generate', async (req: Request, res: Response) => {
         UPDATE embedding_progress
         SET status = 'processing', started_at = CURRENT_TIMESTAMP
         WHERE id = $1
-        RETURNING *,
-               (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-               (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+        RETURNING *
       `, [existingProgress.id]);
       
       progress = updateResult.rows[0];
@@ -525,9 +520,7 @@ router.post('/api/embeddings/generate', async (req: Request, res: Response) => {
       const insertResult = await pgPool.query(`
         INSERT INTO embedding_progress (document_id, document_type, status, total_chunks, processed_chunks)
         VALUES ($1, $2, 'processing', $3, $4)
-        RETURNING *,
-               (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-               (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+        RETURNING *
       `, [documentId, documentType, totalRecords, startOffset || 0]);
       
       progress = insertResult.rows[0];
@@ -612,17 +605,36 @@ router.get('/api/embeddings/tables', async (req: Request, res: Response) => {
       statsMap.set(row.source_table, parseInt(row.embedded_count));
     });
 
-    // Table mappings
-    const tableMappings = [
-      { name: 'sorucevap', sourceName: 'Soru-Cevap', textColumns: 2 },
-      { name: 'danistaykararlari', sourceName: 'Danıştay Kararları', textColumns: 3 },
-      { name: 'Makaleler', sourceName: 'Makaleler', textColumns: 2 }
-    ];
+    // Get tables from settings/database dynamically
+    let tableMappings = [];
+    try {
+      // Try to get source database connection from settings
+      const sourcePool = await getSettingsBasedPool();
+      const tablesResult = await sourcePool.query(`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name
+      `);
 
-    // Get stats for each table
+      tableMappings = tablesResult.rows.map(row => ({
+        name: row.table_name,
+        sourceName: row.table_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        textColumns: 1 // Default value
+      }));
+    } catch (error) {
+      console.error('Error getting dynamic tables:', error);
+      // Fallback to empty array if can't get tables
+      tableMappings = [];
+    }
+
+    // Get stats for each table (only if we have tables)
     for (const table of tableMappings) {
       try {
-        const result = await pgPool.query(`SELECT COUNT(*) as total FROM ${table.name}`);
+        // Use source pool for counting records
+        const sourcePool = await getSettingsBasedPool();
+        const result = await sourcePool.query(`SELECT COUNT(*) as total FROM ${table.name}`);
         const totalRecords = parseInt(result.rows[0].total) || 0;
         const embeddedRecords = statsMap.get(table.sourceName) || 0;
 
@@ -663,12 +675,28 @@ router.get('/api/embeddings/stats', async (req: Request, res: Response) => {
     let totalEmbedded = 0;
     const tables = [];
 
-    // Get stats for each table
-    const tableStats = [
-      { name: 'sorucevap', sourceName: 'Soru-Cevap' },
-      { name: 'danistaykararlari', sourceName: 'Danıştay Kararları' },
-      { name: 'Makaleler', sourceName: 'Makaleler' }
-    ];
+    // Get stats for each table dynamically
+    let tableStats = [];
+    try {
+      // Try to get source database connection from settings
+      const sourcePool = await getSettingsBasedPool();
+      const tablesResult = await sourcePool.query(`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name
+      `);
+
+      tableStats = tablesResult.rows.map(row => ({
+        name: row.table_name,
+        sourceName: row.table_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      }));
+    } catch (error) {
+      console.error('Error getting dynamic tables for stats:', error);
+      // Fallback to empty array if can't get tables
+      tableStats = [];
+    }
 
     for (const table of tableStats) {
       try {
@@ -830,9 +858,7 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
 
         // Fall back to embedding_progress table
         const result = await pgPool.query(`
-          SELECT *,
-                 (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-                 (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+          SELECT *
           FROM embedding_progress
           WHERE status IN ('processing', 'paused', 'completed')
             AND (status != 'completed' OR
@@ -1062,9 +1088,7 @@ router.post('/api/v2/embeddings/pause', async (req: Request, res: Response) => {
       UPDATE embedding_progress
       SET status = 'paused'
       WHERE status = 'processing'
-      RETURNING *,
-             (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-             (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+      RETURNING *
     `);
     
     if (result.rows.length === 0) {
@@ -1155,9 +1179,7 @@ router.post('/api/embeddings/pause', async (req: Request, res: Response) => {
       UPDATE embedding_progress
       SET status = 'paused'
       WHERE status = 'processing'
-      RETURNING *,
-             (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NOT NULL) as already_embedded,
-             (SELECT COUNT(*) FROM sorucevap WHERE embedding IS NULL) as pending_count
+      RETURNING *
     `);
 
     if (result.rows.length === 0) {
