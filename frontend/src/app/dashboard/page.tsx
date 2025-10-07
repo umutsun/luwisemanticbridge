@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useConfig } from "@/contexts/ConfigContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,13 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import 
+import {
   // FileText, Database, Globe, Zap - TEMİZLENDİ
-  Search, 
-  Download, 
-  Upload, 
-  Plus, 
-  Trash2, 
+  Search,
+  Download,
+  Upload,
+  Plus,
+  Trash2,
   RefreshCw,
   Play,
   Pause,
@@ -144,6 +145,7 @@ const StatusCard = ({ title, value, status, description }: {
 };
 
 export default function DashboardPage() {
+  const { config } = useConfig();
   const [activeTab, setActiveTab] = useState("overview");
   const [data, setData] = useState<SystemStatus | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -296,7 +298,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight">ALICE RAG Dashboard</h1>
+          <h1 className="text-4xl font-bold tracking-tight">{config?.app_name || 'ALICE RAG Dashboard'}</h1>
           <p className="text-muted-foreground">RAG sistemi ve web scraper kontrol paneli</p>
         </div>
         <div className="flex items-center space-x-4">

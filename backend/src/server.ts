@@ -32,12 +32,15 @@ import activityRoutes from './routes/activity.routes';
 import ragAnythingRoutes from './routes/raganything.routes';
 import authRoutes from './routes/auth.routes';
 import usersRoutes from './routes/users.routes';
+import subscriptionRoutes from './routes/subscription.routes';
 import embeddingHistoryRoutes from './routes/embedding-history.routes';
 import embeddingCleanupRoutes from './routes/embedding-cleanup.routes';
 import aiSettingsRoutes from './routes/ai-settings.routes';
 import appSettingsRoutes from './routes/app-settings.routes';
 import healthRoutes from './routes/health.routes';
 import adminRoutes from './routes/admin.routes';
+import llmStatusRoutes from './routes/llm-status.routes';
+import { AuthService } from './services/auth.service';
 
 
 // Initialize Express app
@@ -194,11 +197,13 @@ app.use(API.ENDPOINTS.V2.ACTIVITY, activityRoutes);
 app.use('/api/v2/raganything', ragAnythingRoutes);
 app.use(API.ENDPOINTS.V2.AUTH, authRoutes);
 app.use(API.ENDPOINTS.V2.USERS, usersRoutes);
+app.use('/api/v2/subscription', subscriptionRoutes);
 app.use('/api/v2/embedding-history', embeddingHistoryRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
 app.use('/api/v2/ai', aiSettingsRoutes);
 app.use('/api/v2/settings', appSettingsRoutes);
 app.use('/api/v2/health', healthRoutes);
+app.use('/api/v2/llm', llmStatusRoutes);
 app.use('/api/v2/admin', adminRoutes);
 
 // Base route
@@ -487,6 +492,10 @@ async function startServer() {
       console.log('🗃️ Initializing ASEMB Database Tables...');
       await initializeAsembDatabase();
       console.log('✅ ASEMB Database Tables: Ready');
+
+      // Create default admin user if not exists
+      const authService = new AuthService();
+      await authService.createDefaultAdmin();
 
       // Load all configurations from ASEMB database
       console.log('⚙️ Loading configurations from ASEMB database...');
@@ -831,3 +840,4 @@ process.on('SIGTERM', async () => {
 });
 
 export { app, io, httpServer, asembPool as pgPool, redis };
+// Trigger restart

@@ -1,14 +1,26 @@
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
+  name?: string;
   first_name?: string;
   last_name?: string;
   role: 'user' | 'admin' | 'moderator';
-  is_active: boolean;
+  status?: string;
+  is_active?: boolean;
   email_verified: boolean;
   created_at: string;
   updated_at: string;
+  last_login?: string;
+  subscription?: {
+    id: string;
+    plan_name: string;
+    status: string;
+    queries_used: number;
+    queries_limit: number;
+    created_at: string;
+    expires_at?: string;
+  };
 }
 
 export interface RegisterData {

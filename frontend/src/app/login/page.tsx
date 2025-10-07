@@ -1,55 +1,70 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Brain, Lock, Mail, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthProvider';
+import { useConfig } from '@/contexts/ConfigContext';
 import Link from 'next/link';
-import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginPage() {
+  const { config } = useConfig();
   const [email, setEmail] = useState('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (config?.app?.name) {
+      document.title = `Giriş Yap - ${config.app.name}`;
+    }
+  }, [config]);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { login } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-    try {
-      await login({ email, password });
+    const result = await login(email, password);
+
+    if (result.success) {
       router.push('/dashboard');
-    } catch (error) {
-      // Error is handled in the store
+    } else {
+      setError(result.error || 'Login failed');
     }
+
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="w-full max-w-md px-4">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center p-3 bg-primary/10 rounded-full mb-4">
-            <Brain className="h-12 w-12 text-primary" />
+      <div className="w-full max-w-md px-6 my-12">
+        <div className="mb-3">
+          <div className="flex flex-col items-center">
+            <h1 className="text-2xl font-semibold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent mb-1">
+              {config?.app?.name}
+            </h1>
+            <p className="text-muted-foreground text-sm text-left max-w-sm">
+              {config?.app?.description}
+            </p>
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-            Alice Semantic Bridge
-          </h1>
-          <p className="text-muted-foreground mt-2">Intelligent RAG System Dashboard</p>
         </div>
 
-        <Card className="shadow-xl">
-          <CardHeader>
-            <CardTitle>Giriş Yap</CardTitle>
-            <CardDescription>
-              Dashboard'a erişmek için giriş yapın
-            </CardDescription>
-          </CardHeader>
+        <Card className="shadow-lg border-0">
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               {error && (
@@ -70,7 +85,7 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
-                      if (error) clearError();
+                      if (error) setError(null);
                     }}
                     className="pl-10"
                     required
@@ -89,7 +104,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      if (error) clearError();
+                      if (error) setError(null);
                     }}
                     className="pl-10 pr-10"
                     required
@@ -108,8 +123,8 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? (
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Giriş yapılıyor...
@@ -127,12 +142,6 @@ export default function LoginPage() {
                 </p>
               </div>
             </form>
-
-            <div className="mt-6 pt-6 border-t text-center">
-              <Link href="/" className="text-sm text-primary hover:underline">
-                Ana Sayfaya Dön
-              </Link>
-            </div>
           </CardContent>
         </Card>
       </div>

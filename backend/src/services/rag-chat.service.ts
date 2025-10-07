@@ -1,9 +1,6 @@
-import { OpenAI } from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { semanticSearch, SemanticSearchService } from './semantic-search.service';
-import claudeService from './claude.service';
-import geminiService from './gemini.service';
-import deepseekService from './deepseek.service';
+import { LLMManager } from './llm-manager.service';
 import pool from '../config/database';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
@@ -128,106 +125,14 @@ interface ChatOptions {
 
 export class RAGChatService {
   private pool = pool;
-  private openai: OpenAI | null = null;
-  private useOpenAI: boolean = false;
-  private aiProviderPriority: string[] = ['claude', 'openai', 'gemini', 'deepseek', 'fallback'];
-  private fallbackEnabled: boolean;
-  private defaultTemperature: number = 0.1;
-  private defaultMaxTokens: number = 4096;
-  private defaultGeminiModel: string = 'gemini-1.5-flash';
+  private llmManager: LLMManager;
 
   constructor() {
-
-    // Set default values
-    this.fallbackEnabled = process.env.AI_FALLBACK_ENABLED !== 'false'; // Default to true
-
-    // Try to load AI provider from database
-    this.loadAISettings().catch(console.error);
-
-    // Initialize OpenAI only if API key is available
-    if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'sk-proj-YOUR_OPENAI_API_KEY_HERE') {
-      this.openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY
-      });
-      this.useOpenAI = true;
-      console.log('✅ OpenAI Chat API initialized');
-    } else {
-      console.log('⚠️  OpenAI API key not configured');
-    }
-
-    console.log(`🤖 AI Provider Priority: ${this.aiProviderPriority.join(', ')}, Fallback: ${this.fallbackEnabled}`);
-
-    // Load priority asynchronously
-    this.loadPriority();
+    this.llmManager = LLMManager.getInstance();
+    console.log('✅ RAG Chat Service initialized with LLM Manager');
   }
 
-  private async loadPriority() {
-    try {
-      this.aiProviderPriority = await this.getProviderPriority();
-      console.log(`🔄 Updated AI Provider Priority: ${this.aiProviderPriority.join(', ')}`);
-    } catch (error) {
-      // Keep default priority
-    }
-  }
-
-  private async getProviderPriority(): Promise<string[]> {
-    try {
-      // Try to get from database first
-      const result = await pool.query(
-        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'ai_provider_priority'"
-      );
-
-      if (result.rows[0]?.setting_value) {
-        return JSON.parse(result.rows[0].setting_value);
-      }
-    } catch (error) {
-      // Database might not be ready yet
-    }
-
-    // Fallback to environment variable or default
-    const envPriority = process.env.AI_PROVIDER_PRIORITY;
-    if (envPriority) {
-      return envPriority.split(',').map(p => p.trim());
-    }
-
-    // Default priority
-    return ['claude', 'openai', 'gemini', 'deepseek', 'fallback'];
-  }
-
-  /**
-   * Load AI settings from database
-   */
-  private async loadAISettings() {
-    try {
-      const result = await pool.query(
-        "SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ('ai_provider', 'fallback_enabled', 'temperature', 'max_tokens', 'gemini_model')"
-      );
-
-      for (const row of result.rows) {
-        if (row.setting_key === 'ai_provider') {
-          // Update provider priority based on database setting
-          const provider = row.setting_value;
-          this.aiProviderPriority = [provider, ...this.aiProviderPriority.filter(p => p !== provider)];
-          console.log(`📝 AI Provider loaded from database: ${provider}`);
-        } else if (row.setting_key === 'fallback_enabled') {
-          this.fallbackEnabled = row.setting_value === 'true';
-          console.log(`📝 Fallback enabled loaded from database: ${this.fallbackEnabled}`);
-        } else if (row.setting_key === 'temperature') {
-          this.defaultTemperature = parseFloat(row.setting_value) || 0.1;
-          console.log(`📝 Temperature loaded from database: ${this.defaultTemperature}`);
-        } else if (row.setting_key === 'max_tokens') {
-          this.defaultMaxTokens = parseInt(row.setting_value) || 4096;
-          console.log(`📝 Max tokens loaded from database: ${this.defaultMaxTokens}`);
-        } else if (row.setting_key === 'gemini_model') {
-          this.defaultGeminiModel = row.setting_value || 'gemini-1.5-flash';
-          console.log(`📝 Gemini model loaded from database: ${this.defaultGeminiModel}`);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load AI settings from database:', error);
-    }
-  }
-
+  
   /**
    * Get system prompt from database
    */
@@ -308,16 +213,17 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       console.log(`Performing semantic search with pgvector...`);
 
+      // Get search settings from database
+      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '30');
+      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.1');
+
       // Use semantic search to find related content
       let allResults = [];
       if (useUnifiedEmbeddings) {
-        allResults = await semanticSearch.unifiedSemanticSearch(message, 30);
+        allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
       } else {
-        allResults = await semanticSearch.hybridSearch(message, 30);
+        allResults = await semanticSearch.hybridSearch(message, maxResults);
       }
-
-      // Get minimum similarity threshold from database (default 10%)
-      const minThreshold = parseFloat(await settingsService.getSetting('semantic_search_threshold') || '10');
 
       // Filter by threshold and sort by similarity score
       let searchResults = allResults
@@ -342,9 +248,8 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // 3. Get conversation history
       const history = await this.getConversationHistory(convId, 5);
 
-      // 4. Generate simple response focused on the found topics
-      const temperature = options.temperature !== undefined ? options.temperature : this.defaultTemperature;
-      const maxTokens = options.maxTokens !== undefined ? options.maxTokens : this.defaultMaxTokens;
+      // 4. Generate response using LLM Manager
+      const llmManager = LLMManager.getInstance();
 
       // Create a simple context with titles and scores
       const simpleContext = searchResults.slice(0, 5).map((r, idx) => {
@@ -353,8 +258,16 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         return `${idx + 1}. %${score} - ${title}`;
       }).join('\n');
 
-      // Generate response
-      const response = await this.generateResponse(message, simpleContext, history, temperature, options, searchResults, maxTokens);
+      // Generate response using LLM Manager
+      const fullPrompt = `${systemPrompt}\n\nBAĞLAM:\n${simpleContext}\n\nSORU: ${message}`;
+      const response = await llmManager.generateChatResponse(
+        fullPrompt,
+        {
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          systemPrompt: systemPrompt
+        }
+      );
 
       // 5. Save messages to database
       await this.saveMessage(convId, 'user', message);
@@ -413,7 +326,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       return '';
     }
 
-    // Kaynakları score'a göre sırala (yüksek score önce) - context için de
+    // Sort sources by score (highest score first) - for context
     const sortedResults = [...searchResults].sort((a, b) => {
       const scoreA = a.score || (a.similarity_score * 100) || 0;
       const scoreB = b.score || (b.similarity_score * 100) || 0;
@@ -422,7 +335,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
     let context = 'VERİTABANINDAN BULUNAN İLGİLİ BİLGİLER (en yüksek skor dan başlayarak):\n\n';
 
-    // Grupları oluştur - yüksek skorlu kaynakları öne çıkar
+    // Create groups - prioritize high-scoring sources
     const highScoreSources = sortedResults.filter(r => (r.score || (r.similarity_score * 100) || 0) >= 75);
     const mediumScoreSources = sortedResults.filter(r => {
       const score = r.score || (r.similarity_score * 100) || 0;
@@ -430,7 +343,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
     });
     const lowScoreSources = sortedResults.filter(r => (r.score || (r.similarity_score * 100) || 0) < 50);
 
-    // En yüksek skorlu kaynakları başa ekle
+    // Add highest scoring sources first
     if (highScoreSources.length > 0) {
       context += '🎯 YÜSEK EŞLEŞME SONUÇLARI:\n';
       highScoreSources.forEach((result, idx) => {
@@ -439,7 +352,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       context += '\n';
     }
 
-    // Orta skorlu kaynakları ekle
+    // Add medium scoring sources
     if (mediumScoreSources.length > 0) {
       context += '📊 ORTA EŞLEŞME SONUÇLARI:\n';
       mediumScoreSources.forEach((result, idx) => {
@@ -448,7 +361,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       context += '\n';
     }
 
-    // Düşük skorlu kaynakları sona ekle (sadece az sonuç varsa)
+    // Add low scoring sources at the end (only if few results)
     if (lowScoreSources.length > 0 && sortedResults.length < 10) {
       context += '📝 DİĞER İLGİLİ BİLGİLER:\n';
       lowScoreSources.forEach((result, idx) => {
@@ -486,39 +399,16 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
    * Categorize source based on content
    */
   private categorizeSource(result: any): string {
-    // Önce source_table'dan kategori belirle
-    const sourceTable = result.source_table?.toUpperCase();
-    
-    if (sourceTable === 'OZELGELER') {
-      return 'Özelge';
-    } else if (sourceTable === 'DANISTAYKARARLARI') {
-      return 'Danıştay Kararı';
-    } else if (sourceTable === 'MAKALELER') {
-      return 'Makale';
-    } else if (sourceTable === 'DOKUMAN') {
-      return 'Doküman';
-    } else if (sourceTable === 'MEVZUAT') {
-      return 'Mevzuat';
-    }
-    
-    // Eğer source_table yoksa içerikten tahmin et
-    const title = result.title?.toLowerCase() || '';
-    const content = result.excerpt?.toLowerCase() || '';
-    const combined = title + ' ' + content;
+    // Use source_table directly - it should already contain the table name
+    const sourceTable = result.source_table;
 
-    if (combined.includes('kanun') || combined.includes('yönetmelik') || combined.includes('tebliğ')) {
-      return 'Mevzuat';
-    } else if (combined.includes('özelge') || combined.includes('mukteza')) {
-      return 'Özelge';
-    } else if (combined.includes('sirküler') || combined.includes('duyuru')) {
-      return 'Sirküler';
-    } else if (combined.includes('karar') || combined.includes('mahkeme') || combined.includes('danıştay')) {
-      return 'Yargı Kararı';
-    } else if (combined.includes('makale') || combined.includes('yazı') || combined.includes('analiz')) {
-      return 'Makale';
-    } else {
-      return 'Kaynak';
+    // Convert table name to a readable format (capitalize first letter)
+    if (sourceTable) {
+      return sourceTable.charAt(0).toUpperCase() + sourceTable.slice(1).toLowerCase();
     }
+
+    // Default category if no source_table
+    return 'Document';
   }
 
   /**
@@ -527,7 +417,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
   private truncateExcerpt(text: string, maxLength: number): string {
     if (!text || text.length <= maxLength) return text;
     
-    // Cümle sonunda kes
+    // Cut at sentence end
     const truncated = text.substring(0, maxLength);
     const lastPeriod = truncated.lastIndexOf('.');
     
@@ -574,14 +464,26 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       console.log(`Source ${idx}: score=${r.score}, similarity_score=${r.similarity_score}, calculated=${score}`);
 
       // Build proper citation
-      let citation = `[Kaynak ${idx + 1}]`;
+      let citation = `[Source ${idx + 1}]`;
       if (r.metadata) {
-        if (r.source_table === 'OZELGELER' && r.metadata.sayiNo) {
-          citation = `Özelge - ${r.metadata.sayiNo}`;
-        } else if (r.source_table === 'DANISTAYKARARLARI' && r.metadata.kararNo) {
-          citation = `Danıştay ${r.metadata.daire || ''} - Karar: ${r.metadata.kararNo}`;
-        } else if (r.source_table === 'MAKALELER' && r.metadata.yazar) {
-          citation = `${r.metadata.yazar} - ${r.metadata.donem || ''}`;
+        // Dynamic citation based on metadata fields
+        const parts = [];
+
+        // Add table name as a type
+        if (r.source_table) {
+          parts.push(r.source_table);
+        }
+
+        // Add metadata fields dynamically
+        Object.keys(r.metadata).forEach(key => {
+          const value = r.metadata[key];
+          if (value && typeof value === 'string' && value.trim()) {
+            parts.push(`${key}: ${value}`);
+          }
+        });
+
+        if (parts.length > 0) {
+          citation = parts.join(' - ');
         }
       }
 
@@ -675,9 +577,13 @@ Başlık: ${title}
 İçerik: ${cleanExcerpt}
 `;
 
-      // Use the selected chat model (same as for chat responses)
+      // Use the LLM Manager
       try {
-        const response = await this.generateResponse(prompt, '', [], 0.3, {}, [], 500);
+        const response = await this.llmManager.generateChatResponse(prompt, {
+          temperature: 0.3,
+          maxTokens: 500,
+          systemPrompt: ''
+        });
 
         if (response && response.content) {
           // Parse the response based on language
@@ -724,215 +630,7 @@ Başlık: ${title}
     }
   }
 
-  /**
-   * Generate response using selected AI provider
-   */
-  private async generateResponse(
-    query: string,
-    context: string,
-    history: ChatMessage[],
-    temperature: number = 0.1,
-    options: ChatOptions = {},
-    searchResults?: any[],
-    maxTokens: number = 2048
-  ) {
-    let response = null;
-    let lastError = null;
-    let successfulProvider = null;
-
-    // Get fresh priority settings for each request
-    const providerPriority = await this.getProviderPriority();
-
-    // Try providers in priority order
-    for (const provider of providerPriority) {
-      if (response) break; // Stop if we got a response
-
-      console.log(`🤖 Trying ${provider}...`);
-
-      try {
-        switch (provider) {
-          case 'gemini':
-            if (geminiService.isAvailable()) {
-              response = await geminiService.generateResponse(query, context, history, temperature, options.systemPrompt, maxTokens);
-              successfulProvider = 'Gemini';
-              console.log('✅ Gemini successful');
-            } else {
-              throw new Error('Gemini API not available');
-            }
-            break;
-
-          case 'claude':
-            if (claudeService.isAvailable()) {
-              response = await claudeService.generateResponse(query, context, history, options.systemPrompt, maxTokens);
-              successfulProvider = 'Claude';
-              console.log('✅ Claude successful');
-            } else {
-              throw new Error('Claude API not available');
-            }
-            break;
-
-          case 'openai':
-            if (this.useOpenAI && this.openai) {
-              response = await this.generateOpenAIResponse(query, context, history, temperature, searchResults, options.systemPrompt, maxTokens);
-              successfulProvider = 'OpenAI';
-              console.log('✅ OpenAI successful');
-            } else {
-              throw new Error('OpenAI API not available');
-            }
-            break;
-
-          case 'deepseek':
-            if (deepseekService.isAvailable()) {
-              response = await deepseekService.generateResponse(query, context, history, temperature, options.systemPrompt, maxTokens);
-              successfulProvider = 'DeepSeek';
-              console.log('✅ DeepSeek successful');
-            } else {
-              throw new Error('DeepSeek API not available');
-            }
-            break;
-
-          case 'fallback':
-            response = this.generateDemoResponse(query, context);
-            successfulProvider = 'Demo';
-            response.isFallback = true;
-            console.log('✅ Demo response generated (Fallback)');
-            break;
-
-          default:
-            console.warn(`Unknown provider: ${provider}`);
-            break;
-        }
-      } catch (error: any) {
-        console.error(`${provider} API error:`, error.message);
-        lastError = error;
-      }
-    }
-
-    if (!response) {
-      throw lastError || new Error('All AI providers failed');
-    }
-
-    // Add provider info to response
-    return {
-      ...response,
-      provider: successfulProvider
-    };
-  }
-
-  /**
-   * Generate response using OpenAI
-   */
-  private async generateOpenAIResponse(
-    query: string,
-    context: string,
-    history: ChatMessage[],
-    temperature: number = 0.1,
-    searchResults?: any[],
-    systemPrompt?: string,
-    maxTokens: number = 2048
-  ) {
-    if (!this.openai) throw new Error('OpenAI not initialized');
-
-    // Get OpenAI model from settings
-    let openaiModel = 'gpt-3.5-turbo';
-    try {
-      const modelResult = await pool.query(
-        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'openai_model'"
-      );
-      if (modelResult.rows[0]?.setting_value) {
-        openaiModel = modelResult.rows[0].setting_value;
-      }
-    } catch (error) {
-      // Use default model
-    }
-
-    // Get system prompt from database
-    const systemPromptFromDB = await this.getSystemPrompt();
-
-    // Check if we have sources but no good context
-    const hasSourcesButNoContext = searchResults && searchResults.length > 0 && (!context || context.length < 100);
-
-    // If we have sources but limited context, enrich the prompt with source summaries
-    let sourcesSummary = '';
-    if (hasSourcesButNoContext && searchResults) {
-      sourcesSummary = '\n\nKAYNAK ÖZETLERİ (ilgi düzeyine göre):\n';
-      const topSources = searchResults.slice(0, 7);
-      topSources.forEach((source, idx) => {
-        const score = source.score || Math.round((source.similarity_score || 0.5) * 100);
-        const title = source.title || 'Kaynak';
-        const excerpt = source.excerpt || source.content || '';
-        const truncatedExcerpt = excerpt.length > 100 ? excerpt.substring(0, 100) + '...' : excerpt;
-        sourcesSummary += `${idx + 1}. %${score} - ${title}: ${truncatedExcerpt}\n`;
-      });
-    }
-
-    const defaultSystemPrompt = systemPromptFromDB;
-
-    // Append context information to the system prompt
-    const finalSystemPrompt = systemPrompt || defaultSystemPrompt;
-
-    // Add context to the prompt
-    const contextPrompt = finalSystemPrompt + `
-
-Bağlam (en ilgiliden başlayarak sıralı):
-${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili spesifik bilgi bulunamadı.'}${sourcesSummary}`;
-
-    const messages: any[] = [
-      { role: 'system', content: contextPrompt },
-      ...history.map(h => ({ role: h.role, content: h.content })),
-      { role: 'user', content: query }
-    ];
-
-    const completion = await this.openai.chat.completions.create({
-      model: openaiModel,
-      messages,
-      temperature: temperature,
-      max_tokens: Math.min(maxTokens, 8000) // Allow up to 8000 tokens for longer responses
-    });
-
-    return {
-      content: completion.choices[0].message.content || 'Yanıt oluşturulamadı.'
-    };
-  }
-
-  /**
-   * Generate demo response without OpenAI
-   */
-  private generateDemoResponse(query: string, context: string): { content: string } {
-    const lowerQuery = query.toLowerCase();
-    
-    // If context exists, use it to generate a response
-    if (context && context.length > 50) {
-      const contextLines = context.split('\n').filter(line => line.trim());
-      const firstSource = contextLines.find(line => line.includes('[Kaynak')) || '';
-      const relevantInfo = contextLines.slice(0, 2).join('\n');
-      
-      return {
-        content: `${query} hakkında:\n\n${relevantInfo}\n\n💡 Not: Daha detaylı bilgi için aşağıdaki kaynaklara bakabilirsiniz.`
-      };
-    }
-    
-    // Common responses
-    const responses: { [key: string]: string } = {
-      'merhaba': 'Merhaba! 👋 Size nasıl yardımcı olabilirim?\n\nVergi, muhasebe ve mali mevzuat konularında sorularınızı yanıtlayabilirim.',
-      'özelge': '📋 **Özelge Nedir?**\n\nÖzelge, vergi mükelleflerinin belirli bir konu hakkında Gelir İdaresi Başkanlığı\'ndan aldıkları resmi görüştür.\n\n✅ Sadece başvuru sahibini bağlar\n✅ Vergi güvenliği sağlar\n✅ İşlem öncesi alınmalıdır',
-      'kdv': '💰 **KDV Oranları:**\n\n• %1 - Temel gıda maddeleri\n• %8 - Bazı gıda ve hizmetler\n• %18 - Genel oran\n\nDetaylı liste için Maliye Bakanlığı sitesini ziyaret edebilirsiniz.',
-      'test': '✅ Sistem başarıyla çalışıyor!\n\nMesajınız alındı ve işlendi. Size nasıl yardımcı olabilirim?'
-    };
-
-    // Find matching response
-    for (const [key, value] of Object.entries(responses)) {
-      if (lowerQuery.includes(key)) {
-        return { content: value };
-      }
-    }
-
-    // Default response
-    return {
-      content: `"${query}" konusuyla ilgili veritabanımda henüz detaylı bilgi bulunmuyor.\n\nBu konuda size daha iyi yardımcı olabilmem için daha spesifik bir soru sorabilirsiniz.`
-    };
-  }
-
+  
   /**
    * Ensure conversation exists with better title
    */
@@ -1113,16 +811,14 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
         const score = result.score || (result.similarity_score * 100) || 0;
         const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
 
-        // Determine category based on source table and content
-        let category = 'Genel';
-        if (sourceTable.toUpperCase().includes('OZELGE')) category = 'Özelge';
-        else if (sourceTable.toUpperCase().includes('DANISTAY')) category = 'Danıştay Kararı';
-        else if (sourceTable.toUpperCase().includes('MAKALE')) category = 'Makale';
-        else if (sourceTable.toUpperCase().includes('SORUCEVAP')) category = 'Soru-Cevap';
-        else if (sourceTable.toUpperCase().includes('MEVZUAT')) category = 'Mevzuat';
+        // Use the source_table name directly as category - convert to readable format
+        let category = 'Document';
+        if (sourceTable) {
+          category = sourceTable.charAt(0).toUpperCase() + sourceTable.slice(1).toLowerCase();
+        }
 
         // Generate a meaningful title
-        let title = result.title || `${category} - Kaynak ${idx + 1}`;
+        let title = result.title || `${category} - Source ${idx + 1}`;
 
         // Clean up title prefixes
         title = title
@@ -1143,7 +839,13 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
 
         // Generate LLM-processed content and question for related topics
         let processedContent = cleanExcerpt;
-        let generatedQuestion = `${title} hakkında detaylı bilgi verir misiniz?`;
+        // Generate question based on content language (detect Turkish vs other)
+        const isTurkishContent = /[çğıöşüÇĞİÖŞÜ]/.test(cleanExcerpt) ||
+                                 /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
+        const questionTemplate = isTurkishContent ?
+          `${title} hakkında detaylı bilgi verir misiniz?` :
+          `Can you provide detailed information about ${title}?`;
+        let generatedQuestion = questionTemplate;
 
         try {
           console.log(`🤖 Processing related topic: ${title.substring(0, 30)}...`);
@@ -1256,16 +958,14 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
         const score = result.score || (result.similarity_score * 100) || 0;
         const sourceTable = result.source_table || result.databaseInfo?.table || 'documents';
 
-        // Determine category
-        let category = 'Genel';
-        if (sourceTable.toUpperCase().includes('OZELGE')) category = 'Özelge';
-        else if (sourceTable.toUpperCase().includes('DANISTAY')) category = 'Danıştay Kararı';
-        else if (sourceTable.toUpperCase().includes('MAKALE')) category = 'Makale';
-        else if (sourceTable.toUpperCase().includes('SORUCEVAP')) category = 'Soru-Cevap';
-        else if (sourceTable.toUpperCase().includes('MEVZUAT')) category = 'Mevzuat';
+        // Use the source_table name directly as category - convert to readable format
+        let category = 'Document';
+        if (sourceTable) {
+          category = sourceTable.charAt(0).toUpperCase() + sourceTable.slice(1).toLowerCase();
+        }
 
         // Clean title
-        let title = result.title || `${category} - Kaynak ${offset + idx + 1}`;
+        let title = result.title || `${category} - Source ${offset + idx + 1}`;
         title = title
           .replace(/^sorucevap -\s*/i, '')
           .replace(/^ozelgeler -\s*/i, '')
@@ -1283,7 +983,13 @@ ${context && context.length > 50 ? context : 'Veritabanında bu konuyla ilgili s
 
         // Generate LLM-processed content and question
         let processedContent = cleanExcerpt;
-        let generatedQuestion = `${title} hakkında detaylı bilgi verir misiniz?`;
+        // Generate question based on content language (detect Turkish vs other)
+        const isTurkishContent = /[çğıöşüÇĞİÖŞÜ]/.test(cleanExcerpt) ||
+                                 /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
+        const questionTemplate = isTurkishContent ?
+          `${title} hakkında detaylı bilgi verir misiniz?` :
+          `Can you provide detailed information about ${title}?`;
+        let generatedQuestion = questionTemplate;
 
         try {
           console.log(`🤖 Processing paginated result: ${title.substring(0, 30)}...`);

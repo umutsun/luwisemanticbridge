@@ -2,30 +2,30 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/contexts/AuthProvider';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: string[];
+  requireAdmin?: boolean;
 }
 
-export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, requireAdmin }: ProtectedRouteProps) {
   const router = useRouter();
-  const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore();
+  const { user, isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/auth/login');
+    if (!loading && !isAuthenticated) {
+      router.push('/login');
       return;
     }
 
-    if (user && requiredRole && !requiredRole.includes(user.role)) {
-      router.push('/unauthorized');
+    if (requireAdmin && user?.role !== 'admin') {
+      router.push('/chat');
       return;
     }
-  }, [isAuthenticated, isLoading, user, router, requiredRole]);
+  }, [isAuthenticated, loading, user, router, requireAdmin]);
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -37,7 +37,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     return null;
   }
 
-  if (requiredRole && user && !requiredRole.includes(user.role)) {
+  if (requireAdmin && user?.role !== 'admin') {
     return null;
   }
 

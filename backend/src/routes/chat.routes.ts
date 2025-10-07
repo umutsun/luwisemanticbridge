@@ -1,22 +1,28 @@
 import { Router, Request, Response } from 'express';
 import { ragChat } from '../services/rag-chat.service';
+import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { SubscriptionService } from '../services/subscription.service';
 
 const router = Router();
+const subscriptionService = new SubscriptionService();
 
 /**
- * Send a chat message
+ * Send a chat message - requires authentication and subscription
  */
-router.post('/api/v2/chat', async (req: Request, res: Response) => {
+router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: AuthenticatedRequest, res: Response) => {
   try {
     console.log('Chat request received:', {
       body: req.body,
       headers: req.headers['content-type']
     });
     
-    const { 
-      message, 
-      conversationId, 
-      userId = 'demo-user',
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const {
+      message,
+      conversationId,
       temperature = 0.1,
       model,
       systemPrompt,
@@ -25,6 +31,8 @@ router.post('/api/v2/chat', async (req: Request, res: Response) => {
       language,
       responseStyle
     } = req.body;
+
+    const userId = req.user.userId;
     
     if (!message || message.trim() === '') {
       console.log('Message validation failed:', { message });
@@ -44,11 +52,25 @@ router.post('/api/v2/chat', async (req: Request, res: Response) => {
       responseStyle
     });
     
-    console.log('Chat response:', { 
+    console.log('Chat response:', {
       hasResponse: !!result.response,
-      sourcesCount: result.sources?.length || 0 
+      sourcesCount: result.sources?.length || 0
     });
-    
+
+    // Track user usage
+    try {
+      await subscriptionService.trackUserUsage(userId, 'chat_query', {
+        message,
+        responseLength: result.response?.length || 0,
+        sourcesCount: result.sources?.length || 0,
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent')
+      });
+    } catch (trackingError) {
+      console.error('Usage tracking error:', trackingError);
+      // Don't fail the request if tracking fails
+    }
+
     res.json(result);
   } catch (error: any) {
     console.error('Chat error details:', error);
@@ -60,13 +82,17 @@ router.post('/api/v2/chat', async (req: Request, res: Response) => {
 });
 
 /**
- * Get user conversations
+ * Get user conversations - requires authentication
  */
-router.get('/api/v2/chat/conversations', async (req: Request, res: Response) => {
+router.get('/api/v2/chat/conversations', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { userId = 'demo-user' } = req.query;
-    
-    const conversations = await ragChat.getUserConversations(userId as string);
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const userId = req.user.userId;
+
+    const conversations = await ragChat.getUserConversations(userId);
     
     res.json({
       conversations,

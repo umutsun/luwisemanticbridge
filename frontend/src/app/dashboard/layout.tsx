@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Database } from 'lucide-react';
 import Header from '@/components/Header';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -124,13 +125,15 @@ export default function DashboardLayout({
   }
 
   return (
-    <ConfigProvider>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Header user={user || undefined} onLogout={handleLogout} />
-        <main className="container mx-auto px-4">
-          {children}
-        </main>
-      </div>
-    </ConfigProvider>
+    <ProtectedRoute requireAdmin={true}>
+      <ConfigProvider>
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <Header />
+          <main className="container mx-auto px-4">
+            {children}
+          </main>
+        </div>
+      </ConfigProvider>
+    </ProtectedRoute>
   );
 }

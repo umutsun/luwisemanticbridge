@@ -35,11 +35,13 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, this.saltRounds);
 
     // Create user (handle both old and new schema)
+    // Use name column from SQL schema instead of first_name, last_name
+    const fullName = `${first_name || ''} ${last_name || ''}`.trim();
     const result = await this.pool.query(
-      `INSERT INTO users (username, email, password_hash, password, first_name, last_name)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, username, email, first_name, last_name, role, is_active, email_verified, created_at, updated_at`,
-      [username, email, passwordHash, passwordHash, first_name, last_name]
+      `INSERT INTO users (username, email, password, name, role, status, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, username, email, name, role, status, email_verified, created_at, updated_at`,
+      [username, email, passwordHash, fullName || username, 'user', 'active', false]
     );
 
     const user = result.rows[0];
@@ -55,10 +57,9 @@ export class AuthService {
         id: user.id,
         username: user.username,
         email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
+        name: user.name,
         role: user.role,
-        is_active: user.is_active,
+        status: user.status,
         email_verified: user.email_verified,
         created_at: user.created_at,
         updated_at: user.updated_at
@@ -71,9 +72,9 @@ export class AuthService {
   async login(loginData: LoginDto): Promise<AuthResponse> {
     const { email, password } = loginData;
 
-    // Find user (handle both old and new schema)
+    // Find user
     const result = await this.pool.query(
-      `SELECT id, username, email, COALESCE(password_hash, password) as password_hash, first_name, last_name, role, is_active, email_verified, created_at, updated_at
+      `SELECT id, username, email, password as password_hash, name, role, status, email_verified, created_at, updated_at
        FROM users WHERE email = $1`,
       [email]
     );
@@ -84,7 +85,7 @@ export class AuthService {
 
     const user = result.rows[0];
 
-    if (!user.is_active) {
+    if (user.status !== 'active') {
       throw new Error('Account is deactivated');
     }
 
@@ -105,10 +106,9 @@ export class AuthService {
         id: user.id,
         username: user.username,
         email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
+        name: user.name,
         role: user.role,
-        is_active: user.is_active,
+        status: user.status,
         email_verified: user.email_verified,
         created_at: user.created_at,
         updated_at: user.updated_at
@@ -134,8 +134,8 @@ export class AuthService {
 
       // Get user
       const userResult = await this.pool.query(
-        'SELECT id, email, role FROM users WHERE id = $1 AND is_active = true',
-        [decoded.userId]
+        'SELECT id, email, role FROM users WHERE id = $1 AND status = $2',
+        [decoded.userId, 'active']
       );
 
       if (userResult.rows.length === 0) {
@@ -149,7 +149,7 @@ export class AuthService {
 
       // Update session
       await this.pool.query(
-        'UPDATE user_sessions SET token = $1, session_token = $1, refresh_token = $2 WHERE refresh_token = $3',
+        'UPDATE user_sessions SET token = $1, refresh_token = $2 WHERE refresh_token = $3',
         [tokens.accessToken, tokens.refreshToken, refreshToken]
       );
 
@@ -166,9 +166,9 @@ export class AuthService {
     );
   }
 
-  async getUserById(userId: number): Promise<Omit<User, 'password_hash'> | null> {
+  async getUserById(userId: string): Promise<Omit<User, 'password'> | null> {
     const result = await this.pool.query(
-      `SELECT id, username, email, first_name, last_name, role, is_active, email_verified, created_at, updated_at
+      `SELECT id, username, email, name, role, status, email_verified, created_at, updated_at
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -189,14 +189,14 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private async saveSession(userId: number, accessToken: string, refreshToken: string): Promise<void> {
+  private async saveSession(userId: string, accessToken: string, refreshToken: string): Promise<void> {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
 
     await this.pool.query(
-      `INSERT INTO user_sessions (user_id, token, session_token, refresh_token, expires_at)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [userId, accessToken, accessToken, refreshToken, expiresAt]
+      `INSERT INTO user_sessions (user_id, token, refresh_token, expires_at)
+       VALUES ($1, $2, $3, $4)`,
+      [userId, accessToken, refreshToken, expiresAt]
     );
   }
 
@@ -206,7 +206,7 @@ export class AuthService {
 
       // Check if session exists
       const sessionResult = await this.pool.query(
-        'SELECT id FROM user_sessions WHERE session_token = $1 AND expires_at > NOW()',
+        'SELECT id FROM user_sessions WHERE token = $1 AND expires_at > NOW()',
         [token]
       );
 
@@ -218,5 +218,34 @@ export class AuthService {
     } catch (error) {
       throw new Error('Invalid token');
     }
+  }
+
+  async createDefaultAdmin(): Promise<void> {
+    const email = 'admin@asb.com';
+    const password = 'admin123';
+
+    // Check if admin user already exists
+    const existingAdmin = await this.pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
+
+    if (existingAdmin.rows.length > 0) {
+      console.log('Admin user already exists');
+      return;
+    }
+
+    // Create admin user
+    const passwordHash = await bcrypt.hash(password, this.saltRounds);
+
+    await this.pool.query(
+      `INSERT INTO users (username, email, password, name, role, status, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      ['admin', email, passwordHash, 'Administrator', 'admin', 'active', true]
+    );
+
+    console.log('Default admin user created successfully');
+    console.log('Email: admin@asb.com');
+    console.log('Password: admin123');
   }
 }

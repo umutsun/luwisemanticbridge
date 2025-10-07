@@ -156,6 +156,28 @@ interface Config {
   mistral?: {
     apiKey?: string;
   };
+  smtp: {
+    gmail: {
+      enabled: boolean;
+      host: string;
+      port: number;
+      secure: boolean;
+      auth: {
+        user: string;
+        pass: string;
+      };
+    };
+    brevo: {
+      enabled: boolean;
+      host: string;
+      port: number;
+      secure: boolean;
+      auth: {
+        user: string;
+        pass: string;
+      };
+    };
+  };
   n8n: {
     url: string;
     apiKey: string;
@@ -286,6 +308,28 @@ export default function SettingsPage() {
     },
     jina: {
       apiKey: typeof process.env.NEXT_PUBLIC_JINA_API_KEY === 'string' ? process.env.NEXT_PUBLIC_JINA_API_KEY : '',
+    },
+    smtp: {
+      gmail: {
+        enabled: false,
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: '',
+          pass: '',
+        },
+      },
+      brevo: {
+        enabled: false,
+        host: 'smtp-relay.brevo.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: '',
+          pass: '',
+        },
+      },
     },
     n8n: {
       url: 'http://localhost:5678',
@@ -677,6 +721,28 @@ export default function SettingsPage() {
         },
         jina: {
           apiKey: '',
+        },
+        smtp: {
+          gmail: {
+            enabled: false,
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false,
+            auth: {
+              user: '',
+              pass: '',
+            },
+          },
+          brevo: {
+            enabled: false,
+            host: 'smtp-relay.brevo.com',
+            port: 587,
+            secure: false,
+            auth: {
+              user: '',
+              pass: '',
+            },
+          },
         },
         n8n: {
           url: 'http://localhost:5678',
@@ -1683,68 +1749,197 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="integrations">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                n8n Integration
-              </CardTitle>
-              <CardDescription>
-                Connect with n8n for workflow automation
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="n8nUrl">n8n URL</Label>
-                  <Input
-                    id="n8nUrl"
-                    value={config.n8n.url}
-                    onChange={(e) => updateConfig('n8n.url', e.target.value)}
-                    placeholder="http://localhost:5678"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="n8nKey">API Key</Label>
-                  <div className="relative">
+        <TabsContent value="integrations" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  n8n Integration
+                </CardTitle>
+                <CardDescription>
+                  Connect with n8n for workflow automation
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="n8nUrl">n8n URL</Label>
                     <Input
-                      id="n8nKey"
-                      type={showPassword.n8nKey ? 'text' : 'password'}
-                      value={config.n8n.apiKey}
-                      onChange={(e) => updateConfig('n8n.apiKey', e.target.value)}
-                      placeholder="n8n API key"
+                      id="n8nUrl"
+                      value={config.n8n.url}
+                      onChange={(e) => updateConfig('n8n.url', e.target.value)}
+                      placeholder="http://localhost:5678"
                     />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2"
-                      onClick={() => togglePasswordVisibility('n8nKey')}
-                    >
-                      {showPassword.n8nKey ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="n8nKey">API Key</Label>
+                    <div className="relative">
+                      <Input
+                        id="n8nKey"
+                        type={showPassword.n8nKey ? 'text' : 'password'}
+                        value={config.n8n.apiKey}
+                        onChange={(e) => updateConfig('n8n.apiKey', e.target.value)}
+                        placeholder="n8n API key"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2"
+                        onClick={() => togglePasswordVisibility('n8nKey')}
+                      >
+                        {showPassword.n8nKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <Button
-                onClick={() => testConnection('n8n')}
-                disabled={testing === 'n8n'}
-                className="w-full"
-              >
-                {testing === 'n8n' ? (
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Activity className="h-4 w-4 mr-2" />
-                )}
-                Test Connection
-              </Button>
-            </CardContent>
-          </Card>
+                <Button
+                  onClick={() => testConnection('n8n')}
+                  disabled={testing === 'n8n'}
+                  className="w-full"
+                >
+                  {testing === 'n8n' ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Activity className="h-4 w-4 mr-2" />
+                  )}
+                  Test Connection
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Email Configuration
+                </CardTitle>
+                <CardDescription>
+                  Configure SMTP settings for email notifications
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Gmail SMTP</Label>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Switch
+                        id="gmailEnabled"
+                        checked={config.smtp.gmail.enabled}
+                        onCheckedChange={(checked) => updateConfig('smtp.gmail.enabled', checked)}
+                      />
+                      <Label htmlFor="gmailEnabled">Enable Gmail</Label>
+                    </div>
+                    {config.smtp.gmail.enabled && (
+                      <div className="space-y-2 p-3 border rounded-lg">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="gmailUser">Email</Label>
+                            <Input
+                              id="gmailUser"
+                              type="email"
+                              value={config.smtp.gmail.auth.user}
+                              onChange={(e) => updateConfig('smtp.gmail.auth.user', e.target.value)}
+                              placeholder="your@gmail.com"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="gmailPass">App Password</Label>
+                            <div className="relative">
+                              <Input
+                                id="gmailPass"
+                                type={showPassword.gmailPass ? 'text' : 'password'}
+                                value={config.smtp.gmail.auth.pass}
+                                onChange={(e) => updateConfig('smtp.gmail.auth.pass', e.target.value)}
+                                placeholder="app password"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0 top-0 h-full px-3 py-2"
+                                onClick={() => togglePasswordVisibility('gmailPass')}
+                              >
+                                {showPassword.gmailPass ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Use App Password, not your regular password. Enable 2FA first.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Brevo SMTP</Label>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Switch
+                        id="brevoEnabled"
+                        checked={config.smtp.brevo.enabled}
+                        onCheckedChange={(checked) => updateConfig('smtp.brevo.enabled', checked)}
+                      />
+                      <Label htmlFor="brevoEnabled">Enable Brevo</Label>
+                    </div>
+                    {config.smtp.brevo.enabled && (
+                      <div className="space-y-2 p-3 border rounded-lg">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="brevoUser">Sender Email</Label>
+                            <Input
+                              id="brevoUser"
+                              type="email"
+                              value={config.smtp.brevo.auth.user}
+                              onChange={(e) => updateConfig('smtp.brevo.auth.user', e.target.value)}
+                              placeholder="sender@yourdomain.com"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="brevoPass">API Key v3</Label>
+                            <div className="relative">
+                              <Input
+                                id="brevoPass"
+                                type={showPassword.brevoPass ? 'text' : 'password'}
+                                value={config.smtp.brevo.auth.pass}
+                                onChange={(e) => updateConfig('smtp.brevo.auth.pass', e.target.value)}
+                                placeholder="xkeysib-..."
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-0 top-0 h-full px-3 py-2"
+                                onClick={() => togglePasswordVisibility('brevoPass')}
+                              >
+                                {showPassword.brevoPass ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Get your API key from Brevo dashboard under SMTP & API settings.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="chatbot" className="space-y-6">

@@ -1,15 +1,17 @@
 export interface User {
-  id: number;
+  id: string; // UUID
   username: string;
   email: string;
-  password_hash: string;
-  first_name?: string;
-  last_name?: string;
-  role: 'user' | 'admin' | 'moderator';
-  is_active: boolean;
+  password: string;
+  name: string;
+  role: 'user' | 'admin' | 'premium';
+  status: 'active' | 'inactive' | 'suspended';
   email_verified: boolean;
   created_at: Date;
   updated_at: Date;
+  last_login?: Date;
+  subscription_type?: string;
+  subscription_end_date?: Date;
 }
 
 export interface CreateUserDto {
@@ -26,23 +28,24 @@ export interface LoginDto {
 }
 
 export interface AuthResponse {
-  user: Omit<User, 'password_hash'>;
+  user: Omit<User, 'password'>;
   accessToken: string;
   refreshToken: string;
 }
 
 export interface UserSession {
-  id: number;
-  user_id: number;
-  session_token: string;
+  id: string; // UUID
+  user_id: string; // UUID
+  token: string;
   refresh_token?: string;
   expires_at: Date;
   created_at: Date;
-  last_accessed: Date;
+  ip_address?: string;
+  user_agent?: string;
 }
 
 export interface JwtPayload {
-  userId: number;
+  userId: string; // UUID
   email: string;
   role: string;
   iat?: number;

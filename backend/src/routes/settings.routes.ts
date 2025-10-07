@@ -37,6 +37,7 @@ router.get('/', async (req: Request, res: Response) => {
       huggingface: {},
       google: {},
       jina: {},
+      smtp: {},
       n8n: {},
       scraper: {},
       embeddings: {},
@@ -100,6 +101,30 @@ router.get('/', async (req: Request, res: Response) => {
     config.n8n = {
       url: process.env.N8N_WEBHOOK_URL || 'http://localhost:5678',
       apiKey: process.env.N8N_API_KEY || ''
+    };
+
+    // Initialize SMTP configuration
+    config.smtp = {
+      gmail: {
+        enabled: false,
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: '',
+          pass: ''
+        }
+      },
+      brevo: {
+        enabled: false,
+        host: 'smtp-relay.brevo.com',
+        port: 587,
+        secure: false,
+        auth: {
+          user: '',
+          pass: ''
+        }
+      }
     };
 
     // Initialize embeddings configuration
@@ -1407,6 +1432,34 @@ router.get('/test/:service', async (req: Request, res: Response) => {
           success: true,
           message: `LLM services configured: ${providers.join(', ') || 'none'}`
         });
+        break;
+
+      case 'smtp':
+        // Test SMTP configuration
+        const smtpResult = await asembPool.query(
+          'SELECT key, value FROM settings WHERE key LIKE $1',
+          ['smtp.%']
+        );
+
+        if (smtpResult.rows.length === 0) {
+          res.json({
+            success: true,
+            message: 'No SMTP configuration found'
+          });
+        } else {
+          const configuredProviders: string[] = [];
+          smtpResult.rows.forEach(row => {
+            if (row.key.includes('.enabled') && row.value === 'true') {
+              const provider = row.key.split('.')[1];
+              configuredProviders.push(provider);
+            }
+          });
+
+          res.json({
+            success: true,
+            message: `SMTP services configured: ${configuredProviders.join(', ') || 'none'}`
+          });
+        }
         break;
 
       default:

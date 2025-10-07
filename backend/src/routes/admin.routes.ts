@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
-import { authenticateToken, requireRole } from '../middleware/auth.middleware';
+import { authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 import bcrypt from 'bcryptjs';
 
 const router = Router();
@@ -11,7 +11,7 @@ const pool = new Pool({
 });
 
 // Get all users (Admin only)
-router.get('/users', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.get('/users', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -26,7 +26,7 @@ router.get('/users', authenticateToken, requireRole(['admin']), async (req: Requ
     let paramIndex = 1;
 
     if (search) {
-      whereClause += ` AND (username ILIKE $${paramIndex} OR email ILIKE $${paramIndex} OR first_name ILIKE $${paramIndex} OR last_name ILIKE $${paramIndex})`;
+      whereClause += ` AND (email ILIKE $${paramIndex} OR name ILIKE $${paramIndex})`;
       params.push(`%${search}%`);
       paramIndex++;
     }
@@ -38,17 +38,31 @@ router.get('/users', authenticateToken, requireRole(['admin']), async (req: Requ
     }
 
     if (status === 'active') {
-      whereClause += ` AND is_active = true`;
+      whereClause += ` AND status = 'active'`;
     } else if (status === 'inactive') {
-      whereClause += ` AND is_active = false`;
+      whereClause += ` AND status = 'inactive'`;
     }
 
-    // Get users
+    // Get users with subscription info
     const usersQuery = `
-      SELECT id, username, email, first_name, last_name, role, is_active, email_verified, created_at, updated_at
-      FROM users
+      SELECT
+        u.id, u.email, u.name, u.role, u.status, u.email_verified, u.created_at, u.updated_at,
+        COALESCE(
+          json_build_object(
+            'id', us.id,
+            'plan_name', sp.name,
+            'status', us.status,
+            'start_date', us.start_date,
+            'end_date', us.end_date,
+            'created_at', us.created_at
+          ),
+          NULL
+        ) as subscription
+      FROM users u
+      LEFT JOIN user_subscriptions us ON u.id = us.user_id
+      LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
       ${whereClause}
-      ORDER BY created_at DESC
+      ORDER BY u.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
     params.push(limit, offset);
@@ -84,7 +98,7 @@ router.get('/users', authenticateToken, requireRole(['admin']), async (req: Requ
 });
 
 // Get user by ID (Admin only)
-router.get('/users/:id', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.get('/users/:id', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
 
@@ -119,7 +133,7 @@ router.get('/users/:id', authenticateToken, requireRole(['admin']), async (req: 
 });
 
 // Update user (Admin only)
-router.put('/users/:id', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.put('/users/:id', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
     const { username, email, first_name, last_name, role, is_active } = req.body;
@@ -160,7 +174,7 @@ router.put('/users/:id', authenticateToken, requireRole(['admin']), async (req: 
 });
 
 // Create user (Admin only)
-router.post('/users', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.post('/users', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { username, email, password, first_name, last_name, role = 'user' } = req.body;
 
@@ -201,7 +215,7 @@ router.post('/users', authenticateToken, requireRole(['admin']), async (req: Req
 });
 
 // Delete user (Admin only)
-router.delete('/users/:id', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.delete('/users/:id', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
 
@@ -228,7 +242,7 @@ router.delete('/users/:id', authenticateToken, requireRole(['admin']), async (re
 });
 
 // Reset user password (Admin only)
-router.post('/users/:id/reset-password', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.post('/users/:id/reset-password', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
     const { newPassword } = req.body;
@@ -257,7 +271,7 @@ router.post('/users/:id/reset-password', authenticateToken, requireRole(['admin'
 });
 
 // Toggle user active status (Admin only)
-router.patch('/users/:id/toggle-status', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.patch('/users/:id/toggle-status', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
 
@@ -294,7 +308,7 @@ router.patch('/users/:id/toggle-status', authenticateToken, requireRole(['admin'
 });
 
 // Get system stats (Admin only)
-router.get('/stats', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+router.get('/stats', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     // Get user counts
     const userCounts = await pool.query(`
@@ -330,6 +344,55 @@ router.get('/stats', authenticateToken, requireRole(['admin']), async (req: Requ
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// Update user subscription (Admin only)
+router.post('/users/:id/subscription', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.id;
+    const { plan_name } = req.body;
+
+    if (!plan_name || !['basic', 'premium'].includes(plan_name)) {
+      return res.status(400).json({ error: 'Invalid plan name' });
+    }
+
+    // Define plan limits
+    const planLimits = {
+      basic: { queries_limit: 100 },
+      premium: { queries_limit: 1000 }
+    };
+
+    const limits = planLimits[plan_name as keyof typeof planLimits];
+
+    // Check if user has an existing subscription
+    const existingSubscription = await pool.query(
+      'SELECT id FROM user_subscriptions WHERE user_id = $1',
+      [userId]
+    );
+
+    if (existingSubscription.rows.length > 0) {
+      // Update existing subscription
+      await pool.query(
+        `UPDATE user_subscriptions
+         SET plan_name = $1, status = 'active', queries_limit = $2, updated_at = NOW()
+         WHERE user_id = $3`,
+        [plan_name, limits.queries_limit, userId]
+      );
+    } else {
+      // Create new subscription
+      await pool.query(
+        `INSERT INTO user_subscriptions
+         (user_id, plan_name, status, queries_used, queries_limit, created_at, updated_at)
+         VALUES ($1, $2, 'active', 0, $3, NOW(), NOW())`,
+        [userId, plan_name, limits.queries_limit]
+      );
+    }
+
+    res.json({ message: 'Subscription updated successfully' });
+  } catch (error) {
+    console.error('Update subscription error:', error);
+    res.status(500).json({ error: 'Failed to update subscription' });
   }
 });
 

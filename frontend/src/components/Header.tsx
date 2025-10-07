@@ -6,6 +6,7 @@ import config from '@/config/api.config';
 import { usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useConfig } from '@/contexts/ConfigContext';
+import { useAuth } from '@/contexts/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -43,20 +44,12 @@ import {
   X,
   Shield,
   RefreshCw,
-  CheckCircle,
-  AlertCircle
+  Monitor
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
 import { getAppSettings } from '@/lib/api/settings';
 
-interface HeaderProps {
-  user?: {
-    name: string;
-    email: string;
-  };
-  onLogout?: () => void;
-}
 
 interface SystemStatus {
   database: {
@@ -90,10 +83,11 @@ interface SystemStatus {
   };
 }
 
-export default function Header({ user, onLogout }: HeaderProps) {
+export default function Header() {
   const pathname = usePathname();
   const { t } = useTranslation();
   const { config } = useConfig();
+  const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -128,12 +122,10 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
     try {
       // Use direct environment variable to avoid config import issues
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
-
-      // Get detailed system health from backend
+      // Get detailed system health from backend using Next.js rewrites
       const [dashboardResponse, healthResponse] = await Promise.all([
-        fetch(`${apiUrl}/api/dashboard`),
-        fetch(`${apiUrl}/api/v2/health/system`)
+        fetch('/api/dashboard'),
+        fetch('/api/health/system')
       ]);
 
       if (dashboardResponse.ok && healthResponse.ok) {
@@ -197,6 +189,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
             redis: {
               connected: redisService?.status === 'connected' ||
                         redisService?.status === 'healthy' ||
+                        healthData.serverStatus?.redis === 'connected' ||
                         (redisService && !redisService.status),
               used_memory: dashboardData.redis?.used_memory || '0 MB',
               responseTime: redisService?.responseTime || 0
@@ -429,18 +422,12 @@ export default function Header({ user, onLogout }: HeaderProps) {
                       {isConnecting ? (
                         <div className="h-5 w-5 rounded-full bg-gray-400 animate-pulse" />
                       ) : allServicesActive ? (
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <Server className="h-5 w-5 text-green-500" />
                       ) : (
-                        <AlertCircle className="h-5 w-5 text-yellow-500" />
+                        <Monitor className="h-5 w-5 text-yellow-500" />
                       )}
 
-                      {/* Service count badge */}
-                      {!isConnecting && (
-                        <span className="absolute -top-1 -right-1 h-4 w-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                          {getActiveServicesCount()}
-                        </span>
-                      )}
-                    </div>
+                      </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-72 p-0">
@@ -533,7 +520,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     <p className="text-xs text-muted-foreground">{user.email}</p>
                   </div>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={onLogout} className="cursor-pointer">
+                  <DropdownMenuItem onClick={logout} className="cursor-pointer">
                     <LogOut className="h-4 w-4 mr-2" />
                     {t('header.logout')}
                   </DropdownMenuItem>

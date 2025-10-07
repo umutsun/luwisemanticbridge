@@ -1,7 +1,7 @@
-import { OpenAI } from 'openai';
 import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
-import { asembPool } from '../config/database.config'; // Import asembPool
+import { asembPool } from '../config/database.config';
+import { LLMManager } from './llm-manager.service';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -16,55 +16,177 @@ interface EmbeddingSettings {
 export class SemanticSearchService {
   private pool = pool;
   private customerPool: Pool;
-  private openai: OpenAI | null = null;
-  private useOpenAI: boolean = false;
   private embeddingSettings: EmbeddingSettings = {
     provider: 'openai',
-    model: 'text-embedding-ada-002'
+    model: 'text-embedding-3-small'
   };
-  private similarityThreshold: number = 0.001; // Default threshold
+  private similarityThreshold: number = 0.001;
+  private maxResults: number = 25;
+  private minResults: number = 1;
+  private enableHybridSearch: boolean = true;
+  private enableKeywordBoost: boolean = true;
+  private readonly RAG_SETTINGS_TTL = 30000;
+  private readonly EMBEDDING_SETTINGS_TTL = 30000;
+  private lastRAGSettingsRefresh: number = 0;
+  private lastEmbeddingSettingsRefresh: number = 0;
 
   constructor() {
-
-    // Initialize customer database pool
     this.customerPool = new Pool({
       connectionString: process.env.DATABASE_URL || `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || ''}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`
     });
 
-    // Initialize embedding providers asynchronously (fire and forget)
-    // We'll handle the async initialization in the generateEmbedding method
-    this.initializeEmbeddingProviders().catch(error => {
-      console.error('Failed to initialize embedding providers:', error);
+    this.loadRAGSettings().catch(error => {
+      console.error('[SemanticSearch] Failed to load RAG settings:', error);
+    });
+
+    this.loadEmbeddingSettings().catch(error => {
+      console.error('[SemanticSearch] Failed to load embedding settings:', error);
     });
   }
 
-  /**
-   * Load RAG settings from database
-   */
-  private async loadRAGSettings(): Promise<void> {
-    try {
-      const result = await asembPool.query(
-        'SELECT key, value FROM settings WHERE key IN ($1, $2)',
-        ['ragSettings.similarityThreshold', 'similarity_threshold']
-      );
+  private parseBooleanSetting(value: any): boolean | undefined {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'on'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'off'].includes(normalized)) {
+        return false;
+      }
+    }
+    return undefined;
+  }
 
-      result.rows.forEach(row => {
-        if (row.key === 'ragSettings.similarityThreshold' || row.key === 'similarity_threshold') {
-          const threshold = parseFloat(row.value);
-          if (!isNaN(threshold) && threshold >= 0 && threshold <= 1) {
-            this.similarityThreshold = threshold;
-            console.log(`✅ Similarity threshold loaded: ${this.similarityThreshold}`);
-          }
-        }
-      });
-    } catch (error) {
-      console.warn('⚠️ Failed to load RAG settings from database, using defaults:', error);
+  private normalizeProvider(provider?: string): string {
+    if (!provider) {
+      return 'openai';
+    }
+
+    const normalized = provider.toLowerCase();
+
+    if (normalized.includes('claude') || normalized.includes('anthropic')) {
+      return 'claude';
+    }
+
+    if (normalized.includes('gemini') || normalized.includes('google')) {
+      return 'gemini';
+    }
+
+    if (normalized.includes('deepseek')) {
+      return 'deepseek';
+    }
+
+    if (normalized.includes('openai') || normalized.includes('gpt')) {
+      return 'openai';
+    }
+
+    return normalized;
+  }
+
+  private getDefaultEmbeddingModel(provider: string): string {
+    switch (provider) {
+      case 'gemini':
+        return 'text-embedding-004';
+      case 'openai':
+      case 'deepseek':
+        return 'text-embedding-3-small';
+      default:
+        return 'text-embedding-3-small';
     }
   }
 
-  /**
-   * Load embedding settings from database and initialize providers
-   */
+  private async loadRAGSettings(): Promise<void> {
+    try {
+      const result = await asembPool.query(
+        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [
+          'ragSettings.similarityThreshold',
+          'similarity_threshold',
+          'ragSettings.maxResults',
+          'ragSettings.minResults',
+          'ragSettings.enableHybridSearch',
+          'ragSettings.enableKeywordBoost',
+          'similarityThreshold',
+          'maxResults',
+          'minResults'
+        ]
+      );
+
+      result.rows.forEach(row => {
+        const value = row.value;
+        switch (row.key) {
+          case 'ragSettings.similarityThreshold':
+          case 'similarity_threshold':
+          case 'similarityThreshold': {
+            const threshold = parseFloat(value);
+            if (!isNaN(threshold) && threshold >= 0 && threshold <= 1) {
+              this.similarityThreshold = threshold;
+            }
+            break;
+          }
+          case 'ragSettings.maxResults':
+          case 'maxResults': {
+            const parsedMax = parseInt(value, 10);
+            if (!isNaN(parsedMax) && parsedMax > 0) {
+              this.maxResults = parsedMax;
+            }
+            break;
+          }
+          case 'ragSettings.minResults':
+          case 'minResults': {
+            const parsedMin = parseInt(value, 10);
+            if (!isNaN(parsedMin) && parsedMin > 0) {
+              this.minResults = parsedMin;
+            }
+            break;
+          }
+          case 'ragSettings.enableHybridSearch': {
+            const parsed = this.parseBooleanSetting(value);
+            if (parsed !== undefined) {
+              this.enableHybridSearch = parsed;
+            }
+            break;
+          }
+          case 'ragSettings.enableKeywordBoost': {
+            const parsed = this.parseBooleanSetting(value);
+            if (parsed !== undefined) {
+              this.enableKeywordBoost = parsed;
+            }
+            break;
+          }
+          default:
+            break;
+        }
+      });
+
+      this.lastRAGSettingsRefresh = Date.now();
+
+      console.log('[SemanticSearch] RAG settings loaded', {
+        similarityThreshold: this.similarityThreshold,
+        maxResults: this.maxResults,
+        minResults: this.minResults,
+        enableHybridSearch: this.enableHybridSearch,
+        enableKeywordBoost: this.enableKeywordBoost
+      });
+    } catch (error) {
+      console.warn('[SemanticSearch] Failed to load RAG settings from database, using defaults:', error);
+    }
+  }
+
+  private async refreshRAGSettings(): Promise<void> {
+    if (Date.now() - this.lastRAGSettingsRefresh < this.RAG_SETTINGS_TTL) {
+      return;
+    }
+
+    await this.loadRAGSettings();
+  }
+
   private async loadEmbeddingSettings(): Promise<void> {
     try {
       const result = await asembPool.query(
@@ -77,7 +199,6 @@ export class SemanticSearchService {
       );
 
       const settings = result.rows.reduce((acc: any, row: any) => {
-        // Map different key formats to a consistent naming scheme
         if (row.key === 'embedding_provider' || row.key === 'llmSettings.embeddingProvider' || row.key === 'embeddings.provider') {
           acc.embeddingprovider = row.value;
         } else if (row.key === 'embedding_model' || row.key === 'llmSettings.embeddingModel' || row.key === 'embeddings.model') {
@@ -87,135 +208,98 @@ export class SemanticSearchService {
         } else if (row.key === 'google_api_key' || row.key === 'google.apiKey') {
           acc.googleapi = row.value;
         } else {
-          // Fallback for other keys
           const key = row.key.replace('_key', '').replace('.', '');
           acc[key] = row.value;
         }
         return acc;
       }, {});
 
+      const provider = this.normalizeProvider(settings.embeddingprovider || process.env.EMBEDDING_PROVIDER || this.embeddingSettings.provider);
+      const model = settings.embeddingmodel || process.env.EMBEDDING_MODEL || this.getDefaultEmbeddingModel(provider);
+
       this.embeddingSettings = {
-        provider: settings.embeddingprovider || 'google',
-        model: settings.embeddingmodel || 'text-embedding-004',
+        provider,
+        model,
         openaiApiKey: settings.openaiapi || process.env.OPENAI_API_KEY,
         googleApiKey: settings.googleapi || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
       };
 
-      console.log('✅ Embedding settings loaded:', {
+      this.lastEmbeddingSettingsRefresh = Date.now();
+      this.syncEmbeddingConfigWithLLM();
+
+      console.log('[SemanticSearch] Embedding settings loaded', {
         provider: this.embeddingSettings.provider,
         model: this.embeddingSettings.model,
         hasGoogleKey: !!this.embeddingSettings.googleApiKey,
         hasOpenAIKey: !!this.embeddingSettings.openaiApiKey
       });
     } catch (error) {
-      console.warn('⚠️ Failed to load embedding settings from database, using defaults:', error);
-      // Fallback to environment variables
+      console.warn('[SemanticSearch] Failed to load embedding settings from database, using defaults:', error);
+      const provider = this.normalizeProvider(process.env.EMBEDDING_PROVIDER || this.embeddingSettings.provider);
+      const model = process.env.EMBEDDING_MODEL || this.getDefaultEmbeddingModel(provider);
       this.embeddingSettings = {
-        provider: process.env.EMBEDDING_PROVIDER || 'google',
-        model: process.env.EMBEDDING_MODEL || 'text-embedding-004',
+        provider,
+        model,
         openaiApiKey: process.env.OPENAI_API_KEY,
         googleApiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
       };
+      this.lastEmbeddingSettingsRefresh = Date.now();
+      this.syncEmbeddingConfigWithLLM();
     }
   }
 
-  /**
-   * Initialize embedding providers based on settings
-   */
-  private async initializeEmbeddingProviders(): Promise<void> {
-    await this.loadRAGSettings();
-    await this.loadEmbeddingSettings();
-
-    // Initialize OpenAI if available
-    if (this.embeddingSettings.openaiApiKey && this.embeddingSettings.openaiApiKey.startsWith('sk-')) {
-      try {
-        this.openai = new OpenAI({
-          apiKey: this.embeddingSettings.openaiApiKey
-        });
-        this.useOpenAI = true;
-        console.log('✅ OpenAI API initialized for embeddings');
-      } catch (error) {
-        console.log('⚠️  OpenAI API initialization failed:', error);
-      }
-    } else {
-      this.useOpenAI = false;
-      console.log('📝 OpenAI API key not available');
-    }
-  }
-
-  /**
-   * Refresh embedding settings (call this when settings are updated)
-   */
   async refreshEmbeddingSettings(): Promise<void> {
-    await this.initializeEmbeddingProviders();
-  }
+    if (Date.now() - this.lastEmbeddingSettingsRefresh < this.EMBEDDING_SETTINGS_TTL) {
+      return;
+    }
 
-  /**
-   * Generate embedding for a text using configured provider
-   */
-  async generateEmbedding(text: string): Promise<number[]> {
-    // Always refresh settings to ensure we have the latest
     await this.loadEmbeddingSettings();
-
-    console.log(`🎯 Using embedding provider: ${this.embeddingSettings.provider}, model: ${this.embeddingSettings.model} (reloaded)`);
-
-    // Use Google embeddings if configured as provider
-    if (this.embeddingSettings.provider === 'google' && this.embeddingSettings.googleApiKey) {
-      try {
-        const model = this.embeddingSettings.model === 'text-embedding-004' ? 'text-embedding-004' : 'text-embedding-004';
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${this.embeddingSettings.googleApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: `models/${model}`,
-            content: { parts: [{ text }] }
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          return data.embedding.values;
-        }
-      } catch (error) {
-        console.error('Google embedding generation failed:', error);
-      }
-    }
-
-    // Use OpenAI embeddings if configured as provider
-    if (this.embeddingSettings.provider === 'openai' && this.useOpenAI && this.openai) {
-      try {
-        const model = this.embeddingSettings.model || 'text-embedding-ada-002';
-        const response = await this.openai.embeddings.create({
-          model: model,
-          input: text
-        });
-        return response.data[0].embedding;
-      } catch (error) {
-        console.error('OpenAI embedding generation failed:', error);
-      }
-    }
-
-    // Final fallback to mock embedding
-    return this.generateMockEmbedding(text);
   }
 
-  /**
-   * Generate mock embedding for demo purposes
-   */
+  private syncEmbeddingConfigWithLLM(): void {
+    try {
+      const llmManager = LLMManager.getInstance();
+      llmManager.updateEmbeddingConfig({
+        provider: this.embeddingSettings.provider,
+        model: this.embeddingSettings.model
+      });
+    } catch (error) {
+      console.warn('[SemanticSearch] Unable to sync embedding settings with LLM Manager:', error);
+    }
+  }
+
+  private applyResultLimits(requestedLimit: number): number {
+    const safeLimit = Number.isFinite(requestedLimit) ? requestedLimit : this.maxResults;
+    return Math.max(this.minResults, Math.min(this.maxResults, safeLimit));
+  }
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    try {
+      await this.refreshEmbeddingSettings();
+      const llmManager = LLMManager.getInstance();
+      console.log('[SemanticSearch] Generating embedding using LLM Manager');
+      const embedding = await llmManager.generateEmbedding(text, {
+        provider: this.embeddingSettings.provider,
+        model: this.embeddingSettings.model
+      });
+      console.log(`[SemanticSearch] Generated embedding with ${embedding.length} dimensions`);
+      return embedding;
+    } catch (error) {
+      console.error('[SemanticSearch] All embedding providers failed:', error);
+      console.log('[SemanticSearch] Using mock embedding as fallback');
+      return this.generateMockEmbedding(text);
+    }
+  }
+
   private generateMockEmbedding(text: string): number[] {
     const embedding = new Array(768).fill(0);
     const hash = this.simpleHash(text);
-
     for (let i = 0; i < 768; i++) {
       embedding[i] = Math.sin(hash * (i + 1)) * 0.5 + Math.random() * 0.1;
     }
-
     return embedding;
   }
 
-  /**
-   * Simple hash function
-   */
   private simpleHash(str: string): number {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -226,170 +310,105 @@ export class SemanticSearchService {
     return Math.abs(hash);
   }
 
-  /**
-   * Perform keyword search on available tables with enhanced error handling
-   */
   async keywordSearch(query: string, limit: number = 10) {
     const queryId = `keywordSearch_${query.substring(0, 10)}_${Date.now()}`;
     console.time(queryId);
     try {
+      const effectiveLimit = this.applyResultLimits(limit);
       let allResults: any[] = [];
 
-      // Search in all customer database tables with better distribution
-      const tables = [
-        { name: TABLE_NAMES.SORUCEVAP, type: 'sorucevap', priority: 1 },
-        { name: TABLE_NAMES.OZELGELER, type: 'ozelgeler', priority: 2 },
-        { name: TABLE_NAMES.MAKALELER, type: 'makaleler', priority: 3 },
-        { name: TABLE_NAMES.DANISTAYKARARLARI, type: 'danistaykararlari', priority: 4 }
-      ];
+      const searchQuery = `
+        SELECT DISTINCT
+          id::text as id,
+          CASE
+            WHEN content ILIKE '%' || $1 || '%' THEN
+              LEFT(SUBSTRING(content, POSITION($1 IN content) - 50, 200), 150)
+            ELSE LEFT(content, 150)
+          END as title,
+          source_table,
+          source_id,
+          CASE
+            WHEN content ILIKE '%' || $1 || '%' THEN
+              LEFT(SUBSTRING(content, POSITION($1 IN content) - 50, 300), 250)
+            ELSE LEFT(content, 250)
+          END as excerpt,
+          1 as priority,
+          CASE
+            WHEN content ILIKE '%' || $1 || '%' THEN 90
+            WHEN source_table ILIKE '%' || $1 || '%' THEN 70
+            ELSE 50
+          END as score
+        FROM unified_embeddings
+        WHERE content ILIKE '%' || $1 || '%'
+           OR source_table ILIKE '%' || $1 || '%'
+        ORDER BY
+          CASE
+            WHEN content ILIKE '%' || $1 || '%' THEN 90
+            WHEN source_table ILIKE '%' || $1 || '%' THEN 70
+            ELSE 50
+          END DESC,
+          id DESC
+        LIMIT $2
+      `;
 
-      for (const table of tables) {
-        try {
-          let searchQuery = '';
-          
-          if (table.type === 'sorucevap') {
-            searchQuery = `
-              SELECT
-                id::text as id,
-                'SORUCEVAP - ' || LEFT(question, 100) as title,
-                'sorucevap' as source_table,
-                id::text as source_id,
-                LEFT(answer, 500) as excerpt,
-                ${table.priority} as priority
-              FROM ${table.name}
-              WHERE question ILIKE $1 OR answer ILIKE $1
-              ORDER BY id DESC
-              LIMIT $2
-            `;
-          } else if (table.type === 'ozelgeler') {
-            searchQuery = `
-              SELECT 
-                id::text as id,
-                'ÖZELGE - ' || LEFT(subject, 100) as title,
-                'ozelgeler' as source_table,
-                id::text as source_id,
-                LEFT(content, 500) as excerpt,
-                ${table.priority} as priority
-              FROM ${table.name}
-              WHERE subject ILIKE $1 OR content ILIKE $1
-              ORDER BY id DESC
-              LIMIT $2
-            `;
-          } else if (table.type === 'makaleler') {
-            searchQuery = `
-              SELECT 
-                id::text as id,
-                'MAKALE - ' || LEFT(baslik, 100) as title,
-                'makaleler' as source_table,
-                id::text as source_id,
-                LEFT(icerik, 500) as excerpt,
-                ${table.priority} as priority
-              FROM ${table.name}
-              WHERE baslik ILIKE $1 OR icerik ILIKE $1
-              ORDER BY id DESC
-              LIMIT $2
-            `;
-          } else if (table.type === 'danistaykararlari') {
-            searchQuery = `
-              SELECT 
-                id::text as id,
-                'DANIŞTAY - ' || LEFT(konu, 100) as title,
-                'danistaykararlari' as source_table,
-                id::text as source_id,
-                LEFT(karar, 500) as excerpt,
-                ${table.priority} as priority
-              FROM ${table.name}
-              WHERE konu ILIKE $1 OR karar ILIKE $1
-              ORDER BY id DESC
-              LIMIT $2
-            `;
-          }
-
-          const result = await this.customerPool.query(searchQuery, [
-            `%${query}%`,
-            Math.ceil(limit / tables.length) // Distribute limit among tables
-          ]);
-          
-          allResults = [...allResults, ...result.rows];
-          console.log(`Found ${result.rows.length} results from ${table.name}`);
-        } catch (error) {
-          console.log(`${table.name} table not accessible for search`);
-        }
-      }
-
-      // Also try unified_embeddings table if available
       try {
         if (asembPool) {
-          const unifiedQuery = `
-            SELECT
-              id::text as id,
-              COALESCE(metadata->>'title', 'Document ' || id) as title,
-              metadata->>'table' as source_table,
-              source_id::text as source_id,
-              LEFT(content, 500) as excerpt,
-              5 as priority
-            FROM unified_embeddings
-            WHERE content ILIKE $1 OR (metadata->>'title') ILIKE $1
-            LIMIT $2
-          `;
-          const unifiedResult = await asembPool.query(unifiedQuery, [
-            `%${query}%`,
-            Math.ceil(limit / 2)
-          ]);
-          allResults = [...allResults, ...unifiedResult.rows];
-          console.log(`Found ${unifiedResult.rows.length} results from unified_embeddings`);
+          const result = await asembPool.query(searchQuery, [query, effectiveLimit]);
+          allResults = [...allResults, ...result.rows];
+          console.log(`[SemanticSearch] Found ${result.rows.length} keyword results`);
+        } else {
+          console.log('[SemanticSearch] asembPool not available, keyword search disabled');
         }
       } catch (error) {
-        console.log('unified_embeddings table not accessible...');
+        console.log('[SemanticSearch] unified_embeddings table not accessible for keyword search');
       }
 
       console.timeEnd(queryId);
-      
-      // Sort by priority first, then by relevance score
-      const sortedResults = allResults.sort((a, b) => {
-        // Primary sort: by priority (lower number = higher priority)
-        if (a.priority !== b.priority) {
-          return a.priority - b.priority;
-        }
 
-        // Secondary sort: by title/content relevance
-        const queryLower = query.toLowerCase();
-        const aTitle = (a.title || '').toLowerCase();
-        const bTitle = (b.title || '').toLowerCase();
-        const aExcerpt = (a.excerpt || '').toLowerCase();
-        const bExcerpt = (b.excerpt || '').toLowerCase();
+      const sortedResults = allResults
+        .sort((a, b) => {
+          if (a.priority !== b.priority) {
+            return a.priority - b.priority;
+          }
 
-        // Check if query appears in title or excerpt
-        const aRelevance = (aTitle.includes(queryLower) ? 2 : 0) +
-                           (aExcerpt.includes(queryLower) ? 1 : 0);
-        const bRelevance = (bTitle.includes(queryLower) ? 2 : 0) +
-                           (bExcerpt.includes(queryLower) ? 1 : 0);
+          const queryLower = query.toLowerCase();
+          const aTitle = (a.title || '').toLowerCase();
+          const bTitle = (b.title || '').toLowerCase();
+          const aExcerpt = (a.excerpt || '').toLowerCase();
+          const bExcerpt = (b.excerpt || '').toLowerCase();
 
-        return bRelevance - aRelevance;
-      }).slice(0, limit);
-      
+          const aRelevance = (aTitle.includes(queryLower) ? 2 : 0) + (aExcerpt.includes(queryLower) ? 1 : 0);
+          const bRelevance = (bTitle.includes(queryLower) ? 2 : 0) + (bExcerpt.includes(queryLower) ? 1 : 0);
+
+          return bRelevance - aRelevance;
+        })
+        .slice(0, effectiveLimit);
+
       return sortedResults.map(row => ({
         ...row,
-        score: Math.max(90, 100 - (row.priority * 8)) // Score based on priority, minimum 90
+        score: Math.max(90, 100 - (row.priority * 8))
       }));
     } catch (error) {
       console.timeEnd(queryId);
-      console.error('Keyword search error:', error);
+      console.error('[SemanticSearch] Keyword search error:', error);
       return [];
     }
   }
 
-  /**
-   * Perform semantic search using unified_embeddings table
-   */
   async semanticSearch(query: string, limit: number = 10) {
     const embeddingId = `semanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
     const queryId = `semanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
+    let queryTimerStarted = false;
+
     try {
-      // Check if asembPool is available and unified_embeddings has data
+      await this.refreshRAGSettings();
+      await this.refreshEmbeddingSettings();
+
+      const effectiveLimit = this.applyResultLimits(limit);
+
       if (!asembPool) {
-        console.log('❌ asembPool not available, using keyword search');
-        return this.keywordSearch(query, limit);
+        console.log('[SemanticSearch] asembPool not available, using keyword search fallback');
+        return this.keywordSearch(query, effectiveLimit);
       }
 
       const embeddingCheck = await asembPool.query(`
@@ -398,19 +417,18 @@ export class SemanticSearchService {
         WHERE embedding IS NOT NULL
       `);
 
-      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count) > 0;
+      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count, 10) > 0;
 
       if (!hasEmbeddings) {
-        console.log('No embeddings in unified_embeddings, using keyword search');
-        return this.keywordSearch(query, limit);
+        console.log('[SemanticSearch] No embeddings in unified_embeddings, using keyword search fallback');
+        return this.keywordSearch(query, effectiveLimit);
       }
 
-      // Generate embedding for query
       console.time(embeddingId);
       const queryEmbedding = await this.generateEmbedding(query);
       console.timeEnd(embeddingId);
-      
-      // Enhanced semantic search using unified_embeddings
+
+      const keywordPattern = `%${query}%`;
       const searchQuery = `
         SELECT
           ue.id::text as id,
@@ -421,79 +439,82 @@ export class SemanticSearchService {
           ue.metadata,
           1 - (ue.embedding <=> $1::vector) as similarity_score,
           CASE
-            WHEN ue.content ILIKE $3 THEN 0.15
-            WHEN ue.metadata->>'title' ILIKE $3 THEN 0.1
+            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.15
+            WHEN $5::boolean AND ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) > $2  -- Dynamic similarity threshold from settings
+          AND (1 - (ue.embedding <=> $1::vector)) >= $2
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
-            WHEN ue.content ILIKE $3 THEN 0.15
-            WHEN ue.metadata->>'title' ILIKE $3 THEN 0.1
+            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.15
+            WHEN $5::boolean AND ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
           END DESC
-        LIMIT $2
+        LIMIT $4
       `;
 
       console.time(queryId);
+      queryTimerStarted = true;
       const result = await asembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
-        limit,
-        `%${query}%`,
-        this.similarityThreshold
+        this.similarityThreshold,
+        keywordPattern,
+        effectiveLimit,
+        this.enableKeywordBoost
       ]);
       console.timeEnd(queryId);
 
       return result.rows.map(row => ({
         ...row,
-        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 125), // Increased multiplier
+        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
         relevanceScore: parseFloat(row.similarity_score),
         content: row.excerpt
       }));
     } catch (error) {
-      console.timeEnd(queryId); // Ensure timer ends on error
-      console.error('Semantic search error:', error);
-      // Fallback to keyword search
+      if (queryTimerStarted) {
+        console.timeEnd(queryId);
+      }
+      console.error('[SemanticSearch] Semantic search error:', error);
       return this.keywordSearch(query, limit);
     }
   }
 
-  /**
-   * Perform semantic search using unified_embeddings table with enhanced error handling
-   */
   async unifiedSemanticSearch(query: string, limit: number = 10) {
     const embeddingId = `unifiedSemanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
     const queryId = `unifiedSemanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
+    let queryTimerStarted = false;
 
     try {
-      // Check if asembPool is available and connected
+      await this.refreshRAGSettings();
+      await this.refreshEmbeddingSettings();
+
+      const effectiveLimit = this.applyResultLimits(limit);
+
       if (!asembPool) {
-        console.error('❌ asembPool is not available');
-        return this.keywordSearch(query, limit);
+        console.error('[SemanticSearch] asembPool is not available');
+        return this.keywordSearch(query, effectiveLimit);
       }
 
-      // Check if unified_embeddings exists and has data
       const embeddingCheck = await asembPool.query(`
         SELECT COUNT(*) as count
         FROM unified_embeddings
         WHERE embedding IS NOT NULL
       `);
-      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count) > 0;
+      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count, 10) > 0;
 
       if (!hasEmbeddings) {
-        console.log('⚠️ No embeddings in unified_embeddings, falling back to keyword search');
-        return this.keywordSearch(query, limit);
+        console.log('[SemanticSearch] No embeddings in unified_embeddings, falling back to keyword search');
+        return this.keywordSearch(query, effectiveLimit);
       }
 
-      // Generate embedding for query
       console.time(embeddingId);
       const queryEmbedding = await this.generateEmbedding(query);
       console.timeEnd(embeddingId);
 
-      // Search in unified_embeddings table with minimum similarity threshold
+      const keywordPattern = `%${query}%`;
       const searchQuery = `
         SELECT
           ue.id::text as id,
@@ -502,95 +523,87 @@ export class SemanticSearchService {
           ue.source_id,
           1 - (ue.embedding <=> $1::vector) as similarity_score,
           CASE
-            WHEN ue.content ILIKE $3 THEN 0.2
-            WHEN ue.source_table ILIKE $3 THEN 0.15
+            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.2
+            WHEN $5::boolean AND ue.source_table ILIKE $3 THEN 0.15
             ELSE 0
           END as keyword_boost
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) > $2  -- Dynamic similarity threshold from settings
+          AND (1 - (ue.embedding <=> $1::vector)) >= $2
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
-            WHEN ue.content ILIKE $3 THEN 0.2
-            WHEN ue.source_table ILIKE $3 THEN 0.15
+            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.2
+            WHEN $5::boolean AND ue.source_table ILIKE $3 THEN 0.15
             ELSE 0
           END DESC
-        LIMIT $2
+        LIMIT $4
       `;
 
       console.time(queryId);
+      queryTimerStarted = true;
       const result = await asembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
-        limit,
-        `%${query}%`,
-        this.similarityThreshold
+        this.similarityThreshold,
+        keywordPattern,
+        effectiveLimit,
+        this.enableKeywordBoost
       ]);
       console.timeEnd(queryId);
 
       return result.rows.map(row => ({
         ...row,
         title: row.source_table ? `${row.source_table} - ID: ${row.source_id}` : `Document - ID: ${row.source_id}`,
-        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost)) * 125), // Increased multiplier
+        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
         relevanceScore: parseFloat(row.similarity_score),
         content: row.excerpt
       }));
     } catch (error) {
-      console.error('❌ Unified semantic search error:', error);
-      console.timeEnd(queryId);
-
-      // Check if this is a connection issue
-      if (error instanceof Error) {
-        const errorMessage = error.message.toLowerCase();
-        if (errorMessage.includes('connection') || errorMessage.includes('timeout') || errorMessage.includes('pool')) {
-          console.log('⚠️ Database connection issue detected, using keyword search fallback');
-        } else {
-          console.log('⚠️ Database query error, using keyword search fallback');
-        }
+      if (queryTimerStarted) {
+        console.timeEnd(queryId);
       }
-
-      // Fallback to keyword search instead of recursive call
+      console.error('[SemanticSearch] Unified semantic search error:', error);
       return this.keywordSearch(query, limit);
     }
   }
 
-  /**
-   * Perform hybrid search (keyword + semantic) with enhanced error handling
-   */
   async hybridSearch(query: string, limit: number = 10) {
     const searchId = `hybridSearch_${query.substring(0, 10)}_${Date.now()}`;
     console.time(searchId);
 
     try {
-      console.log(`Starting hybrid search for: "${query}"`);
-      
-      // Get results from all sources with better distribution
+      const effectiveLimit = this.applyResultLimits(limit);
+
+      if (!this.enableHybridSearch) {
+        console.log('[SemanticSearch] Hybrid search disabled, falling back to semantic search');
+        console.timeEnd(searchId);
+        return this.semanticSearch(query, effectiveLimit);
+      }
+
       let allResults: any[] = [];
-      
-      // 1. Try unified semantic search first
+
       try {
-        const unifiedResults = await this.unifiedSemanticSearch(query, Math.ceil(limit / 2));
-        if (unifiedResults && unifiedResults.length > 0) {
-          console.log(`✅ Found ${unifiedResults.length} results via unified semantic search`);
-          allResults = [...allResults, ...unifiedResults.map((result) => ({
+        const unifiedResults = await this.unifiedSemanticSearch(query, Math.ceil(effectiveLimit / 2));
+        if (unifiedResults?.length) {
+          console.log(`[SemanticSearch] Found ${unifiedResults.length} results via unified semantic search`);
+          allResults = [...allResults, ...unifiedResults.map(result => ({
             ...result,
             keyword_score: 0,
             semantic_score: result.score / 100,
-            similarity_score: result.score / 100,
+            similarity_score: result.relevanceScore ?? result.score / 100,
             combined_score: result.score / 100,
             source_type: 'unified'
           }))];
         }
       } catch (error) {
-        console.log('Unified semantic search failed, continuing with other sources');
+        console.log('[SemanticSearch] Unified semantic search failed, continuing with other sources');
       }
-      
-      // 2. Add keyword search results from all tables
+
       try {
-        const keywordResults = await this.keywordSearch(query, Math.ceil(limit / 2));
-        if (keywordResults && keywordResults.length > 0) {
-          console.log(`✅ Found ${keywordResults.length} results via keyword search`);
-          allResults = [...allResults, ...keywordResults.map((result) => ({
+        const keywordResults = await this.keywordSearch(query, Math.ceil(effectiveLimit / 2));
+        if (keywordResults?.length) {
+          console.log(`[SemanticSearch] Found ${keywordResults.length} results via keyword search`);
+          allResults = [...allResults, ...keywordResults.map(result => ({
             ...result,
             keyword_score: result.score / 100,
             semantic_score: 0,
@@ -600,81 +613,40 @@ export class SemanticSearchService {
           }))];
         }
       } catch (error) {
-        console.log('Keyword search failed, continuing with other sources');
+        console.log('[SemanticSearch] Keyword search failed, continuing with other sources');
       }
-      
-      // 3. If still no results, try direct table searches
-      if (allResults.length === 0) {
-        console.log('No results from unified or keyword search, trying direct table searches');
-        
-        const tables = [
-          { name: TABLE_NAMES.SORUCEVAP, type: 'sorucevap' },
-          { name: TABLE_NAMES.OZELGELER, type: 'ozelgeler' },
-          { name: TABLE_NAMES.MAKALELER, type: 'makaleler' },
-          { name: TABLE_NAMES.DANISTAYKARARLARI, type: 'danistaykararlari' }
-        ];
-        
-        for (const table of tables) {
-          try {
-            const sourceResults = await this.searchBySource(table.type, query, 5);
-            if (sourceResults && sourceResults.length > 0) {
-              console.log(`Found ${sourceResults.length} results from ${table.name}`);
-              allResults = [...allResults, ...sourceResults.map((result) => ({
-                ...result,
-                score: result.score || 70, // Default score for direct search
-                keyword_score: 0.7,
-                semantic_score: 0,
-                similarity_score: 0,
-                combined_score: 0.7,
-                source_type: 'direct'
-              }))];
-            }
-          } catch (error) {
-            console.log(`Direct search on ${table.name} failed`);
-          }
-        }
-      }
-      
-      // Sort by combined score and limit results
+
       const sortedResults = allResults
         .sort((a, b) => b.combined_score - a.combined_score)
-        .slice(0, limit);
-      
+        .slice(0, effectiveLimit);
+
       console.timeEnd(searchId);
-      console.log(`Returning ${sortedResults.length} hybrid search results`);
-      
+      console.log(`[SemanticSearch] Returning ${sortedResults.length} hybrid search results`);
+
       return sortedResults;
     } catch (error) {
       console.timeEnd(searchId);
-      console.error('❌ Hybrid search error:', error);
-
-      // Last resort fallback - return empty results but don't crash
-      console.log('⚠️ All search methods failed, returning empty results');
+      console.error('[SemanticSearch] Hybrid search error:', error);
+      console.log('[SemanticSearch] All search methods failed, returning empty results');
       return [];
     }
   }
 
-  /**
-   * Get similar documents based on a document ID
-   */
   async findSimilarDocuments(documentId: string, limit: number = 5) {
     try {
-      // For now, return empty since we don't have a unified documents table
       return [];
     } catch (error) {
-      console.error('Find similar documents error:', error);
+      console.error('[SemanticSearch] Find similar documents error:', error);
       return [];
     }
   }
 
-  /**
-   * Search by source table
-   */
   async searchBySource(sourceTable: string, query: string, limit: number = 10) {
     try {
+      const effectiveLimit = this.applyResultLimits(limit);
       let searchQuery = '';
-      
-      switch(sourceTable.toLowerCase()) {
+
+      switch (sourceTable.toLowerCase()) {
         case 'sorucevap':
           try {
             searchQuery = `
@@ -689,18 +661,17 @@ export class SemanticSearchService {
               ORDER BY id DESC
               LIMIT $2
             `;
-            // Use customerPool for sorucevap
-            const result = await this.customerPool.query(searchQuery, [`%${query}%`, limit]);
+            const result = await this.customerPool.query(searchQuery, [`%${query}%`, effectiveLimit]);
             return result.rows;
           } catch (error) {
-            console.log('SORUCEVAP table not accessible for search');
+            console.log('[SemanticSearch] SORUCEVAP table not accessible for search');
             return [];
           }
         case 'ozelgeler':
           searchQuery = `
-            SELECT 
+            SELECT
               id::text as id,
-              'ÖZELGE - ' || LEFT(subject, 100) as title,
+              '?ZELGE - ' || LEFT(subject, 100) as title,
               'ozelgeler' as source_table,
               id::text as source_id,
               LEFT(content, 500) as excerpt
@@ -712,7 +683,7 @@ export class SemanticSearchService {
           break;
         case 'makaleler':
           searchQuery = `
-            SELECT 
+            SELECT
               id::text as id,
               'MAKALE - ' || LEFT(baslik, 100) as title,
               'makaleler' as source_table,
@@ -726,9 +697,9 @@ export class SemanticSearchService {
           break;
         case 'danistaykararlari':
           searchQuery = `
-            SELECT 
+            SELECT
               id::text as id,
-              'DANIŞTAY - ' || LEFT(konu, 100) as title,
+              'DANI?TAY - ' || LEFT(konu, 100) as title,
               'danistaykararlari' as source_table,
               id::text as source_id,
               LEFT(karar, 500) as excerpt
@@ -744,19 +715,16 @@ export class SemanticSearchService {
 
       const result = await this.pool.query(searchQuery, [
         `%${query}%`,
-        limit
+        effectiveLimit
       ]);
 
       return result.rows;
     } catch (error) {
-      console.error('Search by source error:', error);
+      console.error('[SemanticSearch] Search by source error:', error);
       return [];
     }
   }
 
-  /**
-   * Get document statistics
-   */
   async getStats() {
     try {
       const statsQuery = `
@@ -774,34 +742,31 @@ export class SemanticSearchService {
 
       let result;
       try {
-        // Try customer pool first (where the tables are)
         result = await this.customerPool.query(statsQuery);
       } catch (error) {
         if (error instanceof Error) {
-          console.log('Could not get stats from customer database:', error.message);
+          console.log('[SemanticSearch] Could not get stats from customer database:', error.message);
         } else {
-          console.log('An unknown error occurred while getting stats from the customer database.');
+          console.log('[SemanticSearch] Unknown error while getting stats from the customer database');
         }
-        // Fallback to empty result
         result = { rows: [] };
       }
 
-      // Get embeddings count
-      const embeddingsQuery = `SELECT COUNT(*) as count FROM public.embeddings`;
+      const embeddingsQuery = 'SELECT COUNT(*) as count FROM public.embeddings';
       const embeddingsResult = await this.pool.query(embeddingsQuery);
-      
-      const total = result.rows.reduce((sum, row) => sum + parseInt(row.count), 0);
-      
+
+      const total = result.rows.reduce((sum: number, row: any) => sum + parseInt(row.count, 10), 0);
+
       return {
-        bySource: result.rows.map(row => ({
+        bySource: result.rows.map((row: any) => ({
           ...row,
-          with_embeddings: 0 // We'll update this if needed
+          with_embeddings: 0
         })),
-        total: total,
-        totalWithEmbeddings: parseInt(embeddingsResult.rows[0].count)
+        total,
+        totalWithEmbeddings: parseInt(embeddingsResult.rows[0].count, 10)
       };
     } catch (error) {
-      console.error('Get stats error:', error);
+      console.error('[SemanticSearch] Get stats error:', error);
       return {
         bySource: [],
         total: 0,
@@ -810,13 +775,11 @@ export class SemanticSearchService {
     }
   }
 
-  /**
-   * Get sample documents for testing
-   */
   async getSampleDocuments(limit: number = 5) {
     try {
+      const effectiveLimit = this.applyResultLimits(limit);
       const query = `
-        SELECT 
+        SELECT
           id::text as id,
           'SORUCEVAP - ' || LEFT(question, 100) as title,
           'sorucevap' as source_table,
@@ -827,14 +790,13 @@ export class SemanticSearchService {
         LIMIT $1
       `;
 
-      const result = await this.pool.query(query, [limit]);
+      const result = await this.pool.query(query, [effectiveLimit]);
       return result.rows;
     } catch (error) {
-      console.error('Get sample documents error:', error);
+      console.error('[SemanticSearch] Get sample documents error:', error);
       return [];
     }
   }
 }
 
-// Export singleton instance
 export const semanticSearch = new SemanticSearchService();

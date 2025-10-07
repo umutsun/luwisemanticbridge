@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import { useConfig } from '@/contexts/ConfigContext';
+import { useAuth } from '@/contexts/AuthProvider';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,6 +58,20 @@ interface SystemStatus {
 }
 
 export default function ChatPage() {
+  const { config } = useConfig();
+  const { user, loading, isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  // Debug authentication state
+  useEffect(() => {
+    console.log('ChatPage - Auth Debug:', {
+      loading,
+      isAuthenticated,
+      user,
+      hasToken: !!localStorage.getItem('token'),
+      hasUser: !!localStorage.getItem('user')
+    });
+  }, [loading, isAuthenticated, user]);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -205,7 +223,8 @@ export default function ChatPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 dark:from-white dark:via-gray-50 dark:to-white relative overflow-hidden">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 dark:from-white dark:via-gray-50 dark:to-white relative overflow-hidden">
       {/* Enhanced Animated Glassmorphic Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-violet-500/10 dark:bg-violet-500/5 rounded-full blur-3xl animate-float" />
@@ -228,7 +247,7 @@ export default function ChatPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white dark:text-gray-900">
-                  Alice Semantic Bridge
+                  {config?.chatbot_settings?.title || 'Alice Semantic Bridge'}
                 </h1>
                 <p className="text-xs text-gray-400 dark:text-gray-600">AI-Powered Intelligent Assistant</p>
               </div>
@@ -567,5 +586,6 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }
