@@ -430,6 +430,15 @@ export default function SettingsPage() {
 
   const defaultPrompt = 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver. Context dışında bilgi verme.';
 
+  // Initialize with default prompt
+  useEffect(() => {
+    if (!editingPrompt) {
+      setEditingPrompt(defaultPrompt);
+      setPromptTemperature(0.7);
+      setPromptMaxTokens(2048);
+    }
+  }, []);
+
   const fetchConfig = async () => {
     try {
       const url = getApiUrl('settings');
@@ -646,6 +655,49 @@ export default function SettingsPage() {
     if (config.scraper.maxConcurrency < 1 || config.scraper.maxConcurrency > 10) errors.push('Max concurrency must be between 1 and 10');
 
     return errors;
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmail) return;
+
+    setTestingEmail(true);
+    setEmailTestResult(null);
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/settings/test-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: testEmail,
+          provider: config.smtp.gmail.enabled ? 'gmail' : 'brevo',
+          config: config.smtp.gmail.enabled ? config.smtp.gmail : config.smtp.brevo,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setEmailTestResult({
+          success: true,
+          message: 'Test email sent successfully! Please check your inbox.'
+        });
+      } else {
+        setEmailTestResult({
+          success: false,
+          message: result.error || 'Failed to send test email.'
+        });
+      }
+    } catch (error) {
+      setEmailTestResult({
+        success: false,
+        message: 'Network error. Please check your connection.'
+      });
+    } finally {
+      setTestingEmail(false);
+    }
   };
 
   const handleSave = async () => {
@@ -2565,93 +2617,104 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Search Configuration</h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column - Search Configuration */}
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Search Configuration</h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="similarityThreshold">
-                      Similarity Threshold: {(config.ragSettings?.similarityThreshold || 0.001).toFixed(3)}
-                    </Label>
-                    <Slider
-                      id="similarityThreshold"
-                      value={[config.ragSettings?.similarityThreshold || 0.001]}
-                      onValueChange={(value) => updateConfig('ragSettings.similarityThreshold', value[0])}
-                      min={0.001}
-                      max={0.5}
-                      step={0.001}
-                      className="w-full"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Minimum similarity score for vector search results (0.001 = very permissive, 0.1 = strict)
-                    </p>
-                  </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="similarityThreshold">
+                        Similarity Threshold: {(config.ragSettings?.similarityThreshold || 0.001).toFixed(3)}
+                      </Label>
+                      <Slider
+                        id="similarityThreshold"
+                        value={[config.ragSettings?.similarityThreshold || 0.001]}
+                        onValueChange={(value) => updateConfig('ragSettings.similarityThreshold', value[0])}
+                        min={0.001}
+                        max={0.5}
+                        step={0.001}
+                        className="w-full"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Minimum similarity score for vector search results (0.001 = very permissive, 0.1 = strict)
+                      </p>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="maxResults">Max Results: {config.ragSettings?.maxResults || 10}</Label>
-                    <Slider
-                      id="maxResults"
-                      value={[config.ragSettings?.maxResults || 10]}
-                      onValueChange={(value) => updateConfig('ragSettings.maxResults', value[0])}
-                      min={1}
-                      max={50}
-                      step={1}
-                      className="w-full"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Maximum number of documents to retrieve
-                    </p>
+                    <div className="grid grid-cols-2 gap-4 mt-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="minResults">Min Results: {config.ragSettings?.minResults || 3}</Label>
+                        <Slider
+                          id="minResults"
+                          value={[config.ragSettings?.minResults || 3]}
+                          onValueChange={(value) => updateConfig('ragSettings.minResults', value[0])}
+                          min={1}
+                          max={20}
+                          step={1}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Minimum results required
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="maxResults">Max Results: {config.ragSettings?.maxResults || 10}</Label>
+                        <Slider
+                          id="maxResults"
+                          value={[config.ragSettings?.maxResults || 10]}
+                          onValueChange={(value) => updateConfig('ragSettings.maxResults', value[0])}
+                          min={1}
+                          max={50}
+                          step={1}
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Maximum documents to retrieve
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="minResults">Min Results: {config.ragSettings?.minResults || 3}</Label>
-                    <Slider
-                      id="minResults"
-                      value={[config.ragSettings?.minResults || 3]}
-                      onValueChange={(value) => updateConfig('ragSettings.minResults', value[0])}
-                      min={1}
-                      max={20}
-                      step={1}
-                      className="w-full"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Minimum number of results required before falling back to keyword search
-                    </p>
-                  </div>
-                </div>
-              </div>
+                {/* Right Column - Search Options */}
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Search Options</CardTitle>
+                      <CardDescription>
+                        Additional search settings and options
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="enableHybridSearch">Enable Hybrid Search</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Combine vector search with keyword search for better results
+                          </p>
+                        </div>
+                        <Switch
+                          id="enableHybridSearch"
+                          checked={config.ragSettings?.enableHybridSearch ?? true}
+                          onCheckedChange={(checked) => updateConfig('ragSettings.enableHybridSearch', checked)}
+                        />
+                      </div>
 
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Search Options</h3>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="enableHybridSearch">Enable Hybrid Search</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Combine vector search with keyword search for better results
-                    </p>
-                  </div>
-                  <Switch
-                    id="enableHybridSearch"
-                    checked={config.ragSettings?.enableHybridSearch ?? true}
-                    onCheckedChange={(checked) => updateConfig('ragSettings.enableHybridSearch', checked)}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="enableKeywordBoost">Enable Keyword Boost</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Boost scores when query keywords appear in results
-                    </p>
-                  </div>
-                  <Switch
-                    id="enableKeywordBoost"
-                    checked={config.ragSettings?.enableKeywordBoost ?? true}
-                    onCheckedChange={(checked) => updateConfig('ragSettings.enableKeywordBoost', checked)}
-                  />
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="enableKeywordBoost">Enable Keyword Boost</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Boost scores when query keywords appear in results
+                          </p>
+                        </div>
+                        <Switch
+                          id="enableKeywordBoost"
+                          checked={config.ragSettings?.enableKeywordBoost ?? true}
+                          onCheckedChange={(checked) => updateConfig('ragSettings.enableKeywordBoost', checked)}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
 

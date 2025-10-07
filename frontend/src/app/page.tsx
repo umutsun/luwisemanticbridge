@@ -28,9 +28,10 @@ import {
   BookOpen,
   Database,
   CheckCircle2,
-  Settings,
   ChevronDown,
-  Search
+  Search,
+  LogOut,
+  UserCircle
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import SourceCitation from '@/components/SourceCitation';
@@ -122,7 +123,7 @@ const getSourceTableBadgeColor = (sourceTable?: string) => {
 };
 
 export default function ChatInterface() {
-  const { token } = useAuth();
+  const { token, user, logout } = useAuth();
   const [dbHealthLoading, setDbHealthLoading] = useState(true);
   const [isDatabaseHealthy, setIsDatabaseHealthy] = useState(false);
 
@@ -284,6 +285,7 @@ export default function ChatInterface() {
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [visibleSourcesCount, setVisibleSourcesCount] = useState<{ [key: string]: number }>({});
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -388,7 +390,11 @@ export default function ChatInterface() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ message: messageContent }),
+        body: JSON.stringify({
+          message: messageContent,
+          enableSemanticAnalysis: true,
+          trackUserInsights: true
+        }),
       });
 
       if (!response.ok) throw new Error('Failed to get response');
@@ -574,16 +580,6 @@ export default function ChatInterface() {
                   })()}
                 </span>
               </div>
-              <Link href="/dashboard">
-                <Button variant="ghost" size="sm" className="font-light">
-                  Yönetim Paneli
-                </Button>
-              </Link>
-              <Link href="/dashboard/prompts">
-                <Button variant="ghost" size="icon" title="Chatbot Ayarları">
-                  <Settings className="w-4 h-4" />
-                </Button>
-              </Link>
               <Button
                 variant="ghost"
                 size="sm"
@@ -592,6 +588,51 @@ export default function ChatInterface() {
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Yeni Sohbet
               </Button>
+
+              {/* User Dropdown */}
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="flex items-center gap-2"
+                >
+                  <UserCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline text-sm">
+                    {user?.name || user?.email || 'Kullanıcı'}
+                  </span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+                </Button>
+
+                {isUserDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
+                    <div className="p-2">
+                      <div className="px-2 py-1.5 text-sm font-medium border-b">
+                        <div>{user?.name || 'Kullanıcı'}</div>
+                        <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
+                      </div>
+                      <Link href="/profile">
+                        <Button variant="ghost" className="w-full justify-start text-sm h-8 px-2">
+                          <UserCircle className="w-4 h-4 mr-2" />
+                          Profil
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-sm h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                        onClick={() => {
+                          logout();
+                          setIsUserDropdownOpen(false);
+                        }}
+                      >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Çıkış Yap
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <ThemeToggle />
             </div>
           </div>

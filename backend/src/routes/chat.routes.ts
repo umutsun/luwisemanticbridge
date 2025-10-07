@@ -29,7 +29,9 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       ragWeight,
       useLocalDb,
       language,
-      responseStyle
+      responseStyle,
+      enableSemanticAnalysis = false,
+      trackUserInsights = false
     } = req.body;
 
     const userId = req.user.userId;
@@ -49,7 +51,9 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       ragWeight,
       useLocalDb,
       language,
-      responseStyle
+      responseStyle,
+      enableSemanticAnalysis,
+      trackUserInsights
     });
     
     console.log('Chat response:', {
@@ -57,15 +61,29 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       sourcesCount: result.sources?.length || 0
     });
 
-    // Track user usage
+    // Track user usage with semantic insights
     try {
-      await subscriptionService.trackUserUsage(userId, 'chat_query', {
+      const trackingData: any = {
         message,
         responseLength: result.response?.length || 0,
         sourcesCount: result.sources?.length || 0,
         ip_address: req.ip,
         user_agent: req.get('User-Agent')
-      });
+      };
+
+      // Add semantic analysis if enabled
+      if (enableSemanticAnalysis || trackUserInsights) {
+        trackingData.semanticAnalysis = {
+          intent: result.intent || 'informational',
+          topics: result.topics || [],
+          keywords: result.keywords || [],
+          sentiment: result.sentiment || 'neutral',
+          complexity: result.complexity || 'medium'
+        };
+        trackingData.userInsights = trackUserInsights;
+      }
+
+      await subscriptionService.trackUserUsage(userId, 'chat_query', trackingData);
     } catch (trackingError) {
       console.error('Usage tracking error:', trackingError);
       // Don't fail the request if tracking fails
