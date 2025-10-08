@@ -65,13 +65,19 @@ router.get('/system', async (req: Request, res: Response) => {
       const client = await asembPool.connect();
       const result = await client.query('SELECT 1 as test');
       client.release();
-      healthStatus.services.asemb_database.status = 'healthy';
+      healthStatus.services.asemb_database.status = 'connected';
+      healthStatus.services.database = { ...healthStatus.services.asemb_database };
       healthStatus.services.asemb_database.message = 'Connected';
+      healthStatus.services.database.message = 'Connected';
       healthStatus.services.asemb_database.responseTime = Date.now() - asembStart;
+      healthStatus.services.database.responseTime = healthStatus.services.asemb_database.responseTime;
     } catch (error) {
-      healthStatus.services.asemb_database.status = 'error';
+      healthStatus.services.asemb_database.status = 'disconnected';
+      healthStatus.services.database = { ...healthStatus.services.asemb_database };
       healthStatus.services.asemb_database.message = error.message;
+      healthStatus.services.database.message = error.message;
       healthStatus.services.asemb_database.responseTime = Date.now() - asembStart;
+      healthStatus.services.database.responseTime = healthStatus.services.asemb_database.responseTime;
       healthStatus.status = 'degraded';
     }
 
@@ -80,11 +86,11 @@ router.get('/system', async (req: Request, res: Response) => {
     try {
       const redis = await initializeRedis();
       await redis.ping();
-      healthStatus.services.redis.status = 'healthy';
+      healthStatus.services.redis.status = 'connected';
       healthStatus.services.redis.message = 'Connected';
       healthStatus.services.redis.responseTime = Date.now() - redisStart;
     } catch (error) {
-      healthStatus.services.redis.status = 'error';
+      healthStatus.services.redis.status = 'disconnected';
       healthStatus.services.redis.message = error.message;
       healthStatus.services.redis.responseTime = Date.now() - redisStart;
       healthStatus.status = 'degraded';
@@ -95,7 +101,7 @@ router.get('/system', async (req: Request, res: Response) => {
     try {
       const settingsService = SettingsService.getInstance();
       const settings = await settingsService.getAllSettings();
-      healthStatus.services.settings.status = 'healthy';
+      healthStatus.services.settings.status = 'loaded';
       healthStatus.services.settings.message = 'Settings loaded';
       healthStatus.services.settings.responseTime = Date.now() - settingsStart;
     } catch (error) {

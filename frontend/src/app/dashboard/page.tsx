@@ -223,7 +223,7 @@ export default function DashboardPage() {
   // WebSocket connection for real-time logs
   useEffect(() => {
     if (!isConsolePaused) {
-      const ws = new WebSocket('ws://localhost:8083');
+      const ws = new WebSocket(`ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`);
 
       ws.onopen = () => {
         setWsConnected(true);
@@ -922,7 +922,7 @@ export default function DashboardPage() {
             >
               {filteredConsoleLogs.length > 0 ? (
                 filteredConsoleLogs.slice(-50).map((log, index) => (
-                  <div key={log.id || index} className={`mb-1 font-mono ${
+                  <div key={`${log.id || index}-${log.timestamp || Date.now()}-${index}`} className={`mb-1 font-mono ${
                     log.type === 'error' ? 'text-red-400' :
                     log.type === 'warn' ? 'text-yellow-400' :
                     log.type === 'info' ? 'text-blue-400' :

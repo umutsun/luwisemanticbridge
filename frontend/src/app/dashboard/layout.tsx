@@ -2,14 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Database } from 'lucide-react';
 import Header from '@/components/Header';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { ConfigProvider } from '@/contexts/ConfigContext';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 import config from '@/config/api.config';
 import { setStoredToken } from '@/lib/auth-fetch';
+import { Circle } from 'lucide-react';
 
 interface User {
   id: string;
@@ -25,34 +23,11 @@ export default function DashboardLayout({
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dbHealthLoading, setDbHealthLoading] = useState(true);
-  const [isDatabaseHealthy, setIsDatabaseHealthy] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     checkAuth();
-    checkDatabaseHealth();
   }, []);
-
-  const checkDatabaseHealth = async () => {
-    setDbHealthLoading(true);
-    try {
-      const response = await fetch(config.getApiUrl('/api/v2/health/system'));
-      if (response.ok) {
-        const healthData = await response.json();
-        // Check if ASEM database is connected
-        const asemDbStatus = healthData.services?.asemb_database?.status || healthData.services?.database?.status;
-        setIsDatabaseHealthy(asemDbStatus === 'healthy' || asemDbStatus === 'connected');
-      } else {
-        setIsDatabaseHealthy(false);
-      }
-    } catch (error) {
-      console.error('Failed to check database health:', error);
-      setIsDatabaseHealthy(false);
-    } finally {
-      setDbHealthLoading(false);
-    }
-  };
 
   const checkAuth = () => {
     let token = localStorage.getItem('token');
@@ -101,41 +76,22 @@ export default function DashboardLayout({
     router.push('/login');
   };
 
-  if (loading || dbHealthLoading) {
+  // Show loading spinner
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-2 text-muted-foreground">
-            {loading ? 'Oturum kontrol ediliyor...' : 'Veritabanı bağlantısı kontrol ediliyor...'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isDatabaseHealthy) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="mb-4">
-            <Database className="h-12 w-12 text-red-500 mx-auto" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center space-y-4">
+          <div className="relative">
+            <Circle className="h-12 w-12 text-primary mx-auto" />
+            <Circle className="h-12 w-12 text-primary/30 absolute top-0 animate-ping mx-auto" />
           </div>
-          <h2 className="text-xl font-semibold text-red-700 dark:text-red-400 mb-2">
-            Veritabanı Bağlantısı Hatası
-          </h2>
-          <p className="text-muted-foreground mb-4">
-            ASEM veritabanına bağlanılamıyor. Dashboard'a erişebilmek için veritabanı bağlantısının aktif olması gerekir.
-          </p>
-          <div className="space-y-2">
-            <Button onClick={checkDatabaseHealth} variant="outline" className="w-full">
-              Tekrar Dene
-            </Button>
-            <Link href="/">
-              <Button variant="ghost" className="w-full">
-                Ana Sayfaya Dön
-              </Button>
-            </Link>
+          <div>
+            <p className="text-lg font-medium text-gray-900 dark:text-gray-100">
+              Yükleniyor
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Yönlendiriliyorsunuz...
+            </p>
           </div>
         </div>
       </div>
