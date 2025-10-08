@@ -30,9 +30,9 @@ export default function ProtectedRoute({ children, requireAdmin = false }: Prote
         return;
       }
 
-      if (requireAdmin && user?.role !== 'admin') {
-        console.log('ProtectedRoute - User not admin, redirecting to chat...');
-        router.push('/chat');
+      if (requireAdmin && user?.role !== 'admin' && user?.role !== 'manager') {
+        console.log('ProtectedRoute - User not admin, redirecting to home...');
+        router.push('/');
         return;
       }
 
@@ -52,7 +52,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }: Prote
     return null;
   }
 
-  if (requireAdmin && user?.role !== 'admin') {
+  if (requireAdmin && user?.role !== 'admin' && user?.role !== 'manager') {
     return null;
   }
 

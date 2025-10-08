@@ -182,4 +182,59 @@ router.post('/api/v2/chat/related', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Get chat statistics - requires authentication
+ */
+router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const userId = req.user.userId;
+    console.log(`Getting chat stats for user: ${userId}`);
+
+    // Get database pool from environment or use default
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/alice_semantic_bridge'
+    });
+
+    // Get basic chat statistics
+    const [
+      conversationsResult,
+      messagesResult,
+      recentActivityResult
+    ] = await Promise.all([
+      pool.query('SELECT COUNT(*) as total_conversations FROM conversations WHERE user_id = $1', [userId]),
+      pool.query('SELECT COUNT(*) as total_messages FROM messages WHERE user_id = $1', [userId]),
+      pool.query(`
+        SELECT COUNT(*) as recent_messages
+        FROM messages
+        WHERE user_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
+      `, [userId])
+    ]);
+
+    const stats = {
+      totalConversations: parseInt(conversationsResult.rows[0].total_conversations),
+      totalMessages: parseInt(messagesResult.rows[0].total_messages),
+      recentMessages: parseInt(recentActivityResult.rows[0].recent_messages),
+      avgMessagesPerConversation: conversationsResult.rows[0].total_conversations > 0
+        ? Math.round(parseInt(messagesResult.rows[0].total_messages) / parseInt(conversationsResult.rows[0].total_conversations))
+        : 0,
+      lastUpdated: new Date().toISOString()
+    };
+
+    console.log('Chat stats calculated:', stats);
+    res.json(stats);
+
+  } catch (error: any) {
+    console.error('Get chat stats error:', error);
+    res.status(500).json({
+      error: 'Failed to get chat statistics',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;

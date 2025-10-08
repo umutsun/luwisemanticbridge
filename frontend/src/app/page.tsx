@@ -26,13 +26,9 @@ export default function Home() {
         const userRole = user.role || 'user';
         const isAdmin = userRole === 'admin' || userRole === 'manager';
 
-        // If admin, redirect to dashboard
-        if (isAdmin) {
-          setIsRedirecting(true);
-          router.push('/dashboard');
-          return;
-        }
-        // Regular users stay on the home page (no redirect needed)
+        // Admin users can choose to go to dashboard or stay on chat
+        // Don't automatically redirect admins - let them choose
+        // Regular users stay on the home page (chat interface)
       }
     }
   }, [token, user, authLoading, router]);

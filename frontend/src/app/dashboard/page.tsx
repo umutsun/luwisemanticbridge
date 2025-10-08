@@ -205,6 +205,10 @@ export default function DashboardPage() {
   const [chatStats, setChatStats] = useState<any>(null);
   const [chatStatsLoading, setChatStatsLoading] = useState(true);
 
+  // Additional statistics
+  const [documentStats, setDocumentStats] = useState<any>(null);
+  const [embeddingStats, setEmbeddingStats] = useState<any>(null);
+
   // Real-time resources data for animations
   const [realtimeResources, setRealtimeResources] = useState({
     cpu: 24,
@@ -286,6 +290,15 @@ export default function DashboardPage() {
         if (response.ok) {
           const data = await response.json();
           setChatStats(data);
+        } else if (response.status === 404) {
+          // Set default values if endpoint doesn't exist
+          setChatStats({
+            totalConversations: 0,
+            totalMessages: 0,
+            recentMessages: 0,
+            avgMessagesPerConversation: 0,
+            lastUpdated: new Date().toISOString()
+          });
         } else {
           console.error('Failed to fetch chat stats:', response.status);
         }
@@ -297,6 +310,40 @@ export default function DashboardPage() {
     };
 
     fetchChatStats();
+  }, []);
+
+  // Fetch document statistics
+  useEffect(() => {
+    const fetchDocumentStats = async () => {
+      try {
+        const response = await fetch('/api/v2/documents/stats');
+        if (response.ok) {
+          const data = await response.json();
+          setDocumentStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching document stats:', error);
+      }
+    };
+
+    fetchDocumentStats();
+  }, []);
+
+  // Fetch embedding statistics
+  useEffect(() => {
+    const fetchEmbeddingStats = async () => {
+      try {
+        const response = await fetch('/api/v2/embeddings/stats');
+        if (response.ok) {
+          const data = await response.json();
+          setEmbeddingStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching embedding stats:', error);
+      }
+    };
+
+    fetchEmbeddingStats();
   }, []);
 
   const fetchSystemStatus = async () => {
@@ -702,10 +749,10 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <div className="text-2xl font-bold">
-                      {chatStats?.overview?.total_conversations || 0}
+                      {chatStats?.totalConversations || chatStats?.overview?.total_conversations || 0}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {chatStats?.overview?.total_users || 0} kullanıcı
+                      Son 24 saat: {chatStats?.recentMessages || 0} mesaj
                     </div>
                   </>
                 )}
@@ -731,10 +778,10 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <div className="text-2xl font-bold">
-                      {chatStats?.overview?.total_messages?.toLocaleString() || 0}
+                      {chatStats?.totalMessages?.toLocaleString() || chatStats?.overview?.total_messages?.toLocaleString() || 0}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Ort. {Math.round(chatStats?.overview?.avg_message_length || 0)} karakter
+                      Ort. {chatStats?.avgMessagesPerConversation || 0} mesaj/konuşma
                     </div>
                   </>
                 )}

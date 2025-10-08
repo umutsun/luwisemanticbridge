@@ -57,7 +57,17 @@ export default function DashboardLayout({
     }
 
     try {
-      setUser(JSON.parse(userData));
+      const user = JSON.parse(userData);
+      setUser(user);
+
+      // Check if user is admin - redirect non-admins to chat interface
+      const userRole = user.role || 'user';
+      const isAdmin = userRole === 'admin' || userRole === 'manager';
+
+      if (!isAdmin) {
+        router.push('/');
+        return;
+      }
     } catch (error) {
       console.error('Failed to parse user data:', error);
       router.push('/login');

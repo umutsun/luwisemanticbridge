@@ -497,6 +497,20 @@ export default function SettingsPage() {
             enableHybridSearch: data.ragSettings?.enableHybridSearch ?? true,
             enableKeywordBoost: data.ragSettings?.enableKeywordBoost ?? true,
           },
+          embeddings: {
+            chunkSize: data.embeddings?.chunkSize ?? 1000,
+            chunkOverlap: data.embeddings?.chunkOverlap ?? 200,
+            batchSize: data.embeddings?.batchSize ?? 10,
+            provider: data.embeddings?.provider ?? 'google',
+            model: data.embeddings?.model ?? 'google/text-embedding-004',
+            normalizeEmbeddings: data.embeddings?.normalizeEmbeddings ?? true,
+            cacheEmbeddings: data.embeddings?.cacheEmbeddings ?? true,
+          },
+          scraper: {
+            timeout: data.scraper?.timeout ?? 30000,
+            maxConcurrency: data.scraper?.maxConcurrency ?? 3,
+            userAgent: data.scraper?.userAgent ?? 'ASB Web Scraper',
+          },
         };
 
         setConfig(enrichedConfig);
@@ -1293,7 +1307,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-10 gap-1">
+        <TabsList className="grid w-full grid-cols-9 gap-1">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>
           <TabsTrigger value="ai-services">AI Services</TabsTrigger>
@@ -1302,7 +1316,6 @@ export default function SettingsPage() {
           <TabsTrigger value="chatbot">Chatbot</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="rag">RAG</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="advanced">Advanced</TabsTrigger>
         </TabsList>
 
@@ -2428,94 +2441,96 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="lg:col-span-2 space-y-6">
-                  {/* New Prompt Form */}
-                  <Card className="border-dashed">
-                    <CardHeader>
-                      <CardTitle className="text-base">Create New Prompt</CardTitle>
-                      <CardDescription>
-                        Add a new custom system prompt template
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="newPromptName">Prompt Name</Label>
-                          <Input
-                            id="newPromptName"
-                            value={promptName}
-                            onChange={(e) => setPromptName(e.target.value)}
-                            placeholder="e.g., Technical Support, Creative Assistant"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Quick Actions</Label>
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={addPrompt}
-                              size="sm"
-                              disabled={!promptName.trim() || !editingPrompt.trim()}
-                              className="flex-1"
-                            >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Create Prompt
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                setPromptName('');
-                                setEditingPrompt(defaultPrompt);
-                                setPromptTemperature(0.7);
-                                setPromptMaxTokens(2048);
-                              }}
-                              size="sm"
-                              variant="outline"
-                            >
-                              Clear
-                            </Button>
+                  {/* New Prompt Form - Only show when not editing */}
+                  {!activePrompt && (
+                    <Card className="border-dashed">
+                      <CardHeader>
+                        <CardTitle className="text-base">Create New Prompt</CardTitle>
+                        <CardDescription>
+                          Add a new custom system prompt template
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="newPromptName">Prompt Name</Label>
+                            <Input
+                              id="newPromptName"
+                              value={promptName}
+                              onChange={(e) => setPromptName(e.target.value)}
+                              placeholder="e.g., Technical Support, Creative Assistant"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Quick Actions</Label>
+                            <div className="flex gap-2">
+                              <Button
+                                onClick={addPrompt}
+                                size="sm"
+                                disabled={!promptName.trim() || !editingPrompt.trim()}
+                                className="flex-1"
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Create Prompt
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  setPromptName('');
+                                  setEditingPrompt(defaultPrompt);
+                                  setPromptTemperature(0.7);
+                                  setPromptMaxTokens(2048);
+                                }}
+                                size="sm"
+                                variant="outline"
+                              >
+                                Clear
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="newPromptContent">Prompt Content</Label>
-                        <Textarea
-                          id="newPromptContent"
-                          value={editingPrompt}
-                          onChange={(e) => setEditingPrompt(e.target.value)}
-                          rows={6}
-                          placeholder="Enter your system prompt content..."
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Temperature: {promptTemperature}</Label>
-                          <Slider
-                            value={[promptTemperature]}
-                            onValueChange={(value) => setPromptTemperature(value[0])}
-                            min={0}
-                            max={2}
-                            step={0.1}
-                            className="w-full"
+                          <Label htmlFor="newPromptContent">Prompt Content</Label>
+                          <Textarea
+                            id="newPromptContent"
+                            value={editingPrompt}
+                            onChange={(e) => setEditingPrompt(e.target.value)}
+                            rows={6}
+                            placeholder="Enter your system prompt content..."
                           />
-                          <p className="text-xs text-muted-foreground">
-                            0 = focused, 2 = creative
-                          </p>
                         </div>
-                        <div className="space-y-2">
-                          <Label>Max Tokens: {promptMaxTokens}</Label>
-                          <Slider
-                            value={[promptMaxTokens]}
-                            onValueChange={(value) => setPromptMaxTokens(value[0])}
-                            min={256}
-                            max={4096}
-                            step={256}
-                            className="w-full"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Response length limit
-                          </p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Temperature: {promptTemperature}</Label>
+                            <Slider
+                              value={[promptTemperature]}
+                              onValueChange={(value) => setPromptTemperature(value[0])}
+                              min={0}
+                              max={2}
+                              step={0.1}
+                              className="w-full"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              0 = focused, 2 = creative
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Max Tokens: {promptMaxTokens}</Label>
+                            <Slider
+                              value={[promptMaxTokens]}
+                              onValueChange={(value) => setPromptMaxTokens(value[0])}
+                              min={256}
+                              max={4096}
+                              step={256}
+                              className="w-full"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Response length limit
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Edit Existing Prompt */}
                   {activePrompt && (
@@ -2541,6 +2556,13 @@ export default function SettingsPage() {
                             <Button onClick={updatePrompt} size="sm">
                               <Save className="h-4 w-4 mr-1" />
                               Update
+                            </Button>
+                            <Button
+                              onClick={() => setActivePrompt(null)}
+                              size="sm"
+                              variant="outline"
+                            >
+                              Cancel
                             </Button>
                           </div>
                         </div>
@@ -2650,90 +2672,6 @@ export default function SettingsPage() {
                   </ul>
                 </AlertDescription>
               </Alert>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="security">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Security Settings
-              </CardTitle>
-              <CardDescription>
-                Configure authentication and security options
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableAuth"
-                    checked={config.security.enableAuth}
-                    onCheckedChange={(checked) => updateConfig('security.enableAuth', checked)}
-                  />
-                  <Label htmlFor="enableAuth">Enable Authentication</Label>
-                </div>
-
-                {config.security.enableAuth && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="jwtSecret">JWT Secret</Label>
-                      <div className="relative">
-                      <Input
-                          id="jwtSecret"
-                          type={showPassword.jwtSecret ? 'text' : 'password'}
-                          value={config.security.jwtSecret}
-                          onChange={(e) => updateConfig('security.jwtSecret', e.target.value)}
-                      />
-                      <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 py-2"
-                          onClick={() => togglePasswordVisibility('jwtSecret')}
-                        >
-                          {showPassword.jwtSecret ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="sessionTimeout">Session Timeout (seconds)</Label>
-                      <Input
-                        id="sessionTimeout"
-                        type="number"
-                        value={config.security.sessionTimeout}
-                        onChange={(e) => updateConfig('security.sessionTimeout', parseInt(e.target.value))}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="rateLimit">Rate Limit (requests per minute)</Label>
-                      <Input
-                        id="rateLimit"
-                        type="number"
-                        value={config.security.rateLimit}
-                        onChange={(e) => updateConfig('security.rateLimit', parseInt(e.target.value))}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="corsOrigins">CORS Origins (comma-separated)</Label>
-                      <Input
-                        id="corsOrigins"
-                        value={config.security.corsOrigins.join(', ')}
-                        onChange={(e) => updateConfig('security.corsOrigins', e.target.value.split(',').map(s => s.trim()))}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
