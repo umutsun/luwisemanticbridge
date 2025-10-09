@@ -237,4 +237,54 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
   }
 });
 
+/**
+ * Get more sources for a conversation (progressive loading)
+ */
+router.post('/api/v2/chat/more-sources', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { conversationId, currentSourceCount, maxResults = 14 } = req.body;
+    const userId = req.user.userId;
+
+    if (!conversationId) {
+      return res.status(400).json({ error: 'Conversation ID is required' });
+    }
+
+    // Get conversation messages from database
+    const pool = await import('pg').then(pg => new pg.Pool({
+      connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/alice_semantic_bridge'
+    }));
+
+    const conversationResult = await pool.query(
+      'SELECT sources FROM messages WHERE conversation_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1',
+      [conversationId, userId]
+    );
+
+    if (conversationResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    const sources = conversationResult.rows[0].sources || [];
+
+    // Return additional sources
+    const additionalSources = sources.slice(currentSourceCount, currentSourceCount + 5);
+
+    res.json({
+      sources: additionalSources,
+      hasMore: sources.length > currentSourceCount + additionalSources.length,
+      totalSources: sources.length
+    });
+
+  } catch (error: any) {
+    console.error('Get more sources error:', error);
+    res.status(500).json({
+      error: 'Failed to get more sources',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;

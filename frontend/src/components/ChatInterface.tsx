@@ -162,6 +162,20 @@ export default function ChatInterface() {
       });
   }, []);
 
+  // Listen for tag click events from SourceCitation component
+  useEffect(() => {
+    const handleTagClick = (event: CustomEvent) => {
+      const { query } = event.detail;
+      setInputText(query);
+      textareaRef.current?.focus();
+    };
+
+    window.addEventListener('tagClick', handleTagClick as EventListener);
+    return () => {
+      window.removeEventListener('tagClick', handleTagClick as EventListener);
+    };
+  }, []);
+
   // Extract minimal meaningful keywords from title
   const getSemanticKeywords = (source: Record<string, unknown>) => {
     const keywords: string[] = [];

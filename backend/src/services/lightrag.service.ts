@@ -9,7 +9,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
 import { getAiSettings as fetchAiSettings, asembPool } from '../config/database.config';
-import SettingsService from './settings.service'; // Correct import
+import { SettingsService } from './settings.service';
 
 export class LightRAGService {
   private vectorStore: MemoryVectorStore | null = null;
@@ -35,7 +35,7 @@ export class LightRAGService {
     // Priority order: OpenAI -> Gemini -> Deepseek -> Claude
 
     // Get API keys from database
-    const aiSettings = await this.settingsService.getAiSettings();
+    const aiSettings = await this.settingsService.getAllSettings();
 
     const openaiKey = aiSettings['openai_api_key'] || process.env.OPENAI_API_KEY;
     const geminiKey = aiSettings['gemini_api_key'] || process.env.GEMINI_API_KEY;
