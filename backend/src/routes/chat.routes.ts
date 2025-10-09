@@ -194,10 +194,10 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
     const userId = req.user.userId;
     console.log(`Getting chat stats for user: ${userId}`);
 
-    // Get database pool from environment or use default
+    // Get database pool from ASEMB database connection
     const { Pool } = require('pg');
     const pool = new Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/alice_semantic_bridge'
+      connectionString: process.env.ASEMB_DATABASE_URL || 'postgresql://asemb:asemb_password@91.99.229.96:5432/asemb'
     });
 
     // Get basic chat statistics
@@ -255,7 +255,7 @@ router.post('/api/v2/chat/more-sources', authenticateToken, async (req: Authenti
 
     // Get conversation messages from database
     const pool = await import('pg').then(pg => new pg.Pool({
-      connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/alice_semantic_bridge'
+      connectionString: process.env.ASEMB_DATABASE_URL || 'postgresql://asemb:asemb_password@91.99.229.96:5432/asemb'
     }));
 
     const conversationResult = await pool.query(
