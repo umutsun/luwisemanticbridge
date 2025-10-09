@@ -414,7 +414,8 @@ export default function EmbeddingsManagerPage() {
   const fetchAvailableTablesAndStats = async () => {
     setIsLoadingTables(true);
     try {
-      const response = await fetch(`${API_BASE}/tables-fixed?t=${Date.now()}&force=${Math.random()}`, {
+      // Use the new embeddings-tables endpoint that correctly maps tables
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings-tables/all?t=${Date.now()}`, {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -428,7 +429,7 @@ export default function EmbeddingsManagerPage() {
         const embeddedRecords = data.tables.reduce((acc: number, t: TableInfo) => acc + t.embeddedRecords, 0);
 
         // Debug: Log the actual values from backend
-        console.log('DEBUG Frontend - Tables data:', data.tables);
+        console.log('DEBUG Frontend - Tables data from embeddings-tables:', data.tables);
         console.log('DEBUG Frontend - Calculated totalRecords:', totalRecords);
         console.log('DEBUG Frontend - Calculated embeddedRecords:', embeddedRecords);
 
@@ -436,7 +437,7 @@ export default function EmbeddingsManagerPage() {
             totalRecords,
             embeddedRecords,
             pendingRecords: totalRecords - embeddedRecords,
-            databaseName: data.databaseName,
+            databaseName: 'rag_chatbot', // The source database
         });
 
         // Fetch embedding statistics

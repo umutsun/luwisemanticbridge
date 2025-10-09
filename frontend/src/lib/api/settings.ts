@@ -120,16 +120,26 @@ export interface AppSettings {
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
-  // Use the main settings endpoint that returns nested config format
-  const response = await apiClient.get('/api/v2/settings/');
+  try {
+    // Use the main settings endpoint that returns nested config format
+    const response = await apiClient.get('/api/v2/settings/', {
+      timeout: 5000 // 5 second timeout to prevent hanging
+    });
 
-  // The backend returns data directly, not wrapped in a success/data object
-  if (response.data.error) {
-    throw new Error(response.data.error || 'Failed to load settings');
+    // The backend returns data directly, not wrapped in a success/data object
+    if (response.data && response.data.error) {
+      throw new Error(response.data.error || 'Failed to load settings');
+    }
+
+    // Return the data directly, transforming it to match AppSettings interface if needed
+    // Return empty object if response.data is empty or null
+    return response.data || {} as AppSettings;
+  } catch (error: any) {
+    // Log the error but don't throw to prevent breaking the UI
+    console.warn('Settings endpoint unavailable, returning defaults:', error.message);
+    // Return empty settings object to prevent errors
+    return {} as AppSettings;
   }
-
-  // Return the data directly, transforming it to match AppSettings interface if needed
-  return response.data as AppSettings;
 }
 
 export async function getLLMProviders() {

@@ -153,7 +153,7 @@ export default function Header() {
 
           try {
             const settings = await getAppSettings();
-            if (settings.llmSettings?.activeChatModel) {
+            if (settings && settings.llmSettings?.activeChatModel) {
               const modelParts = settings.llmSettings.activeChatModel.split('/');
               if (modelParts.length >= 2) {
                 const provider = modelParts[0];
@@ -180,7 +180,9 @@ export default function Header() {
               }
             }
           } catch (error) {
-            console.error('Failed to fetch LLM settings:', error);
+            // Silently handle the error to prevent console spam
+            // The default llmModelInfo will be used instead
+            console.warn('Could not fetch LLM settings, using defaults');
           }
 
           setSystemStatus({

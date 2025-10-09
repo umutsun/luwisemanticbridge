@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -18,10 +19,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Upload, 
-  FileText, 
-  Trash2, 
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Upload,
+  FileText,
+  Trash2,
   Download,
   Eye,
   Loader2,
@@ -39,7 +41,10 @@ import {
   Calendar,
   Hash,
   Brain,
-  Zap
+  Zap,
+  X,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 
 interface Document {
@@ -350,13 +355,18 @@ export default function DocumentManagerPage() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString('tr-TR', { 
+    return date.toLocaleString('tr-TR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Kopyalandı');
   };
 
   const filteredDocuments = documents.filter(doc => {
@@ -367,16 +377,260 @@ export default function DocumentManagerPage() {
   });
 
   return (
-    <div className="py-6 space-y-6">
+    <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-7xl">
       <Toaster position="top-right" />
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold">Döküman Yönetimi</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Dökümanlarınızı yönetin ve organize edin
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Döküman Yönetimi</h1>
+          <p className="text-muted-foreground">Dökümanlarınızı yönetin ve organize edin</p>
+        </div>
       </div>
 
+      {/* Two Column Layout */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* Left Column: Upload & Stats */}
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="text-lg">Döküman Yükle</CardTitle>
+            <CardDescription className="text-sm">Döküman yükleyin ve istatistikleri görüntüleyin</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Upload Card */}
+            <Card className={`border-dashed border-2 transition-all mb-4 ${uploading ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
+              <CardContent className="p-0 relative">
+                <input
+                  type="file"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="file-upload"
+                  accept=".txt,.pdf,.json,.md,.csv,.doc,.docx,.xls,.xlsx"
+                  disabled={uploading}
+                />
+                <label
+                  htmlFor="file-upload"
+                  className={`cursor-pointer flex flex-col items-center justify-center h-full py-8 ${uploading ? 'pointer-events-none' : ''}`}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-12 w-12 text-primary mb-3 animate-spin" />
+                      <span className="text-base font-medium text-primary">Yükleniyor...</span>
+                      <span className="text-sm text-muted-foreground mt-1">{uploadProgress}%</span>
+                      <div className="w-full px-6 mt-4">
+                        <Progress value={uploadProgress} className="w-full h-2" />
+                      </div>
+                    </>
+                  ) : uploadProgress === 100 ? (
+                    <>
+                      <CheckCircle className="h-12 w-12 text-green-500 mb-3" />
+                      <span className="text-base font-medium text-green-500">Başarılı!</span>
+                      <span className="text-sm text-muted-foreground mt-1">Dosya yüklendi</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-12 w-12 text-muted-foreground mb-3" />
+                      <span className="text-base font-medium">Dosya Yükle</span>
+                      <span className="text-sm text-muted-foreground mt-1">Max 10MB</span>
+                      <span className="text-xs text-muted-foreground mt-2 text-center">txt, pdf, json, md, csv, doc, docx, xls, xlsx</span>
+                    </>
+                  )}
+                </label>
+              </CardContent>
+            </Card>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">
+                    Toplam Döküman
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">{documents.length}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">
+                    Toplam Boyut
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">
+                    {formatFileSize(documents.reduce((sum, doc) => sum + doc.size, 0))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">
+                    Embedding'li
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">
+                    {documents.filter(d => d.metadata?.embeddings).length}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs font-medium text-muted-foreground">
+                    Chunk Sayısı
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xl font-bold">
+                    {documents.reduce((sum, doc) => sum + (doc.metadata?.chunks || 0), 0)}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right Column: Documents List */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg">Dökümanlar</CardTitle>
+                <Badge variant="secondary">{filteredDocuments.length}</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Ara..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 w-[150px] h-8"
+                  />
+                </div>
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="px-3 py-1 border rounded-md text-sm h-8"
+                >
+                  <option value="all">Tümü</option>
+                  <option value="text">Text</option>
+                  <option value="pdf">PDF</option>
+                  <option value="json">JSON</option>
+                  <option value="code">Code</option>
+                </select>
+                <Button onClick={fetchDocuments} variant="outline" size="icon" className="h-8 w-8">
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredDocuments.length === 0 ? (
+              <div className="text-center py-12">
+                <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground" />
+                <p className="mt-2 text-muted-foreground">Henüz döküman yok</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[500px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Başlık</TableHead>
+                      <TableHead className="w-[100px]">Boyut</TableHead>
+                      <TableHead className="text-right w-[100px]">İşlemler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDocuments.map((doc) => (
+                      <TableRow key={doc.id}>
+                        <TableCell>
+                          <div className="max-w-[300px]">
+                            <div className="flex items-center gap-2 mb-1">
+                              {getFileIcon(doc.type)}
+                              <p
+                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors"
+                                title={doc.title}
+                                onClick={() => setSelectedDoc(doc)}
+                              >
+                                {doc.title}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <Badge variant="outline" className="text-xs">
+                                {doc.type}
+                              </Badge>
+                              <span className="flex items-center gap-1">
+                                <Database className="h-3 w-3" />
+                                {doc.metadata?.chunks || 0} chunks
+                              </span>
+                              {doc.metadata?.embeddings ? (
+                                <CheckCircle className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <AlertCircle className="h-3 w-3 text-gray-400" />
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {formatFileSize(doc.size)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            {!doc.metadata?.embeddings ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleCreateEmbeddings(doc.id, doc.title)}
+                                disabled={embeddingProgress[doc.id]}
+                                className="h-8 w-8 p-0"
+                                title="Embedding Oluştur"
+                              >
+                                {embeddingProgress[doc.id] ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Brain className="h-4 w-4" />
+                                )}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteEmbeddings(doc.id)}
+                                className="h-8 w-8 p-0"
+                                title="Embedding'leri Sil"
+                              >
+                                <Zap className="h-4 w-4 text-yellow-500" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteDocument(doc.id)}
+                              className="h-8 w-8 p-0"
+                              title="Sil"
+                            >
+                              <Trash2 className="h-4 w-4 text-white hover:text-red-300 transition-colors" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs for History */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="documents">
@@ -390,223 +644,7 @@ export default function DocumentManagerPage() {
         </TabsList>
 
         <TabsContent value="documents" className="space-y-6">
-
-      {/* Stats Cards with Upload */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Toplam Döküman
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{documents.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Toplam Boyut
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatFileSize(documents.reduce((sum, doc) => sum + doc.size, 0))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Embedding'li
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {documents.filter(d => d.metadata?.embeddings).length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Chunk Sayısı
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {documents.reduce((sum, doc) => sum + (doc.metadata?.chunks || 0), 0)}
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Compact Upload Card */}
-        <Card className={`border-dashed border-2 transition-all ${uploading ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
-          <CardContent className="p-0 relative">
-            <input
-              type="file"
-              onChange={handleFileUpload}
-              className="hidden"
-              id="file-upload"
-              accept=".txt,.pdf,.json,.md,.csv,.doc,.docx,.xls,.xlsx"
-              disabled={uploading}
-            />
-            <label 
-              htmlFor="file-upload" 
-              className={`cursor-pointer flex flex-col items-center justify-center h-full py-6 ${uploading ? 'pointer-events-none' : ''}`}
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="h-8 w-8 text-primary mb-2 animate-spin" />
-                  <span className="text-sm font-medium text-primary">Yükleniyor...</span>
-                  <span className="text-xs text-muted-foreground mt-1">{uploadProgress}%</span>
-                  <div className="w-full px-4 mt-3">
-                    <Progress value={uploadProgress} className="w-full h-2" />
-                  </div>
-                </>
-              ) : uploadProgress === 100 ? (
-                <>
-                  <CheckCircle className="h-8 w-8 text-green-500 mb-2" />
-                  <span className="text-sm font-medium text-green-500">Başarılı!</span>
-                  <span className="text-xs text-muted-foreground mt-1">Dosya yüklendi</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                  <span className="text-sm font-medium">Dosya Yükle</span>
-                  <span className="text-xs text-muted-foreground mt-1">Max 10MB</span>
-                  <span className="text-xs text-muted-foreground">txt, pdf, json, md, csv, doc, docx, xls, xlsx</span>
-                </>
-              )}
-            </label>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Documents List */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CardTitle>Dökümanlar</CardTitle>
-              <Button onClick={fetchDocuments} variant="ghost" size="icon" className="h-8 w-8">
-                <RefreshCw className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Ara..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-[200px]"
-                />
-              </div>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="px-3 py-2 border rounded-md"
-              >
-                <option value="all">Tümü</option>
-                <option value="text">Text</option>
-                <option value="pdf">PDF</option>
-                <option value="json">JSON</option>
-                <option value="code">Code</option>
-              </select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredDocuments.length === 0 ? (
-            <div className="text-center py-12">
-              <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground" />
-              <p className="mt-2 text-muted-foreground">Henüz döküman yok</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Başlık</TableHead>
-                  <TableHead>Tip</TableHead>
-                  <TableHead>Boyut</TableHead>
-                  <TableHead>Chunks</TableHead>
-                  <TableHead>Embedding</TableHead>
-                  <TableHead>Tarih</TableHead>
-                  <TableHead className="text-right">İşlemler</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredDocuments.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {getFileIcon(doc.type)}
-                        {doc.title}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{doc.type}</Badge>
-                    </TableCell>
-                    <TableCell>{formatFileSize(doc.size)}</TableCell>
-                    <TableCell>{doc.metadata?.chunks || 0}</TableCell>
-                    <TableCell>
-                      {doc.metadata?.embeddings ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4 text-gray-400" />
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(doc.metadata.created_at).toLocaleDateString('tr-TR')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {!doc.metadata?.embeddings ? (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleCreateEmbeddings(doc.id, doc.title)}
-                            disabled={embeddingProgress[doc.id]}
-                            title="Embedding Oluştur"
-                          >
-                            {embeddingProgress[doc.id] ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Brain className="h-4 w-4" />
-                            )}
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteEmbeddings(doc.id)}
-                            title="Embedding'leri Sil"
-                          >
-                            <Zap className="h-4 w-4 text-yellow-500" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteDocument(doc.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
+          {/* Documents table view can be added here if needed */}
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">
@@ -765,6 +803,90 @@ export default function DocumentManagerPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Document Detail Modal */}
+      {selectedDoc && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="max-w-5xl w-full h-[85vh] flex flex-col">
+            <Card className="flex-1 flex flex-col overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between bg-background border-b flex-shrink-0">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="truncate text-lg flex items-center gap-2">
+                    {getFileIcon(selectedDoc.type)}
+                    {selectedDoc.title}
+                  </CardTitle>
+                  <CardDescription className="text-sm mt-1">
+                    {selectedDoc.type.toUpperCase()} • {formatFileSize(selectedDoc.size)}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(selectedDoc.content)}
+                    className="h-8"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Kopyala
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedDoc(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+
+              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                {/* Content Section */}
+                <div className="flex-1 p-6 min-h-0">
+                  <div className="h-full flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                      <Label className="text-base font-semibold">Döküman İçeriği</Label>
+                      <Badge variant="outline" className="text-xs">
+                        {selectedDoc.content.length} karakter
+                      </Badge>
+                    </div>
+
+                    {/* ScrollArea with fixed height */}
+                    <div className="flex-1 min-h-0">
+                      <ScrollArea className="h-full border rounded-lg bg-muted/30">
+                        <div className="p-4">
+                          <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
+                            {selectedDoc.content}
+                          </pre>
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metadata Section */}
+                <div className="border-t bg-muted/20 p-4 flex-shrink-0">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Boyut</span>
+                      <p className="font-medium">{formatFileSize(selectedDoc.size)}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Chunks</span>
+                      <p className="font-medium">{selectedDoc.metadata?.chunks || 0}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Embedding</span>
+                      <p className="font-medium">
+                        {selectedDoc.metadata?.embeddings ? 'Var' : 'Yok'}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-muted-foreground text-xs">Oluşturulma</span>
+                      <p className="font-medium">{formatDate(selectedDoc.metadata.created_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

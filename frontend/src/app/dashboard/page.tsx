@@ -227,7 +227,7 @@ export default function DashboardPage() {
   // WebSocket connection for real-time logs
   useEffect(() => {
     if (!isConsolePaused) {
-      const ws = new WebSocket(`ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`);
+      const ws = new WebSocket(`ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}/ws/logs`);
 
       ws.onopen = () => {
         setWsConnected(true);
@@ -925,13 +925,13 @@ export default function DashboardPage() {
                 >
                   Clear
                 </Button>
-                <Terminal className="h-4 w-4 text-gray-500" />
+                <Terminal className="h-4 w-4 text-gray-500 dark:text-gray-500" />
               </div>
             </div>
 
             {/* Filter Buttons */}
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-gray-500">Filter:</span>
+              <span className="text-xs text-gray-500 dark:text-gray-500">Filter:</span>
               {(['all', 'backend', 'frontend', 'error', 'warn', 'info'] as const).map((filter) => (
                 <Button
                   key={filter}
@@ -945,7 +945,7 @@ export default function DashboardPage() {
                         filter === 'backend' ? 'bg-blue-500 hover:bg-blue-600' :
                         filter === 'frontend' ? 'bg-green-500 hover:bg-green-600' :
                         'bg-gray-500 hover:bg-gray-600'
-                      : 'text-gray-600 hover:text-gray-800'
+                      : 'text-gray-600 dark:text-gray-600 hover:text-gray-800 dark:hover:text-gray-300'
                   }`}
                 >
                   {filter}
@@ -964,24 +964,24 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pt-0">
             <div
-              className="bg-gray-950 text-gray-100 p-4 rounded-lg font-mono text-xs overflow-auto"
+              className="bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-100 p-4 rounded-lg font-mono text-xs overflow-auto border border-gray-300 dark:border-gray-800"
               style={{ height: `${consoleHeight}px`, maxHeight: '600px' }}
             >
               {filteredConsoleLogs.length > 0 ? (
                 filteredConsoleLogs.slice(-50).map((log, index) => (
                   <div key={`${log.id || index}-${log.timestamp || Date.now()}-${index}`} className={`mb-1 font-mono ${
-                    log.type === 'error' ? 'text-red-400' :
-                    log.type === 'warn' ? 'text-yellow-400' :
-                    log.type === 'info' ? 'text-blue-400' :
-                    'text-gray-300'
+                    log.type === 'error' ? 'text-red-500 dark:text-red-400' :
+                    log.type === 'warn' ? 'text-yellow-600 dark:text-yellow-400' :
+                    log.type === 'info' ? 'text-blue-600 dark:text-blue-400' :
+                    'text-gray-700 dark:text-gray-300'
                   }`}>
-                    <span className="text-gray-600 select-none">[{log.timestamp}]</span>
-                    <span className="ml-2">{log.message}</span>
+                    <span className="text-gray-500 dark:text-gray-600 select-none">[{log.timestamp}]</span>
+                    <span className="ml-2 text-gray-800 dark:text-gray-200">{log.message}</span>
                     {log.source && (
                       <span className={`ml-2 text-xs opacity-75 ${
-                        log.source === 'backend' ? 'text-blue-400' :
-                        log.source === 'frontend' ? 'text-green-400' :
-                        'text-gray-500'
+                        log.source === 'backend' ? 'text-blue-600 dark:text-blue-400' :
+                        log.source === 'frontend' ? 'text-green-600 dark:text-green-400' :
+                        'text-gray-600 dark:text-gray-500'
                       }`}>
                         [{log.source.toUpperCase()}]
                       </span>
@@ -989,7 +989,7 @@ export default function DashboardPage() {
                   </div>
                 ))
               ) : (
-                <div className="text-gray-600 text-center py-8">
+                <div className="text-gray-500 dark:text-gray-600 text-center py-8">
                   {consoleFilter === 'all' ?
                     'Console output will appear here...' :
                     `No ${consoleFilter} logs found. Try changing the filter.`

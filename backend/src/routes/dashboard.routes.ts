@@ -98,9 +98,13 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
 
                 let embeddedRecords = 0;
                 try {
-                    // Use display name for source_table (dynamically generated)
+                    // Check for embeddings with both the original table name and display name
                     const displayName = createDisplayName(table.name);
-                    const embeddedCount = await client.query(`SELECT COUNT(DISTINCT(source_id)) FROM unified_embeddings WHERE source_table = $1`, [displayName]);
+                    const embeddedCount = await client.query(
+                        `SELECT COUNT(DISTINCT(source_id)) FROM unified_embeddings
+                         WHERE source_table = $1 OR source_table = $2`,
+                        [table.name, displayName]
+                    );
                     embeddedRecords = parseInt(embeddedCount.rows[0].count);
                 } catch (e) { /* ignore */ }
 

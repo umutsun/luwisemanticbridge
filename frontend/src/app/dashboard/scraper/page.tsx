@@ -21,37 +21,18 @@ import {
   Loader2,
   Trash2,
   RefreshCw,
-  FileText,
-  Database,
-  History,
-  Calendar,
   Brain,
-  Search,
   Zap,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Eye,
-  Hash,
   Filter,
-  CheckSquare,
-  Square,
-  Play,
-  Activity,
   X,
   Copy,
-  ExternalLink,
-  CheckCircle,
-  Circle
+  ExternalLink
 } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Checkbox } from '@/components/ui/checkbox';
 
 interface ScrapedPage {
   id: string;
@@ -69,17 +50,6 @@ interface ScrapedPage {
   updated_at: string;
 }
 
-interface HistoryEntry {
-  id: number;
-  operation_type: string;
-  source_url: string;
-  title: string;
-  status: string;
-  details: any;
-  metrics: any;
-  error_message?: string;
-  created_at: string;
-}
 
 export default function WebScraperPage() {
   const { t } = useTranslation();
@@ -87,9 +57,7 @@ export default function WebScraperPage() {
   
   const [url, setUrl] = useState('');
   const [scrapedPages, setScrapedPages] = useState<ScrapedPage[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [scrapeOptions, setScrapeOptions] = useState({
     saveToDb: true,
     generateEmbeddings: false,
@@ -98,12 +66,10 @@ export default function WebScraperPage() {
     prioritySelectors: '',
     extractMode: 'best'
   });
-  const [embeddingProgress, setEmbeddingProgress] = useState<Record<string, boolean>>({});
   const [scraping, setScraping] = useState(false);
   const [selectedPage, setSelectedPage] = useState<ScrapedPage | null>(null);
   const [pageDetails, setPageDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [lastScrapedData, setLastScrapedData] = useState<any>(null);
 
   // New states for enhanced functionality
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
@@ -125,7 +91,6 @@ export default function WebScraperPage() {
   useEffect(() => {
     initTables();
     fetchScrapedPages();
-    fetchHistory();
   }, []);
 
   const initTables = async () => {
@@ -153,18 +118,7 @@ export default function WebScraperPage() {
     }
   };
 
-  const fetchHistory = async () => {
-    try {
-      const response = await fetch('http://localhost:8083/api/v2/scraper/activity/history?operation_type=scrape&limit=10');
-      if (response.ok) {
-        const data = await response.json();
-        setHistory(data.history || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch history:', error);
-    }
-  };
-
+  
   const fetchPageDetails = async (pageId: string) => {
     try {
       const response = await fetch(`http://localhost:8083/api/v2/scraper/pages/${pageId}`);
@@ -200,53 +154,7 @@ export default function WebScraperPage() {
     return 'error';
   };
 
-  const togglePageSelection = (pageId: string) => {
-    setSelectedPages(prev =>
-      prev.includes(pageId)
-        ? prev.filter(id => id !== pageId)
-        : [...prev, pageId]
-    );
-  };
-
-  const toggleAllPagesSelection = () => {
-    if (selectedPages.length === filteredPages.length) {
-      setSelectedPages([]);
-    } else {
-      setSelectedPages(filteredPages.map(page => page.id));
-    }
-  };
-
-  const handleBulkEmbedding = async () => {
-    if (selectedPages.length === 0) {
-      toast({ variant: "destructive", title: "No pages selected for embedding" });
-      return;
-    }
-
-    const pagesToEmbed = selectedPages.filter(pageId => {
-      const page = filteredPages.find(p => p.id === pageId);
-      return getEmbeddingStatus(page!) === 'not_embedded';
-    });
-
-    if (pagesToEmbed.length === 0) {
-      toast({ variant: "destructive", title: "No unembedded pages selected" });
-      return;
-    }
-
-    // Process embeddings for selected pages
-    for (const pageId of pagesToEmbed) {
-      const page = filteredPages.find(p => p.id === pageId);
-      if (page) {
-        await handleCreateEmbeddings(page.id, page.title);
-      }
-    }
-
-    setSelectedPages([]);
-    toast({
-      title: "Bulk embedding completed",
-      description: `Processed ${pagesToEmbed.length} pages`
-    });
-  };
-
+  
   const getFilteredPages = () => {
     return filteredPages.filter(page => {
       const status = getEmbeddingStatus(page);
@@ -306,9 +214,7 @@ export default function WebScraperPage() {
           message: 'Scrape completed successfully!'
         });
         toast({ title: t('scraper.toasts.scrapeSuccess', { title: data.title }) });
-        setLastScrapedData(data);
         fetchScrapedPages();
-        fetchHistory();
         setUrl('');
 
         // Reset progress after delay
@@ -346,18 +252,7 @@ export default function WebScraperPage() {
     }
   };
 
-  const handleCreateEmbeddings = async (pageId: string, title: string) => {
-    setEmbeddingProgress(prev => ({ ...prev, [pageId]: true }));
-    try {
-      toast({ title: t('scraper.toasts.embeddingsSuccess', { title }) });
-      fetchScrapedPages();
-    } catch (error) {
-      toast({ variant: "destructive", title: t('scraper.toasts.embeddingsFailed') });
-    } finally {
-      setEmbeddingProgress(prev => ({ ...prev, [pageId]: false }));
-    }
-  };
-
+  
   const handleDeletePage = async (id: string) => {
     if (!confirm('Are you sure you want to delete this scraped page?')) return;
 
@@ -392,50 +287,14 @@ export default function WebScraperPage() {
     }
   };
 
-  const deleteHistoryEntry = async (id: number) => {
-    try {
-      const response = await fetch(`http://localhost:8083/api/v2/scraper/activity/history/scraper/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        fetchHistory();
-        toast({ title: t('scraper.toasts.historyDeleted') });
-      } else {
-        toast({ variant: "destructive", title: t('scraper.toasts.historyDeleteFailed') });
-      }
-    } catch (error) {
-      toast({ variant: "destructive", title: t('scraper.toasts.networkError') });
-    }
-  };
-
-  const clearAllHistory = async () => {
-    if (!confirm(t('scraper.toasts.confirmClearHistory'))) return;
-    try {
-      const response = await fetch('http://localhost:8083/api/v2/scraper/activity/history/scraper', { method: 'DELETE' });
-      if (response.ok) {
-        fetchHistory();
-        toast({ title: t('scraper.toasts.historyCleared') });
-      } else {
-        toast({ variant: "destructive", title: t('scraper.toasts.historyClearFailed') });
-      }
-    } catch (error) {
-      toast({ variant: "destructive", title: t('scraper.toasts.networkError') });
-    }
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
-
+  
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   const filteredPages = scrapedPages.filter(page =>
-    page.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    page.url?.toLowerCase().includes(searchQuery.toLowerCase())
+    page.title?.toLowerCase().includes('') ||
+    page.url?.toLowerCase().includes('')
   );
 
   return (
@@ -462,8 +321,7 @@ export default function WebScraperPage() {
                 placeholder={t('scraper.urlPlaceholder')}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && !scraping && handleScrape()}
-                className="mb-2"
+                  className="mb-2"
                 disabled={scraping}
               />
               <div className="space-y-3 border-t pt-3">
@@ -649,14 +507,7 @@ export default function WebScraperPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Bulk Actions */}
-                {selectedPages.length > 0 && (
-                  <Button onClick={handleBulkEmbedding} variant="outline" size="sm" className="h-8">
-                    <Brain className="h-4 w-4 mr-1" />
-                    Embed Selected ({selectedPages.length})
-                  </Button>
-                )}
-
+  
                 {/* Refresh */}
                 <Button onClick={fetchScrapedPages} variant="outline" size="icon" className="h-8 w-8">
                   <RefreshCw className="h-4 w-4" />
@@ -680,15 +531,14 @@ export default function WebScraperPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Title</TableHead>
-                      <TableHead className="w-[120px]">Size/Chunks</TableHead>
-                      <TableHead className="text-right w-[80px]">Actions</TableHead>
+                      <TableHead className="w-[100px]">Size/Chunks</TableHead>
+                      <TableHead className="w-[60px] text-center">Select</TableHead>
+                      <TableHead className="w-[50px] text-center">Delete</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {getFilteredPages().map((page) => {
                       const embedStatus = getEmbeddingStatus(page);
-                      const isSelected = selectedPages.includes(page.id);
-                      const isEmbedding = embeddingProgress[page.id];
 
                       return (
                         <TableRow key={page.id}>
@@ -707,56 +557,40 @@ export default function WebScraperPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex flex-col items-center">
-                              <div className="flex items-center gap-1">
-                                <Hash className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs">
-                                  {(page.content_length / 1024).toFixed(1)}KB
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Database className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-xs">{page.chunk_count}</span>
-                              </div>
-                              {embedStatus === 'embedded' && (
-                                <CheckCircle2 className="h-4 w-4 text-green-500 mt-1" />
-                              )}
-                              {embedStatus === 'not_embedded' && (
-                                <Circle className="h-4 w-4 text-yellow-500 mt-1" />
-                              )}
-                              {embedStatus === 'error' && (
-                                <XCircle className="h-4 w-4 text-red-500 mt-1" />
-                              )}
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs font-medium">
+                                {(page.content_length / 1024).toFixed(1)}KB
+                              </span>
+                              <span className="text-xs font-medium">{page.chunk_count}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              {embedStatus === 'not_embedded' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCreateEmbeddings(page.id, page.title)}
-                                  disabled={isEmbedding}
-                                  className="h-8 w-8 p-0"
-                                  title="Create Embeddings"
-                                >
-                                  {isEmbedding ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Brain className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeletePage(page.id)}
-                                className="h-8 w-8 p-0"
-                                title="Delete Page"
-                              >
-                                <Trash2 className="h-4 w-4 text-white hover:text-red-300 transition-colors" />
-                              </Button>
-                            </div>
+                          <TableCell className="text-center">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-gray-300"
+                              checked={embedStatus === 'embedded'}
+                              disabled={embedStatus === 'embedded'}
+                              onChange={() => {
+                                if (embedStatus !== 'embedded') {
+                                  if (selectedPages.includes(page.id)) {
+                                    setSelectedPages(prev => prev.filter(id => id !== page.id));
+                                  } else {
+                                    setSelectedPages(prev => [...prev, page.id]);
+                                  }
+                                }
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeletePage(page.id)}
+                              className="h-8 w-8 p-0 mx-auto"
+                              title="Delete Page"
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600 transition-colors" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );

@@ -2756,6 +2756,7 @@ export default function SettingsPage() {
                       id="logFile"
                       value={config.logging.file}
                       onChange={(e) => updateConfig('logging.file', e.target.value)}
+                      placeholder="logs/asb.log"
                     />
                   </div>
                   <div className="space-y-2">
@@ -2764,6 +2765,7 @@ export default function SettingsPage() {
                       id="maxSize"
                       value={config.logging.maxSize}
                       onChange={(e) => updateConfig('logging.maxSize', e.target.value)}
+                      placeholder="10m"
                     />
                   </div>
                   <div className="space-y-2">
@@ -2773,8 +2775,55 @@ export default function SettingsPage() {
                       type="number"
                       value={config.logging.maxFiles}
                       onChange={(e) => updateConfig('logging.maxFiles', parseInt(e.target.value))}
+                      placeholder="5"
                     />
                   </div>
+                </div>
+                <div className="flex items-center gap-2 pt-4">
+                  <Button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch('/api/v2/logs/test', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                          },
+                          body: JSON.stringify({
+                            level: config.logging.level,
+                            message: `Test log message at ${new Date().toLocaleString()}`
+                          })
+                        });
+
+                        if (response.ok) {
+                          toast({
+                            title: 'Test Log Sent',
+                            description: 'Check the dashboard console for the test log',
+                          });
+                        } else {
+                          toast({
+                            title: 'Error',
+                            description: 'Failed to send test log',
+                            variant: 'destructive',
+                          });
+                        }
+                      } catch (error) {
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to send test log',
+                          variant: 'destructive',
+                        });
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Terminal className="h-4 w-4 mr-2" />
+                    Send Test Log
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Send a test log message to verify logging configuration
+                  </p>
                 </div>
               </CardContent>
             </Card>

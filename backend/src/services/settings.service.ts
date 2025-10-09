@@ -241,6 +241,31 @@ export class SettingsService {
     }
   }
 
+  // Set a single setting
+  async setSetting(key: string, value: string): Promise<void> {
+    try {
+      const client = await asembPool.connect();
+
+      try {
+        // Upsert the setting
+        await client.query(`
+          INSERT INTO settings (key, value, created_at, updated_at)
+          VALUES ($1, $2, NOW(), NOW())
+          ON CONFLICT (key) DO UPDATE SET
+            value = $2,
+            updated_at = NOW()
+        `, [key, value]);
+
+        logger.info(`Setting ${key} updated successfully`);
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      logger.error(`Failed to set setting ${key}:`, error);
+      throw error;
+    }
+  }
+
   // Get all API keys
   async getApiKeys(): Promise<Record<string, string>> {
     try {

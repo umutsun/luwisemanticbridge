@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ path: '.env.asemb' });
 
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -40,6 +40,8 @@ import appSettingsRoutes from './routes/app-settings.routes';
 import healthRoutes from './routes/health.routes';
 import adminRoutes from './routes/admin.routes';
 import llmStatusRoutes from './routes/llm-status.routes';
+import logsRoutes, { initializeLogWebSocket } from './routes/logs.routes';
+import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
 import { AuthService } from './services/auth.service';
 
 
@@ -75,14 +77,30 @@ const wss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
   path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH
 }) : null;
 
+// Initialize WebSocket Server for logs
+const logWss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
+  noServer: true,
+  path: '/ws/logs'
+}) : null;
+
+// Initialize log WebSocket service
+// Temporarily disabled to prevent startup issues
+// if (SERVER.WEBSOCKET.ENABLED && logWss) {
+//   initializeLogWebSocket(logWss);
+// }
+
 // Handle WebSocket upgrade for standard WebSocket connections if enabled
-if (SERVER.WEBSOCKET.ENABLED && wss) {
+if (SERVER.WEBSOCKET.ENABLED && (wss || logWss)) {
   httpServer.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
 
-    if (pathname === SERVER.WEBSOCKET.NOTIFICATIONS_PATH) {
+    if (pathname === SERVER.WEBSOCKET.NOTIFICATIONS_PATH && wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
+      });
+    } else if (pathname === '/ws/logs' && logWss) {
+      logWss.handleUpgrade(request, socket, head, (ws) => {
+        logWss.emit('connection', ws, request);
       });
     } else {
       socket.destroy();
@@ -205,6 +223,8 @@ app.use('/api/v2/settings', appSettingsRoutes);
 app.use('/api/v2/health', healthRoutes);
 app.use('/api/v2/llm', llmStatusRoutes);
 app.use('/api/v2/admin', adminRoutes);
+app.use('/api/v2/logs', logsRoutes);
+app.use('/api/v2/embeddings-tables', embeddingsTablesRoutes);
 
 // Base route
 app.get('/api/v2', (req: Request, res: Response) => {
