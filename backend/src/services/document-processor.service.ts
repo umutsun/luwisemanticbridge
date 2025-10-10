@@ -24,14 +24,49 @@ interface ChunkMetadata {
 }
 
 export class DocumentProcessorService {
-  private openai: OpenAI;
+  private openai: OpenAI | null;
   private chunkSize: number = 1000;
   private chunkOverlap: number = 200;
 
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    // Initialize OpenAI client lazily when needed
+    this.openai = null;
+  }
+
+  private async getOpenAIClient(): Promise<OpenAI | null> {
+    if (this.openai) {
+      return this.openai;
+    }
+
+    try {
+      // Get API key from settings table
+      const result = await pool.query(
+        'SELECT value FROM settings WHERE key = $1',
+        ['openai.apiKey']
+      );
+
+      if (result.rows.length > 0 && result.rows[0].value) {
+        const apiKey = result.rows[0].value;
+        // Check if it's a JSON object with apiKey property
+        let key = apiKey;
+        try {
+          const parsed = JSON.parse(apiKey);
+          if (typeof parsed === 'object' && parsed.apiKey) {
+            key = parsed.apiKey;
+          }
+        } catch {
+          // Use as-is if not JSON
+        }
+
+        this.openai = new OpenAI({ apiKey: key });
+        return this.openai;
+      }
+    } catch (error) {
+      console.error('Error fetching OpenAI API key from settings:', error);
+    }
+
+    console.warn('OpenAI API key not found in settings. OpenAI features will be disabled.');
+    return null;
   }
 
   async processFile(filePath: string, originalName: string, mimeType: string): Promise<ProcessedDocument> {
@@ -204,15 +239,24 @@ export class DocumentProcessorService {
 
   async createEmbeddings(text: string): Promise<number[]> {
     try {
-      const response = await this.openai.embeddings.create({
+      const openaiClient = await this.getOpenAIClient();
+
+      if (!openaiClient) {
+        console.warn('OpenAI client not available. Skipping embeddings generation.');
+        // Return empty array or fallback embedding
+        return [];
+      }
+
+      const response = await openaiClient.embeddings.create({
         model: "text-embedding-ada-002",
         input: text
       });
-      
+
       return response.data[0].embedding;
     } catch (error) {
       console.error('Error creating embeddings:', error);
-      throw new Error('Failed to create embeddings');
+      // Return empty array instead of throwing error to prevent crashes
+      return [];
     }
   }
 
