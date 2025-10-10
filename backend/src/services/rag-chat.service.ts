@@ -216,6 +216,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // Get search settings from database
       const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '15');
       const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || await settingsService.getSetting('minResults') || '5');
+      const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3'); // Use batch size for initial load
       const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.014');
 
       // Use semantic search to find related content
@@ -240,7 +241,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       console.log(`Found ${searchResults.length} results with similarity >= ${minThreshold}%`);
 
-      // Ensure minimum results requirement
+      // For initial display, use batch size instead of minResults
+      const initialDisplayCount = Math.min(batchSize, searchResults.length);
+      console.log(`📊 Displaying ${initialDisplayCount} initial results (batch size: ${batchSize})`);
+
+      // Ensure minimum results requirement (for backend processing, not display)
       if (searchResults.length < minResults && allResults.length > 0) {
         const additionalResults = allResults
           .filter(result => {
@@ -265,15 +270,16 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // 4. Generate response using LLM Manager
       const llmManager = LLMManager.getInstance();
 
-      // Create a simple context with titles and scores
-      const simpleContext = searchResults.slice(0, 5).map((r, idx) => {
+      // Create a simple context with titles and scores using batch size
+      const simpleContext = searchResults.slice(0, initialDisplayCount).map((r, idx) => {
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
         return `${idx + 1}. %${score} - ${title}`;
       }).join('\n');
 
       // Generate response using LLM Manager
-      const fullPrompt = `${systemPrompt}\n\nBAĞLAM:\n${simpleContext}\n\nSORU: ${message}`;
+      const fullPrompt = `BAĞLAM:\n${simpleContext}\n\nSORU: ${message}`;
+      console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       const response = await llmManager.generateChatResponse(
         fullPrompt,
         {
@@ -290,10 +296,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // 6. Format sources for frontend with natural language summaries
       const formattedSources = await this.formatSources(searchResults);
 
-      // 7. Get additional related topics (excluding already shown ones)
-      const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
-      const shownIds = searchResults.slice(0, 3).map(s => s.id?.toString() || s.source_id?.toString());
-      const relatedTopics = await this.getRelatedTopics(message, searchResults.slice(0, 3), relatedResultsLimit);
+      // 7. Get additional related topics (excluding already shown ones) - DISABLED FOR PERFORMANCE
+      // const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
+      // const shownIds = searchResults.slice(0, 3).map(s => s.id?.toString() || s.source_id?.toString());
+      // const relatedTopics = await this.getRelatedTopics(message, searchResults.slice(0, 3), relatedResultsLimit);
+      const relatedTopics = []; // Disable for now
 
       // Multilingual provider names
     const getProviderDisplayName = (provider: string, language: string = 'tr') => {
@@ -462,90 +469,225 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
   /**
    * Format sources for better UI display
-   * Optimized to avoid blocking on LLM content generation
+   * Optimized with enhanced parallel LLM processing
    */
   private async formatSources(searchResults: any[]): Promise<any[]> {
     const formattedResults = [];
-    const enableLLMGeneration = true; // Always enable LLM generation for better questions
+    // Check if parallel LLM processing is enabled
+    const enableParallelLLM = await settingsService.getSetting('enable_parallel_llm') === 'true';
+    // Get parallel LLM count from settings (default 5, max 10)
+    const parallelCount = Math.min(
+      parseInt(await settingsService.getSetting('parallel_llm_count') || '5'),
+      10
+    );
+    const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
+    const enableLLMGeneration = true; // Keep LLM features but optimize
 
-    console.log(`🔄 Formatting ${searchResults.length} sources with LLM generation: ${enableLLMGeneration}`);
+    console.log(`🚀 Formatting ${searchResults.length} sources with ENHANCED parallel LLM: ${enableLLMGeneration} (PARALLEL: ${enableParallelLLM}, MAX_CONCURRENT: ${parallelCount}, BATCH: ${batchSize})`);
 
-    for (let idx = 0; idx < searchResults.length; idx++) {
-      const r = searchResults[idx];
-      const category = this.categorizeSource(r);
-      // Score already calculated in search results
-      const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
-      console.log(`Source ${idx}: score=${r.score}, similarity_score=${r.similarity_score}, calculated=${score}`);
+    if (enableParallelLLM && searchResults.length > 1) {
+      // ENHANCED: Process sources with dynamic concurrency based on parallelCount
+      console.log(`⚡ Starting enhanced parallel processing with ${parallelCount} concurrent workers`);
 
-      // Build proper citation
-      let citation = `[Source ${idx + 1}]`;
-      if (r.metadata) {
-        // Dynamic citation based on metadata fields
-        const parts = [];
+      // Create processing queue with all sources
+      const allSources = [...searchResults];
+      const processingPromises: Promise<any>[] = [];
 
-        // Add metadata fields dynamically (skip source_table as it's redundant)
-        Object.keys(r.metadata).forEach(key => {
-          const value = r.metadata[key];
-          if (value && typeof value === 'string' && value.trim()) {
-            parts.push(`${key}: ${value}`);
+      // Process sources in parallel chunks
+      for (let i = 0; i < allSources.length; i++) {
+        const r = allSources[i];
+
+        // Create processing promise for each source
+        const sourcePromise = this.processSourceWithLLM(r, i, enableLLMGeneration);
+
+        // Add to processing queue
+        processingPromises.push(sourcePromise);
+
+        // When we reach max concurrent, wait for some to complete
+        if (processingPromises.length >= parallelCount) {
+          // Process current batch
+          const batchResults = await Promise.allSettled(processingPromises);
+
+          // Extract successful results
+          batchResults.forEach((result, idx) => {
+            if (result.status === 'fulfilled') {
+              formattedResults.push(result.value);
+            } else {
+              console.warn(`Failed to process source ${i - processingPromises.length + idx + 1}:`, result.reason);
+              // Add fallback result
+              formattedResults.push(this.createFallbackResult(r, i - processingPromises.length + idx + 1));
+            }
+          });
+
+          // Clear the queue for next batch
+          processingPromises.length = 0;
+          console.log(`✅ Processed ${batchResults.length} sources, total: ${formattedResults.length}`);
+        }
+      }
+
+      // Process remaining sources
+      if (processingPromises.length > 0) {
+        const remainingResults = await Promise.allSettled(processingPromises);
+        remainingResults.forEach((result, idx) => {
+          if (result.status === 'fulfilled') {
+            formattedResults.push(result.value);
+          } else {
+            console.warn(`Failed to process remaining source:`, result.reason);
+            formattedResults.push(this.createFallbackResult(r, searchResults.length - processingPromises.length + idx + 1));
           }
         });
-
-        if (parts.length > 0) {
-          citation = parts.join(' - ');
-        }
       }
 
-      // Clean HTML from title and excerpt
-      const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
-      const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+      // Sort results by original index to maintain order
+      formattedResults.sort((a, b) => a.index - b.index);
+      console.log(`🎉 Enhanced parallel processing completed: ${formattedResults.length} sources processed`);
 
-      // Use fallback content by default for faster response
-      let processedContent = cleanExcerpt;
-      let generatedQuestion = `${cleanTitle} hakkında detaylı bilgi verir misiniz?`;
+    } else {
+      // Sequential processing (fallback)
+      console.log('🔄 Using sequential processing (parallel disabled or single result)');
+      for (let idx = 0; idx < searchResults.length; idx++) {
+        const r = searchResults[idx];
+        const category = this.categorizeSource(r);
+        // Score already calculated in search results
+        const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
+        console.log(`Source ${idx}: score=${r.score}, similarity_score=${r.similarity_score}, calculated=${score}`);
 
-      // Only generate LLM content if explicitly enabled (opt-in)
-      if (enableLLMGeneration) {
-        try {
-          console.time(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
-          const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
-          processedContent = llmResult.processedContent;
-          generatedQuestion = llmResult.generatedQuestion;
-          console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
-        } catch (error) {
-          console.warn('LLM content generation failed, using fallback:', error);
+        // Build proper citation
+        let citation = `[Source ${idx + 1}]`;
+        if (r.metadata) {
+          // Dynamic citation based on metadata fields
+          const parts = [];
+          // Add metadata fields dynamically (skip source_table as it's redundant)
+          Object.keys(r.metadata).forEach(key => {
+            const value = r.metadata[key];
+            if (value && typeof value === 'string' && value.trim()) {
+              parts.push(`${key}: ${value}`);
+            }
+          });
+          if (parts.length > 0) {
+            citation = parts.join(' - ');
+          }
         }
-      }
 
-      formattedResults.push({
-        id: r.id,
-        title: cleanTitle,
-        excerpt: this.truncateExcerpt(cleanExcerpt, 250),
-        content: processedContent,
-        question: generatedQuestion,
-        category: category,
-        sourceTable: r.source_table || 'documents',
-        citation: citation,
-        score: score,
-        relevance: score,
-        relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
-        databaseInfo: {
-          table: r.source_table || 'documents',
+        // Clean HTML from title and excerpt
+        const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
+        const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+
+        // Use fallback content by default for faster response
+        let processedContent = cleanExcerpt;
+        // Generate dynamic question based on content and category
+        let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
+
+        // Only generate LLM content if explicitly enabled (opt-in)
+        if (enableLLMGeneration) {
+          try {
+            console.time(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
+            const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
+            processedContent = llmResult.processedContent;
+            generatedQuestion = llmResult.generatedQuestion;
+            console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
+          } catch (error) {
+            console.warn('LLM content generation failed, using fallback:', error);
+          }
+        }
+
+        formattedResults.push({
           id: r.id,
-          hasMetadata: !!r.metadata
-        },
-        index: idx + 1,
-        metadata: r.metadata || {},
-        priority: idx + 1,
-        hasContent: !!(r.content || r.excerpt),
-        contentLength: (r.content || r.excerpt || '').length,
-        // Add flag indicating if LLM enrichment was applied
-        enriched: enableLLMGeneration
-      });
+          title: cleanTitle,
+          excerpt: this.truncateExcerpt(cleanExcerpt, 250),
+          content: processedContent,
+          question: generatedQuestion,
+          category: category,
+          sourceTable: r.source_table || 'documents',
+          citation: citation,
+          score: score,
+          relevance: score,
+          relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
+          databaseInfo: {
+            table: r.source_table || 'documents',
+            id: r.id,
+            hasMetadata: !!r.metadata
+          },
+          index: idx + 1,
+          metadata: r.metadata || {},
+          priority: idx + 1,
+          hasContent: !!(r.content || r.excerpt),
+          contentLength: (r.content || r.excerpt || '').length,
+          // Add flag indicating if LLM enrichment was applied
+          enriched: enableLLMGeneration
+        });
+      }
     }
 
     console.log(`✅ Formatted ${formattedResults.length} sources successfully`);
     return formattedResults;
+  }
+
+  /**
+   * Generate dynamic question based on title, excerpt and category without LLM
+   */
+  private generateDynamicQuestion(title: string, excerpt: string, category: string): string {
+    // Detect language
+    const isTurkish = /[çğıöşüÇĞİÖŞÜ]/.test(excerpt) ||
+                     /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
+
+    // Extract keywords from title and excerpt
+    const titleWords = title.toLowerCase().split(' ').filter(w => w.length > 3);
+    const excerptWords = excerpt.toLowerCase().split(' ').filter(w => w.length > 4);
+
+    // Category-specific question templates
+    const templates = {
+      'Vergi': isTurkish ? [
+        `${title} konusunda nasıl bir yol izlemeliyim?`,
+        `${title} için gerekli belgeler nelerdir?`,
+        `${title} süreci nasıl işler?`
+      ] : [
+        `What is the process for ${title}?`,
+        `What documents are needed for ${title}?`,
+        `How should I proceed with ${title}?`
+      ],
+      'Hukuk': isTurkish ? [
+        `${title} hukuki olarak ne anlama gelir?`,
+        `${title} ile ilgili haklarım nelerdir?`,
+        `${title} durumunda ne yapmalıyım?`
+      ] : [
+        `What are the legal implications of ${title}?`,
+        `What are my rights regarding ${title}?`,
+        `What should I do in case of ${title}?`
+      ],
+      'Mali': isTurkish ? [
+        `${title} maliyetini nasıl hesaplarım?`,
+        `${title} için ne kadar bütçe ayırmalıyım?`,
+        `${title} finansal avantajları nelerdir?`
+      ] : [
+        `How to calculate the cost of ${title}?`,
+        `What budget should I allocate for ${title}?`,
+        `What are the financial benefits of ${title}?`
+      ],
+      'İdare': isTurkish ? [
+        `${title} için nereye başvurmalıyım?`,
+        `${title} başvuru şartları nelerdir?`,
+        `${title} işlemi ne kadar sürer?`
+      ] : [
+        `Where should I apply for ${title}?`,
+        `What are the application requirements for ${title}?`,
+        `How long does the ${title} process take?`
+      ]
+    };
+
+    // Get template for category or use default
+    const categoryTemplates = templates[category] || (isTurkish ? [
+      `${title} hakkında detaylı bilgi verir misiniz?`,
+      `${title} ile ilgili önemli noktalar nelerdir?`,
+      `${title} konusuna açıklık getirebilir misiniz?`
+    ] : [
+      `Can you provide detailed information about ${title}?`,
+      `What are the key points about ${title}?`,
+      `Could you clarify the ${title} topic?`
+    ]);
+
+    // Return a random template from the category
+    return categoryTemplates[Math.floor(Math.random() * categoryTemplates.length)];
   }
 
   /**
@@ -1097,6 +1239,186 @@ Başlık: ${title}
         'Gelir vergisi dilimleri 2024',
         'Geçici vergi nasıl hesaplanır?'
       ];
+    }
+  }
+/**
+   * Process a single source with LLM enrichment
+   * Used by enhanced parallel processing
+   */
+  private async processSourceWithLLM(r: any, idx: number, enableLLMGeneration: boolean): Promise<any> {
+    const category = this.categorizeSource(r);
+    const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
+
+    // Build proper citation
+    let citation = `[Source ${idx + 1}]`;
+    if (r.metadata) {
+      const parts = [];
+      Object.keys(r.metadata).forEach(key => {
+        const value = r.metadata[key];
+        if (value && typeof value === 'string' && value.trim()) {
+          parts.push(`${key}: ${value}`);
+        }
+      });
+      if (parts.length > 0) {
+        citation = parts.join(' - ');
+      }
+    }
+
+    // Clean HTML from title and excerpt
+    const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
+    const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+
+    // Prepare content
+    let processedContent = cleanExcerpt;
+    let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
+
+    // Generate LLM content if enabled
+    if (enableLLMGeneration) {
+      try {
+        const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
+        processedContent = llmResult.processedContent;
+        generatedQuestion = llmResult.generatedQuestion;
+      } catch (error) {
+        console.warn(`LLM processing failed for source ${idx + 1}:`, error);
+        // Continue with fallback content
+      }
+    }
+
+    return {
+      id: r.id,
+      title: cleanTitle,
+      excerpt: this.truncateExcerpt(cleanExcerpt, 250),
+      content: processedContent,
+      question: generatedQuestion,
+      category: category,
+      sourceTable: r.source_table || 'documents',
+      citation: citation,
+      score: score,
+      relevance: score,
+      relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
+      databaseInfo: {
+        table: r.source_table || 'documents',
+        id: r.id,
+        hasMetadata: !!r.metadata
+      },
+      index: idx + 1,
+      metadata: r.metadata || {},
+      priority: idx + 1,
+      hasContent: !!(r.content || r.excerpt),
+      contentLength: (r.content || r.excerpt || '').length,
+      enriched: enableLLMGeneration
+    };
+  }
+
+  /**
+   * Create fallback result for failed processing
+   */
+  private createFallbackResult(r: any, idx: number): any {
+    const category = this.categorizeSource(r);
+    const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
+    const cleanTitle = this.stripHtml(r.title || `Kaynak ${idx + 1}`);
+    const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+
+    return {
+      id: r.id,
+      title: cleanTitle,
+      excerpt: this.truncateExcerpt(cleanExcerpt, 250),
+      content: cleanExcerpt,
+      question: this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category),
+      category: category,
+      sourceTable: r.source_table || 'documents',
+      citation: `[Source ${idx + 1}]`,
+      score: score,
+      relevance: score,
+      relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
+      databaseInfo: {
+        table: r.source_table || 'documents',
+        id: r.id,
+        hasMetadata: !!r.metadata
+      },
+      index: idx + 1,
+      metadata: r.metadata || {},
+      priority: idx + 1,
+      hasContent: !!(r.content || r.excerpt),
+      contentLength: (r.content || r.excerpt || '').length,
+      enriched: false
+    };
+  }
+
+  /**
+   * Get more search results with dynamic loading based on settings
+   * This enables scroll-to-load functionality
+   */
+  async getMoreSearchResults(
+    originalQuery: string,
+    currentOffset: number,
+    conversationId?: string
+  ): Promise<{ sources: any[], hasMore: boolean, nextOffset: number }> {
+    try {
+      // Get settings
+      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || '15');
+      const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || '5');
+      const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3'); // Use batch size for pagination
+      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || '0.014');
+
+      // Calculate how many results to fetch in this batch
+      const fetchCount = Math.min(batchSize, maxResults - currentOffset);
+      if (fetchCount <= 0) {
+        return { sources: [], hasMore: false, nextOffset: currentOffset };
+      }
+
+      console.log(`🔍 Loading more results: query="${originalQuery}", offset=${currentOffset}, batch=${fetchCount} (batch size: ${batchSize})`);
+
+      // Check if we should use unified embeddings
+      let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+      if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
+        const result = await pool.query(
+          "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
+        );
+        useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
+      }
+
+      // Perform semantic search with offset
+      let allResults = [];
+      if (useUnifiedEmbeddings) {
+        allResults = await semanticSearch.unifiedSemanticSearch(originalQuery, maxResults);
+      } else {
+        allResults = await semanticSearch.hybridSearch(originalQuery, maxResults);
+      }
+
+      // Filter and get additional results
+      const filteredResults = allResults
+        .filter(result => {
+          const score = result.score || (result.similarity_score * 100) || 0;
+          return score >= (minThreshold * 100);
+        })
+        .sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
+          return scoreB - scoreA;
+        });
+
+      // Get results from current offset in batch size chunks
+      const newResults = filteredResults.slice(currentOffset, currentOffset + fetchCount);
+
+      // Format the results
+      const formattedResults = await this.formatSources(newResults);
+
+      // Check if there are more results
+      const hasMore = currentOffset + fetchCount < filteredResults.length;
+      const nextOffset = currentOffset + fetchCount;
+
+      console.log(`✅ Loaded ${formattedResults.length} more results (batch: ${fetchCount}), hasMore=${hasMore}, nextOffset=${nextOffset}`);
+
+      return {
+        sources: formattedResults,
+        hasMore,
+        nextOffset
+      };
+
+    } catch (error) {
+      console.error('Error getting more search results:', error);
+      return { sources: [], hasMore: false, nextOffset: currentOffset };
     }
   }
 }

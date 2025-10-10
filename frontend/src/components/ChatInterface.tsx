@@ -180,12 +180,12 @@ export default function ChatInterface() {
   const getSemanticKeywords = (source: Record<string, unknown>) => {
     const keywords: string[] = [];
 
-    // Always add category as first tag
+    // Add category as first tag
     if (source.category) {
       keywords.push(source.category as string);
     }
 
-    // Add source table as second tag
+    // Add source table as second tag, but avoid duplicates
     if (source.sourceTable) {
       const tableMap: { [key: string]: string } = {
         'OZELGELER': 'Özelge',
@@ -195,7 +195,11 @@ export default function ChatInterface() {
         'sorucevap': 'Soru-Cevap'
       };
       const tableName = tableMap[source.sourceTable as string] || source.sourceTable as string;
-      keywords.push(tableName);
+
+      // Only add if it's not the same as the category (avoid duplicates)
+      if (!keywords.includes(tableName)) {
+        keywords.push(tableName);
+      }
     }
 
     // Backend should provide keywords

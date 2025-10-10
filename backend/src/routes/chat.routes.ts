@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ragChat } from '../services/rag-chat.service';
 import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
-import { pgPool as asembPool } from '../server';
+import { asembPool } from '../config/database.config';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();
@@ -205,11 +205,17 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
       recentActivityResult
     ] = await Promise.all([
       asembPool.query('SELECT COUNT(*) as total_conversations FROM conversations WHERE user_id = $1', [userId]),
-      asembPool.query('SELECT COUNT(*) as total_messages FROM messages WHERE user_id = $1', [userId]),
+      asembPool.query(`
+        SELECT COUNT(*) as total_messages
+        FROM messages m
+        JOIN conversations c ON m.conversation_id = c.id
+        WHERE c.user_id = $1
+      `, [userId]),
       asembPool.query(`
         SELECT COUNT(*) as recent_messages
-        FROM messages
-        WHERE user_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
+        FROM messages m
+        JOIN conversations c ON m.conversation_id = c.id
+        WHERE c.user_id = $1 AND m.created_at > NOW() - INTERVAL '24 hours'
       `, [userId])
     ]);
 
@@ -257,9 +263,6 @@ router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: Authen
     }
 
     console.log('Getting dashboard stats for admin user');
-
-    // Use existing database connection pool
-    const { asembPool } = await import('../config/database');
 
     // Get global chat statistics
     const [
@@ -392,6 +395,57 @@ router.post('/api/v2/chat/more-sources', authenticateToken, async (req: Authenti
     console.error('Get more sources error:', error);
     res.status(500).json({
       error: 'Failed to get more sources',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * Load more search results with dynamic loading (NEW)
+ * This endpoint enables scroll-to-load functionality for chat search results
+ */
+router.post('/api/v2/chat/load-more-results', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { query, offset = 0, conversationId } = req.body;
+    const userId = req.user.userId;
+
+    if (!query || query.trim() === '') {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    console.log(`🔄 Loading more results for user ${userId}: query="${query}", offset=${offset}`);
+
+    // Get more search results using the new method
+    const result = await ragChat.getMoreSearchResults(query, offset, conversationId);
+
+    // Track usage for analytics
+    try {
+      await subscriptionService.trackUserUsage(userId, 'load_more_results', {
+        query,
+        offset,
+        resultsCount: result.sources.length,
+        hasMore: result.hasMore
+      });
+    } catch (trackingError) {
+      console.error('Usage tracking error:', trackingError);
+    }
+
+    res.json({
+      success: true,
+      sources: result.sources,
+      hasMore: result.hasMore,
+      nextOffset: result.nextOffset,
+      loadedCount: result.sources.length
+    });
+
+  } catch (error: any) {
+    console.error('Load more results error:', error);
+    res.status(500).json({
+      error: 'Failed to load more results',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

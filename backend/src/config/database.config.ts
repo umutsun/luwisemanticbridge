@@ -396,6 +396,70 @@ export async function initializeAsembDatabase() {
       })
     ]);
 
+    // Create chat tables
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chatbot_settings (
+        id SERIAL PRIMARY KEY,
+        setting_key VARCHAR(255) UNIQUE NOT NULL,
+        setting_value TEXT,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(255) NOT NULL,
+        title VARCHAR(500),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        metadata JSONB DEFAULT '{}'::jsonb
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+        content TEXT NOT NULL,
+        sources JSONB DEFAULT '[]'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        metadata JSONB DEFAULT '{}'::jsonb
+      )
+    `);
+
+    // Create indexes for chat tables
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_chatbot_settings_key ON chatbot_settings(setting_key)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)`);
+
+    // Create updated_at trigger function for conversations
+    await client.query(`
+      CREATE OR REPLACE FUNCTION update_updated_at_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+          NEW.updated_at = CURRENT_TIMESTAMP;
+          RETURN NEW;
+      END;
+      $$ language 'plpgsql'
+    `);
+
+    // Create trigger for conversations
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations
+    `);
+    await client.query(`
+      CREATE TRIGGER update_conversations_updated_at
+          BEFORE UPDATE ON conversations
+          FOR EACH ROW
+          EXECUTE FUNCTION update_updated_at_column()
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS activity_log (
         id SERIAL PRIMARY KEY,

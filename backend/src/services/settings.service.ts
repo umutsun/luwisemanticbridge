@@ -42,12 +42,45 @@ export interface RedisConfig {
 
 export class SettingsService {
   private static instance: SettingsService;
+  private cache: Map<string, { value: any; timestamp: number; ttl: number }> = new Map();
+  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
 
   static getInstance(): SettingsService {
     if (!SettingsService.instance) {
       SettingsService.instance = new SettingsService();
     }
     return SettingsService.instance;
+  }
+
+  private isCacheValid(key: string): boolean {
+    const cached = this.cache.get(key);
+    if (!cached) return false;
+    return Date.now() - cached.timestamp < cached.ttl;
+  }
+
+  private setCache(key: string, value: any, ttl: number = this.CACHE_TTL): void {
+    this.cache.set(key, {
+      value,
+      timestamp: Date.now(),
+      ttl
+    });
+  }
+
+  private getCache(key: string): any | null {
+    const cached = this.cache.get(key);
+    if (!cached || !this.isCacheValid(key)) {
+      this.cache.delete(key);
+      return null;
+    }
+    return cached.value;
+  }
+
+  private clearCache(key?: string): void {
+    if (key) {
+      this.cache.delete(key);
+    } else {
+      this.cache.clear();
+    }
   }
 
   // Get port configurations from settings
@@ -215,6 +248,15 @@ export class SettingsService {
 
   // Get all settings
   async getAllSettings(): Promise<Record<string, any>> {
+    const cacheKey = 'all_settings';
+
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      logger.debug('Returning cached settings');
+      return cached;
+    }
+
     try {
       const client = await asembPool.connect();
 
@@ -230,6 +272,10 @@ export class SettingsService {
         for (const row of result.rows) {
           settings[row.key] = row.value;
         }
+
+        // Cache the result
+        this.setCache(cacheKey, settings);
+        logger.debug('Settings cached successfully');
 
         return settings;
       } finally {
@@ -257,6 +303,10 @@ export class SettingsService {
         `, [key, value]);
 
         logger.info(`Setting ${key} updated successfully`);
+
+        // Clear cache when setting is updated
+        this.clearCache('all_settings');
+        logger.debug('Cache cleared due to setting update');
       } finally {
         client.release();
       }

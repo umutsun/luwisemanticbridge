@@ -231,6 +231,9 @@ interface Config {
     minResults: number;
     enableHybridSearch: boolean;
     enableKeywordBoost: boolean;
+    enableParallelLLM: boolean;
+    parallelLLMCount: number;
+    parallelLLMBatchSize: number;
     llmKnowledgeWeight: number;
     streamResponse: boolean;
     systemPrompt: string;
@@ -843,7 +846,7 @@ export default function SettingsPage() {
     setLoading(true);
     try {
       const response = await fetch(getApiUrl('settings'), {
-        method: 'PUT',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -887,14 +890,27 @@ export default function SettingsPage() {
             const promptData = await promptResponse.json();
             console.log('Prompt saved successfully:', promptData);
             toast({
-              title: 'System prompt saved',
-              description: 'Your system prompt has been saved successfully',
+              title: 'System Settings saved',
+              description: 'Your system settings have been saved successfully',
             });
           }
         }
 
         // Save all prompts to custom prompts table (if it exists)
         // This would require a new backend endpoint for custom prompt templates
+
+        // Save RAG settings (including batch size and parallel LLM)
+        await fetch(getApiUrl('settings'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...config.llmSettings,
+            ...config.ragSettings
+          }),
+        });
 
         // Save chatbot settings
         await fetch(getApiUrl('chatbotSettings'), {
@@ -1907,7 +1923,8 @@ export default function SettingsPage() {
                         <SelectItem value="openai/gpt-4-turbo-preview">OpenAI GPT-4 Turbo</SelectItem>
                         <SelectItem value="openai/gpt-4">OpenAI GPT-4</SelectItem>
                         <SelectItem value="openai/gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</SelectItem>
-                        <SelectItem value="google/gemini-pro">Google Gemini Pro</SelectItem>
+                        <SelectItem value="google/gemini-1.5-pro">Google Gemini 1.5 Pro</SelectItem>
+                        <SelectItem value="google/gemini-1.5-flash">Google Gemini 1.5 Flash</SelectItem>
                         <SelectItem value="anthropic/claude-3-opus">Anthropic Claude 3 Opus</SelectItem>
                         <SelectItem value="anthropic/claude-3-sonnet">Anthropic Claude 3 Sonnet</SelectItem>
                       </SelectContent>
@@ -2957,10 +2974,14 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column - Search Configuration */}
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-medium mb-4">Search Configuration</h3>
-
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg font-medium">Search Configuration</CardTitle>
+                    <CardDescription>
+                      Configure search parameters and thresholds
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                     <div className="space-y-2">
                       <Label htmlFor="similarityThreshold">
                         Similarity Threshold: {(config.ragSettings?.similarityThreshold || 0.001).toFixed(3)}
@@ -2979,7 +3000,7 @@ export default function SettingsPage() {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 mt-6">
+                    <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="minResults">Min Results: {config.ragSettings?.minResults || 3}</Label>
                         <Slider
@@ -3011,45 +3032,119 @@ export default function SettingsPage() {
                         </p>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Right Column - Search Options */}
+                    {/* Search Options Card */}
+                    <div className="pt-4 border-t">
+                      <h4 className="text-base font-medium mb-4">Search Options</h4>
+                      <Card className="bg-muted/30">
+                        <CardContent className="p-4 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label htmlFor="enableHybridSearch">Enable Hybrid Search</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Combine vector search with keyword search
+                              </p>
+                            </div>
+                            <Switch
+                              id="enableHybridSearch"
+                              checked={config.ragSettings?.enableHybridSearch ?? true}
+                              onCheckedChange={(checked) => updateConfig('ragSettings.enableHybridSearch', checked)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <Label htmlFor="enableKeywordBoost">Enable Keyword Boost</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Boost scores when keywords appear in results
+                              </p>
+                            </div>
+                            <Switch
+                              id="enableKeywordBoost"
+                              checked={config.ragSettings?.enableKeywordBoost ?? true}
+                              onCheckedChange={(checked) => updateConfig('ragSettings.enableKeywordBoost', checked)}
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Right Column - Parallel LLM Processing */}
                 <div className="space-y-6">
+                  {/* Parallel LLM Processing Card */}
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-base">Search Options</CardTitle>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Zap className="h-4 w-4" />
+                        Parallel LLM Processing
+                      </CardTitle>
                       <CardDescription>
-                        Additional search settings and options
+                        Configure how search results are processed
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="enableHybridSearch">Enable Hybrid Search</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Combine vector search with keyword search for better results
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <Label htmlFor="parallelLLMCount" className="text-sm font-medium">
+                              Parallel Count
+                            </Label>
+                          </div>
+                          <div className="px-2">
+                            <span className="text-lg font-bold text-blue-600">
+                              {config.ragSettings?.parallelLLMCount || 5}
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-2">concurrent</span>
+                          </div>
+                          <Slider
+                            id="parallelLLMCount"
+                            value={[config.ragSettings?.parallelLLMCount || 5]}
+                            onValueChange={(value) => updateConfig('ragSettings.parallelLLMCount', value[0])}
+                            min={1}
+                            max={10}
+                            step={1}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            LLM processes running together
                           </p>
                         </div>
-                        <Switch
-                          id="enableHybridSearch"
-                          checked={config.ragSettings?.enableHybridSearch ?? true}
-                          onCheckedChange={(checked) => updateConfig('ragSettings.enableHybridSearch', checked)}
-                        />
+
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <Label htmlFor="parallelLLMBatchSize" className="text-sm font-medium">
+                              Initial Load
+                            </Label>
+                          </div>
+                          <div className="px-2">
+                            <span className="text-lg font-bold text-green-600">
+                              {config.ragSettings?.parallelLLMBatchSize || 3}
+                            </span>
+                            <span className="text-xs text-muted-foreground ml-2">sources</span>
+                          </div>
+                          <Slider
+                            id="parallelLLMBatchSize"
+                            value={[config.ragSettings?.parallelLLMBatchSize || 3]}
+                            onValueChange={(value) => updateConfig('ragSettings.parallelLLMBatchSize', value[0])}
+                            min={1}
+                            max={10}
+                            step={1}
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Results shown initially
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="enableKeywordBoost">Enable Keyword Boost</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Boost scores when query keywords appear in results
-                          </p>
-                        </div>
-                        <Switch
-                          id="enableKeywordBoost"
-                          checked={config.ragSettings?.enableKeywordBoost ?? true}
-                          onCheckedChange={(checked) => updateConfig('ragSettings.enableKeywordBoost', checked)}
-                        />
+                      <div className="bg-muted/50 rounded-lg p-3">
+                        <p className="text-xs text-muted-foreground">
+                          <strong>Tip:</strong> Batch size determines initial results. More results load on scroll.
+                        </p>
                       </div>
                     </CardContent>
                   </Card>

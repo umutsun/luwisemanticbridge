@@ -118,11 +118,14 @@ router.get('/', async (req: Request, res: Response) => {
         language: 'tr'
       },
       ragSettings: {
-        similarityThreshold: 0.001,
-        maxResults: 10,
-        minResults: 3,
+        similarityThreshold: 0.014,
+        maxResults: 15,
+        minResults: 5,
         enableHybridSearch: true,
-        enableKeywordBoost: true
+        enableKeywordBoost: true,
+        enableParallelLLM: true,
+        parallelLLMCount: 5,
+        parallelLLMBatchSize: 3
       },
       security: {
         enableAuth: false,
@@ -614,7 +617,85 @@ router.get('/ai', async (req: Request, res: Response) => {
   }
 });
 
-// Save AI settings
+// Save settings (general endpoint)
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const settings = req.body;
+
+    // Handle both LLM and RAG settings
+    const settingsToSave = [];
+
+    // LLM Settings
+    if (settings.activeChatModel) {
+      settingsToSave.push({ key: 'active_chat_model', value: settings.activeChatModel });
+    }
+    if (settings.activeEmbeddingModel) {
+      settingsToSave.push({ key: 'active_embedding_model', value: settings.activeEmbeddingModel });
+    }
+    if (settings.temperature !== undefined) {
+      settingsToSave.push({ key: 'temperature', value: settings.temperature.toString() });
+    }
+    if (settings.topP !== undefined) {
+      settingsToSave.push({ key: 'top_p', value: settings.topP.toString() });
+    }
+    if (settings.maxTokens !== undefined) {
+      settingsToSave.push({ key: 'max_tokens', value: settings.maxTokens.toString() });
+    }
+    if (settings.streamResponse !== undefined) {
+      settingsToSave.push({ key: 'stream_response', value: settings.streamResponse.toString() });
+    }
+
+    // RAG Settings
+    if (settings.similarityThreshold !== undefined) {
+      settingsToSave.push({ key: 'similarity_threshold', value: settings.similarityThreshold.toString() });
+    }
+    if (settings.minResults !== undefined) {
+      settingsToSave.push({ key: 'min_results', value: settings.minResults.toString() });
+    }
+    if (settings.maxResults !== undefined) {
+      settingsToSave.push({ key: 'max_results', value: settings.maxResults.toString() });
+    }
+    if (settings.enableHybridSearch !== undefined) {
+      settingsToSave.push({ key: 'enable_hybrid_search', value: settings.enableHybridSearch.toString() });
+    }
+    if (settings.enableKeywordBoost !== undefined) {
+      settingsToSave.push({ key: 'enable_keyword_boost', value: settings.enableKeywordBoost.toString() });
+    }
+    if (settings.parallelLLMCount !== undefined) {
+      settingsToSave.push({ key: 'parallel_llm_count', value: settings.parallelLLMCount.toString() });
+    }
+    if (settings.parallelLLMBatchSize !== undefined) {
+      settingsToSave.push({ key: 'parallel_llm_batch_size', value: settings.parallelLLMBatchSize.toString() });
+    }
+
+    // Save each setting
+    for (const setting of settingsToSave) {
+      const checkResult = await asembPool.query(
+        'SELECT key FROM settings WHERE key = $1',
+        [setting.key]
+      );
+
+      if (checkResult.rows.length === 0) {
+        await asembPool.query(
+          'INSERT INTO settings (key, value) VALUES ($1, $2)',
+          [setting.key, setting.value]
+        );
+      } else {
+        await asembPool.query(
+          'UPDATE settings SET value = $1 WHERE key = $2',
+          [setting.value, setting.key]
+        );
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
+// Save AI settings (legacy endpoint)
 router.post('/ai', async (req: Request, res: Response) => {
   try {
     const {
@@ -647,7 +728,15 @@ router.post('/ai', async (req: Request, res: Response) => {
       { key: 'stream_response', value: streamResponse.toString() },
       { key: 'system_prompt', value: systemPrompt },
       { key: 'response_style', value: responseStyle },
-      { key: 'response_language', value: language }
+      { key: 'response_language', value: language },
+      // RAG Settings
+      { key: 'similarity_threshold', value: ragSettings.similarityThreshold.toString() },
+      { key: 'min_results', value: ragSettings.minResults.toString() },
+      { key: 'max_results', value: ragSettings.maxResults.toString() },
+      { key: 'enable_hybrid_search', value: ragSettings.enableHybridSearch.toString() },
+      { key: 'enable_keyword_boost', value: ragSettings.enableKeywordBoost.toString() },
+      { key: 'parallel_llm_count', value: ragSettings.parallelLLMCount.toString() },
+      { key: 'parallel_llm_batch_size', value: ragSettings.parallelLLMBatchSize.toString() }
     ];
 
     for (const setting of settings) {

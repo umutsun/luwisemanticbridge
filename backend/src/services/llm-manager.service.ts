@@ -158,7 +158,7 @@ export class LLMManager {
 
       this.updateProviderSettings('gemini', {
         apiKey: settings['google.apiKey'] || settings['gemini.apiKey'] || this.providers.get('gemini')?.apiKey,
-        model: settings['llmSettings.geminiModel'] || 'gemini-1.5-pro'
+        model: settings['llmSettings.geminiModel'] || 'gemini-pro'
       });
 
       this.updateProviderSettings('deepseek', {
@@ -478,9 +478,12 @@ export class LLMManager {
     await this.refreshSettingsIfNeeded();
 
     // Use provided options || fall back to config from database
-    const temperature = options.temperature ?? this.config.temperature;
-    const maxTokens = options.maxTokens ?? this.config.maxTokens;
-    const systemPrompt = options.systemPrompt ?? this.config.systemPrompt;
+    // Check if temperature is explicitly provided (not undefined)
+    const temperature = options.temperature !== undefined ? options.temperature : this.config.temperature;
+    const maxTokens = options.maxTokens !== undefined ? options.maxTokens : this.config.maxTokens;
+    const systemPrompt = options.systemPrompt !== undefined ? options.systemPrompt : this.config.systemPrompt;
+
+    console.log(`🌡️ LLM Manager - options.temperature: ${options.temperature}, final temperature: ${temperature}`);
     const provider = await this.getAvailableProvider();
 
     if (!provider) {
@@ -528,10 +531,9 @@ export class LLMManager {
 
         case 'gemini':
           const geminiModel = prov.client.getGenerativeModel({ model: prov.model });
-          const geminiResponse = await geminiModel.generateContent([
-            { role: 'user', parts: [{ text: `System: ${systemPrompt}` }] },
-            { role: 'user', parts: [{ text: message }] }
-          ]);
+          // Gemini expects content in a different format - no role field, just parts
+          const prompt = `${systemPrompt}\n\n${message}`;
+          const geminiResponse = await geminiModel.generateContent(prompt);
           return {
             content: geminiResponse.response.text() || '',
             provider: 'Gemini',
