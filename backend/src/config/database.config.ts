@@ -10,7 +10,7 @@ export const asembDbConfig = {
   port: parseInt(process.env.POSTGRES_PORT || '5432'),
   database: process.env.POSTGRES_DB || 'asemb',
   user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
+  password: process.env.POSTGRES_PASSWORD || '',
   ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
 };
 
@@ -31,7 +31,7 @@ export async function initializeConfigs(): Promise<void> {
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     database: process.env.POSTGRES_DB || 'asemb',
     user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
+    password: process.env.POSTGRES_PASSWORD || '',
     ssl: process.env.POSTGRES_SSL === 'true'
   };
 

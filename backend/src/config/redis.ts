@@ -74,15 +74,15 @@ export async function initializeRedis() {
     redis.on('error', (err) => {
       console.error('Redis connection error:', err.message);
       // If NOAUTH error, try without password
-      if (err.message.includes('NOAUTH')) {
-        console.log('🔄 NOAUTH error detected, trying without password...');
+      if (err.message.includes('NOAUTH') || err.message.includes('ECONNREFUSED')) {
+        console.log('🔄 NOAUTH/ECONNREFUSED error detected, trying without password...');
         fallbackToNoAuth();
       }
     });
 
     subscriber.on('error', (err) => {
       console.error('Redis subscriber connection error:', err.message);
-      if (err.message.includes('NOAUTH')) {
+      if (err.message.includes('NOAUTH') || err.message.includes('ECONNREFUSED')) {
         fallbackToNoAuth();
       }
     });
@@ -112,9 +112,9 @@ export async function initializeRedis() {
 
   } catch (error) {
     console.error('❌ Failed to initialize Redis connections:', error);
-    // Check if it's a NOAUTH error and try without password
-    if (error instanceof Error && error.message.includes('NOAUTH')) {
-      console.log('🔄 NOAUTH error in initial connection, trying without password...');
+    // Check if it's a NOAUTH or connection error and try without password
+    if (error instanceof Error && (error.message.includes('NOAUTH') || error.message.includes('ECONNREFUSED'))) {
+      console.log('🔄 NOAUTH/ECONNREFUSED error in initial connection, trying without password...');
       return fallbackToNoAuth();
     }
     // Create dummy Redis objects that gracefully fail
