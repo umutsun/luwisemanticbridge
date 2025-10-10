@@ -112,8 +112,9 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss)) {
 // Initialize Redis
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6380'),
-  db: parseInt(process.env.REDIS_DB || '2')
+  port: parseInt(process.env.REDIS_PORT || '6379'),
+  db: parseInt(process.env.REDIS_DB || '2'),
+  password: process.env.REDIS_PASSWORD || undefined
 });
 
 // Disable helmet for CORS issues during development
@@ -771,19 +772,19 @@ const setupChatRoutes = () => {
         SELECT value FROM settings WHERE key = 'chatbot'
       `);
 
-      let chatbotSettings = {};
+      let chatbotSettings: any = {};
       if (settingsResult.rows.length > 0) {
         chatbotSettings = settingsResult.rows[0].value || {};
       }
 
       res.json({
-        title: chatbotSettings.title || 'ASB Hukuki Asistan',
-        subtitle: chatbotSettings.subtitle || 'Yapay Zeka Asistanınız',
-        logoUrl: chatbotSettings.logoUrl || '',
-        welcomeMessage: chatbotSettings.welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
-        placeholder: chatbotSettings.placeholder || 'Sorunuzu yazın...',
-        primaryColor: chatbotSettings.primaryColor || '#3B82F6',
-        activeModel: chatbotSettings.activeModel || 'Claude 3'
+        title: (chatbotSettings as any).title || 'ASB Hukuki Asistan',
+        subtitle: (chatbotSettings as any).subtitle || 'Yapay Zeka Asistanınız',
+        logoUrl: (chatbotSettings as any).logoUrl || '',
+        welcomeMessage: (chatbotSettings as any).welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
+        placeholder: (chatbotSettings as any).placeholder || 'Sorunuzu yazın...',
+        primaryColor: (chatbotSettings as any).primaryColor || '#3B82F6',
+        activeModel: (chatbotSettings as any).activeModel || 'Claude 3'
       });
     } catch (error) {
       console.error('Error fetching chatbot settings:', error);

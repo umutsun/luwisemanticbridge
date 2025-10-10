@@ -37,7 +37,7 @@ export async function initializeConfigs(): Promise<void> {
 
   redisConfig = {
     host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6380'),
+    port: parseInt(process.env.REDIS_PORT || '6379'),
     db: parseInt(process.env.REDIS_DB || '2'),
     password: process.env.REDIS_PASSWORD || 'Semsiye!22'
   };

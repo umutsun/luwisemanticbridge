@@ -10,7 +10,7 @@ const router = Router();
 // Redis connection for cleanup operations
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6380'),
+  port: parseInt(process.env.REDIS_PORT || '6379'),
   db: parseInt(process.env.REDIS_DB || '2'),
   maxRetriesPerRequest: 3
 });

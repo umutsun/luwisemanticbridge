@@ -25,7 +25,7 @@ export const SERVER = {
   DEFAULT_PORTS: {
     BACKEND: parseInt(process.env.BACKEND_PORT || '8083', 10),
     FRONTEND: parseInt(process.env.FRONTEND_PORT || '3000', 10),
-    REDIS: parseInt(process.env.REDIS_PORT || '6380', 10),
+    REDIS: parseInt(process.env.REDIS_PORT || '6379', 10),
   },
   WEBSOCKET: {
     PORT: parseInt(process.env.WEBSOCKET_PORT || '8083', 10),
@@ -121,7 +121,7 @@ export const DATABASE = {
 // Redis Configuration
 export const REDIS = {
   DEFAULT_DB: parseInt(process.env.REDIS_DB || '2', 10),
-  DEFAULT_PORT: parseInt(process.env.REDIS_PORT || '6380', 10),
+  DEFAULT_PORT: parseInt(process.env.REDIS_PORT || '6379', 10),
   DEFAULT_HOST: process.env.REDIS_HOST || 'localhost',
   DEFAULT_PASSWORD: process.env.REDIS_PASSWORD || 'redis_password_2025',
 } as const;

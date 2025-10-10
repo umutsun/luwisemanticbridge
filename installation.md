@@ -44,9 +44,14 @@ POSTGRES_DB=asemb
 # Redis Settings
 REDIS_PASSWORD=your_secure_redis_password
 
-# Port Configuration (Optional - defaults will be used if not set)
-FRONTEND_PORT=3000
+# Port Configuration (IMPORTANT - Current Setup)
+FRONTEND_PORT=3002
 BACKEND_PORT=8083
+API_PORT=8083
+WEBSOCKET_PORT=8083
+
+# Database URL
+DATABASE_URL=postgresql://postgres:your_secure_password_here@91.99.229.96:5432/asemb
 
 # n8n Credentials
 N8N_USER=admin
@@ -190,7 +195,7 @@ docker-compose -f docker-compose.dev.yml up -d
 ```
 
 Access Points:
-- Frontend: http://localhost:3000
+- Frontend: http://localhost:3002
 - API: http://localhost:8083
 - Database: localhost:5432
 - Redis: localhost:6379

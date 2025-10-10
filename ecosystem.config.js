@@ -57,8 +57,8 @@ module.exports = {
     // ==========================================
     {
       name: 'asb-frontend',
-      script: 'node_modules/.bin/next',
-      args: 'start -p 3002',
+      script: 'npx',
+      args: 'next start -p 3002',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
@@ -138,6 +138,42 @@ module.exports = {
       restart_delay: 4000,
     },
     */
+
+    // ==========================================
+    // REVERSE PROXY SERVER
+    // ==========================================
+    {
+      name: 'asb-proxy',
+      script: './proxy-server.js',
+      cwd: './',
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      max_memory_restart: '512M',
+
+      // Environment
+      env: {
+        NODE_ENV: 'development',
+      },
+      env_production: {
+        NODE_ENV: 'production',
+      },
+
+      // Logging
+      error_file: './logs/proxy-error.log',
+      out_file: './logs/proxy-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+
+      // Auto restart strategies
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      restart_delay: 4000,
+
+      // Performance
+      node_args: '--max-old-space-size=512',
+    },
   ],
 
   // ==========================================
