@@ -10,7 +10,7 @@ export const asembDbConfig = {
   port: parseInt(process.env.POSTGRES_PORT || '5432'),
   database: process.env.POSTGRES_DB || 'asemb',
   user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || '',
+  password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
   ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
 };
 
@@ -31,7 +31,7 @@ export async function initializeConfigs(): Promise<void> {
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     database: process.env.POSTGRES_DB || 'asemb',
     user: process.env.POSTGRES_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || '',
+    password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
     ssl: process.env.POSTGRES_SSL === 'true'
   };
 
@@ -162,7 +162,7 @@ export function getCustomerPool(config?: DatabaseConfig): Pool {
     const poolConfig = {
       host: dbConfig.host,
       port: dbConfig.port,
-      database: dbConfig.name || dbConfig.database, // Handle both property names
+      database: (dbConfig as any).name || (dbConfig as any).database, // Handle both property names
       user: dbConfig.user,
       password: dbConfig.password,
       ssl: dbConfig.ssl,
