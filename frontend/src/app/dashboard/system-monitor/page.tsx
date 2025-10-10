@@ -57,8 +57,10 @@ import {
   Download,
   Upload,
   AlertCircle,
-  Info
+  Info,
+  Terminal
 } from 'lucide-react';
+import LogConsole from '@/components/LogConsole';
 
 interface SystemMetrics {
   timestamp: string;
@@ -210,11 +212,12 @@ export default function SystemMonitor() {
       )}
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Genel Bakış</TabsTrigger>
           <TabsTrigger value="performance">Performans</TabsTrigger>
           <TabsTrigger value="services">Servisler</TabsTrigger>
           <TabsTrigger value="network">Ağ</TabsTrigger>
+          <TabsTrigger value="logs">Loglar</TabsTrigger>
           <TabsTrigger value="alerts">Uyarılar</TabsTrigger>
         </TabsList>
 
@@ -493,6 +496,10 @@ export default function SystemMonitor() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="logs" className="space-y-4">
+          <LogConsole />
         </TabsContent>
 
         <TabsContent value="alerts" className="space-y-4">

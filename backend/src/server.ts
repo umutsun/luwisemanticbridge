@@ -12,7 +12,7 @@ import { WebSocketServer as StandardWebSocketServer } from 'ws';
 import Redis from 'ioredis';
 import { SERVER, API } from './config';
 import { initializeRedis } from './config/redis';
-import { initializeConfigs, getAppConfig, asembPool, initializeAsembDatabase } from './config/database.config';
+import { initializeConfigs, getAppConfig, asembPool, initializeAsembDatabase, syncAPIKeysToDatabase } from './config/database.config';
 
 // Import routes
 import searchRoutes from './routes/search.routes';
@@ -84,10 +84,9 @@ const logWss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
 }) : null;
 
 // Initialize log WebSocket service
-// Temporarily disabled to prevent startup issues
-// if (SERVER.WEBSOCKET.ENABLED && logWss) {
-//   initializeLogWebSocket(logWss);
-// }
+if (SERVER.WEBSOCKET.ENABLED && logWss) {
+  initializeLogWebSocket(logWss);
+}
 
 // Handle WebSocket upgrade for standard WebSocket connections if enabled
 if (SERVER.WEBSOCKET.ENABLED && (wss || logWss)) {
@@ -169,6 +168,9 @@ app.use(morgan('dev', {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // Health check endpoint
 app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
@@ -207,8 +209,7 @@ app.use('/api/v2/documents', documentsRoutes);
 app.use(API.ENDPOINTS.V2.MIGRATION, migrationRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingsV2Routes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingProgressRoutes);
-app.use(API.ENDPOINTS.V2.SETTINGS, settingsRoutes);
-app.use('/api/v2/config', settingsRoutes);
+// settingsRoutes and appSettingsRoutes moved down to fix conflicts
 app.use('/api/v2/migration-check', migrationCheckRoutes);
 app.use(API.ENDPOINTS.V2.ACTIVITY, activityRoutes);
 app.use('/api/v2/raganything', ragAnythingRoutes);
@@ -219,7 +220,10 @@ app.use('/api/v2/subscription', subscriptionRoutes);
 app.use('/api/v2/embedding-history', embeddingHistoryRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
 app.use('/api/v2/ai', aiSettingsRoutes);
-app.use('/api/v2/settings', appSettingsRoutes);
+// TODO: Fix route conflict - only use one settings route
+// app.use('/api/v2/settings', appSettingsRoutes);
+app.use(API.ENDPOINTS.V2.SETTINGS, settingsRoutes);
+app.use('/api/v2/config', settingsRoutes);
 app.use('/api/v2/health', healthRoutes);
 app.use('/api/v2/llm', llmStatusRoutes);
 app.use('/api/v2/admin', adminRoutes);
@@ -521,6 +525,10 @@ async function startServer() {
       console.log('⚙️ Loading configurations from ASEMB database...');
       await initializeConfigs();
       console.log('✅ All configurations loaded from database');
+
+      // Sync API keys from environment variables to database
+      await syncAPIKeysToDatabase();
+      console.log('✅ API keys synced to database');
 
       // Update server status to indicate successful database connection
       (global as any).serverStatus = {

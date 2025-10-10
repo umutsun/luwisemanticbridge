@@ -1,6 +1,6 @@
 import { RegisterData, LoginData, AuthResponse, User } from '@/types/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8084'}`;
 
 class AuthError extends Error {
   constructor(message: string, public status?: number) {

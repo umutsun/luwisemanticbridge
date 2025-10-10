@@ -2,11 +2,57 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import OpenAI from 'openai';
 import { getDatabaseSettings, getCustomerPool, getAiSettings } from '../config/database.config';
-import { asembPool } from '../server'; // Import the centralized pool
+import { pgPool as asembPool } from '../server'; // Import the centralized pool
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 const router = Router();
 const ragAnythingRouter = Router();
+
+// Dashboard main endpoint - requires authentication
+router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId || 'default-user'; // Temporary fallback for testing
+
+    // Get basic dashboard data
+    const dashboardData = {
+      user: {
+        id: userId,
+        email: req.user?.email,
+        role: req.user?.role
+      },
+      timestamp: new Date().toISOString(),
+      stats: {
+        totalConversations: 0,
+        totalMessages: 0,
+        activeEmbeddings: 0,
+        documentsProcessed: 0
+      },
+      services: {
+        database: 'connected',
+        redis: 'connected',
+        embeddings: 'disabled'
+      }
+    };
+
+    // Get real stats if possible
+    try {
+      const [convResult, msgResult] = await Promise.all([
+        asembPool.query('SELECT COUNT(*) as count FROM conversations WHERE user_id = $1', [userId]),
+        asembPool.query('SELECT COUNT(*) as count FROM messages WHERE user_id = $1', [userId])
+      ]);
+
+      dashboardData.stats.totalConversations = parseInt(convResult.rows[0].count);
+      dashboardData.stats.totalMessages = parseInt(msgResult.rows[0].count);
+    } catch (err) {
+      console.log('Could not fetch stats:', err);
+    }
+
+    res.json(dashboardData);
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ error: 'Failed to load dashboard data' });
+  }
+});
 
 // --- RAG-anything Proxy Setup ---
 const RAG_ANYTHING_BASE_URL = process.env.RAG_ANYTHING_URL || 'http://localhost:5000';
@@ -86,7 +132,6 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
                 .join(' ')
                 .replace(/Danistay/g, 'Danıştay')
                 .replace(/Ozel/g, 'Özel')
-                .replace(/Sorucevap/g, 'Soru-Cevap')
                 .replace(/Mevzuat/g, 'Mevzuat')
                 .replace(/Dokuman/g, 'Doküman');
         };
@@ -693,7 +738,6 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                         .join(' ')
                         .replace(/Danistay/g, 'Danıştay')
                         .replace(/Ozel/g, 'Özel')
-                        .replace(/Sorucevap/g, 'Soru-Cevap')
                         .replace(/Mevzuat/g, 'Mevzuat')
                         .replace(/Dokuman/g, 'Doküman');
                 };

@@ -108,10 +108,7 @@ export default function InitializationScreen() {
                   </span>
                 </div>
 
-                <div className="flex items-center justify-center gap-2 p-3 bg-muted/30 rounded-lg mb-4">
-                  <span className="text-sm">Yönlendiriliyorsunuz...</span>
-                </div>
-
+  
                 <Button
                   onClick={handleManualRedirect}
                   className="w-full"

@@ -48,6 +48,11 @@ let subscriber: Redis;
 
 // Async initialization function
 export async function initializeRedis() {
+  // Check if already initialized
+  if (redis && redis.status === 'ready') {
+    return redis;
+  }
+
   try {
     redis = await createRedisConnection();
     subscriber = redis.duplicate();
@@ -84,11 +89,14 @@ export async function initializeRedis() {
     await redis.connect();
     await subscriber.connect();
 
+    return redis;
+
   } catch (error) {
     console.error('Failed to initialize Redis connections:', error);
     // Create dummy Redis objects that gracefully fail
     redis = createFallbackRedis();
     subscriber = createFallbackRedis();
+    return redis;
   }
 }
 

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { WebSocketServer } from 'ws';
 import { loggerService } from '../utils/logger.service';
+import { frontendLogBridge } from '../utils/frontend-log-bridge';
 
 const router = Router();
 
@@ -86,6 +87,41 @@ router.post('/test', async (req, res) => {
       error: 'Failed to send test log',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// Frontend log submission endpoint
+router.post('/frontend', frontendLogBridge);
+
+// Stream all logs endpoint
+router.get('/stream', async (req, res) => {
+  try {
+    const { limit = 100, level, source } = req.query;
+
+    // This would typically read from log files or database
+    // For now, we'll return recent logs from memory
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Send initial connection message
+    res.write('data: {"type": "connected"}\n\n');
+
+    // Store the response for streaming
+    const clients = (req as any).streamClients || [];
+    clients.push(res);
+    (req as any).streamClients = clients;
+
+    // Handle client disconnect
+    req.on('close', () => {
+      const index = clients.indexOf(res);
+      if (index > -1) {
+        clients.splice(index, 1);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to set up log stream:', error);
+    res.status(500).json({ error: 'Failed to set up log stream' });
   }
 });
 

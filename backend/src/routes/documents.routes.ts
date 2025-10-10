@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import pool from '../config/database';
+import { asembPool } from '../config/database.config';
 import documentProcessor from '../services/document-processor.service';
 
 const router = Router();
@@ -42,10 +42,10 @@ const upload = multer({
 router.post('/init', async (req: Request, res: Response) => {
   try {
     // First drop the table if it exists to ensure clean state
-    await pool.query('DROP TABLE IF EXISTS documents CASCADE');
+    await asembPool.query('DROP TABLE IF EXISTS documents CASCADE');
     
     // Create fresh table with proper structure
-    await pool.query(`
+    await asembPool.query(`
       CREATE TABLE documents (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -75,7 +75,7 @@ router.post('/init', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     // First ensure table exists
-    await pool.query(`
+    await asembPool.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -90,7 +90,7 @@ router.get('/', async (req: Request, res: Response) => {
     `);
 
     // Also ensure document_embeddings table exists
-    await pool.query(`
+    await asembPool.query(`
       CREATE TABLE IF NOT EXISTS document_embeddings (
         id SERIAL PRIMARY KEY,
         document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
@@ -101,7 +101,7 @@ router.get('/', async (req: Request, res: Response) => {
       )
     `);
 
-    const result = await pool.query(
+    const result = await asembPool.query(
       `SELECT d.*,
               CASE
                 WHEN EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id) THEN true
@@ -167,7 +167,7 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     const fileType = ext || 'text';
 
     // Save to database
-    const result = await pool.query(
+    const result = await asembPool.query(
       `INSERT INTO documents (title, content, type, size, file_path, metadata)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
@@ -219,7 +219,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const size = Buffer.byteLength(content, 'utf8');
 
-    const result = await pool.query(
+    const result = await asembPool.query(
       `INSERT INTO documents (title, content, type, size, metadata)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
@@ -262,7 +262,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.get('/stats', async (req: Request, res: Response) => {
   try {
     // Ensure table exists first
-    await pool.query(`
+    await asembPool.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -276,7 +276,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       )
     `);
 
-    const stats = await pool.query(`
+    const stats = await asembPool.query(`
       SELECT
         COUNT(*) as total,
         SUM(size) as total_size,
@@ -285,7 +285,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       FROM documents
     `);
 
-    const typeDistribution = await pool.query(`
+    const typeDistribution = await asembPool.query(`
       SELECT type, COUNT(*) as count
       FROM documents
       GROUP BY type
@@ -309,7 +309,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
-    const result = await pool.query(
+    const result = await asembPool.query(
       'SELECT * FROM documents WHERE id = $1',
       [id]
     );
@@ -370,7 +370,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
 
-    const result = await pool.query(
+    const result = await asembPool.query(
       `UPDATE documents 
        SET ${updates.join(', ')}
        WHERE id = $${paramIndex}
@@ -400,7 +400,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // First get the document to delete the file if exists
-    const docResult = await pool.query(
+    const docResult = await asembPool.query(
       'SELECT file_path FROM documents WHERE id = $1',
       [id]
     );
@@ -413,7 +413,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await pool.query(
+    const result = await asembPool.query(
       'DELETE FROM documents WHERE id = $1 RETURNING id',
       [id]
     );
@@ -440,7 +440,7 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // Get document
-    const docResult = await pool.query(
+    const docResult = await asembPool.query(
       'SELECT * FROM documents WHERE id = $1',
       [id]
     );
@@ -510,6 +510,93 @@ router.post('/search', async (req: Request, res: Response) => {
     res.status(500).json({ 
       error: error.message || 'Failed to search documents' 
     });
+  }
+});
+
+// Bulk create embeddings
+router.post('/bulk-embed', async (req: Request, res: Response) => {
+  const client = await asembPool.connect();
+
+  try {
+    const { documentIds } = req.body;
+
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'Invalid document IDs' });
+    }
+
+    let embeddedCount = 0;
+    const errors: string[] = [];
+
+    for (const docId of documentIds) {
+      try {
+        await client.query('BEGIN');
+
+        // Check if document exists and has no embeddings
+        const docResult = await client.query(
+          'SELECT id, title, content FROM documents WHERE id = $1',
+          [docId]
+        );
+
+        if (docResult.rows.length === 0) {
+          errors.push(`Document ${docId} not found`);
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        const document = docResult.rows[0];
+
+        // Check if embeddings already exist
+        const existingEmbeds = await client.query(
+          'SELECT COUNT(*) FROM embeddings WHERE document_id = $1',
+          [docId]
+        );
+
+        if (parseInt(existingEmbeds.rows[0].count) > 0) {
+          errors.push(`Document ${docId} already has embeddings`);
+          await client.query('ROLLBACK');
+          continue;
+        }
+
+        // Process document and create embeddings
+        const chunks = await documentProcessor.processDocument(document.content);
+
+        // Insert chunks
+        for (const chunk of chunks) {
+          await client.query(
+            `INSERT INTO embeddings (document_id, chunk_index, content, metadata)
+             VALUES ($1, $2, $3, $4)`,
+            [docId, chunk.index, chunk.text, JSON.stringify(chunk.metadata || {})]
+          );
+        }
+
+        // Update document metadata
+        await client.query(
+          'UPDATE documents SET metadata = metadata || $1 WHERE id = $2',
+          [JSON.stringify({ chunks: chunks.length, embeddings: true, last_embedded: new Date().toISOString() }), docId]
+        );
+
+        await client.query('COMMIT');
+        embeddedCount++;
+
+      } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(`Failed to embed document ${docId}:`, error);
+        errors.push(`Document ${docId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      embedded: embeddedCount,
+      total: documentIds.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    console.error('Bulk embed failed:', error);
+    res.status(500).json({ error: 'Failed to create bulk embeddings' });
+  } finally {
+    client.release();
   }
 });
 

@@ -110,7 +110,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8084'}`;
 
       if (authToken) {
         setStoredToken(authToken);
@@ -229,7 +229,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = async (newConfig: Config) => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8084'}`;
       const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
         method: 'PUT',
         headers: {

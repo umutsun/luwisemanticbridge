@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '@/hooks/use-toast';
+import { getApiUrl, buildApiUrl } from '@/lib/config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +27,8 @@ import {
   Filter,
   X,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Search
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -58,6 +60,7 @@ export default function WebScraperPage() {
   const [url, setUrl] = useState('');
   const [scrapedPages, setScrapedPages] = useState<ScrapedPage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [scrapeOptions, setScrapeOptions] = useState({
     saveToDb: true,
     generateEmbeddings: false,
@@ -95,8 +98,8 @@ export default function WebScraperPage() {
 
   const initTables = async () => {
     try {
-      await fetch('http://localhost:8083/api/v2/scraper/init-table', { method: 'POST' });
-      await fetch('http://localhost:8083/api/v2/scraper/activity/init-table', { method: 'POST' });
+      await fetch(`${getApiUrl('scraper')}/init-table`, { method: 'POST' });
+      await fetch(`${getApiUrl('scraper')}/activity/init-table`, { method: 'POST' });
     } catch (error) {
       console.error('Failed to initialize tables:', error);
     }
@@ -105,7 +108,7 @@ export default function WebScraperPage() {
   const fetchScrapedPages = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8083/api/v2/scraper/pages');
+      const response = await fetch(`${getApiUrl('scraper')}/pages`);
       if (response.ok) {
         const data = await response.json();
         setScrapedPages(data.pages || []);
@@ -121,7 +124,7 @@ export default function WebScraperPage() {
   
   const fetchPageDetails = async (pageId: string) => {
     try {
-      const response = await fetch(`http://localhost:8083/api/v2/scraper/pages/${pageId}`);
+      const response = await fetch(`${getApiUrl('scraper')}/pages/${pageId}`);
       if (response.ok) {
         const data = await response.json();
         setPageDetails(data.page);
@@ -185,57 +188,148 @@ export default function WebScraperPage() {
     setScraping(true);
     setScrapeProgress({
       status: 'scraping',
-      progress: 10,
+      progress: 5,
       chunks: 0,
       size: 0,
-      message: 'Starting scrape...'
+      message: 'Initializing scraper...'
     });
+
     try {
       const customSelectorsArray = scrapeOptions.customSelectors.split('\n').map(s => s.trim()).filter(s => s.length > 0);
       const prioritySelectorsArray = scrapeOptions.prioritySelectors.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-      
-      const response = await fetch('http://localhost:8083/api/v2/scraper', {
+
+      const response = await fetch(getApiUrl('scraper'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url, 
+          url,
           ...scrapeOptions,
           customSelectors: customSelectorsArray,
-          prioritySelectors: prioritySelectorsArray
+          prioritySelectors: prioritySelectorsArray,
+          realTimeProgress: true // Enable real-time progress tracking
         })
       });
-      const data = await response.json();
-      if (response.ok) {
-        setScrapeProgress({
-          status: 'success',
-          progress: 100,
-          chunks: data.metrics?.chunksCreated || 0,
-          size: data.metrics?.contentLength || 0,
-          message: 'Scrape completed successfully!'
-        });
-        toast({ title: t('scraper.toasts.scrapeSuccess', { title: data.title }) });
-        fetchScrapedPages();
-        setUrl('');
 
-        // Reset progress after delay
-        setTimeout(() => {
+      const data = await response.json();
+
+      if (response.ok && data.jobId) {
+        // Real-time progress tracking with SSE
+        const eventSource = new EventSource(`${getApiUrl('scraper')}/job/${data.jobId}/events`);
+
+        eventSource.onmessage = (event) => {
+          const parsedData = JSON.parse(event.data);
+
+          if (parsedData.type === 'status') {
+            const jobData = parsedData.data;
+            setScrapeProgress({
+              status: jobData.status === 'completed' ? 'success' :
+                      jobData.status === 'failed' ? 'error' : 'scraping',
+              progress: jobData.progress || 0,
+              chunks: jobData.chunksCreated || 0,
+              size: jobData.contentLength || 0,
+              message: jobData.message || 'Processing...'
+            });
+
+            // If completed, show success message and cleanup
+            if (jobData.status === 'completed') {
+              toast({ title: t('scraper.toasts.scrapeSuccess', { title: jobData.title || 'Page' }) });
+              fetchScrapedPages();
+              setUrl('');
+              eventSource.close();
+
+              // Reset progress after delay
+              setTimeout(() => {
+                setScrapeProgress({
+                  status: 'idle',
+                  progress: 0,
+                  chunks: 0,
+                  size: 0,
+                  message: ''
+                });
+              }, 3000);
+            } else if (jobData.status === 'failed') {
+              toast({ variant: "destructive", title: 'Scraping failed', description: jobData.message });
+              eventSource.close();
+            }
+          } else if (parsedData.type === 'error') {
+            setScrapeProgress({
+              status: 'error',
+              progress: 0,
+              chunks: 0,
+              size: 0,
+              message: parsedData.message || 'An error occurred'
+            });
+            toast({ variant: "destructive", title: 'Error', description: parsedData.message });
+            eventSource.close();
+          } else if (parsedData.type === 'done') {
+            eventSource.close();
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('SSE Error:', error);
+          eventSource.close();
           setScrapeProgress({
-            status: 'idle',
+            status: 'error',
             progress: 0,
             chunks: 0,
             size: 0,
-            message: ''
+            message: 'Connection error'
           });
-        }, 3000);
+          toast({ variant: "destructive", title: 'Connection Error', description: 'Could not connect to progress updates' });
+        };
+
+        // Set timeout to close connection if it hangs
+        setTimeout(() => {
+          if (eventSource.readyState !== EventSource.CLOSED) {
+            eventSource.close();
+            if (scrapeProgress.status === 'scraping') {
+              setScrapeProgress({
+                status: 'error',
+                progress: 0,
+                chunks: 0,
+                size: 0,
+                message: 'Timeout error'
+              });
+              toast({ variant: "destructive", title: 'Timeout', description: 'Scraping took too long' });
+            }
+          }
+        }, 120000); // 2 minutes timeout
+
       } else {
-        setScrapeProgress({
-          status: 'error',
-          progress: 0,
-          chunks: 0,
-          size: 0,
-          message: data.error || 'Scrape failed'
-        });
-        toast({ variant: "destructive", title: data.error || t('scraper.toasts.scrapeFailed') });
+        // Fallback to basic response if real-time tracking not available
+        if (response.ok) {
+          setScrapeProgress({
+            status: 'success',
+            progress: 100,
+            chunks: data.metrics?.chunksCreated || 0,
+            size: data.metrics?.contentLength || 0,
+            message: 'Scrape completed successfully!'
+          });
+          toast({ title: t('scraper.toasts.scrapeSuccess', { title: data.title }) });
+          fetchScrapedPages();
+          setUrl('');
+
+          // Reset progress after delay
+          setTimeout(() => {
+            setScrapeProgress({
+              status: 'idle',
+              progress: 0,
+              chunks: 0,
+              size: 0,
+              message: ''
+            });
+          }, 3000);
+        } else {
+          setScrapeProgress({
+            status: 'error',
+            progress: 0,
+            chunks: 0,
+            size: 0,
+            message: data.error || 'Scrape failed'
+          });
+          toast({ variant: "destructive", title: data.error || t('scraper.toasts.scrapeFailed') });
+        }
       }
     } catch (error: any) {
       console.error('Scraping error:', error);
@@ -257,7 +351,7 @@ export default function WebScraperPage() {
     if (!confirm('Are you sure you want to delete this scraped page?')) return;
 
     try {
-      const response = await fetch(`http://localhost:8083/api/v2/scraper/pages/${id}`, {
+      const response = await fetch(`${getApiUrl('scraper')}/pages/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
@@ -287,15 +381,60 @@ export default function WebScraperPage() {
     }
   };
 
-  
+  const handleBulkEmbed = async () => {
+    if (selectedPages.length === 0) return;
+
+    try {
+      const response = await fetch(`${getApiUrl('scraper')}/bulk-embed`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ pageIds: selectedPages })
+      });
+
+      if (response.ok) {
+        toast({
+          title: 'Success',
+          description: `Generating embeddings for ${selectedPages.length} page${selectedPages.length > 1 ? 's' : ''}`
+        });
+        setSelectedPages([]);
+        fetchScrapedPages();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast({
+          variant: "destructive",
+          title: 'Failed to generate embeddings',
+          description: errorData.error || 'Unknown error'
+        });
+      }
+    } catch (error) {
+      console.error('Bulk embed error:', error);
+      toast({
+        variant: "destructive",
+        title: 'Network error',
+        description: 'Could not connect to server'
+      });
+    }
+  };
+
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const filteredPages = scrapedPages.filter(page =>
-    page.title?.toLowerCase().includes('') ||
-    page.url?.toLowerCase().includes('')
-  );
+  const filteredPages = scrapedPages.filter(page => {
+    const matchesSearch = searchQuery === '' ||
+      page.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      page.url?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      page.description?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesEmbedStatus = embedStatusFilter === 'all' ||
+      (embedStatusFilter === 'embedded' && page.chunk_count > 0) ||
+      (embedStatusFilter === 'not_embedded' && page.chunk_count === 0) ||
+      (embedStatusFilter === 'error' && false); // Hata durumu için backend'den bilgi gerekir
+
+    return matchesSearch && matchesEmbedStatus;
+  });
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-7xl">
@@ -486,29 +625,29 @@ export default function WebScraperPage() {
 
         {/* Right Column: Scraped Pages Management */}
         <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Web Scrapers</CardTitle>
               <div className="flex items-center gap-2">
-                <CardTitle className="text-lg">Scraped Pages</CardTitle>
-                <Badge variant="secondary">{getFilteredPages().length}</Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* Filter */}
-                <Select value={embedStatusFilter} onValueChange={(value) => setEmbedStatusFilter(value as any)}>
-                  <SelectTrigger className="w-[150px] h-8">
-                    <Filter className="h-4 w-4 mr-1" />
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Pages</SelectItem>
-                    <SelectItem value="embedded">✅ Embedded</SelectItem>
-                    <SelectItem value="not_embedded">⏳ Not Embedded</SelectItem>
-                    <SelectItem value="error">❌ Error</SelectItem>
-                  </SelectContent>
-                </Select>
-
-  
-                {/* Refresh */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Ara..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 w-[150px] h-8"
+                  />
+                </div>
+                <select
+                  value={embedStatusFilter}
+                  onChange={(e) => setEmbedStatusFilter(e.target.value as any)}
+                  className="px-3 py-1 border rounded-md text-sm h-8"
+                >
+                  <option value="all">Tümü</option>
+                  <option value="embedded">Embedding'li</option>
+                  <option value="not_embedded">Embedding'siz</option>
+                  <option value="error">Hata</option>
+                </select>
                 <Button onClick={fetchScrapedPages} variant="outline" size="icon" className="h-8 w-8">
                   <RefreshCw className="h-4 w-4" />
                 </Button>
@@ -520,7 +659,7 @@ export default function WebScraperPage() {
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : getFilteredPages().length === 0 ? (
+            ) : filteredPages.length === 0 ? (
               <div className="text-center py-12">
                 <Globe className="mx-auto h-12 w-12 text-muted-foreground" />
                 <p className="mt-2 text-muted-foreground">No scraped pages found</p>
@@ -530,44 +669,22 @@ export default function WebScraperPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead className="w-[100px]">Size/Chunks</TableHead>
-                      <TableHead className="w-[60px] text-center">Select</TableHead>
-                      <TableHead className="w-[50px] text-center">Delete</TableHead>
+                      <TableHead className="w-[50px] text-center"></TableHead>
+                      <TableHead>Page</TableHead>
+                      <TableHead className="w-[100px] text-right">Size</TableHead>
+                      <TableHead className="w-[50px] text-center"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {getFilteredPages().map((page) => {
+                    {filteredPages.map((page) => {
                       const embedStatus = getEmbeddingStatus(page);
 
                       return (
-                        <TableRow key={page.id}>
-                          <TableCell>
-                            <div className="max-w-[360px]">
-                              <p
-                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors"
-                                title={page.title}
-                                onClick={() => handlePageClick(page)}
-                              >
-                                {page.title || 'Untitled'}
-                              </p>
-                              <p className="text-xs text-muted-foreground truncate" title={page.url}>
-                                {page.url}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-xs font-medium">
-                                {(page.content_length / 1024).toFixed(1)}KB
-                              </span>
-                              <span className="text-xs font-medium">{page.chunk_count}</span>
-                            </div>
-                          </TableCell>
+                        <TableRow key={page.id} className={embedStatus === 'embedded' ? 'bg-muted/30' : ''}>
                           <TableCell className="text-center">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300"
+                              className="h-4 w-4 rounded border-gray-300 mx-auto"
                               checked={embedStatus === 'embedded'}
                               disabled={embedStatus === 'embedded'}
                               onChange={() => {
@@ -580,6 +697,25 @@ export default function WebScraperPage() {
                                 }
                               }}
                             />
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-[400px]">
+                              <p
+                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors mb-1"
+                                title={page.title}
+                                onClick={() => handlePageClick(page)}
+                              >
+                                {page.title || 'Untitled'}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate" title={page.url}>
+                                {page.url}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="text-sm text-muted-foreground">
+                              {(page.content_length / 1024).toFixed(1)}KB
+                            </span>
                           </TableCell>
                           <TableCell className="text-center">
                             <Button
@@ -602,6 +738,34 @@ export default function WebScraperPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Bottom Action Bar for Bulk Operations */}
+      {selectedPages.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t p-4 z-40">
+          <div className="container mx-auto max-w-7xl flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">
+              {selectedPages.length} page{selectedPages.length > 1 ? 's' : ''} selected
+            </span>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedPages([])}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleBulkEmbed}
+                disabled={selectedPages.length === 0}
+              >
+                <Brain className="h-4 w-4 mr-2" />
+                Generate Embeddings
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedPage && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">

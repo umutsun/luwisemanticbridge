@@ -11,6 +11,8 @@ interface User {
   role: 'user' | 'admin' | 'premium';
   status: string;
   email_verified: boolean;
+  profile_image?: string;
+  created_at: string;
 }
 
 interface AuthContextType {

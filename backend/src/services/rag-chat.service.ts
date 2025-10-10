@@ -469,12 +469,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         // Dynamic citation based on metadata fields
         const parts = [];
 
-        // Add table name as a type
-        if (r.source_table) {
-          parts.push(r.source_table);
-        }
-
-        // Add metadata fields dynamically
+        // Add metadata fields dynamically (skip source_table as it's redundant)
         Object.keys(r.metadata).forEach(key => {
           const value = r.metadata[key];
           if (value && typeof value === 'string' && value.trim()) {

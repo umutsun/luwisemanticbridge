@@ -160,6 +160,7 @@ export default function EmbeddingsManagerPage() {
   const [cleanupIssues, setCleanupIssues] = useState<any[]>([]);
   const [cleanupRecommendations, setCleanupRecommendations] = useState<string[]>([]);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [tokenStats, setTokenStats] = useState<any>(null);
   const { toast } = useToast();
   const userPausedRef = useRef(false);
   const lastAutoResumeRef = useRef(0); // Track last auto-resume timestamp
@@ -197,6 +198,36 @@ export default function EmbeddingsManagerPage() {
   }, [embeddingMethod]);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_URL + '/api/v2/embeddings';
+
+  // Format token number for display
+  const formatTokenNumber = (num: number) => {
+    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
+    return num.toLocaleString('tr-TR');
+  };
+
+  // Fetch token statistics
+  const fetchTokenStats = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings-tables/token-stats?t=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTokenStats(data);
+        } else {
+          console.error('Token stats API returned error:', data.error);
+          setTokenStats({ totalTokensUsed: 0, embeddedRecords: 0, uniqueTables: 0 });
+        }
+      } else {
+        console.error('Token stats HTTP error:', response.status);
+        setTokenStats({ totalTokensUsed: 0, embeddedRecords: 0, uniqueTables: 0 });
+      }
+    } catch (error) {
+      console.error('Failed to fetch token stats:', error);
+      setTokenStats({ totalTokensUsed: 0, embeddedRecords: 0, uniqueTables: 0 });
+    }
+  };
 
   // Check and recover from stuck process
   const checkAndRecoverStuckProcess = async () => {
@@ -433,11 +464,14 @@ export default function EmbeddingsManagerPage() {
         console.log('DEBUG Frontend - Calculated totalRecords:', totalRecords);
         console.log('DEBUG Frontend - Calculated embeddedRecords:', embeddedRecords);
 
+        // Get database name from first table (all tables should be from same database)
+        const databaseName = data.tables.length > 0 ? data.tables[0].database : 'Unknown';
+
         setMigrationStats({
             totalRecords,
             embeddedRecords,
             pendingRecords: totalRecords - embeddedRecords,
-            databaseName: 'rag_chatbot', // The source database
+            databaseName: databaseName, // Dynamic database name from API
         });
 
         // Fetch embedding statistics
@@ -461,6 +495,9 @@ export default function EmbeddingsManagerPage() {
         } catch (historyError) {
           console.error('Error fetching embedding history:', historyError);
         }
+
+        // Fetch token statistics
+        await fetchTokenStats();
       } else {
         setError('Failed to fetch tables.');
       }
@@ -1235,19 +1272,35 @@ export default function EmbeddingsManagerPage() {
   const searchEmbeddings = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
+    setError('');
     try {
-      const response = await fetch(`${API_BASE}/search`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/search/semantic`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery, limit: 5 })
       });
+
       if (response.ok) {
-        setSearchResults(await response.json());
+        const data = await response.json();
+        setSearchResults(data.results || []);
       } else {
-        setError('Search failed.');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Search failed';
+        setError(errorMessage);
+        toast({
+          title: "Search Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      setError('An error occurred during search.');
+      const errorMessage = error instanceof Error ? error.message : 'Network error during search';
+      setError(errorMessage);
+      toast({
+        title: "Search Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setIsSearching(false);
     }
@@ -1313,94 +1366,48 @@ export default function EmbeddingsManagerPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 max-w-4xl">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg">
           <TabsTrigger value="overview" className="text-xs sm:text-sm">RAG Status</TabsTrigger>
           <TabsTrigger value="migration" className="text-xs sm:text-sm">Embedding Operations</TabsTrigger>
-          <TabsTrigger value="history" className="text-xs sm:text-sm">History</TabsTrigger>
-          <TabsTrigger value="statistics" className="text-xs sm:text-sm">Statistics</TabsTrigger>
           <TabsTrigger value="search" className="text-xs sm:text-sm">Test & Search</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="space-y-6">
             {/* Summary Statistics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
                     <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Total Records</p>
-                    <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{migrationStats?.totalRecords.toLocaleString('tr-TR') || '0'}</p>
+                    <p className="text-lg font-bold text-blue-700 dark:text-blue-300 flex items-center justify-center h-6">
+                        {migrationStats?.totalRecords.toLocaleString('tr-TR') || '0'}
+                    </p>
                 </div>
                 <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
                     <p className="text-xs text-green-600 dark:text-green-400 font-medium">Processed</p>
-                    <p className="text-lg font-bold text-green-700 dark:text-green-300">{migrationStats?.embeddedRecords.toLocaleString('tr-TR') || '0'}</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-300 flex items-center justify-center h-6">
+                        {migrationStats?.embeddedRecords.toLocaleString('tr-TR') || '0'}
+                    </p>
                 </div>
                 <div className="bg-orange-50 dark:bg-orange-950/20 rounded-lg p-3 border border-orange-200 dark:border-orange-800">
                     <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">Pending</p>
-                    <p className="text-lg font-bold text-orange-700 dark:text-orange-300">{migrationStats?.pendingRecords.toLocaleString('tr-TR') || '0'}</p>
+                    <p className="text-lg font-bold text-orange-700 dark:text-orange-300 flex items-center justify-center h-6">
+                        {migrationStats?.pendingRecords.toLocaleString('tr-TR') || '0'}
+                    </p>
                 </div>
                 <div className="bg-purple-50 dark:bg-purple-950/20 rounded-lg p-3 border border-purple-200 dark:border-purple-800">
                     <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Completed</p>
-                    <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
+                    <p className="text-lg font-bold text-purple-700 dark:text-purple-300 flex items-center justify-center h-6">
                         {migrationStats?.totalRecords > 0 ? Math.round((migrationStats.embeddedRecords / migrationStats.totalRecords) * 100) : 0}%
                     </p>
                 </div>
                 <div className="bg-red-50 dark:bg-red-950/20 rounded-lg p-3 border border-red-200 dark:border-red-800">
-                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">Estimated Cost</p>
-                    <p className="text-lg font-bold text-red-700 dark:text-red-300">
-                        ${(((migrationStats?.pendingRecords || 0) * 250) / 1000 * 0.0001).toFixed(2)}
-                    </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-300 dark:border-gray-700">
-                    <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">Database</p>
-                    <p className="text-lg font-bold text-gray-700 dark:text-gray-300 truncate">
-                        {migrationStats?.databaseName || 'rag_chatbot'}
+                    <p className="text-xs text-red-600 dark:text-red-400 font-medium">Tokens Used</p>
+                    <p className="text-lg font-bold text-red-700 dark:text-red-300 flex items-center justify-center h-6">
+                        {formatTokenNumber(tokenStats?.totalTokensUsed || 0)}
                     </p>
                 </div>
             </div>
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <CardTitle>Data Tables</CardTitle>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={fetchAvailableTablesAndStats}
-                            disabled={isLoadingTables}
-                        >
-                            {isLoadingTables ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                            <span className="ml-2">Refresh</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              const response = await fetch(`${API_BASE}/refresh-tables`, {
-                                method: 'POST'
-                              });
-                              if (response.ok) {
-                                toast({
-                                  title: "Success",
-                                  description: "Cache cleared. Tables will refresh.",
-                                });
-                                // Refresh after clearing cache
-                                setTimeout(fetchAvailableTablesAndStats, 500);
-                              }
-                            } catch (error) {
-                              toast({
-                                title: "Error",
-                                description: "Failed to clear cache",
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                        >
-                          <Database className="h-4 w-4" />
-                          <span className="ml-2">Clear Cache</span>
-                        </Button>
-                    </div>
-                    {migrationStats?.databaseName && (
-                        <CardDescription className="text-sm">
-                            Database: {migrationStats.databaseName}
-                        </CardDescription>
-                    )}
+                    <CardTitle>Data Tables</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {isLoadingTables ? <div className="text-center"><Loader2 className="h-8 w-8 animate-spin" /></div> :
@@ -1415,6 +1422,9 @@ export default function EmbeddingsManagerPage() {
                                         />
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded font-mono">
+                                            {table.database}
+                                        </span>
                                         <span className="text-sm text-muted-foreground">
                                             {table.embeddedRecords?.toLocaleString('tr-TR') || '0'} / {table.totalRecords?.toLocaleString('tr-TR') || '0'}
                                         </span>
@@ -1524,84 +1534,6 @@ export default function EmbeddingsManagerPage() {
                     </div>}
                 </CardContent>
             </Card>
-        </TabsContent>
-        <TabsContent value="history" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Embedding Geçmişi</CardTitle>
-              <CardDescription>Yapılan embedding işlemlerinin detaylı kayıtları</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {embeddingHistory && embeddingHistory.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">Tarih</th>
-                          <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">Model</th>
-                          <th className="text-left px-3 py-2.5 text-xs font-medium text-muted-foreground">Tablolar</th>
-                          <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">İşlenen</th>
-                          <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">Başarılı / Hatalı</th>
-                          <th className="text-right px-3 py-2.5 text-xs font-medium text-muted-foreground">Batch / Worker</th>
-                          <th className="text-center px-3 py-2.5 text-xs font-medium text-muted-foreground">Durum</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {embeddingHistory.map((record: any, index: number) => (
-                          <tr key={record.id || index} className="border-b hover:bg-muted/50">
-                            <td className="px-3 py-3">
-                              {new Date(record.started_at || record.created_at).toLocaleString('tr-TR')}
-                            </td>
-                            <td className="px-3 py-3 font-mono text-xs">
-                              {record.embedding_model || '-'}
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="flex flex-wrap gap-1">
-                                {record.source_table?.map((table: string, i: number) => (
-                                  <Badge key={i} variant="outline" className="text-xs">
-                                    {table}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="px-3 py-3 text-right">
-                              {record.records_processed?.toLocaleString('tr-TR') || '0'}
-                            </td>
-                            <td className="px-3 py-3 text-right">
-                              {record.records_success?.toLocaleString('tr-TR') || '0'} / {record.records_failed?.toLocaleString('tr-TR') || '0'}
-                            </td>
-                            <td className="px-3 py-3 text-right">
-                              {record.batch_size || '-'} / {record.worker_count || '-'}
-                            </td>
-                            <td className="px-3 py-3 text-center">
-                              <Badge variant={
-                                record.status === 'completed' ? 'default' :
-                                record.status === 'error' ? 'destructive' :
-                                record.status === 'processing' ? 'default' :
-                                record.status === 'paused' ? 'secondary' :
-                                'secondary'
-                              }>
-                                {record.status === 'completed' ? 'Tamamlandı' :
-                                 record.status === 'error' ? 'Hata' :
-                                 record.status === 'processing' ? 'İşleniyor' :
-                                 record.status === 'paused' ? 'Duraklatıldı' :
-                                 record.status === 'started' ? 'Başlatıldı' : record.status}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Henüz embedding geçmişi bulunmuyor
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
         <TabsContent value="migration" className="space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -1897,6 +1829,9 @@ export default function EmbeddingsManagerPage() {
                           >
                             <div className="font-medium flex items-center gap-2">
                               {table.displayName}
+                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded font-mono">
+                                {table.database || 'rag_chatbot'}
+                              </span>
                               {isFullyEmbedded && (
                                 <CheckCircle className="w-4 h-4 text-green-600" />
                               )}
@@ -1933,35 +1868,67 @@ export default function EmbeddingsManagerPage() {
             </div>
           </div>
         </TabsContent>
-        <TabsContent value="statistics">
+  
+        <TabsContent value="search" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>İstatistikler Taşındı</CardTitle>
-              <CardDescription>
-                Embedding istatistikleri artık RAG Durumu sayfasında bulunmaktadır.
-              </CardDescription>
+              <CardTitle>Semantic Search Test</CardTitle>
+              <CardDescription>Embedding sistemini test etmek için semantik arama yapın</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Link href="/dashboard/rag?tab=embeddings">
-                <Button>
-                  İstatistikleri Görüntüle
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Aramak için bir şeyler yazın..."
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      searchEmbeddings();
+                    }
+                  }}
+                />
+                <Button onClick={searchEmbeddings} disabled={isSearching || !searchQuery.trim()}>
+                  {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Ara'}
                 </Button>
-              </Link>
+              </div>
+
+              {searchResults.length > 0 && (
+                <div className="space-y-3 mt-6">
+                  <h4 className="text-sm font-medium">Arama Sonuçları ({searchResults.length})</h4>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {searchResults.map((result, i) => (
+                      <div key={i} className="p-4 border rounded-lg bg-muted/50">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
+                            {result.source_table || 'Bilinmeyen Tablo'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Score: {result.score?.toFixed(4) || result.similarity?.toFixed(4) || 'N/A'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-3">
+                          {result.content || result.text || result.icerik || 'İçerik bulunamadı'}
+                        </p>
+                        {result.source_id && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            ID: {result.source_id}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {searchResults.length === 0 && searchQuery && !isSearching && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>Sonuç bulunamadı</p>
+                  <p className="text-xs">Embedding sistemi çalışıyor olabilir, farklı bir arama terimi deneyin.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="search">
-            <Card>
-                <CardHeader><CardTitle>Test & Arama</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                        <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search query..." />
-                        <Button onClick={searchEmbeddings} disabled={isSearching}>{isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}</Button>
-                    </div>
-                    {searchResults.map((result, i) => <div key={i} className="p-2 border rounded">...</div>)}
-                </CardContent>
-            </Card>
         </TabsContent>
       </Tabs>
     </div>

@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { User, Lock, Mail, Save, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Mail, Save, ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -22,6 +22,9 @@ export default function ProfilePage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -48,24 +51,21 @@ export default function ProfilePage() {
         name: user.name || '',
         email: user.email || ''
       });
+      // Set profile image if exists
+      if (user.profile_image) {
+        setProfileImage(user.profile_image);
+      }
     }
   }, [user]);
 
   if (!user) {
+    // If user is not logged in, redirect to login page
+    router.push('/login');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Alert className="max-w-md">
-            <AlertDescription>
-              Lütfen önce giriş yapın.
-            </AlertDescription>
-          </Alert>
-          <Link href="/login" className="mt-4 inline-block">
-            <Button>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Giriş Yap
-            </Button>
-          </Link>
+          <div className="animate-spin h-8 w-8 border-2 border-gray-300 border-t-primary rounded-full mx-auto"></div>
+          <p className="mt-4 text-gray-600">Yönlendiriliyorsunuz...</p>
         </div>
       </div>
     );
@@ -186,23 +186,90 @@ export default function ProfilePage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Hata',
+        description: 'Lütfen geçerli bir resim dosyası seçin',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Hata',
+        description: 'Resim dosyası maksimum 5MB olabilir',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setUploadingImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('profileImage', file);
+
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/users/upload-profile-image'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Profil fotoğrafı yüklenemedi');
+      }
+
+      const data = await response.json();
+
+      // Update user in localStorage
+      const updatedUser = { ...user, profile_image: data.profileImage };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+
+      setProfileImage(data.profileImage);
+
+      toast({
+        title: 'Başarılı',
+        description: 'Profil fotoğrafınız güncellendi',
+      });
+
+    } catch (error) {
+      console.error('Image upload error:', error);
+      toast({
+        title: 'Hata',
+        description: error instanceof Error ? error.message : 'Profil fotoğrafı yüklenemedi',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Link href="/">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Geri Dön
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Profil Ayarları</h1>
-            <p className="text-muted-foreground">Hesap bilgilerinizi yönetin</p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header - Dashboard ile uyumlu */}
+      <header className="bg-white dark:bg-gray-800 shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Profil Ayarları</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Hesap bilgilerinizi yönetin</p>
+            </div>
           </div>
         </div>
+      </header>
 
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Profile Info Card */}
           <div className="lg:col-span-2 space-y-6">
@@ -396,22 +463,70 @@ export default function ProfilePage() {
             </Card>
           </div>
 
-          {/* User Info Sidebar */}
+          {/* User Info Card - Combined */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Hesap Bilgileri</CardTitle>
+                <CardTitle>Profil Bilgileri</CardTitle>
+                <CardDescription>
+                  Hesap bilgilerinizi ve profil fotoğrafınızı yönetin
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+                {/* Profile Image Section */}
                 <div className="text-center">
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <User className="h-8 w-8 text-primary" />
+                  <div className="relative inline-block cursor-pointer mx-auto" onClick={() => fileInputRef.current?.click()}>
+                    <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
+                      {profileImage ? (
+                        <img
+                          src={profileImage.startsWith('http') ? profileImage : `http://localhost:8083/uploads/${profileImage}`}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Profile image load error:', e);
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <User className="h-12 w-12 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="absolute bottom-0 right-0 shadow-lg bg-white dark:bg-gray-800"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                      disabled={uploadingImage}
+                    >
+                      {uploadingImage ? (
+                        <div className="animate-spin h-4 w-4 border-2 border-gray-300 border-t-primary rounded-full" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
-                  <h3 className="font-medium">{user.name}</h3>
+                  <p className="text-sm text-gray-500 mt-3">Profil fotoğrafını değiştirmek için tıklayın</p>
+                </div>
+
+                {/* User Info Section */}
+                <div className="text-center space-y-2 pt-4 border-t">
+                  <h3 className="font-semibold text-lg">{user.name}</h3>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
 
-                <div className="space-y-2 pt-4 border-t">
+                {/* Account Details */}
+                <div className="space-y-3 pt-4 border-t">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Rol</span>
                     <span className="font-medium">
@@ -439,9 +554,21 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Geri Dön Butonu */}
+            <Card>
+              <CardContent className="pt-6">
+                <Link href="/" className="block">
+                  <Button variant="outline" className="w-full">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Ana Sayfaya Dön
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

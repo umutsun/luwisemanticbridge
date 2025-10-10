@@ -18,7 +18,7 @@ class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
 
-  constructor(baseURL: string = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`) {
+  constructor(baseURL: string = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8084'}`) {
     this.client = axios.create({
       baseURL,
       timeout: 10000,

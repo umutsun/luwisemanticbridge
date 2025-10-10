@@ -1,7 +1,7 @@
 export const API_CONFIG = {
-  baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`,
-  port: process.env.NEXT_PUBLIC_API_PORT || '8083',
-  wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}${process.env.NEXT_PUBLIC_WEBSOCKET_PATH || '/socket.io'}`,
+  baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8084'}`,
+  port: process.env.NEXT_PUBLIC_API_PORT || '8084',
+  wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8084'}${process.env.NEXT_PUBLIC_WEBSOCKET_PATH || '/socket.io'}`,
 
   endpoints: {
     // Dashboard
@@ -18,6 +18,7 @@ export const API_CONFIG = {
 
     // Embeddings
     embeddings: '/api/v2/embeddings',
+    embeddingsTables: '/api/v2/embeddings-tables',
 
     // Scraper
     scraper: '/api/v2/scraper',

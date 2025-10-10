@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 
@@ -11,6 +14,36 @@ const pool = new Pool({
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Multer configuration for profile image uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    cb(null, true);
+  }
+});
 
 // Middleware to verify JWT and admin role
 const verifyAdmin = (req: Request, res: Response, next: Function) => {
@@ -289,7 +322,7 @@ router.put('/profile', async (req: Request, res: Response) => {
       values.push(email);
     }
 
-    query += ' WHERE id = $' + paramIndex++ + ' RETURNING id, name, email, role, status, email_verified, created_at, updated_at';
+    query += ' WHERE id = $' + paramIndex++ + ' RETURNING id, name, email, role, status, email_verified, created_at, updated_at, profile_image';
     values.push(decoded.userId);
 
     const result = await pool.query(query, values);
@@ -347,6 +380,60 @@ router.post('/change-password', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error changing password:', error);
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Upload profile image (authenticated user)
+router.post('/upload-profile-image', upload.single('profileImage'), async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const userId = decoded.userId;
+    const filename = req.file.filename;
+
+    // Get current user to check if they have an existing profile image
+    const currentUser = await pool.query('SELECT profile_image FROM users WHERE id = $1', [userId]);
+
+    if (currentUser.rows.length > 0 && currentUser.rows[0].profile_image) {
+      // Delete old profile image if it exists
+      const oldImagePath = path.join(uploadsDir, currentUser.rows[0].profile_image);
+      if (fs.existsSync(oldImagePath)) {
+        fs.unlinkSync(oldImagePath);
+      }
+    }
+
+    // Update user profile with new image filename
+    await pool.query(
+      'UPDATE users SET profile_image = $1, updated_at = NOW() WHERE id = $2',
+      [filename, userId]
+    );
+
+    res.json({
+      message: 'Profile image uploaded successfully',
+      profileImage: filename
+    });
+  } catch (error) {
+    console.error('Error uploading profile image:', error);
+
+    // Clean up uploaded file if there was an error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    res.status(500).json({ error: 'Failed to upload profile image' });
   }
 });
 

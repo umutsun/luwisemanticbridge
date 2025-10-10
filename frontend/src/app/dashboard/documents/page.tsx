@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { getApiUrl, API_CONFIG } from '@/lib/config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import toast, { Toaster } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Upload,
   FileText,
@@ -44,7 +45,9 @@ import {
   Zap,
   X,
   Copy,
-  ExternalLink
+  ExternalLink,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
 interface Document {
@@ -77,6 +80,7 @@ interface HistoryEntry {
 }
 
 export default function DocumentManagerPage() {
+  const { toast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -84,10 +88,12 @@ export default function DocumentManagerPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [uploadProgress, setUploadProgress] = useState(0);
-      const [activeTab, setActiveTab] = useState('documents');
+  const [activeTab, setActiveTab] = useState('documents');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [embeddingProgress, setEmbeddingProgress] = useState<{[key: string]: boolean}>({});
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
+  const [bulkEmbedding, setBulkEmbedding] = useState(false);
 
   useEffect(() => {
     initHistoryTables();
@@ -98,9 +104,11 @@ export default function DocumentManagerPage() {
 
   const initDocumentsTable = async () => {
     try {
-      await fetch('http://localhost:8083/api/v2/documents/init', {
-        method: 'POST'
-      });
+      // Temporarily disabled due to backend issues
+      // await fetch('http://localhost:8083/api/v2/documents/init', {
+      //   method: 'POST'
+      // });
+      console.log('Documents table init skipped (backend down)');
     } catch (error) {
       console.error('Failed to init documents table:', error);
     }
@@ -108,9 +116,11 @@ export default function DocumentManagerPage() {
 
   const initHistoryTables = async () => {
     try {
-      await fetch('http://localhost:8083/api/v2/history/init', {
-        method: 'POST'
-      });
+      // Temporarily disabled due to backend issues
+      // await fetch('http://localhost:8083/api/v2/history/init', {
+      //   method: 'POST'
+      // });
+      console.log('History table init skipped (backend down)');
     } catch (error) {
       console.error('Failed to init history tables:', error);
     }
@@ -337,6 +347,62 @@ export default function DocumentManagerPage() {
     }
   };
 
+  const handleBulkEmbed = async () => {
+    if (selectedDocuments.size === 0) {
+      toast.error('Lütfen en az bir doküman seçin');
+      return;
+    }
+
+    setBulkEmbedding(true);
+    const docsToEmbed = Array.from(selectedDocuments);
+
+    try {
+      const response = await fetch(`http://localhost:8083/api/v2/documents/bulk-embed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentIds: docsToEmbed }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        await fetchDocuments();
+        setSelectedDocuments(new Set());
+        toast.success(`${data.embedded || docsToEmbed.length} doküman için embedding oluşturuldu`);
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Toplu embedding oluşturulamadı');
+      }
+    } catch (error) {
+      console.error('Failed to create bulk embeddings:', error);
+      toast.error('Toplu embedding oluşturulurken hata oluştu');
+    } finally {
+      setBulkEmbedding(false);
+    }
+  };
+
+  const handleSelectDocument = (id: string, isEmbedded: boolean) => {
+    if (isEmbedded) return; // Don't allow selection if already embedded
+
+    setSelectedDocuments(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const nonEmbeddedDocs = allDocuments.filter(doc => !doc.metadata?.embeddings);
+    if (selectedDocuments.size === nonEmbeddedDocs.length) {
+      setSelectedDocuments(new Set());
+    } else {
+      setSelectedDocuments(new Set(nonEmbeddedDocs.map(doc => doc.id)));
+    }
+  };
+
   const getFileIcon = (type: string) => {
     switch (type) {
       case 'pdf': return <FileText className="h-4 w-4" />;
@@ -366,19 +432,52 @@ export default function DocumentManagerPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Kopyalandı');
+    toast({
+      title: "Kopyalandı",
+      description: "Metin panoya kopyalandı"
+    });
   };
 
-  const filteredDocuments = documents.filter(doc => {
+  // Combine current documents and history documents
+  const allDocuments = React.useMemo(() => {
+    // Convert history entries to document format
+    const historyDocs: Document[] = history.map(entry => ({
+      id: `history_${entry.id}`,
+      title: entry.filename,
+      content: entry.content || '',
+      type: entry.file_type || 'text',
+      size: entry.file_size || 0,
+      metadata: {
+        created_at: entry.created_at,
+        updated_at: entry.created_at,
+        chunks: entry.chunks_count,
+        embeddings: entry.embeddings_created,
+        source: 'history'
+      }
+    }));
+
+    // Combine and remove duplicates (by title)
+    const combined = [...documents, ...historyDocs];
+    const unique = combined.reduce((acc, doc) => {
+      const existing = acc.find(d => d.title === doc.title);
+      if (!existing) {
+        acc.push(doc);
+      }
+      return acc;
+    }, [] as Document[]);
+
+    return unique;
+  }, [documents, history]);
+
+  const filteredDocuments = allDocuments.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         doc.content.toLowerCase().includes(searchQuery.toLowerCase());
+                         (doc.content && doc.content.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesType = filterType === 'all' || doc.type === filterType;
     return matchesSearch && matchesType;
   });
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-7xl">
-      <Toaster position="top-right" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -447,7 +546,7 @@ export default function DocumentManagerPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-xl font-bold">{documents.length}</div>
+                  <div className="text-xl font-bold">{allDocuments.length}</div>
                 </CardContent>
               </Card>
               <Card>
@@ -458,7 +557,7 @@ export default function DocumentManagerPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">
-                    {formatFileSize(documents.reduce((sum, doc) => sum + doc.size, 0))}
+                    {formatFileSize(allDocuments.reduce((sum, doc) => sum + doc.size, 0))}
                   </div>
                 </CardContent>
               </Card>
@@ -470,7 +569,7 @@ export default function DocumentManagerPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">
-                    {documents.filter(d => d.metadata?.embeddings).length}
+                    {allDocuments.filter(d => d.metadata?.embeddings).length}
                   </div>
                 </CardContent>
               </Card>
@@ -482,7 +581,7 @@ export default function DocumentManagerPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold">
-                    {documents.reduce((sum, doc) => sum + (doc.metadata?.chunks || 0), 0)}
+                    {allDocuments.reduce((sum, doc) => sum + (doc.metadata?.chunks || 0), 0)}
                   </div>
                 </CardContent>
               </Card>
@@ -490,14 +589,11 @@ export default function DocumentManagerPage() {
           </CardContent>
         </Card>
 
-        {/* Right Column: Documents List */}
+        {/* Right Column: Documents Cards */}
         <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-lg">Dökümanlar</CardTitle>
-                <Badge variant="secondary">{filteredDocuments.length}</Badge>
-              </div>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Dökümanlar</CardTitle>
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -536,273 +632,111 @@ export default function DocumentManagerPage() {
                 <p className="mt-2 text-muted-foreground">Henüz döküman yok</p>
               </div>
             ) : (
-              <ScrollArea className="h-[500px]">
+              <ScrollArea className="h-[600px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Başlık</TableHead>
-                      <TableHead className="w-[100px]">Boyut</TableHead>
-                      <TableHead className="text-right w-[100px]">İşlemler</TableHead>
+                      <TableHead className="w-[50px] text-center"></TableHead>
+                      <TableHead>Doküman</TableHead>
+                      <TableHead className="w-[100px] text-right">Boyut</TableHead>
+                      <TableHead className="w-[50px] text-center"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredDocuments.map((doc) => (
-                      <TableRow key={doc.id}>
-                        <TableCell>
-                          <div className="max-w-[300px]">
-                            <div className="flex items-center gap-2 mb-1">
-                              {getFileIcon(doc.type)}
+                    {filteredDocuments.map((doc) => {
+                      const isEmbedded = doc.metadata?.embeddings;
+                      const isSelected = selectedDocuments.has(doc.id);
+                      const canSelect = !isEmbedded;
+
+                      return (
+                        <TableRow key={doc.id} className={isEmbedded ? 'bg-muted/30' : ''}>
+                          <TableCell className="text-center">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => handleSelectDocument(doc.id, isEmbedded)}
+                              disabled={!canSelect}
+                              className={isEmbedded ? 'opacity-50' : 'mx-auto'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-[400px]">
                               <p
-                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors"
+                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors mb-1"
                                 title={doc.title}
                                 onClick={() => setSelectedDoc(doc)}
                               >
                                 {doc.title}
                               </p>
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <Badge variant="outline" className="text-xs">
-                                {doc.type}
-                              </Badge>
-                              <span className="flex items-center gap-1">
-                                <Database className="h-3 w-3" />
-                                {doc.metadata?.chunks || 0} chunks
-                              </span>
-                              {doc.metadata?.embeddings ? (
-                                <CheckCircle className="h-3 w-3 text-green-500" />
-                              ) : (
-                                <AlertCircle className="h-3 w-3 text-gray-400" />
+                              {doc.content && (
+                                <p
+                                  className="text-xs text-muted-foreground truncate hover:text-foreground transition-colors cursor-pointer"
+                                  title="Click to preview"
+                                  onClick={() => setSelectedDoc(doc)}
+                                >
+                                  {doc.content.substring(0, 100)}...
+                                </p>
                               )}
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {formatFileSize(doc.size)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            {!doc.metadata?.embeddings ? (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleCreateEmbeddings(doc.id, doc.title)}
-                                disabled={embeddingProgress[doc.id]}
-                                className="h-8 w-8 p-0"
-                                title="Embedding Oluştur"
-                              >
-                                {embeddingProgress[doc.id] ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Brain className="h-4 w-4" />
-                                )}
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteEmbeddings(doc.id)}
-                                className="h-8 w-8 p-0"
-                                title="Embedding'leri Sil"
-                              >
-                                <Zap className="h-4 w-4 text-yellow-500" />
-                              </Button>
-                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="text-sm text-muted-foreground">
+                              {formatFileSize(doc.size)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
                             <Button
+                              size="sm"
                               variant="ghost"
-                              size="icon"
                               onClick={() => handleDeleteDocument(doc.id)}
-                              className="h-8 w-8 p-0"
+                              className="h-8 w-8 p-0 mx-auto"
                               title="Sil"
                             >
-                              <Trash2 className="h-4 w-4 text-white hover:text-red-300 transition-colors" />
+                              <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600 transition-colors" />
                             </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </ScrollArea>
             )}
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Tabs for History */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="documents">
-            <FileText className="w-4 h-4 mr-2" />
-            Dokümanlar
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            <History className="w-4 h-4 mr-2" />
-            Geçmiş
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="documents" className="space-y-6">
-          {/* Documents table view can be added here if needed */}
-        </TabsContent>
-
-        <TabsContent value="history" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Doküman Yükleme Geçmişi</CardTitle>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={fetchHistory}
+            {/* Bottom Action Bar */}
+            {selectedDocuments.size > 0 && (
+              <div className="border-t p-4 bg-muted/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="select-all-bottom"
+                      checked={selectedDocuments.size === allDocuments.filter(d => !d.metadata?.embeddings).length}
+                      onCheckedChange={handleSelectAll}
+                    />
+                    <Label htmlFor="select-all-bottom" className="text-sm">
+                      Tümünü Seç
+                    </Label>
+                    <span className="text-sm text-muted-foreground">
+                      {selectedDocuments.size} doküman seçili
+                    </span>
+                  </div>
+                  <Button
+                    onClick={handleBulkEmbed}
+                    disabled={bulkEmbedding}
+                    className="h-9 px-6"
                   >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={clearAllHistory}
-                  >
-                    <Trash2 className="h-4 w-4" />
+                    {bulkEmbedding ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Brain className="h-4 w-4 mr-2" />
+                    )}
+                    Embed ({selectedDocuments.size})
                   </Button>
                 </div>
               </div>
-              <CardDescription>
-                Daha önce yüklediğiniz veya eklediğiniz dokümanlar
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {historyLoading ? (
-                <div className="text-center py-8">
-                  <Loader2 className="mx-auto h-8 w-8 animate-spin" />
-                  <p className="mt-2 text-muted-foreground">Yükleniyor...</p>
-                </div>
-              ) : history.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <History className="mx-auto h-12 w-12 mb-2 opacity-50" />
-                  <p>Henüz kayıtlı geçmiş yok</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {history.map((entry) => (
-                    <div 
-                      key={entry.id}
-                      className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-base mb-1 flex items-center gap-2">
-                            {getFileIcon(entry.file_type || 'text')}
-                            {entry.filename}
-                          </h3>
-                          {entry.file_type && (
-                            <Badge variant="outline" className="text-xs">
-                              {entry.file_type}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {entry.success ? (
-                            <Badge variant="success">Başarılı</Badge>
-                          ) : (
-                            <Badge variant="destructive">Başarısız</Badge>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteHistoryEntry(entry.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      {entry.error_message && (
-                        <Alert className="mb-3">
-                          <AlertDescription>{entry.error_message}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Hash className="h-4 w-4 text-muted-foreground" />
-                          <span>{formatFileSize(entry.file_size || 0)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          <span>{entry.chunks_count} chunk</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Database className="h-4 w-4 text-muted-foreground" />
-                          <span>{entry.embeddings_created ? 'Embedding var' : 'Embedding yok'}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span>{formatDate(entry.created_at)}</span>
-                        </div>
-                      </div>
-
-                      {entry.content && (
-                        <div className="mt-3">
-                          <details className="cursor-pointer">
-                            <summary className="text-sm font-medium mb-2">İçerik Önizleme</summary>
-                            <div className="bg-muted/50 rounded-lg p-3 mt-2">
-                              <pre className="text-xs whitespace-pre-wrap font-mono">
-                                {entry.content.substring(0, 500)}
-                                {entry.content.length > 500 && '...'}
-                              </pre>
-                            </div>
-                          </details>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-3">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            // Re-upload functionality removed
-                            toast.info('Tekrar yükleme özelliği kaldırıldı');
-                          }}
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Tekrar Yükle
-                        </Button>
-                        {entry.content && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedDoc({
-                                id: `history_${entry.id}`,
-                                title: entry.filename,
-                                content: entry.content || '',
-                                type: entry.file_type || 'text',
-                                size: entry.file_size || 0,
-                                metadata: {
-                                  created_at: entry.created_at,
-                                  updated_at: entry.created_at,
-                                  chunks: entry.chunks_count,
-                                  embeddings: entry.embeddings_created
-                                }
-                              });
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Görüntüle
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Document Detail Modal */}
       {selectedDoc && (

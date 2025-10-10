@@ -514,7 +514,6 @@ export default function Header() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="gap-2 px-2 lg:px-3">
                     <User className="h-4 w-4" />
-                    <span className="text-sm hidden md:inline">{user.name}</span>
                     <ChevronDown className="h-3 w-3 opacity-60 hidden lg:inline" />
                   </Button>
                 </DropdownMenuTrigger>

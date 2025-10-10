@@ -99,10 +99,7 @@ export default function DashboardLayout({
             <p className="text-lg font-medium text-gray-900 dark:text-gray-100">
               Yükleniyor
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Yönlendiriliyorsunuz...
-            </p>
-          </div>
+            </div>
         </div>
       </div>
     );

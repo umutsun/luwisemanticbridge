@@ -222,44 +222,47 @@ export default function DashboardPage() {
     fetchSystemStatus();
     fetchDocuments();
     fetchSessions();
+
+    // Initialize console with system message
+    addConsoleLog('[SYSTEM] Dashboard initialized', 'info', 'system');
   }, []);
 
-  // WebSocket connection for real-time logs
-  useEffect(() => {
-    if (!isConsolePaused) {
-      const ws = new WebSocket(`ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}/ws/logs`);
+  // WebSocket connection disabled - backend doesn't have this endpoint
+  // useEffect(() => {
+  //   if (!isConsolePaused) {
+  //     const ws = new WebSocket(`ws://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}/ws/logs`);
 
-      ws.onopen = () => {
-        setWsConnected(true);
-        addConsoleLog('[SYSTEM] WebSocket connected for real-time logs', 'info', 'system');
-      };
+  //     ws.onopen = () => {
+  //       setWsConnected(true);
+  //       addConsoleLog('[SYSTEM] WebSocket connected for real-time logs', 'info', 'system');
+  //     };
 
-      ws.onmessage = (event) => {
-        try {
-          const logData = JSON.parse(event.data);
-          addConsoleLog(logData.message, logData.level || 'info', logData.source || 'backend');
-        } catch (error) {
-          // If it's not JSON, treat as plain text
-          addConsoleLog(event.data, 'info', 'backend');
-        }
-      };
+  //     ws.onmessage = (event) => {
+  //       try {
+  //         const logData = JSON.parse(event.data);
+  //         addConsoleLog(logData.message, logData.level || 'info', logData.source || 'backend');
+  //       } catch (error) {
+  //         // If it's not JSON, treat as plain text
+  //         addConsoleLog(event.data, 'info', 'backend');
+  //       }
+  //     };
 
-      ws.onclose = () => {
-        setWsConnected(false);
-        if (!isConsolePaused) {
-          addConsoleLog('[SYSTEM] WebSocket disconnected, attempting reconnect...', 'warn', 'system');
-        }
-      };
+  //     ws.onclose = () => {
+  //       setWsConnected(false);
+  //       if (!isConsolePaused) {
+  //         addConsoleLog('[SYSTEM] WebSocket disconnected, attempting reconnect...', 'warn', 'system');
+  //       }
+  //     };
 
-      ws.onerror = () => {
-        addConsoleLog('[SYSTEM] WebSocket connection error', 'error', 'system');
-      };
+  //     ws.onerror = () => {
+  //       addConsoleLog('[SYSTEM] WebSocket connection error', 'error', 'system');
+  //     };
 
-      return () => {
-        ws.close();
-      };
-    }
-  }, [isConsolePaused]);
+  //     return () => {
+  //       ws.close();
+  //     };
+  //   }
+  // }, [isConsolePaused]);
 
   // Simulate real-time resource updates
   useEffect(() => {
@@ -279,26 +282,54 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchChatStats = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('/api/v2/chat/stats', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        // Try dashboard stats first (for admin users)
+        const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/dashboard-stats`);
 
         if (response.ok) {
           const data = await response.json();
           setChatStats(data);
-        } else if (response.status === 404) {
-          // Set default values if endpoint doesn't exist
-          setChatStats({
-            totalConversations: 0,
-            totalMessages: 0,
-            recentMessages: 0,
-            avgMessagesPerConversation: 0,
-            lastUpdated: new Date().toISOString()
-          });
+        } else if (response.status === 403) {
+          // If not admin, try user-specific stats
+          const userResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/stats`);
+
+          if (userResponse.ok) {
+            const userData = await userResponse.json();
+            // Transform user stats to dashboard format
+            setChatStats({
+              overview: {
+                total_conversations: userData.totalConversations || 0,
+                total_messages: userData.totalMessages || 0,
+                total_users: 1 // Only current user
+              },
+              recentMessages: userData.recentMessages || 0,
+              avgMessagesPerConversation: userData.avgMessagesPerConversation || 0,
+              daily_activity: [{
+                date: new Date().toISOString().split('T')[0],
+                active_users: 1,
+                conversations: userData.totalConversations || 0,
+                messages: userData.recentMessages || 0
+              }],
+              lastUpdated: new Date().toISOString()
+            });
+          } else {
+            // Set default values if both endpoints fail
+            setChatStats({
+              overview: {
+                total_conversations: 0,
+                total_messages: 0,
+                total_users: 0
+              },
+              recentMessages: 0,
+              avgMessagesPerConversation: 0,
+              daily_activity: [{
+                date: new Date().toISOString().split('T')[0],
+                active_users: 0,
+                conversations: 0,
+                messages: 0
+              }],
+              lastUpdated: new Date().toISOString()
+            });
+          }
         } else {
           console.error('Failed to fetch chat stats:', response.status);
         }

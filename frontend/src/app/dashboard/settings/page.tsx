@@ -456,7 +456,10 @@ export default function SettingsPage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, {
+        headers,
+        cache: 'no-store'
+      });
 
       if (response.ok) {
         const data = await response.json();
@@ -464,6 +467,54 @@ export default function SettingsPage() {
         // Ensure required properties have default values if missing from API
         const enrichedConfig = {
           ...data,
+          // Add fallback for app configuration
+          app: data.app || {
+            name: 'Alice Semantic Bridge',
+            description: 'AI-Powered Knowledge Management System',
+            logoUrl: '',
+            locale: 'tr'
+          },
+          // Add fallback for all API provider configurations
+          openai: data.openai || {
+            apiKey: typeof process.env.NEXT_PUBLIC_OPENAI_API_KEY === 'string' ? process.env.NEXT_PUBLIC_OPENAI_API_KEY : '',
+            model: 'gpt-4-turbo-preview',
+            embeddingModel: 'text-embedding-3-small',
+            maxTokens: 4096,
+            temperature: 0.7,
+          },
+          anthropic: data.anthropic || {
+            apiKey: '',
+            model: 'claude-3-opus-20240229',
+            maxTokens: 4096,
+          },
+          deepseek: data.deepseek || {
+            apiKey: '',
+            baseUrl: 'https://api.deepseek.com',
+            model: 'deepseek-coder',
+          },
+          ollama: data.ollama || {
+            baseUrl: 'http://localhost:11434',
+            model: 'llama2',
+            embeddingModel: 'nomic-embed-text',
+          },
+          huggingface: data.huggingface || {
+            apiKey: typeof process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY : '',
+            model: 'sentence-transformers/all-MiniLM-L6-v2',
+            endpoint: 'https://api-inference.huggingface.co/models/',
+          },
+          cohere: data.cohere || {
+            apiKey: typeof process.env.NEXT_PUBLIC_COHERE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_COHERE_API_KEY : '',
+          },
+          voyage: data.voyage || {
+            apiKey: typeof process.env.NEXT_PUBLIC_VOYAGE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_VOYAGE_API_KEY : '',
+          },
+          google: data.google || {
+            apiKey: typeof process.env.NEXT_PUBLIC_GOOGLE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_GOOGLE_API_KEY : '',
+            projectId: typeof process.env.NEXT_PUBLIC_GOOGLE_PROJECT_ID === 'string' ? process.env.NEXT_PUBLIC_GOOGLE_PROJECT_ID : '',
+          },
+          jina: data.jina || {
+            apiKey: typeof process.env.NEXT_PUBLIC_JINA_API_KEY === 'string' ? process.env.NEXT_PUBLIC_JINA_API_KEY : '',
+          },
           dataSource: {
             useLocalDb: data.dataSource?.useLocalDb ?? true,
             localDbPercentage: data.dataSource?.localDbPercentage ?? 100,
@@ -510,6 +561,35 @@ export default function SettingsPage() {
             timeout: data.scraper?.timeout ?? 30000,
             maxConcurrency: data.scraper?.maxConcurrency ?? 3,
             userAgent: data.scraper?.userAgent ?? 'ASB Web Scraper',
+          },
+          // Add fallback for system prompts
+          systemPrompts: data.systemPrompts || [
+            {
+              id: 'default',
+              name: 'Varsayılan Sistem Prompt',
+              prompt: 'Sen bir yapay zeka asistanısın. Kullanıcıya yardımcı olmak için verilen bilgileri kullan.',
+              temperature: 0.7,
+              maxTokens: 2048,
+              isActive: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }
+          ],
+          // Add fallback for n8n configuration
+          n8n: data.n8n || {
+            url: 'http://localhost:5678',
+            enabled: false,
+            apiKey: ''
+          },
+          // Add fallback for SMTP configuration
+          smtp: data.smtp || {
+            gmail: {
+              enabled: false,
+              email: '',
+              password: '',
+              host: 'smtp.gmail.com',
+              port: 587
+            }
           },
         };
 
@@ -703,8 +783,8 @@ export default function SettingsPage() {
         },
         body: JSON.stringify({
           to: testEmail,
-          provider: config.smtp.gmail.enabled ? 'gmail' : 'brevo',
-          config: config.smtp.gmail.enabled ? config.smtp.gmail : config.smtp.brevo,
+          provider: config.smtp?.gmail?.enabled ? 'gmail' : 'brevo',
+          config: config.smtp?.gmail?.enabled ? config.smtp.gmail : config.smtp.brevo,
         }),
       });
 
@@ -781,7 +861,7 @@ export default function SettingsPage() {
         // Save active prompt to system settings
         const activePromptData = prompts.find(p => p.isActive);
         if (activePromptData) {
-          await fetch(getApiUrl('prompts'), {
+          const promptResponse = await fetch(getApiUrl('prompts'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -794,6 +874,23 @@ export default function SettingsPage() {
               name: activePromptData.name
             }),
           });
+
+          if (!promptResponse.ok) {
+            const errorData = await promptResponse.json().catch(() => ({}));
+            console.error('Failed to save prompt:', errorData);
+            toast({
+              title: 'Error saving system prompt',
+              description: errorData.error || errorData.details || 'Unknown error',
+              variant: 'destructive',
+            });
+          } else {
+            const promptData = await promptResponse.json();
+            console.log('Prompt saved successfully:', promptData);
+            toast({
+              title: 'System prompt saved',
+              description: 'Your system prompt has been saved successfully',
+            });
+          }
         }
 
         // Save all prompts to custom prompts table (if it exists)
@@ -1076,6 +1173,22 @@ export default function SettingsPage() {
           setPromptTemperature(0.7);
           setPromptMaxTokens(2048);
         }
+      } else {
+        // Handle 401 and other HTTP errors gracefully
+        console.warn(`Prompts endpoint returned ${response.status}, using default prompt`);
+        setPrompts([{
+          id: '1',
+          name: 'System Prompt',
+          prompt: defaultPrompt,
+          temperature: 0.7,
+          maxTokens: 2048,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }]);
+        setEditingPrompt(defaultPrompt);
+        setPromptTemperature(0.7);
+        setPromptMaxTokens(2048);
       }
     } catch (error) {
       console.error('Failed to fetch prompts:', error);
@@ -1927,7 +2040,7 @@ export default function SettingsPage() {
                     <Label htmlFor="n8nUrl">n8n URL</Label>
                     <Input
                       id="n8nUrl"
-                      value={config.n8n.url}
+                      value={config.n8n?.url || ''}
                       onChange={(e) => updateConfig('n8n.url', e.target.value)}
                       placeholder="http://localhost:5678"
                     />
@@ -1938,7 +2051,7 @@ export default function SettingsPage() {
                       <Input
                         id="n8nKey"
                         type={showPassword.n8nKey ? 'text' : 'password'}
-                        value={config.n8n.apiKey}
+                        value={config.n8n?.apiKey || ''}
                         onChange={(e) => updateConfig('n8n.apiKey', e.target.value)}
                         placeholder="n8n API key"
                       />
@@ -1990,12 +2103,12 @@ export default function SettingsPage() {
                     <div className="flex items-center space-x-2 mb-2">
                       <Switch
                         id="gmailEnabled"
-                        checked={config.smtp.gmail.enabled}
+                        checked={config.smtp?.gmail?.enabled || false}
                         onCheckedChange={(checked) => updateConfig('smtp.gmail.enabled', checked)}
                       />
                       <Label htmlFor="gmailEnabled">Enable Gmail</Label>
                     </div>
-                    {config.smtp.gmail.enabled && (
+                    {config.smtp?.gmail?.enabled && (
                       <div className="space-y-2 p-3 border rounded-lg">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-2">
@@ -2003,7 +2116,7 @@ export default function SettingsPage() {
                             <Input
                               id="gmailUser"
                               type="email"
-                              value={config.smtp.gmail.auth.user}
+                              value={config.smtp?.gmail?.auth?.user || ''}
                               onChange={(e) => updateConfig('smtp.gmail.auth.user', e.target.value)}
                               placeholder="your@gmail.com"
                             />
@@ -2014,7 +2127,7 @@ export default function SettingsPage() {
                               <Input
                                 id="gmailPass"
                                 type={showPassword.gmailPass ? 'text' : 'password'}
-                                value={config.smtp.gmail.auth.pass}
+                                value={config.smtp?.gmail?.auth?.pass || ''}
                                 onChange={(e) => updateConfig('smtp.gmail.auth.pass', e.target.value)}
                                 placeholder="app password"
                               />
@@ -2046,12 +2159,12 @@ export default function SettingsPage() {
                     <div className="flex items-center space-x-2 mb-2">
                       <Switch
                         id="brevoEnabled"
-                        checked={config.smtp.brevo.enabled}
+                        checked={config.smtp?.brevo?.enabled || false}
                         onCheckedChange={(checked) => updateConfig('smtp.brevo.enabled', checked)}
                       />
                       <Label htmlFor="brevoEnabled">Enable Brevo</Label>
                     </div>
-                    {config.smtp.brevo.enabled && (
+                    {config.smtp?.brevo?.enabled && (
                       <div className="space-y-2 p-3 border rounded-lg">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-2">
@@ -2059,7 +2172,7 @@ export default function SettingsPage() {
                             <Input
                               id="brevoUser"
                               type="email"
-                              value={config.smtp.brevo.auth.user}
+                              value={config.smtp?.brevo?.auth?.user || ''}
                               onChange={(e) => updateConfig('smtp.brevo.auth.user', e.target.value)}
                               placeholder="sender@yourdomain.com"
                             />
@@ -2070,7 +2183,7 @@ export default function SettingsPage() {
                               <Input
                                 id="brevoPass"
                                 type={showPassword.brevoPass ? 'text' : 'password'}
-                                value={config.smtp.brevo.auth.pass}
+                                value={config.smtp?.brevo?.auth?.pass || ''}
                                 onChange={(e) => updateConfig('smtp.brevo.auth.pass', e.target.value)}
                                 placeholder="xkeysib-..."
                               />
@@ -2308,14 +2421,14 @@ export default function SettingsPage() {
                           <p className="text-sm text-muted-foreground">{chatbotSettings.subtitle || 'How can I help you?'}</p>
                         </div>
                       </div>
-                      <div className="bg-white p-3 rounded shadow-sm">
+                      <div className="bg-background p-3 rounded shadow-sm border">
                         <p className="text-sm">{chatbotSettings.welcomeMessage || 'Hello! I\'m your AI assistant. How can I help you today?'}</p>
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {suggestions.slice(0, 3).map((suggestion, index) => (
                           <div
                             key={index}
-                            className="px-2 py-1 bg-white border rounded text-xs"
+                            className="px-2 py-1 bg-background border rounded text-xs"
                             style={{ borderColor: chatbotSettings.primaryColor }}
                           >
                             {suggestion.title}

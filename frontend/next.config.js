@@ -50,7 +50,7 @@ const nextConfig = {
 
   // Rewrite API requests to backend
   async rewrites() {
-    const backendPort = process.env.NEXT_PUBLIC_API_PORT || '8083';
+    const backendPort = process.env.NEXT_PUBLIC_API_PORT || '8084';
     const backendUrl = `http://localhost:${backendPort}`;
 
     return [

@@ -58,7 +58,7 @@ export const API = {
 // Server Configuration
 export const SERVER = {
   DEFAULT_PORTS: {
-    BACKEND: parseInt(process.env.NEXT_PUBLIC_API_PORT || '8083', 10),
+    BACKEND: parseInt(process.env.NEXT_PUBLIC_API_PORT || '8084', 10),
     FRONTEND: parseInt(process.env.NEXT_PUBLIC_PORT || '3002', 10),
     REDIS: 6379,
   },

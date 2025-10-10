@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { chromium } from 'playwright';
-import { pgPool, redis } from '../server';
+import { asembPool } from '../config/database.config';
+import { redis } from '../server';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { encoding_for_model } from 'tiktoken';
 import advancedScraper from '../services/advanced-scraper.service';
@@ -15,9 +16,9 @@ const router = Router();
 
 // Helper function to count tokens
 // Activity history table creation
-router.post('/api/v2/activity/init-table', async (req: Request, res: Response) => {
+router.post('/activity/init-table', async (req: Request, res: Response) => {
   try {
-    await pgPool.query(`
+    await asembPool.query(`
       CREATE TABLE IF NOT EXISTS activity_history (
         id SERIAL PRIMARY KEY,
         operation_type TEXT NOT NULL,
@@ -31,7 +32,7 @@ router.post('/api/v2/activity/init-table', async (req: Request, res: Response) =
       )
     `);
     
-    await pgPool.query(`
+    await asembPool.query(`
       CREATE INDEX IF NOT EXISTS idx_activity_operation ON activity_history(operation_type);
       CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_history(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_activity_status ON activity_history(status);
@@ -61,10 +62,10 @@ router.get('/activity/history', async (req: Request, res: Response) => {
     
     query += ` ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
     
-    const result = await pgPool.query(query, params);
+    const result = await asembPool.query(query, params);
     
     // Get statistics
-    const stats = await pgPool.query(`
+    const stats = await asembPool.query(`
       SELECT 
         operation_type,
         COUNT(*) as count,
@@ -106,7 +107,7 @@ async function logActivity(
   errorMessage?: string
 ) {
   try {
-    await pgPool.query(`
+    await asembPool.query(`
       INSERT INTO activity_history (
         operation_type, source_url, title, status, details, metrics, error_message
       )
@@ -136,16 +137,17 @@ router.post('/', async (req: Request, res: Response) => {
   const startTime = Date.now();
   let activityMetrics: any = {};
   let activityDetails: any = {};
-  
+
   try {
-    const { 
-      url, 
-      saveToDb = false, 
-      mode = 'auto', 
+    const {
+      url,
+      saveToDb = false,
+      mode = 'auto',
       generateEmbeddings = false,
       customSelectors = [],
       prioritySelectors = [],
-      extractMode = 'best'
+      extractMode = 'best',
+      realTimeProgress = false
     } = req.body;
     
     // Check if it's a Turkish government site
@@ -186,19 +188,81 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'URL is required' });
     }
 
-    console.log(`[SCRAPER] Starting scrape for: ${url}`);
+    // Generate jobId for real-time progress tracking
+    const jobId = realTimeProgress ? `scrape_${Date.now()}` : null;
+
+    // Initialize job tracking if real-time progress is requested
+    if (realTimeProgress && jobId) {
+      await redis.set(`job:${jobId}`, JSON.stringify({
+        status: 'initializing',
+        progress: 0,
+        message: 'Starting scraper...',
+        url,
+        startTime: new Date().toISOString()
+      }), 'EX', 3600);
+    }
+
+    console.log(`[SCRAPER] Starting scrape for: ${url}${jobId ? ` (job: ${jobId})` : ''}`);
     console.log(`[SCRAPER] Mode: ${useGibScraper ? 'GİB Specialized' : useEnhancedPuppeteer ? 'Enhanced Puppeteer' : usePuppeteer ? 'puppeteer (advanced)' : (useDynamic ? 'dynamic (playwright)' : 'static (cheerio)')}`);
-    
+
+    // Update progress: initializing
+    if (realTimeProgress && jobId) {
+      await redis.set(`job:${jobId}`, JSON.stringify({
+        status: 'initializing',
+        progress: 5,
+        message: 'Initializing scraper components...',
+        url,
+        startTime: new Date().toISOString()
+      }), 'EX', 3600);
+    }
+
     // Use GİB scraper for Turkish government sites
     if (useGibScraper) {
       console.log('[SCRAPER] Using GİB specialized scraper for Turkish government site');
+
+      // Update progress: scraping started
+      if (realTimeProgress && jobId) {
+        await redis.set(`job:${jobId}`, JSON.stringify({
+          status: 'scraping',
+          progress: 20,
+          message: 'Scraping Turkish government site...',
+          url,
+          startTime: new Date().toISOString()
+        }), 'EX', 3600);
+      }
+
       const gibResult = await gibScraper.scrapeGibPage(url);
-      
+
       if (gibResult.success && gibResult.content) {
+        // Update progress: content retrieved
+        if (realTimeProgress && jobId) {
+          await redis.set(`job:${jobId}`, JSON.stringify({
+            status: 'processing',
+            progress: 50,
+            message: 'Processing scraped content...',
+            url,
+            title: gibResult.title,
+            contentLength: gibResult.content.length,
+            startTime: new Date().toISOString()
+          }), 'EX', 3600);
+        }
         // Save to database if requested
         let savedId = null;
         if (saveToDb) {
-          const insertResult = await pgPool.query(
+          // Update progress: saving to database
+          if (realTimeProgress && jobId) {
+            await redis.set(`job:${jobId}`, JSON.stringify({
+              status: 'saving',
+              progress: 75,
+              message: 'Saving to database...',
+              url,
+              title: gibResult.title,
+              contentLength: gibResult.content.length,
+              startTime: new Date().toISOString()
+            }), 'EX', 3600);
+          }
+
+          const insertResult = await asembPool.query(
             `INSERT INTO scraped_pages (url, title, content, description, keywords, content_length, scraping_mode, metadata)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
@@ -235,6 +299,21 @@ router.post('/', async (req: Request, res: Response) => {
           // For now, we'll skip this part
         }
         
+        // Update progress: completing
+        if (realTimeProgress && jobId) {
+          await redis.set(`job:${jobId}`, JSON.stringify({
+            status: 'completed',
+            progress: 100,
+            message: 'Scraping completed successfully!',
+            url,
+            title: gibResult.title,
+            contentLength: gibResult.content.length,
+            chunksCreated: chunks.length,
+            savedToDb: saveToDb,
+            completedAt: new Date().toISOString()
+          }), 'EX', 3600);
+        }
+
         // Log activity
         await logActivity(
           'scrape',
@@ -258,8 +337,8 @@ router.post('/', async (req: Request, res: Response) => {
           },
           undefined
         );
-        
-        return res.json({
+
+        const responseData = {
           success: true,
           title: gibResult.title,
           content: gibResult.content.substring(0, 5000),
@@ -284,7 +363,14 @@ router.post('/', async (req: Request, res: Response) => {
           },
           savedToDb: saveToDb,
           timestamp: new Date().toISOString()
-        });
+        };
+
+        // Include jobId for real-time progress tracking
+        if (realTimeProgress && jobId) {
+          responseData.jobId = jobId;
+        }
+
+        return res.json(responseData);
       } else {
         // If GİB scraper fails, fall back to enhanced puppeteer
         console.log('[SCRAPER] GİB scraper failed, falling back to enhanced puppeteer');
@@ -308,7 +394,7 @@ router.post('/', async (req: Request, res: Response) => {
         // Save to database if requested
         let savedId = null;
         if (saveToDb) {
-          const insertResult = await pgPool.query(
+          const insertResult = await asembPool.query(
             `INSERT INTO scraped_pages (url, title, content, description, keywords, content_length, scraping_mode, metadata)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
@@ -595,6 +681,18 @@ router.post('/', async (req: Request, res: Response) => {
     if (!useDynamic) {
       // Use axios for static content
       console.log('[SCRAPER] Using axios for static content...');
+
+      // Update progress: fetching content
+      if (realTimeProgress && jobId) {
+        await redis.set(`job:${jobId}`, JSON.stringify({
+          status: 'fetching',
+          progress: 20,
+          message: 'Fetching webpage content...',
+          url,
+          startTime: new Date().toISOString()
+        }), 'EX', 3600);
+      }
+
       const response = await axios.get(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -609,7 +707,7 @@ router.post('/', async (req: Request, res: Response) => {
         maxRedirects: 5,
         validateStatus: (status) => status < 500
       });
-      
+
       htmlContent = response.data;
       statusCode = response.status;
       console.log(`[SCRAPER] Response status: ${statusCode}`);
@@ -783,7 +881,7 @@ router.post('/', async (req: Request, res: Response) => {
     if (saveToDb && content.length > 0) {
       try {
         // Create scraped_data table if it doesn't exist
-        await pgPool.query(`
+        await asembPool.query(`
           CREATE TABLE IF NOT EXISTS scraped_data (
             id SERIAL PRIMARY KEY,
             url TEXT UNIQUE NOT NULL,
@@ -823,7 +921,7 @@ router.post('/', async (req: Request, res: Response) => {
         }
         
         // Insert or update the scraped content
-        const result = await pgPool.query(`
+        const result = await asembPool.query(`
           INSERT INTO scraped_data (
             url, title, content, description, keywords, metadata,
             content_chunks, chunk_count, content_length, 
@@ -862,7 +960,7 @@ router.post('/', async (req: Request, res: Response) => {
         if (formattedEmbeddings && formattedEmbeddings.length > 0) {
           try {
             for (let i = 0; i < formattedEmbeddings.length && i < chunks.length; i++) {
-              await pgPool.query(`
+              await asembPool.query(`
                 INSERT INTO document_embeddings (
                   document_id, 
                   chunk_text, 
@@ -904,7 +1002,22 @@ router.post('/', async (req: Request, res: Response) => {
       undefined
     );
     
-    const response = {
+    // Update progress: completing
+    if (realTimeProgress && jobId) {
+      await redis.set(`job:${jobId}`, JSON.stringify({
+        status: 'completed',
+        progress: 100,
+        message: 'Scraping completed successfully!',
+        url,
+        title: finalTitle,
+        contentLength: content.length,
+        chunksCreated: chunks.length,
+        savedToDb: !!savedId,
+        completedAt: new Date().toISOString()
+      }), 'EX', 3600);
+    }
+
+    const response: any = {
       success: true,
       title: finalTitle,
       content: content.substring(0, 5000), // Return first 5000 chars
@@ -932,7 +1045,12 @@ router.post('/', async (req: Request, res: Response) => {
       dbId: savedId,
       timestamp: new Date().toISOString()
     };
-    
+
+    // Include jobId for real-time progress tracking
+    if (realTimeProgress && jobId) {
+      response.jobId = jobId;
+    }
+
     console.log(`[SCRAPER] Completed successfully in ${Date.now() - startTime}ms`);
     res.json(response);
     
@@ -1062,7 +1180,7 @@ function generateLocalEmbedding(text: string): number[] {
 }
 
 // Embeddings endpoint
-router.post('/api/v2/embeddings', async (req: Request, res: Response) => {
+router.post('/embeddings', async (req: Request, res: Response) => {
   const startTime = Date.now();
   
   try {
@@ -1150,7 +1268,7 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { limit = 50 } = req.query;
     
-    const result = await pgPool.query(`
+    const result = await asembPool.query(`
       SELECT 
         id, 
         title, 
@@ -1184,7 +1302,7 @@ router.get('/', async (req: Request, res: Response) => {
 // Get all scraped pages with metrics
 router.get('/pages', async (req: Request, res: Response) => {
   try {
-    const result = await pgPool.query(`
+    const result = await asembPool.query(`
       SELECT 
         id, 
         title, 
@@ -1202,7 +1320,7 @@ router.get('/pages', async (req: Request, res: Response) => {
     `);
     
     // Get summary statistics
-    const stats = await pgPool.query(`
+    const stats = await asembPool.query(`
       SELECT 
         COUNT(*) as total_pages,
         SUM(content_length) as total_characters,
@@ -1233,7 +1351,7 @@ router.get('/pages', async (req: Request, res: Response) => {
 router.get('/pages/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pgPool.query(`
+    const result = await asembPool.query(`
       SELECT * FROM scraped_data WHERE id = $1
     `, [id]);
     
@@ -1266,7 +1384,7 @@ router.get('/pages/:id', async (req: Request, res: Response) => {
 router.delete('/pages/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pgPool.query(`
+    const result = await asembPool.query(`
       DELETE FROM scraped_data WHERE id = $1 RETURNING id, title, url
     `, [id]);
     
@@ -1300,7 +1418,7 @@ router.delete('/pages/:id', async (req: Request, res: Response) => {
 });
 
 // Advanced scraping endpoints
-router.post('/api/v2/scraper/crawl', async (req: Request, res: Response) => {
+router.post('/crawl', async (req: Request, res: Response) => {
   try {
     const {
       url,
@@ -1381,7 +1499,7 @@ router.post('/api/v2/scraper/crawl', async (req: Request, res: Response) => {
 });
 
 // Batch scraping endpoint
-router.post('/api/v2/scraper/batch', async (req: Request, res: Response) => {
+router.post('/batch', async (req: Request, res: Response) => {
   try {
     const {
       urls,
@@ -1446,6 +1564,57 @@ router.post('/api/v2/scraper/batch', async (req: Request, res: Response) => {
   }
 });
 
+// Server-Sent Events for real-time job progress
+router.get('/job/:jobId/events', async (req: Request, res: Response) => {
+  const { jobId } = req.params;
+
+  // Set headers for SSE
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  // Send initial status
+  const jobData = await redis.get(`job:${jobId}`);
+  if (jobData) {
+    res.write(`data: ${JSON.stringify({ type: 'status', data: JSON.parse(jobData) })}\n\n`);
+  } else {
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Job not found' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Set up interval to check for updates
+  const interval = setInterval(async () => {
+    const currentJobData = await redis.get(`job:${jobId}`);
+    if (currentJobData) {
+      const job = JSON.parse(currentJobData);
+      res.write(`data: ${JSON.stringify({ type: 'status', data: job })}\n\n`);
+
+      // Stop if job is completed or failed
+      if (job.status === 'completed' || job.status === 'failed') {
+        clearInterval(interval);
+        setTimeout(() => {
+          res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+          res.end();
+        }, 1000);
+      }
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Job lost' })}\n\n`);
+      clearInterval(interval);
+      res.end();
+    }
+  }, 1000); // Check every second
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
 // Get job status
 router.get('/job/:jobId', async (req: Request, res: Response) => {
   try {
@@ -1471,7 +1640,7 @@ router.get('/job/:jobId', async (req: Request, res: Response) => {
 });
 
 // Get sitemap URLs
-router.post('/api/v2/scraper/sitemap', async (req: Request, res: Response) => {
+router.post('/sitemap', async (req: Request, res: Response) => {
   try {
     const { url } = req.body;
     
@@ -1510,10 +1679,10 @@ router.post('/api/v2/scraper/sitemap', async (req: Request, res: Response) => {
 });
 
 // Initialize tables endpoint
-router.post('/api/v2/scraper/init-table', async (req: Request, res: Response) => {
+router.post('/init-table', async (req: Request, res: Response) => {
   try {
     // Create scraped_data table
-    await pgPool.query(`
+    await asembPool.query(`
       CREATE TABLE IF NOT EXISTS scraped_data (
         id SERIAL PRIMARY KEY,
         url TEXT UNIQUE NOT NULL,
@@ -1534,7 +1703,7 @@ router.post('/api/v2/scraper/init-table', async (req: Request, res: Response) =>
     `);
     
     // Create activity_history table
-    await pgPool.query(`
+    await asembPool.query(`
       CREATE TABLE IF NOT EXISTS activity_history (
         id SERIAL PRIMARY KEY,
         operation_type TEXT NOT NULL,
@@ -1549,7 +1718,7 @@ router.post('/api/v2/scraper/init-table', async (req: Request, res: Response) =>
     `);
     
     // Create indexes
-    await pgPool.query(`
+    await asembPool.query(`
       CREATE INDEX IF NOT EXISTS idx_scraped_data_url ON scraped_data(url);
       CREATE INDEX IF NOT EXISTS idx_scraped_data_created_at ON scraped_data(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_activity_operation ON activity_history(operation_type);
@@ -1565,7 +1734,7 @@ router.post('/api/v2/scraper/init-table', async (req: Request, res: Response) =>
 });
 
 // Start scraping session
-router.post('/api/v2/scraper/start', async (req: Request, res: Response) => {
+router.post('/start', async (req: Request, res: Response) => {
   try {
     const { url, config } = req.body;
 
@@ -1591,7 +1760,7 @@ router.post('/api/v2/scraper/start', async (req: Request, res: Response) => {
 });
 
 // Pause scraping session
-router.post('/api/v2/scraper/pause', async (req: Request, res: Response) => {
+router.post('/pause', async (req: Request, res: Response) => {
   try {
     const { sessionId } = req.body;
 
@@ -1637,14 +1806,14 @@ router.get('/sessions', async (req: Request, res: Response) => {
 router.get('/dashboard/status', async (req: Request, res: Response) => {
   try {
     // Get basic system status
-    const result = await pgPool.query(`
+    const result = await asembPool.query(`
       SELECT
         COUNT(*) as total_documents,
         COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as recent_documents
       FROM documents
     `);
 
-    const scraperResult = await pgPool.query(`
+    const scraperResult = await asembPool.query(`
       SELECT
         COUNT(*) as total_pages,
         COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as recent_pages

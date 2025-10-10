@@ -76,6 +76,53 @@ export async function initializeConfigs(): Promise<void> {
   console.log('✅ All configurations loaded from environment variables');
 }
 
+// Sync API keys from environment variables to database
+export async function syncAPIKeysToDatabase(): Promise<void> {
+  console.log('🔄 Syncing API keys from environment variables to database...');
+
+  try {
+    const apiKeys = [
+      { key: 'openai.apiKey', value: process.env.OPENAI_API_KEY || '' },
+      { key: 'anthropic.apiKey', value: process.env.CLAUDE_API_KEY || '' },
+      { key: 'google.apiKey', value: process.env.GEMINI_API_KEY || '' },
+      { key: 'deepseek.apiKey', value: process.env.DEEPSEEK_API_KEY || '' },
+      { key: 'huggingface.apiKey', value: process.env.HUGGINGFACE_API_KEY || '' },
+      { key: 'google.projectId', value: process.env.GOOGLE_PROJECT_ID || '' },
+    ];
+
+    for (const apiKey of apiKeys) {
+      if (apiKey.value) {
+        // Check if key already exists
+        const existing = await asembPool.query(
+          'SELECT key FROM settings WHERE key = $1',
+          [apiKey.key]
+        );
+
+        if (existing.rows.length === 0) {
+          // Insert new key
+          await asembPool.query(
+            'INSERT INTO settings (key, value, category, description) VALUES ($1, $2, $3, $4)',
+            [apiKey.key, apiKey.value, 'api_keys', `API key for ${apiKey.key.replace('.apiKey', '').replace('.', ' ').toUpperCase()}`]
+          );
+          console.log(`✅ Added ${apiKey.key} to database`);
+        } else {
+          // Update existing key
+          await asembPool.query(
+            'UPDATE settings SET value = $1 WHERE key = $2',
+            [apiKey.value, apiKey.key]
+          );
+          console.log(`✅ Updated ${apiKey.key} in database`);
+        }
+      }
+    }
+
+    console.log('✅ API keys synced to database successfully');
+  } catch (error) {
+    console.error('❌ Failed to sync API keys to database:', error);
+    throw error;
+  }
+}
+
 // Export functions to get current configurations
 export function getCustomerDbConfig(): DatabaseConfig {
   return customerDbConfig;
@@ -107,12 +154,32 @@ let customerPool: Pool | null = null;
 export function getCustomerPool(config?: DatabaseConfig): Pool {
   if (!customerPool || config) {
     const dbConfig = config || getCustomerDbConfig();
-    customerPool = new Pool({
-      ...dbConfig,
+    // DEBUG: Fixed database name mapping issue
+    console.log('DEBUG: getCustomerPool creating pool with config:', JSON.stringify(dbConfig, null, 2));
+
+    // Map the config properties to match Pool constructor expectations
+    // The settings object uses 'name' but Pool expects 'database'
+    const poolConfig = {
+      host: dbConfig.host,
+      port: dbConfig.port,
+      database: dbConfig.name || dbConfig.database, // Handle both property names
+      user: dbConfig.user,
+      password: dbConfig.password,
+      ssl: dbConfig.ssl,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000,
+    };
+
+    console.log('DEBUG: Pool configuration:', {
+      host: poolConfig.host,
+      port: poolConfig.port,
+      database: poolConfig.database,
+      user: poolConfig.user,
+      ssl: poolConfig.ssl
     });
+
+    customerPool = new Pool(poolConfig);
   }
   return customerPool;
 }
@@ -380,14 +447,38 @@ export async function getDatabaseSettings() {
   let client;
   try {
     client = await asembPool.connect();
-    const result = await client.query(`
-      SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'customer_database'
+    // First try to get source_database (new key), if not found fallback to customer_database (old key)
+    let result = await client.query(`
+      SELECT value FROM settings WHERE key = 'source_database'
     `);
-    
-    if (result.rows.length > 0) {
-      return result.rows[0].value;
+
+    // If source_database not found, try customer_database for backward compatibility
+    if (result.rows.length === 0) {
+      console.log('DEBUG: source_database not found, trying customer_database for backward compatibility');
+      result = await client.query(`
+        SELECT value FROM settings WHERE key = 'customer_database'
+      `);
+    } else {
+      console.log('DEBUG: Found source_database setting');
     }
-    
+
+    if (result.rows.length > 0) {
+      const value = result.rows[0].value;
+      // Parse JSON if it's a string, otherwise return as-is
+      if (typeof value === 'string') {
+        try {
+          const parsed = JSON.parse(value);
+          console.log('DEBUG: Parsed database settings:', JSON.stringify(parsed, null, 2));
+          return parsed;
+        } catch (e) {
+          console.error('DEBUG: Failed to parse JSON value:', e);
+          return value;
+        }
+      }
+      console.log('DEBUG: Database settings already parsed:', JSON.stringify(value, null, 2));
+      return value;
+    }
+
     return null;
   } catch (error) {
     console.error('Failed to get database settings:', error);
@@ -427,5 +518,6 @@ export default {
   testDatabaseConnection,
   initializeAsembDatabase,
   saveDatabaseSettings,
-  getDatabaseSettings
+  getDatabaseSettings,
+  syncAPIKeysToDatabase
 };

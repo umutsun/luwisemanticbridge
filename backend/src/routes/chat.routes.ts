@@ -194,11 +194,8 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
     const userId = req.user.userId;
     console.log(`Getting chat stats for user: ${userId}`);
 
-    // Get database pool from ASEMB database connection
-    const { Pool } = require('pg');
-    const pool = new Pool({
-      connectionString: process.env.ASEMB_DATABASE_URL || 'postgresql://asemb:asemb_password@91.99.229.96:5432/asemb'
-    });
+    // Use existing database connection pool
+    const { asembPool } = await import('../config/database');
 
     // Get basic chat statistics
     const [
@@ -206,9 +203,9 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
       messagesResult,
       recentActivityResult
     ] = await Promise.all([
-      pool.query('SELECT COUNT(*) as total_conversations FROM conversations WHERE user_id = $1', [userId]),
-      pool.query('SELECT COUNT(*) as total_messages FROM messages WHERE user_id = $1', [userId]),
-      pool.query(`
+      asembPool.query('SELECT COUNT(*) as total_conversations FROM conversations WHERE user_id = $1', [userId]),
+      asembPool.query('SELECT COUNT(*) as total_messages FROM messages WHERE user_id = $1', [userId]),
+      asembPool.query(`
         SELECT COUNT(*) as recent_messages
         FROM messages
         WHERE user_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
@@ -230,10 +227,122 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
 
   } catch (error: any) {
     console.error('Get chat stats error:', error);
-    res.status(500).json({
-      error: 'Failed to get chat statistics',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
+
+    // Return default values on error to prevent frontend crashes
+    const defaultStats = {
+      totalConversations: 0,
+      totalMessages: 0,
+      recentMessages: 0,
+      avgMessagesPerConversation: 0,
+      lastUpdated: new Date().toISOString()
+    };
+
+    res.json(defaultStats);
+  }
+});
+
+/**
+ * Get dashboard statistics for admins - requires authentication
+ */
+router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    console.log('Getting dashboard stats for admin user');
+
+    // Use existing database connection pool
+    const { asembPool } = await import('../config/database');
+
+    // Get global chat statistics
+    const [
+      totalConversationsResult,
+      totalMessagesResult,
+      recentMessagesResult,
+      totalUsersResult,
+      activeUsersTodayResult,
+      avgMessagesResult
+    ] = await Promise.all([
+      asembPool.query('SELECT COUNT(*) as total_conversations FROM conversations'),
+      asembPool.query('SELECT COUNT(*) as total_messages FROM messages'),
+      asembPool.query(`
+        SELECT COUNT(*) as recent_messages
+        FROM messages
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+      `),
+      asembPool.query('SELECT COUNT(*) as total_users FROM users WHERE role = $1', ['user']),
+      asembPool.query(`
+        SELECT COUNT(DISTINCT user_id) as active_users_today
+        FROM messages
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+      `),
+      asembPool.query(`
+        SELECT AVG(message_count) as avg_messages
+        FROM (
+          SELECT COUNT(*) as message_count
+          FROM messages
+          GROUP BY conversation_id
+        ) AS conversation_stats
+      `)
+    ]);
+
+    const totalConversations = parseInt(totalConversationsResult.rows[0].total_conversations);
+    const totalMessages = parseInt(totalMessagesResult.rows[0].total_messages);
+    const recentMessages = parseInt(recentMessagesResult.rows[0].recent_messages);
+    const totalUsers = parseInt(totalUsersResult.rows[0].total_users);
+    const activeUsersToday = parseInt(activeUsersTodayResult.rows[0].active_users_today);
+    const avgMessagesPerConversation = avgMessagesResult.rows[0].avg_messages
+      ? Math.round(parseFloat(avgMessagesResult.rows[0].avg_messages))
+      : 0;
+
+    const stats = {
+      overview: {
+        total_conversations: totalConversations,
+        total_messages: totalMessages,
+        total_users: totalUsers
+      },
+      recentMessages: recentMessages,
+      avgMessagesPerConversation: avgMessagesPerConversation,
+      daily_activity: [{
+        date: new Date().toISOString().split('T')[0],
+        active_users: activeUsersToday,
+        conversations: totalConversations,
+        messages: recentMessages
+      }],
+      lastUpdated: new Date().toISOString()
+    };
+
+    console.log('Dashboard stats calculated:', stats);
+    res.json(stats);
+
+  } catch (error: any) {
+    console.error('Get dashboard stats error:', error);
+
+    // Return default values on error to prevent frontend crashes
+    const defaultStats = {
+      overview: {
+        total_conversations: 0,
+        total_messages: 0,
+        total_users: 0
+      },
+      recentMessages: 0,
+      avgMessagesPerConversation: 0,
+      daily_activity: [{
+        date: new Date().toISOString().split('T')[0],
+        active_users: 0,
+        conversations: 0,
+        messages: 0
+      }],
+      lastUpdated: new Date().toISOString()
+    };
+
+    res.json(defaultStats);
   }
 });
 
