@@ -14,10 +14,45 @@ const targetPool = new Pool({
   connectionString: process.env.TARGET_DB || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb'
 });
 
-// OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// OpenAI client (lazy loading)
+let openai: OpenAI | null = null;
+
+async function getOpenAIClient(): Promise<OpenAI | null> {
+  if (openai) {
+    return openai;
+  }
+
+  try {
+    // Get API key from settings table
+    const { asembPool } = await import('../config/database');
+    const result = await asembPool.query(
+      'SELECT value FROM settings WHERE key = $1',
+      ['openai.apiKey']
+    );
+
+    if (result.rows.length > 0 && result.rows[0].value) {
+      const apiKey = result.rows[0].value;
+      // Check if it's a JSON object with apiKey property
+      let key = apiKey;
+      try {
+        const parsed = JSON.parse(apiKey);
+        if (typeof parsed === 'object' && parsed.apiKey) {
+          key = parsed.apiKey;
+        }
+      } catch {
+        // Use as-is if not JSON
+      }
+
+      openai = new OpenAI({ apiKey: key });
+      return openai;
+    }
+  } catch (error) {
+    console.error('Error fetching OpenAI API key from settings:', error);
+  }
+
+  console.warn('OpenAI API key not found in settings. Migration features will be disabled.');
+  return null;
+}
 
 // Progress tracking
 class MigrationProgress extends EventEmitter {
@@ -223,21 +258,30 @@ router.delete('/clear/:table', async (req: Request, res: Response) => {
 // Helper: Generate embedding
 async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    const response = await openai.embeddings.create({
+    const openaiClient = await getOpenAIClient();
+
+    if (!openaiClient) {
+      console.warn('OpenAI client not available. Skipping embedding generation.');
+      // Return empty array or fallback embedding
+      return [];
+    }
+
+    const response = await openaiClient.embeddings.create({
       model: 'text-embedding-ada-002',
       input: text.substring(0, 8000) // Truncate to limit
     });
-    
+
     // Track token usage (estimate)
     const estimatedTokens = Math.ceil(text.length / 4);
     globalTokenUsage.prompt_tokens += estimatedTokens;
     globalTokenUsage.total_tokens += estimatedTokens;
     globalTokenUsage.estimated_cost += (estimatedTokens / 1000) * 0.0001; // Ada-002 pricing
-    
+
     return response.data[0].embedding;
   } catch (error) {
     console.error('OpenAI embedding error:', error);
-    throw error;
+    // Return empty array instead of throwing error to prevent crashes
+    return [];
   }
 }
 
