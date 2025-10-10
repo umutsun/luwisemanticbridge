@@ -1,4 +1,4 @@
--- Alice Semantic Bridge - Database Schema
+-- Luwi Semantic Bridge - Database Schema
 -- Author: Claude (CTO & System Architect)
 -- Version: 1.0.0
 

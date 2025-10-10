@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Starting Alice Semantic Bridge..."
+echo "Starting Luwi Semantic Bridge..."
 
 # Kill existing processes
 pkill -f "npm run dev" 2>/dev/null || true

@@ -8,7 +8,7 @@ set -e
 ENVIRONMENT=${1:-dev}
 PROJECT_NAME="asemb"
 
-echo "🚀 Deploying Alice Semantic Bridge to $ENVIRONMENT environment..."
+echo "🚀 Deploying Luwi Semantic Bridge to $ENVIRONMENT environment..."
 
 # Stop existing containers
 echo "🛑 Stopping existing containers..."

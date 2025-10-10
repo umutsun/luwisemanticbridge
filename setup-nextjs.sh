@@ -1,7 +1,7 @@
 # Next.js Project Setup Script
 # Run this to create proper Next.js structure
 
-echo "🚀 Setting up Alice Semantic Bridge as Next.js 14 project..."
+echo "🚀 Setting up Luwi Semantic Bridge as Next.js 14 project..."
 
 # Create Next.js app structure
 mkdir -p app/api/search

@@ -1,4 +1,4 @@
-# Alice Semantic Bridge - Unified Container
+# Luwi Semantic Bridge - Unified Container
 FROM node:18-alpine
 
 # Set working directory
@@ -40,7 +40,7 @@ COPY RAG-anything/ ./RAG-anything/
 
 # Create startup script
 RUN echo '#!/bin/sh\n\
-echo "Starting Alice Semantic Bridge Services..."\n\
+echo "Starting Luwi Semantic Bridge Services..."\n\
 \n\
 # Start PostgreSQL in background (if needed)\n\
 # Wait for PostgreSQL\n\

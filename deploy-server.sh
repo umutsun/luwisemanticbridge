@@ -1,8 +1,8 @@
 #!/bin/bash
-# Alice Semantic Bridge Sunucu Kurulum Script'i
+# Luwi Semantic Bridge Sunucu Kurulum Script'i
 
 echo "========================================"
-echo "Alice Semantic Bridge - Sunucu Kurulum"
+echo "Luwi Semantic Bridge - Sunucu Kurulum"
 echo "========================================"
 
 # Gerekli paketleri kontrol et

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting Alice Semantic Bridge with Docker databases..."
+echo "🚀 Starting Luwi Semantic Bridge with Docker databases..."
 
 # Start Docker databases
 echo "📊 Starting PostgreSQL and Redis containers..."

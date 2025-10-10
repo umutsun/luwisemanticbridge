@@ -1,4 +1,4 @@
-# Windows Docker Compose Configuration - Alice Semantic Bridge
+# Windows Docker Compose Configuration - Luwi Semantic Bridge
 # Optimized for Windows with host networking support
 version: '3.9'
 

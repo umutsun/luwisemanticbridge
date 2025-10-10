@@ -1,4 +1,4 @@
--- Alice Semantic Bridge - Performance Indexes
+-- Luwi Semantic Bridge - Performance Indexes
 -- Run this script in your PostgreSQL database to create performance indexes
 
 -- Enable vector extension if not already enabled

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# Alice Semantic Bridge - Docker Management Script
+# Luwi Semantic Bridge - Docker Management Script
 # =====================================================
 
 set -e
@@ -212,7 +212,7 @@ restore_database() {
 # Show help
 show_help() {
     cat << EOF
-Alice Semantic Bridge - Docker Management
+Luwi Semantic Bridge - Docker Management
 
 Usage: $0 [command] [options]
 

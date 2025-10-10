@@ -43,7 +43,7 @@ async def startup_event():
     # For this example, we will index some sample text on first query if not already indexed.
     global is_indexed
     sample_text = """
-    Alice Semantic Bridge (ASB) is an AI-powered semantic search and knowledge management system.
+    Luwi Semantic Bridge (ASB) is an AI-powered semantic search and knowledge management system.
     It uses Retrieval-Augmented Generation (RAG) to provide contextually aware answers from a knowledge base.
     The system is composed of a Node.js backend, a Next.js dashboard, and various AI microservices.
     LightRAG is being integrated to enhance its knowledge graph capabilities.

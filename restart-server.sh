@@ -2,7 +2,7 @@
 
 # Restart server with updated configuration
 
-echo "🔄 Restarting Alice Semantic Bridge server..."
+echo "🔄 Restarting Luwi Semantic Bridge server..."
 
 # Stop existing processes
 echo "🛑 Stopping existing processes..."

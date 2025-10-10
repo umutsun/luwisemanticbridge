@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# Alice Semantic Bridge - Service Status (Linux)
+# Luwi Semantic Bridge - Service Status (Linux)
 # =====================================================
 
 echo ""

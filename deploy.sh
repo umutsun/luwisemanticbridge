@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Alice Semantic Bridge Deployment Script
+# Luwi Semantic Bridge Deployment Script
 
 set -e
 

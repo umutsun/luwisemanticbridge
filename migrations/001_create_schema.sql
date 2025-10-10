@@ -1,4 +1,4 @@
--- Alice Semantic Bridge Database Schema
+-- Luwi Semantic Bridge Database Schema
 -- Phase 3 - Production Ready
 
 -- Enable pgvector extension (already enabled)

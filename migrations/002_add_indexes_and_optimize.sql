@@ -1,4 +1,4 @@
--- Alice Semantic Bridge - Index Optimization Migration
+-- Luwi Semantic Bridge - Index Optimization Migration
 -- Author: Kilo Code
 -- Date: 2025-09-01
 -- Description: Consolidates all performance indexes and adds maintenance commands

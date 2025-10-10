@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "========================================="
-echo "Alice Semantic Bridge Docker Setup"
+echo "Luwi Semantic Bridge Docker Setup"
 echo "========================================="
 
 # Ortam değişkenlerini yükle

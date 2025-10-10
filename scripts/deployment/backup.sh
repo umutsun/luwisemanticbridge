@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# Alice Semantic Bridge - Automated Backup Script
+# Luwi Semantic Bridge - Automated Backup Script
 # =====================================================
 
 set -e

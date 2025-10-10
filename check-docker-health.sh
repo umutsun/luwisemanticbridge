@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Alice Semantic Bridge Docker Health Check
+# Luwi Semantic Bridge Docker Health Check
 
-echo "Checking Alice Semantic Bridge services..."
+echo "Checking Luwi Semantic Bridge services..."
 echo "========================================="
 
 # Check containers

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Alice Semantic Bridge - Quick Status Check
+# Luwi Semantic Bridge - Quick Status Check
 
 echo "==================================="
 echo "ASB Phase 3 - Status Check"

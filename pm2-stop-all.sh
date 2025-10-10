@@ -1,6 +1,6 @@
 #!/bin/bash
 # =====================================================
-# Alice Semantic Bridge - Stop All Services (Linux)
+# Luwi Semantic Bridge - Stop All Services (Linux)
 # =====================================================
 
 echo ""

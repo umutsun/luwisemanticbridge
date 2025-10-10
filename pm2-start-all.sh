@@ -1,11 +1,11 @@
 #!/bin/bash
 # =====================================================
-# Alice Semantic Bridge - Start All Services (Linux)
+# Luwi Semantic Bridge - Start All Services (Linux)
 # =====================================================
 
 echo ""
 echo "========================================"
-echo "  Alice Semantic Bridge - Starting..."
+echo "  Luwi Semantic Bridge - Starting..."
 echo "========================================"
 echo ""
 

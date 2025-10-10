@@ -1,5 +1,5 @@
 #!/bin/bash
-# Alice Semantic Bridge Production Setup Script
+# Luwi Semantic Bridge Production Setup Script
 # This script will clone the repository, create configuration files, and start the services.
 
 # Exit immediately if a command exits with a non-zero status.
@@ -11,7 +11,7 @@ PROJECT_DIR="alice-semantic-bridge"
 DOMAIN_NAME="asemb.luwi.dev"
 
 # --- Script Start ---
-echo "🚀 Starting Alice Semantic Bridge setup for $DOMAIN_NAME..."
+echo "🚀 Starting Luwi Semantic Bridge setup for $DOMAIN_NAME..."
 
 # 1. Clone the repository
 if [ -d "$PROJECT_DIR" ]; then

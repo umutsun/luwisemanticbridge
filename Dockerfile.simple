@@ -1,4 +1,4 @@
-# Simple unified container for Alice Semantic Bridge
+# Simple unified container for Luwi Semantic Bridge
 FROM node:18-alpine
 
 WORKDIR /app
@@ -24,7 +24,7 @@ COPY frontend/ ./frontend/
 
 # Create startup script
 RUN echo '#!/bin/sh\n\
-echo "Starting Alice Semantic Bridge..."\n\
+echo "Starting Luwi Semantic Bridge..."\n\
 \n\
 # Start Backend\n\
 cd /app/backend\n\

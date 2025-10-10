@@ -2,7 +2,7 @@
 set -e
 
 echo "========================================="
-echo "Alice Semantic Bridge Starting..."
+echo "Luwi Semantic Bridge Starting..."
 echo "========================================="
 
 # Wait for PostgreSQL

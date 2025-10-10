@@ -58,7 +58,7 @@ module.exports = {
     {
       name: 'asb-frontend',
       script: 'node_modules/.bin/next',
-      args: 'start -p 3000',
+      args: 'start -p 3002',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',

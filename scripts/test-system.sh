@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Complete System Test Script
-# Tests all components of the Alice Semantic Bridge
+# Tests all components of the Luwi Semantic Bridge
 
 set -e
 
