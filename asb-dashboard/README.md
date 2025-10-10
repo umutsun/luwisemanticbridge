@@ -1,6 +1,6 @@
-# ASB Dashboard - Alice Semantic Bridge
+# ASB Dashboard - Luwi Semantic Bridge
 
-Modern dashboard interface for Alice Semantic Bridge with real-time monitoring, node management, and analytics.
+Modern dashboard interface for Luwi Semantic Bridgewith real-time monitoring, node management, and analytics.
 
 ## Features
 

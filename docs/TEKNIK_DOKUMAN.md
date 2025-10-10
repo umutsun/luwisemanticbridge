@@ -1,8 +1,8 @@
-# Alice Semantic Bridge - Teknik Dokümantasyon
+# Luwi Semantic Bridge - Teknik Dokümantasyon
 
 ## Sistem Genel Bakış
 
-Alice Semantic Bridge, Türkçe vergi ve mali mevzuat dokümanları için geliştirilmiş bir RAG (Retrieval-Augmented Generation) sistemidir. Sistem, embedding tabanlı semantik arama ve AI destekli sohbet yetenekleri sunar.
+Luwi Semantic Bridge Türkçe vergi ve mali mevzuat dokümanları için geliştirilmiş bir RAG (Retrieval-Augmented Generation) sistemidir. Sistem, embedding tabanlı semantik arama ve AI destekli sohbet yetenekleri sunar.
 
 ## Mimari
 

@@ -32,7 +32,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchResults, setSearchResults] = useState([]);
   const [appConfig, setAppConfig] = useState({
-    name: 'Alice Semantic Bridge',
+    name: 'Luwi Semantic Bridge',
     description: 'AI-Powered Knowledge Management System'
   });
   const [stats, setStats] = useState({
@@ -332,7 +332,7 @@ export default function Dashboard() {
       <footer className="bg-white border-t mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center text-sm text-gray-500">
-            <span>© 2025 Alice Semantic Bridge</span>
+            <span>© 2025 Luwi Semantic Bridge/span>
             <div className="flex space-x-4">
               <span className={`flex items-center space-x-1 ${
                 systemHealth.services.asemb_database.status === 'healthy' ? 'text-green-600' : 'text-red-600'

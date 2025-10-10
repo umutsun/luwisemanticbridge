@@ -143,7 +143,7 @@ export default function ChatInterface() {
     setMessages([{
       id: '1',
       role: 'assistant',
-      content: 'Merhaba! Ben Alice Semantic Bridge AI asistanınız. Size nasıl yardımcı olabilirim?',
+      content: 'Merhaba! Ben Luwi Semantic Bridge AI asistanınız. Size nasıl yardımcı olabilirim?',
       timestamp: new Date(),
     }]);
     setShowSuggestions(true);
@@ -158,7 +158,7 @@ export default function ChatInterface() {
             <div className="flex items-center gap-2">
               <Brain className="w-8 h-8 text-primary" />
               <div>
-                <h1 className="text-xl font-bold">Alice Semantic Bridge</h1>
+                <h1 className="text-xl font-bold">Luwi Semantic Bridge/h1>
                 <p className="text-xs text-muted-foreground">Mali Müşavir Asistanı</p>
               </div>
             </div>

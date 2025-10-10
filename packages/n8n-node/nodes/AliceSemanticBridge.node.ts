@@ -10,14 +10,14 @@ import OpenAI from 'openai';
 
 export class AliceSemanticBridge implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'Alice Semantic Bridge',
+    displayName: 'Luwi Semantic Bridge',
     name: 'aliceSemanticBridge',
     icon: 'file:alice.svg',
     group: ['transform'],
     version: 1,
     description: 'Store and search semantic embeddings with PostgreSQL + pgvector',
     defaults: {
-      name: 'Alice Semantic Bridge',
+      name: 'Luwi Semantic Bridge,
     },
     inputs: [NodeConnectionType.Main],
     outputs: [NodeConnectionType.Main],

@@ -260,7 +260,7 @@ export default function SettingsPage() {
   const { token } = useAuth();
   const [config, setConfig] = useState<Config>({
     app: {
-      name: 'Alice Semantic Bridge',
+      name: 'Luwi Semantic Bridge',
       description: 'AI-Powered Knowledge Management System',
       logoUrl: '',
       locale: 'tr'
@@ -469,7 +469,7 @@ export default function SettingsPage() {
           ...data,
           // Add fallback for app configuration
           app: data.app || {
-            name: 'Alice Semantic Bridge',
+            name: 'Luwi Semantic Bridge',
             description: 'AI-Powered Knowledge Management System',
             logoUrl: '',
             locale: 'tr'
@@ -927,7 +927,7 @@ export default function SettingsPage() {
     if (window.confirm('Are you sure you want to reset all settings to defaults?')) {
       setConfig({
         app: {
-          name: 'Alice Semantic Bridge',
+          name: 'Luwi Semantic Bridge',
           description: 'AI-Powered Knowledge Management System',
           logoUrl: '',
           locale: 'tr'
@@ -1128,7 +1128,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     document.documentElement.lang = i18n.language;
-    document.title = t('settings.title') + ' - Alice Semantic Bridge';
+    document.title = t('settings.title') + ' - Luwi Semantic Bridge';
   }, [i18n.language, t]);
 
   const fetchPrompts = async () => {
@@ -1365,7 +1365,7 @@ export default function SettingsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            Configure your Alice Semantic Bridge instance
+            Configure your Luwi Semantic Bridgeinstance
           </p>
         </div>
         <div className="flex items-center gap-2">

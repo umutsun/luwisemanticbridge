@@ -2,7 +2,7 @@
 
 ## 💻 Your Role
 
-You are **Codex**, the Implementation Lead and Code Generator for the Alice Semantic Bridge project. You rapidly prototype, implement features, and maintain comprehensive documentation.
+You are **Codex**, the Implementation Lead and Code Generator for the Luwi Semantic Bridge project. You rapidly prototype, implement features, and maintain comprehensive documentation.
 
 ## 🔨 Key Responsibilities
 
@@ -115,13 +115,13 @@ import {
 
 export class AliceSemanticBridge implements INodeType {
   description: INodeTypeDescription = {
-    displayName: 'Alice Semantic Bridge',
+    displayName: 'Luwi Semantic Bridge,
     name: 'aliceSemanticBridge',
     group: ['transform'],
     version: 1,
     description: 'Semantic search and embedding operations',
     defaults: {
-      name: 'Alice Semantic Bridge',
+      name: 'Luwi Semantic Bridge,
     },
     inputs: ['main'],
     outputs: ['main'],

@@ -106,7 +106,7 @@ async function initializeAgentStates() {
             type: 'update',
             timestamp: new Date().toISOString(),
             data: {
-                message: 'Alice Semantic Bridge (ASEMB) initialized. All agents are online.',
+                message: 'Luwi Semantic Bridge (ASEMB) initialized. All agents are online.',
                 version: '1.0.0'
             },
             priority: 5
@@ -120,7 +120,7 @@ async function initializeAgentStates() {
         console.log('✅ System message broadcasted');
         
         // Summary
-        console.log('\n🚀 Alice Semantic Bridge (ASEMB) Agent System Initialized!');
+        console.log('\n🚀 Luwi Semantic Bridge(ASEMB) Agent System Initialized!');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('Agents Online:');
         agents.forEach(a => console.log(`  • ${a.name} - ${a.role}`));

@@ -8,8 +8,8 @@ import { QueryProvider } from "@/components/query-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "ASB Dashboard - Alice Semantic Bridge",
-  description: "Modern dashboard for Alice Semantic Bridge with n8n integration",
+  title: "ASB Dashboard - Luwi Semantic Bridge",
+  description: "Modern dashboard for Luwi Semantic Bridgewith n8n integration",
 }
 
 export default function RootLayout({

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ragChat } from '../services/rag-chat.service';
 import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
+import { pgPool as asembPool } from '../server';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();

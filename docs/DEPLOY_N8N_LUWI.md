@@ -170,7 +170,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 - Sol menüden "Nodes" sekmesine git
 - Arama kutusuna "Alice" yaz
 - Şu node'lar görünmeli:
-  - Alice Semantic Bridge
+  - Luwi Semantic Bridge
   - PgHybrid Query
   - Text Chunk
   - Web Scrape Enhanced
@@ -227,7 +227,7 @@ Settings > Credentials > Add Credential:
         "operation": "upsert",
         "sourceId": "test-source"
       },
-      "name": "Alice Semantic Bridge",
+      "name": "Luwi Semantic Bridge,
       "type": "n8n-nodes-alice-semantic-bridge.aliceSemanticBridge",
       "position": [650, 300]
     }
@@ -248,7 +248,7 @@ Settings > Credentials > Add Credential:
       "main": [
         [
           {
-            "node": "Alice Semantic Bridge",
+            "node": "Luwi Semantic Bridge,
             "type": "main",
             "index": 0
           }

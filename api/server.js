@@ -620,7 +620,7 @@ app.get('/api/v2/health/config', (req, res) => {
         connected: redis && redis.status === 'ready'
       },
       app_config: {
-        name: 'Alice Semantic Bridge',
+        name: 'Luwi Semantic Bridge',
         version: '1.0.0',
         environment: process.env.NODE_ENV || 'development'
       }
@@ -669,7 +669,7 @@ app.get('/api/v2/settings', async (req, res) => {
           }
         },
         app_config: {
-          name: 'Alice Semantic Bridge',
+          name: 'Luwi Semantic Bridge,
           version: '1.0.0',
           environment: process.env.NODE_ENV || 'development'
         }
@@ -702,7 +702,7 @@ app.get('/api/v2/config', async (req, res) => {
 
     res.json({
       app: {
-        name: dbSettings['app.name'] || 'Alice Semantic Bridge',
+        name: dbSettings['app.name'] || 'Luwi Semantic Bridge,
         description: dbSettings['app.description'] || 'AI-Powered Knowledge Management System',
         logoUrl: dbSettings['app.logoUrl'] || '',
         locale: dbSettings['app.locale'] || 'tr'
@@ -877,7 +877,7 @@ app.get('/api/v2/rag/prompts', (req, res) => {
         {
           id: 'system',
           name: 'System Prompt',
-          prompt: "Sen Alice Semantic Bridge asistanısın. Kullanıcılara sistem hakkında bilgi ver ve onlara yardımcı ol.",
+          prompt: "Sen Luwi Semantic Bridgeasistanısın. Kullanıcılara sistem hakkında bilgi ver ve onlara yardımcı ol.",
           isActive: true,
           temperature: 0.7,
           maxTokens: 1000
@@ -915,7 +915,7 @@ app.get('/api/v2/chatbot/settings', (req, res) => {
     model: process.env.AI_PROVIDER || 'openai',
     temperature: 0.1,
     maxTokens: 2048,
-    systemPrompt: "Sen Alice Semantic Bridge asistanısın. Kullanıcılara sistem hakkında bilgi ver ve onlara yardımcı ol.",
+    systemPrompt: "Sen Luwi Semantic Bridgeasistanısın. Kullanıcılara sistem hakkında bilgi ver ve onlara yardımcı ol.",
     features: {
       ragEnabled: true,
       semanticSearch: true,
@@ -972,7 +972,7 @@ app.post('/api/v2/chatbot/chat', async (req, res) => {
 
     // Simple echo response for now - in real implementation this would use LLM
     const response = {
-      message: `I understand you're asking about: "${message}". This is a test response from the Alice Semantic Bridge chatbot.`,
+      message: `I understand you're asking about: "${message}". This is a test response from the Luwi Semantic Bridgechatbot.`,
       suggestions: [
         "Tell me more about embeddings",
         "How to configure API keys?",
@@ -998,7 +998,7 @@ app.post('/api/v2/chatbot/chat', async (req, res) => {
 // Start the server
 const PORT = process.env.PORT || process.env.API_PORT || 8083;
 const httpServer = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Alice Semantic Bridge API running on port ${PORT}`);
+  console.log(`Luwi Semantic BridgeAPI running on port ${PORT}`);
 });
 
 // Socket.IO Server for notifications - attach to existing Express server
@@ -1025,7 +1025,7 @@ if (process.env.ENABLE_WEBSOCKET === 'true') {
     // Send initial connection message
     socket.emit('notification', {
       type: 'connection',
-      message: 'Connected to Alice Semantic Bridge notifications',
+      message: 'Connected to Luwi Semantic Bridgenotifications',
       timestamp: new Date().toISOString()
     });
 

@@ -14,7 +14,7 @@ import { createHash } from 'crypto';
 
 export class AliceSemanticBridgeEnhanced implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Alice Semantic Bridge Enhanced',
+		displayName: 'Luwi Semantic Bridge Enhanced',
 		name: 'aliceSemanticBridgeEnhanced',
 		icon: 'file:alice-bridge.svg',
 		group: ['transform'],
@@ -22,7 +22,7 @@ export class AliceSemanticBridgeEnhanced implements INodeType {
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'AI-powered multi-agent semantic bridge with intelligent optimization',
 		defaults: {
-			name: 'Alice Semantic Bridge Enhanced',
+			name: 'Luwi Semantic BridgeEnhanced',
 		},
 		inputs: [NodeConnectionType.Main],
 		outputs: [NodeConnectionType.Main],
@@ -393,7 +393,7 @@ export class AliceSemanticBridgeEnhanced implements INodeType {
 			} else {
 				throw new NodeOperationError(
 					this.getNode(),
-					`Alice Semantic Bridge error: ${error.message}`
+					`Luwi Semantic Bridgeerror: ${error.message}`
 				);
 			}
 		} finally {

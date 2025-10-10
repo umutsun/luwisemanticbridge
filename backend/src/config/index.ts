@@ -1,5 +1,5 @@
 /**
- * Centralized Configuration for Alice Semantic Bridge Backend
+ * Centralized Configuration for Luwi Semantic Bridge Backend
  * All hardcoded values should be moved here
  */
 

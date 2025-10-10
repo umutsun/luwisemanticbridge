@@ -1,4 +1,4 @@
-// Alice Semantic Bridge - Main Server
+// Luwi Semantic Bridge - Main Server
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -312,7 +312,7 @@ async function startServer() {
   httpServer.listen(PORT, () => {
     console.log(`
 ╔═══════════════════════════════════════════╗
-║   Alice Semantic Bridge API Server        ║
+║   Luwi Semantic BridgeAPI Server        ║
 ╠═══════════════════════════════════════════╣
 ║   Status: RUNNING                         ║
 ║   Port: ${PORT}                             ║

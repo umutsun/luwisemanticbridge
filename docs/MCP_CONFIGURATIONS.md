@@ -1,4 +1,4 @@
-# MCP Konfigürasyonları - Alice Semantic Bridge
+# MCP Konfigürasyonları - Luwi Semantic Bridge
 
 ## 📁 Konfigürasyon Dosyaları
 
@@ -131,4 +131,4 @@ MIT
 
 ## 👤 Yazar
 
-Alice - Alice Semantic Bridge MCP Integration
+Alice - Luwi Semantic BridgeMCP Integration

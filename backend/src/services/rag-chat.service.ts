@@ -214,9 +214,9 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       console.log(`Performing semantic search with pgvector...`);
 
       // Get search settings from database
-      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '30');
+      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '15');
       const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || await settingsService.getSetting('minResults') || '5');
-      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.1');
+      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.014');
 
       // Use semantic search to find related content
       let allResults = [];

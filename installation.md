@@ -1,6 +1,6 @@
-# Alice Semantic Bridge - Production Deployment Guide
+# Luwi Semantic Bridge - Production Deployment Guide
 
-This guide provides step-by-step instructions to deploy the Alice Semantic Bridge application on a CentOS/RHEL-based server using Docker behind a host Nginx reverse proxy. This is the recommended setup for servers hosting multiple websites.
+This guide provides step-by-step instructions to deploy the Luwi Semantic Bridgeapplication on a CentOS/RHEL-based server using Docker behind a host Nginx reverse proxy. This is the recommended setup for servers hosting multiple websites.
 
 ## 1. Prerequisites
 
@@ -44,14 +44,9 @@ POSTGRES_DB=asemb
 # Redis Settings
 REDIS_PASSWORD=your_secure_redis_password
 
-# Port Configuration (IMPORTANT - Current Setup)
-FRONTEND_PORT=3002
+# Port Configuration (Optional - defaults will be used if not set)
+FRONTEND_PORT=3000
 BACKEND_PORT=8083
-API_PORT=8083
-WEBSOCKET_PORT=8083
-
-# Database URL
-DATABASE_URL=postgresql://postgres:your_secure_password_here@91.99.229.96:5432/asemb
 
 # n8n Credentials
 N8N_USER=admin
@@ -195,7 +190,7 @@ docker-compose -f docker-compose.dev.yml up -d
 ```
 
 Access Points:
-- Frontend: http://localhost:3002
+- Frontend: http://localhost:3000
 - API: http://localhost:8083
 - Database: localhost:5432
 - Redis: localhost:6379

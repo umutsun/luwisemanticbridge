@@ -1,15 +1,15 @@
-# 🚀 Alice Semantic Bridge (ASEMB)
+# 🚀 Luwi Semantic Bridge (ASEMB)
 ## AI-Powered Context Engine & Knowledge Management System
 
 ---
 
 ## 📖 Genel Bakış
 
-**Alice Semantic Bridge**, kuruluşların bilgi kaynaklarını akıllı bir şekilde yönetmesini, anlamlı arama yapmasını ve yapay zeka destekli içgörüler elde etmesini sağlayan yeni nesil bir **Context Engine ve AI-Powered Knowledge Management** platformudur.
+**Luwi Semantic Bridge*, kuruluşların bilgi kaynaklarını akıllı bir şekilde yönetmesini, anlamlı arama yapmasını ve yapay zeka destekli içgörüler elde etmesini sağlayan yeni nesil bir **Context Engine ve AI-Powered Knowledge Management** platformudur.
 
 ### 💡 Değer Önerisi
 
-Günümüzde işletmeler, PDF'ler, web siteleri, veritabanları ve dahili belgeler gibi çok sayıda farklı kaynakta dağınık halde bulunan bilgi yığınlarıyla karşı karşıyadır. Alice Semantic Bridge, bu karmaşık bilgi mimarisini:
+Günümüzde işletmeler, PDF'ler, web siteleri, veritabanları ve dahili belgeler gibi çok sayıda farklı kaynakta dağınık halde bulunan bilgi yığınlarıyla karşı karşıyadır. Luwi Semantic Bridge bu karmaşık bilgi mimarisini:
 
 - ✅ **Tek bir noktadan erişilebilir** hale getirir
 - ✅ **Anlamsal olarak aranabilir** kılar
@@ -376,12 +376,12 @@ Alice Semantic açık kaynak bir projedir ve katkılarınızı bekliyoruz!
 
 ## 📄 Lisans
 
-Alice Semantic Bridge, MIT lisansı altında dağıtılmaktadır.
+Luwi Semantic Bridge MIT lisansı altında dağıtılmaktadır.
 
 ```
 MIT License
 
-Copyright (c) 2024 Alice Semantic Bridge Contributors
+Copyright (c) 2024 Luwi Semantic BridgeContributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -392,7 +392,7 @@ in the Software without restriction...
 
 ## 🎉 Sonuç
 
-Alice Semantic Bridge, kuruluşunuzun bilgi kaynaklarını **akıllı bir hafızaya** dönüştüren, **yapay zeka gücünü** iş süreçlerinize entegre eden ve **ölçeklenebilir mimarisinden** ödün vermeyen modern bir **Context Engine** ve **Knowledge Management** platformudur.
+Luwi Semantic Bridge kuruluşunuzun bilgi kaynaklarını **akıllı bir hafızaya** dönüştüren, **yapay zeka gücünü** iş süreçlerinize entegre eden ve **ölçeklenebilir mimarisinden** ödün vermeyen modern bir **Context Engine** ve **Knowledge Management** platformudur.
 
 ### Hemen Başlayın!
 

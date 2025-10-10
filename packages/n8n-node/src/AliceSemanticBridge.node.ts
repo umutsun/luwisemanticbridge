@@ -14,7 +14,7 @@ const openAiCache: { [key: string]: OpenAI } = {};
 
 /**
  * @class AliceSemanticBridge
- * @description The main n8n node for Alice Semantic Bridge operations.
+ * @description The main n8n node for Luwi Semantic Bridge operations.
  * This node serves as a central hub for semantic search, data ingestion (embedding),
  * and management of vector data within a PostgreSQL database using pgvector.
  * It is designed to be modular and work with other n8n nodes.
@@ -24,14 +24,14 @@ const openAiCache: { [key: string]: OpenAI } = {};
  */
 export class AliceSemanticBridge implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Alice Semantic Bridge',
+		displayName: 'Luwi Semantic Bridge,
 		name: 'aliceSemanticBridge',
 		icon: 'fa:brain',
 		group: ['transform'],
 		version: 1,
 		description: 'A node for semantic search, embedding, and RAG operations.',
 		defaults: {
-			name: 'Alice Semantic Bridge',
+			name: 'Luwi Semantic Bridge,
 		},
 		inputs: ['main'],
 		outputs: ['main'],

@@ -74,7 +74,7 @@ export default function ChatInterface() {
     title: 'ASB Hukuki Asistan',
     subtitle: 'Yapay Zeka Asistanınız',
     logoUrl: '',
-    welcomeMessage: 'Merhaba! Ben Alice Semantic Bridge AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
+    welcomeMessage: 'Merhaba! Ben Luwi Semantic Bridge AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
     placeholder: 'Sorunuzu yazın...',
     primaryColor: '#3B82F6',
     activeChatModel: 'deepseek/deepseek-chat'
@@ -99,7 +99,7 @@ export default function ChatInterface() {
     {
       id: '1',
       role: 'assistant',
-      content: 'Merhaba! Ben Alice Semantic Bridge AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim. Nasıl yardımcı olabilirim?',
+      content: 'Merhaba! Ben Luwi Semantic BridgeAI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim. Nasıl yardımcı olabilirim?',
       timestamp: new Date(),
     }
   ]);
@@ -345,7 +345,7 @@ export default function ChatInterface() {
     setMessages([{
       id: '1',
       role: 'assistant',
-      content: 'Merhaba! Ben Alice Semantic Bridge AI asistanınız. Size nasıl yardımcı olabilirim?',
+      content: 'Merhaba! Ben Luwi Semantic BridgeAI asistanınız. Size nasıl yardımcı olabilirim?',
       timestamp: new Date(),
     }]);
     setShowSuggestions(true);

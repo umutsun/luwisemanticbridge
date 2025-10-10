@@ -1,10 +1,10 @@
-# 🚀 Alice Semantic Bridge - Quick Start Guide
+# 🚀 Luwi Semantic Bridge - Quick Start Guide
 
 ## 📌 For All Agents: START HERE!
 
-This guide helps Claude, Gemini, and Codex quickly understand and start working on the Alice Semantic Bridge project.
+This guide helps Claude, Gemini, and Codex quickly understand and start working on the Luwi Semantic Bridgeproject.
 
-## 🎯 What is Alice Semantic Bridge?
+## 🎯 What is Luwi Semantic Bridge
 
 **One Sentence**: A N8N community node that enables semantic search across multiple data sources (Google Docs, PostgreSQL, Web) with a visual dashboard for management.
 

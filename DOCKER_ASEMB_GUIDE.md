@@ -1,6 +1,6 @@
-# Alice Semantic Bridge (ASEMB) Docker Kurulum Rehberi
+# Luwi Semantic Bridge (ASEMB) Docker Kurulum Rehberi
 
-Bu dokümantasyon Alice Semantic Bridge (ASEMB) projesini hem yerel Windows hem de sunucu ortamında Docker ile nasıl çalıştıracağınızı açıklar.
+Bu dokümantasyon Luwi Semantic Bridge(ASEMB) projesini hem yerel Windows hem de sunucu ortamında Docker ile nasıl çalıştıracağınızı açıklar.
 
 ## Özellikler
 
