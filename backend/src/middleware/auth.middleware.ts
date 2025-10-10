@@ -11,7 +11,12 @@ export interface AuthenticatedRequest extends Request {
 export const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+
+    // Also check cookies if no token in header
+    if (!token) {
+      token = req.cookies?.token || req.cookies?.['auth-token'] || req.cookies?.['asb_token'];
+    }
 
     if (!token) {
       return res.status(401).json({

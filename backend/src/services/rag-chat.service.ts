@@ -215,6 +215,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       // Get search settings from database
       const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '30');
+      const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || await settingsService.getSetting('minResults') || '5');
       const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.1');
 
       // Use semantic search to find related content
@@ -239,9 +240,22 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       console.log(`Found ${searchResults.length} results with similarity >= ${minThreshold}%`);
 
-      // If no results meet threshold, take top results anyway
+      // Ensure minimum results requirement
+      if (searchResults.length < minResults && allResults.length > 0) {
+        const additionalResults = allResults
+          .filter(result => {
+            const score = result.score || (result.similarity_score * 100) || 0;
+            return score < minThreshold;
+          })
+          .slice(0, minResults - searchResults.length);
+
+        searchResults = [...searchResults, ...additionalResults];
+        console.log(`Added ${additionalResults.length} results to meet minimum requirement of ${minResults}`);
+      }
+
+      // If still no results, take top matches anyway
       if (searchResults.length === 0 && allResults.length > 0) {
-        searchResults = allResults.slice(0, 10);
+        searchResults = allResults.slice(0, minResults);
         console.log('No results above threshold, showing top matches');
       }
 

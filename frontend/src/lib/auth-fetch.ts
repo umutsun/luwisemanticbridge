@@ -12,7 +12,25 @@ export const getStoredToken = (): string | null => {
   if (typeof window === 'undefined') {
     return null;
   }
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+
+  // First try localStorage
+  let token = localStorage.getItem(TOKEN_STORAGE_KEY);
+
+  // If not in localStorage, try cookie
+  if (!token) {
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (name === 'auth-token' || name === 'asb_token') {
+        token = value;
+        // Store in localStorage for consistency
+        localStorage.setItem(TOKEN_STORAGE_KEY, token);
+        break;
+      }
+    }
+  }
+
+  return token;
 };
 
 export const setStoredToken = (token: string | null) => {

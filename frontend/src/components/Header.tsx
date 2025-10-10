@@ -123,9 +123,13 @@ export default function Header() {
     try {
       // Use API_BASE_URL for proper cross-origin requests
       const headers = {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       };
+
+      // Add token if available
+      if (token) {
+        (headers as any)['Authorization'] = `Bearer ${token}`;
+      }
 
       const [dashboardResponse, healthResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v2/dashboard`, { headers }),

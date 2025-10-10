@@ -75,7 +75,7 @@ export class SemanticSearchService {
     }
 
     if (normalized.includes('gemini') || normalized.includes('google')) {
-      return 'gemini';
+      return 'google';
     }
 
     if (normalized.includes('deepseek')) {
@@ -91,13 +91,13 @@ export class SemanticSearchService {
 
   private getDefaultEmbeddingModel(provider: string): string {
     switch (provider) {
-      case 'gemini':
+      case 'google':
         return 'text-embedding-004';
       case 'openai':
       case 'deepseek':
         return 'text-embedding-3-small';
       default:
-        return 'text-embedding-3-small';
+        return 'text-embedding-004';
     }
   }
 
@@ -189,6 +189,14 @@ export class SemanticSearchService {
 
   private async loadEmbeddingSettings(): Promise<void> {
     try {
+      // Since we've migrated embeddings to use Google text-embedding-004 (768 dimensions),
+      // we'll hardcode the provider to google to ensure compatibility
+      const provider = 'google';
+      const model = 'text-embedding-004';
+      const targetDimensions = 768;
+
+      console.log('[SemanticSearch] Using Google embedding provider for 768-dimension embeddings (migrated database)');
+
       const result = await asembPool.query(
         'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [
@@ -199,11 +207,7 @@ export class SemanticSearchService {
       );
 
       const settings = result.rows.reduce((acc: any, row: any) => {
-        if (row.key === 'embedding_provider' || row.key === 'llmSettings.embeddingProvider' || row.key === 'embeddings.provider') {
-          acc.embeddingprovider = row.value;
-        } else if (row.key === 'embedding_model' || row.key === 'llmSettings.embeddingModel' || row.key === 'embeddings.model') {
-          acc.embeddingmodel = row.value;
-        } else if (row.key === 'openai_api_key' || row.key === 'openai.apiKey') {
+        if (row.key === 'openai_api_key' || row.key === 'openai.apiKey') {
           acc.openaiapi = row.value;
         } else if (row.key === 'google_api_key' || row.key === 'google.apiKey') {
           acc.googleapi = row.value;
@@ -213,9 +217,6 @@ export class SemanticSearchService {
         }
         return acc;
       }, {});
-
-      const provider = this.normalizeProvider(settings.embeddingprovider || process.env.EMBEDDING_PROVIDER || this.embeddingSettings.provider);
-      const model = settings.embeddingmodel || process.env.EMBEDDING_MODEL || this.getDefaultEmbeddingModel(provider);
 
       this.embeddingSettings = {
         provider,
@@ -230,13 +231,15 @@ export class SemanticSearchService {
       console.log('[SemanticSearch] Embedding settings loaded', {
         provider: this.embeddingSettings.provider,
         model: this.embeddingSettings.model,
+        targetDimensions,
         hasGoogleKey: !!this.embeddingSettings.googleApiKey,
         hasOpenAIKey: !!this.embeddingSettings.openaiApiKey
       });
     } catch (error) {
       console.warn('[SemanticSearch] Failed to load embedding settings from database, using defaults:', error);
-      const provider = this.normalizeProvider(process.env.EMBEDDING_PROVIDER || this.embeddingSettings.provider);
-      const model = process.env.EMBEDDING_MODEL || this.getDefaultEmbeddingModel(provider);
+      // Default to Google embeddings (768 dimensions) for compatibility
+      const provider = 'google';
+      const model = 'text-embedding-004';
       this.embeddingSettings = {
         provider,
         model,
@@ -308,6 +311,56 @@ export class SemanticSearchService {
       hash = hash & hash;
     }
     return Math.abs(hash);
+  }
+
+  private extractKeywords(text: string, query: string): string[] {
+    // Common Turkish tax/legal terms to look for
+    const legalTerms = [
+      'vergi', 'kdv', 'katma değer vergisi', 'kurumlar vergisi', 'gelir vergisi',
+      'stopaj', 'geçici vergi', 'vergi ziyaı', 'usulsüzlük', 'kaçakçılık',
+      'vergi incelemesi', 'müfettiş', 'tarh', 'zamanaşımı', 'beyanname',
+      'mükellef', 'vergi dairesi', 'defter', 'fatura', 'günlük kasa',
+      'beyan', 'ödeme', 'faiz', 'ceza', 'tarhiyat', 'matrah',
+      'kanun', 'tebliğ', 'genel tebliğ', 'sirküler', 'karar',
+      'danıştay', 'yargıtay', 'mahkeme', 'dava', 'itiraz',
+      'sosyal güvenlik', 'sgk', 'bağkur', 'emeklilik', 'işsizlik'
+    ];
+
+    // Extract words from text
+    const words = text.toLowerCase()
+      .replace(/[^\w\sçğıöşü]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2);
+
+    // Find legal terms in text
+    const foundTerms = legalTerms.filter(term =>
+      text.toLowerCase().includes(term.toLowerCase())
+    );
+
+    // Extract important words from query
+    const queryWords = query.toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 3)
+      .slice(0, 3);
+
+    // Extract capitalized words (potential entities)
+    const capitalizedWords = text.match(/\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\b/g) || [];
+
+    // Combine and deduplicate
+    const allKeywords = [
+      ...foundTerms.slice(0, 3),  // Prioritize legal terms
+      ...queryWords.slice(0, 2),  // Add query terms
+      ...capitalizedWords.slice(0, 2)  // Add some entities
+    ];
+
+    // Filter and return unique keywords
+    return [...new Set(allKeywords)]
+      .filter(keyword =>
+        keyword.length > 2 &&
+        keyword.length < 30 &&
+        !['ve', 'ile', 'için', 'göre', 'üzerine', 'kadar', 'olarak', 'sonra', 'önce'].includes(keyword.toLowerCase())
+      )
+      .slice(0, 5);  // Limit to 5 keywords
   }
 
   async keywordSearch(query: string, limit: number = 10) {
@@ -433,13 +486,13 @@ export class SemanticSearchService {
         SELECT
           ue.id::text as id,
           COALESCE(ue.metadata->>'title', ue.content::text) as title,
-          ue.content as excerpt,
+          COALESCE(ue.content, ue.metadata->>'content', ue.metadata->>'text', '') as excerpt,
           COALESCE(ue.metadata->>'table', 'unknown') as source_table,
           ue.source_id,
           ue.metadata,
           1 - (ue.embedding <=> $1::vector) as similarity_score,
           CASE
-            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.15
+            WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.15
             WHEN $5::boolean AND ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
           END as keyword_boost
@@ -449,7 +502,7 @@ export class SemanticSearchService {
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
-            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.15
+            WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.15
             WHEN $5::boolean AND ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
           END DESC
@@ -467,12 +520,18 @@ export class SemanticSearchService {
       ]);
       console.timeEnd(queryId);
 
-      return result.rows.map(row => ({
-        ...row,
-        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
-        relevanceScore: parseFloat(row.similarity_score),
-        content: row.excerpt
-      }));
+      return result.rows.map(row => {
+        // Extract keywords from content
+        const keywords = this.extractKeywords(row.excerpt || '', query);
+
+        return {
+          ...row,
+          score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
+          relevanceScore: parseFloat(row.similarity_score),
+          content: row.excerpt,
+          keywords: keywords
+        };
+      });
     } catch (error) {
       if (queryTimerStarted) {
         console.timeEnd(queryId);
@@ -518,12 +577,12 @@ export class SemanticSearchService {
       const searchQuery = `
         SELECT
           ue.id::text as id,
-          ue.content as excerpt,
+          COALESCE(ue.content, ue.metadata->>'content', ue.metadata->>'text', '') as excerpt,
           ue.source_table,
           ue.source_id,
           1 - (ue.embedding <=> $1::vector) as similarity_score,
           CASE
-            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.2
+            WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.2
             WHEN $5::boolean AND ue.source_table ILIKE $3 THEN 0.15
             ELSE 0
           END as keyword_boost
@@ -533,7 +592,7 @@ export class SemanticSearchService {
         ORDER BY
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
-            WHEN $5::boolean AND ue.content ILIKE $3 THEN 0.2
+            WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.2
             WHEN $5::boolean AND ue.source_table ILIKE $3 THEN 0.15
             ELSE 0
           END DESC
@@ -551,13 +610,19 @@ export class SemanticSearchService {
       ]);
       console.timeEnd(queryId);
 
-      return result.rows.map(row => ({
-        ...row,
-        title: row.source_table ? `${row.source_table} - ID: ${row.source_id}` : `Document - ID: ${row.source_id}`,
-        score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
-        relevanceScore: parseFloat(row.similarity_score),
-        content: row.excerpt
-      }));
+      return result.rows.map(row => {
+        // Extract keywords from content
+        const keywords = this.extractKeywords(row.excerpt || '', query);
+
+        return {
+          ...row,
+          title: row.source_table ? `${row.source_table} - ID: ${row.source_id}` : `Document - ID: ${row.source_id}`,
+          score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
+          relevanceScore: parseFloat(row.similarity_score),
+          content: row.excerpt,
+          keywords: keywords
+        };
+      });
     } catch (error) {
       if (queryTimerStarted) {
         console.timeEnd(queryId);

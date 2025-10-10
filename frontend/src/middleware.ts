@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Public routes that don't require authentication
-const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/api/auth'];
+const publicRoutes = ['/login', '/register', '/forgot-password', '/api/auth'];
 
 // Admin only routes
 const adminRoutes = ['/admin', '/api/admin'];
@@ -14,8 +14,22 @@ export function middleware(request: NextRequest) {
   // Check if route is public
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
   
-  // If no token and trying to access protected route
-  if (!token && !isPublicRoute) {
+  // Special handling for root route - check if user has valid session
+  if (pathname === '/') {
+    // If no token in cookies, check if we have one in localStorage via a header
+    if (!token) {
+      // Try to get token from localStorage (via a custom header)
+      const authHeader = request.headers.get('authorization');
+      const localToken = authHeader?.replace('Bearer ', '');
+
+      if (!localToken) {
+        const url = new URL('/login', request.url);
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+  // For other protected routes
+  else if (!token && !isPublicRoute) {
     const url = new URL('/login', request.url);
     url.searchParams.set('from', pathname);
     return NextResponse.redirect(url);
@@ -37,9 +51,9 @@ export function middleware(request: NextRequest) {
         return response;
       }
 
-      // Check admin routes
+      // Check admin routes - allow admin and manager roles
       const isAdminRoute = adminRoutes.some(route => pathname.startsWith(route));
-      if (isAdminRoute && payload.role !== 'admin') {
+      if (isAdminRoute && !['admin', 'manager'].includes(payload.role || 'user')) {
         return NextResponse.redirect(new URL('/unauthorized', request.url));
       }
 

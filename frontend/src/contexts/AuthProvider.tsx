@@ -144,6 +144,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setStoredToken(data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Also set token in cookie
+      document.cookie = `auth-token=${data.accessToken}; path=/; max-age=86400; SameSite=Lax`;
+
       setToken(data.accessToken);
       setUser(data.user);
 
@@ -162,6 +165,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('user');
     localStorage.removeItem('asb_user');
     localStorage.removeItem('asb_token');
+
+    // Remove token from cookies
+    document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
 
     setToken(null);
     setUser(null);

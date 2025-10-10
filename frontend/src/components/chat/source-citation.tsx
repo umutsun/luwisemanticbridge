@@ -23,17 +23,13 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
   // Helper function to get source table display name
   const getSourceTableName = (sourceTable?: string) => {
-    const tableNames: { [key: string]: string } = {
-      'OZELGELER': 'Özelgeler',
-      'DANISTAYKARARLARI': 'Danıştay Kararları',
-      'MAKALELER': 'Makaleler',
-      'SORUCEVAP': 'Soru Cevap',
-      'Kaynak': 'Genel Kaynak',
-      'embeddings': 'Dokümanlar',
-      'chunks': 'Metin Parçaları',
-      'sources': 'Kaynaklar'
-    };
-    return tableNames[sourceTable || ''] || sourceTable || 'Kaynak';
+    if (!sourceTable) return 'Kaynak';
+
+    // Convert to title case for better readability
+    return sourceTable
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   };
 
   // Helper function to get icon based on source table

@@ -37,8 +37,8 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
     // Get real stats if possible
     try {
       const [convResult, msgResult] = await Promise.all([
-        asembPool.query('SELECT COUNT(*) as count FROM conversations WHERE user_id = $1', [userId]),
-        asembPool.query('SELECT COUNT(*) as count FROM messages WHERE user_id = $1', [userId])
+        asembPool.query('SELECT COUNT(*) as count FROM conversations'),
+        asembPool.query('SELECT COUNT(*) as count FROM messages')
       ]);
 
       dashboardData.stats.totalConversations = parseInt(convResult.rows[0].count);
