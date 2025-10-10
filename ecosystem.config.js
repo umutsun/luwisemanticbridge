@@ -68,18 +68,18 @@ module.exports = {
       // Environment
       env: {
         NODE_ENV: 'development',
-        PORT: 3000,
-        NEXT_PUBLIC_PORT: 3000,
+        PORT: 3002,
+        NEXT_PUBLIC_PORT: 3002,
         NEXT_PUBLIC_API_URL: 'http://localhost:8083',
-        NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+        NEXT_PUBLIC_APP_URL: 'http://localhost:3002',
         NEXT_PUBLIC_WEBSOCKET_URL: 'ws://localhost:8083',
       },
       env_production: {
         NODE_ENV: 'production',
-        PORT: 3000,
-        NEXT_PUBLIC_PORT: 3000,
+        PORT: 3002,
+        NEXT_PUBLIC_PORT: 3002,
         NEXT_PUBLIC_API_URL: 'http://localhost:8083',
-        NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+        NEXT_PUBLIC_APP_URL: 'http://localhost:3002',
         NEXT_PUBLIC_WEBSOCKET_URL: 'ws://localhost:8083',
       },
 
