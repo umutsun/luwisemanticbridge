@@ -1499,9 +1499,6 @@ export default function EmbeddingsManagerPage() {
                                         />
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded font-mono">
-                                            {table.database}
-                                        </span>
                                         <span className="text-sm text-muted-foreground">
                                             {table.embeddedRecords?.toLocaleString('tr-TR') || '0'} / {table.totalRecords?.toLocaleString('tr-TR') || '0'}
                                         </span>
@@ -1650,41 +1647,6 @@ export default function EmbeddingsManagerPage() {
                           )}
                         </SelectContent>
                       </Select>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Vektör Boyutu (Chunk Size)</Label>
-                    {progress?.status === 'processing' || progress?.status === 'paused' ? (
-                      <div className="p-2 border rounded-md bg-muted">
-                        <div className="text-sm">
-                          <span className="font-mono">{currentChunkSize || chunkSize}</span> karakter
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Provider limiti: {availableProviders.find(p => p.id === (currentEmbeddingMethod || embeddingMethod))?.chunkSize || 'N/A'} karakter
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <input
-                          type="range"
-                          min="100"
-                          max="8192"
-                          step="100"
-                          value={chunkSize}
-                          onChange={(e) => setChunkSize(parseInt(e.target.value))}
-                          disabled={progress?.status === 'processing' || progress?.status === 'paused'}
-                          className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary disabled:[&::-webkit-slider-thumb]:bg-muted-foreground/50"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>100</span>
-                          <span className="font-mono text-foreground">{chunkSize}</span>
-                          <span>8192</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Provider limiti: {availableProviders.find(p => p.id === embeddingMethod)?.chunkSize || 'N/A'} karakter
-                        </div>
-                      </div>
                     )}
                   </div>
 
@@ -1920,9 +1882,6 @@ export default function EmbeddingsManagerPage() {
                           >
                             <div className="font-medium flex items-center gap-2">
                               {table.displayName}
-                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded font-mono">
-                                {table.database}
-                              </span>
                               {isFullyEmbedded && (
                                 <CheckCircle className="w-4 h-4 text-green-600" />
                               )}

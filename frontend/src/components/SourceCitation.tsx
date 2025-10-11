@@ -32,15 +32,21 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
 
     const extraction = extractSemanticKeywords(context);
 
-    // Get the source table name as the primary keyword
-    const sourceTableName = getTableDisplayName(source.sourceTable || 'Konu');
+    // Generate keywords from extraction
+    const keywords = generateTagKeywords(extraction);
 
-    // Generate other keywords and filter out duplicates
-    const keywords = generateTagKeywords(extraction)
-      .filter(keyword => keyword !== sourceTableName); // Remove source table name from regular keywords
+    // Filter out source table names and generic terms
+    const sourceTableDisplayName = getTableDisplayName(source.sourceTable || '');
+    const filteredKeywords = keywords.filter(keyword => {
+      // Remove source table name
+      if (keyword === sourceTableDisplayName) return false;
+      // Remove generic terms
+      const genericTerms = ['Hukuki', 'Yasal', 'Meşru', 'Geçerli', 'İdari', 'Yargı'];
+      return !genericTerms.includes(keyword) && keyword.length > 3;
+    });
 
-    // Return source table name first, then other keywords, limited to 3 total
-    return [sourceTableName, ...keywords].slice(0, 3);
+    // Return only content-based keywords, limited to 3
+    return filteredKeywords.slice(0, 3);
   };
 
   const handleKeywordClick = (source: Source, keyword: string) => {
@@ -76,19 +82,14 @@ const SourceCitation: React.FC<SourceCitationProps> = ({
 
   
   const getTableDisplayName = (tableName: string) => {
-    const upperTable = tableName?.toUpperCase();
-    switch(upperTable) {
-      case 'OZELGELER':
-        return 'Özelge';
-      case 'DANISTAYKARARLARI':
-        return 'Danıştay';
-      case 'MAKALELER':
-        return 'Makale';
-      case 'SORUCEVAP':
-        return 'S/C';
-      default:
-        return 'Konu';
-    }
+    // Convert table name to readable format dynamically
+    if (!tableName) return 'Document';
+
+    // Convert snake_case to Title Case
+    return tableName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   };
 
   const formatSourceTitle = (source: Source) => {

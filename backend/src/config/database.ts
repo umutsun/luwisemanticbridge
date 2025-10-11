@@ -61,12 +61,14 @@ const testConnection = async (retries = 3) => {
 
 testConnection();
 
-// Database table names configuration
-export const TABLE_NAMES = {
-  SORUCEVAP: 'Soru-Cevap',
-  OZELGELER: 'Özelgeler',
-  MAKALELER: 'Makaleler',
-  DANISTAYKARARLARI: 'Danıştay Kararları'
-};
+// Database table names configuration - dynamically loaded
+// Note: Use tableConfigService to get actual table names dynamically
+export const TABLE_NAMES = {} as { [key: string]: string };
+
+// Helper function to get table names dynamically
+export async function getTableNames(): Promise<{ [key: string]: string }> {
+  const { tableConfigService } = await import('./table-config.service');
+  return await tableConfigService.getTableNames();
+}
 
 export default pool;

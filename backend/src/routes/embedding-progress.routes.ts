@@ -883,6 +883,7 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
         // Calculate actual embedded records from the database for better accuracy
         let actualEmbeddedCount = 0;
         try {
+          // Try to get count from unified_embeddings first
           const embeddedResult = await pgPool.query(`
             SELECT COUNT(DISTINCT(metadata->>'source_id')) as count
             FROM unified_embeddings
@@ -890,7 +891,8 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
           `, [progress.document_type]);
           actualEmbeddedCount = parseInt(embeddedResult.rows[0]?.count || '0');
         } catch (error) {
-          console.error('Error getting actual embedded count:', error);
+          // If unified_embeddings doesn't exist, use the progress value
+          actualEmbeddedCount = progress.processed_chunks || 0;
         }
 
         // Get total records for the current table

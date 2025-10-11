@@ -172,8 +172,8 @@ export default function ChatInterface() {
         setSettingsLoaded(true);
       });
 
-    // Fetch available models
-    fetchAvailableModels();
+    // Fetch available models with force refresh to avoid caching
+    fetchAvailableModels(true);
   }, []);
 
   // Fetch available models
@@ -198,7 +198,7 @@ export default function ChatInterface() {
         const models = [];
 
         if (settings.openai?.apiKey) {
-          console.log('Adding OpenAI models');
+          console.log('OpenAI API key found, adding OpenAI models');
           models.push({
             provider: 'openai',
             model: 'openai/gpt-4o',
@@ -206,7 +206,7 @@ export default function ChatInterface() {
             description: 'OpenAI GPT'
           });
         } else {
-          console.log('OpenAI API key not found');
+          console.log('OpenAI API key NOT found, skipping OpenAI models');
         }
         if (settings.anthropic?.apiKey) {
           models.push({
@@ -240,6 +240,19 @@ export default function ChatInterface() {
         }
 
         setAvailableModels(models);
+
+        // Set current model based on chatbotSettings.activeChatModel
+        if (chatbotSettings.activeChatModel && models.length > 0) {
+          const activeModel = models.find(m => m.model === chatbotSettings.activeChatModel);
+          if (activeModel) {
+            setCurrentModel(activeModel.displayName);
+              console.log(`Set active model: ${activeModel.displayName} (${activeModel.model})`);
+          } else {
+            // Fallback to first available model
+            setCurrentModel(models[0].displayName);
+              console.log(`Set fallback model: ${models[0].displayName}`);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to fetch models:', error);
@@ -560,10 +573,7 @@ export default function ChatInterface() {
                   className="flex items-center gap-2"
                 >
                   <UserCircle className="w-4 h-4" />
-                  <span className="hidden sm:inline text-sm">
-                    {user?.name || user?.email || 'Kullanıcı'}
-                  </span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                 </Button>
 
                 {isUserDropdownOpen && (
@@ -626,13 +636,7 @@ export default function ChatInterface() {
                               <div className={`h-2 w-2 rounded-full ${
                                 isActive
                                   ? 'bg-green-500'
-                                  : model.provider === 'anthropic'
-                                    ? 'bg-purple-500'
-                                    : model.provider === 'google'
-                                      ? 'bg-blue-500'
-                                      : model.provider === 'openai'
-                                        ? 'bg-green-500'
-                                        : 'bg-orange-500'
+                                  : 'bg-gray-400'
                               }`} />
                               <div className="flex-1">
                                 <p className={`text-sm font-medium ${isActive ? 'text-green-700 dark:text-green-300' : ''}`}>

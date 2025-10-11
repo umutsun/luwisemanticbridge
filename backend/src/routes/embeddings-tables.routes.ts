@@ -59,32 +59,108 @@ router.get('/all', async (req, res) => {
         );
         const totalRecords = parseInt(recordCount.rows[0].count);
 
-        // Initialize embedded count to 0 (will be updated if embeddings table exists)
+        // Initialize embedded count to 0 (will be updated if embeddings exist)
         let embeddedCount = 0;
 
-        // Check if there's an embeddings table for this source table
+        // Check unified_embeddings table using exact table names from database
         try {
-          // Check for embeddings table with pattern: embeddings_<table_name>
-          const embeddingTableName = `embeddings_${tableName.toLowerCase()}`;
-          const embeddingTableCheck = await ragChatbotPool.query(`
-            SELECT EXISTS (
-              SELECT FROM information_schema.tables
-              WHERE table_schema = 'public'
-              AND table_name = $1
-            );
-          `, [embeddingTableName]);
+          // Get all unique source_table values and their counts
+          const allSourcesResult = await asembClient.query(`
+            SELECT source_table, COUNT(DISTINCT source_id) as count
+            FROM unified_embeddings
+            GROUP BY source_table
+          `);
 
-          if (embeddingTableCheck.rows[0].exists) {
-            // Count embeddings in the embeddings table
-            const embeddingCountResult = await ragChatbotPool.query(`
-              SELECT COUNT(*) as count
-              FROM public.${embeddingTableName}
-            `);
-            embeddedCount = parseInt(embeddingCountResult.rows[0].count);
+          // Group embeddings by normalized table name (case-insensitive and Turkish character insensitive)
+          const tableGroups = {};
+
+          // First, group all similar table names together
+          for (const source of allSourcesResult.rows) {
+            const normalizedSource = source.source_table
+              .toLowerCase()
+              .replace(/ö/g, 'o')
+              .replace(/ü/g, 'u')
+              .replace(/ı/g, 'i')
+              .replace(/ğ/g, 'g')
+              .replace(/ş/g, 's')
+              .replace(/ç/g, 'c');
+
+            const normalizedTableName = tableName
+              .toLowerCase()
+              .replace(/ö/g, 'o')
+              .replace(/ü/g, 'u')
+              .replace(/ı/g, 'i')
+              .replace(/ğ/g, 'g')
+              .replace(/ş/g, 's')
+              .replace(/ç/g, 'c');
+
+            // If this source matches our table (after normalization), add to group
+            if (normalizedSource === normalizedTableName ||
+                normalizedSource === normalizedTableName.replace(/_/g, '') ||
+                normalizedSource.replace(/_/g, '') === normalizedTableName) {
+              if (!tableGroups[normalizedTableName]) {
+                tableGroups[normalizedTableName] = {
+                  total: 0,
+                  sources: []
+                };
+              }
+              tableGroups[normalizedTableName].total += parseInt(source.count) || 0;
+              tableGroups[normalizedTableName].sources.push({
+                name: source.source_table,
+                count: parseInt(source.count) || 0
+              });
+            }
+          }
+
+          // Get the total for this table
+          const normalizedTableName = tableName
+            .toLowerCase()
+            .replace(/ö/g, 'o')
+            .replace(/ü/g, 'u')
+            .replace(/ı/g, 'i')
+            .replace(/ğ/g, 'g')
+            .replace(/ş/g, 's')
+            .replace(/ç/g, 'c');
+
+          if (tableGroups[normalizedTableName]) {
+            embeddedCount = tableGroups[normalizedTableName].total;
+            console.log(`Found ${embeddedCount} total embeddings for table ${tableName} from:`,
+              tableGroups[normalizedTableName].sources.map(s => `${s.name}(${s.count})`).join(', '));
           }
         } catch (error) {
-          console.log(`Could not get embedding count for ${tableName}:`, error.message);
-          embeddedCount = 0;
+          // Silently handle error - don't show "relation does not exist" error
+          if (error.message.includes('does not exist')) {
+            console.log(`unified_embeddings table does not exist, checking individual embedding tables`);
+          } else {
+            console.log(`Could not get unified embedding count for ${tableName}:`, error.message);
+          }
+        }
+
+        // If no records in unified_embeddings, check for separate embeddings table
+        if (embeddedCount === 0) {
+          try {
+            // Check for embeddings table with pattern: embeddings_<table_name>
+            const embeddingTableName = `embeddings_${tableName.toLowerCase()}`;
+            const embeddingTableCheck = await ragChatbotPool.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
+                AND table_name = $1
+              );
+            `, [embeddingTableName]);
+
+            if (embeddingTableCheck.rows[0].exists) {
+              // Count embeddings in the embeddings table
+              const embeddingCountResult = await ragChatbotPool.query(`
+                SELECT COUNT(*) as count
+                FROM public.${embeddingTableName}
+              `);
+              embeddedCount = parseInt(embeddingCountResult.rows[0].count);
+            }
+          } catch (error) {
+            console.log(`Could not get embedding count for ${tableName}:`, error.message);
+            embeddedCount = 0;
+          }
         }
 
         tables.push({

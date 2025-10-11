@@ -519,7 +519,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       10
     );
     const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
-    const enableLLMGeneration = false; // DISABLE LLM generation for performance
+    const enableLLMGeneration = true; // ENABLE LLM generation for natural language questions
 
     console.log(`🚀 Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for performance)`);
 
@@ -616,12 +616,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         // Generate dynamic question based on content and category
         let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
 
-        // Only generate LLM content if explicitly enabled (opt-in)
+        // Generate LLM content if explicitly enabled
         if (enableLLMGeneration) {
           try {
             console.time(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
-            // Skip LLM question generation for performance
-            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
+            const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
             processedContent = llmResult.processedContent;
             generatedQuestion = llmResult.generatedQuestion;
             console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
@@ -729,27 +728,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
     return categoryTemplates[Math.floor(Math.random() * categoryTemplates.length)];
   }
 
+  
   /**
    * Generate LLM-processed content and question from excerpt
-   * DISABLED FOR PERFORMANCE - Returns content as-is
    */
   private async generateContentAndQuestion(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
-    // Performance optimization: Skip LLM call for question generation
-    const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
-    const generatedQuestion = ''; // No question generation for speed
-
-    console.log(`[Performance] Skipping question generation for: ${title.substring(0, 30)}...`);
-
-    return {
-      processedContent: cleanExcerpt,
-      generatedQuestion
-    };
-  }
-
-  /**
-   * Generate LLM-processed content and question from excerpt (DISABLED)
-   */
-  private async generateContentAndQuestion_DISABLED(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
     try {
       console.log(`🤖 Attempting to generate question for: ${title.substring(0, 30)}...`);
       console.time(`LLM processing for: ${title.substring(0, 30)}...`);
@@ -1151,15 +1134,19 @@ Başlık: ${title}
 
         const cleanExcerpt = this.stripHtml(result.excerpt || result.content || '');
 
-        // DISABLE LLM generation for related topics for performance
+        // Enable LLM generation for related topics
         let processedContent = cleanExcerpt;
         let generatedQuestion = '';
 
         try {
-          console.log(`[Performance] Skipping LLM for related topic: ${title.substring(0, 30)}...`);
-          // Completely skip LLM processing
+          console.log(`🤖 Processing related topic with LLM: ${title.substring(0, 30)}...`);
+          const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
+          processedContent = llmResult.processedContent;
+          generatedQuestion = llmResult.generatedQuestion;
         } catch (error) {
           console.warn('LLM processing for related topic failed, using fallback:', error);
+          // Generate fallback question
+          generatedQuestion = cleanExcerpt.length > 50 ? `${title} ile ilgili detaylı bilgi alabilir miyim?` : `${title} hakkında bilgi verebilir misiniz?`;
         }
 
         formattedResults.push({
@@ -1289,22 +1276,21 @@ Başlık: ${title}
 
         // Generate LLM-processed content and question
         let processedContent = cleanExcerpt;
-        // Generate question based on content language (detect Turkish vs other)
-        const isTurkishContent = /[çğıöşüÇĞİÖŞÜ]/.test(cleanExcerpt) ||
-                                 /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
-        const questionTemplate = isTurkishContent ?
-          `${title} hakkında detaylı bilgi verir misiniz?` :
-          `Can you provide detailed information about ${title}?`;
-        let generatedQuestion = questionTemplate;
+        let generatedQuestion = '';
 
         try {
-          console.log(`🤖 Processing paginated result: ${title.substring(0, 30)}...`);
-          // Skip LLM question generation for performance
-            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
+          console.log(`🤖 Processing paginated result with LLM: ${title.substring(0, 30)}...`);
+          const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
           processedContent = llmResult.processedContent;
           generatedQuestion = llmResult.generatedQuestion;
         } catch (error) {
           console.warn('LLM processing for paginated result failed, using fallback:', error);
+          // Generate fallback question based on content language
+          const isTurkishContent = /[çğıöşüÇĞİÖŞÜ]/.test(cleanExcerpt) ||
+                                   /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
+          generatedQuestion = isTurkishContent ?
+            `${title} hakkında detaylı bilgi verir misiniz?` :
+            `Can you provide detailed information about ${title}?`;
         }
 
         formattedResults.push({
@@ -1492,8 +1478,8 @@ Başlık: ${title}
     // Generate LLM content if enabled
     if (enableLLMGeneration) {
       try {
-        // Skip LLM question generation for performance
-            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
+        console.log(`🤖 Processing source ${idx + 1} with LLM: ${cleanTitle.substring(0, 30)}...`);
+        const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
         processedContent = llmResult.processedContent;
         generatedQuestion = llmResult.generatedQuestion;
       } catch (error) {

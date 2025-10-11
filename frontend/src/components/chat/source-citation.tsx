@@ -82,49 +82,97 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   const extractTags = (source: Source): string[] => {
     const tags: string[] = [];
 
-    // Add category if available
-    if (source.category) {
-      tags.push(source.category);
-    }
-
-    // Extract keywords from title
+    // Extract from title - just get unique words
     if (source.title) {
-      // Remove common words and extract meaningful terms
-      const titleWords = source.title
+      const words = source.title
         .toLowerCase()
-        .replace(/[^\w\sçğıöşü]/g, ' ')
         .split(/\s+/)
         .filter(word => word.length > 3)
-        .filter(word => !['için','hakkında','ile','ve','veya','bu','bir','çok','üzerinde','kadar'].includes(word));
-
-      tags.push(...titleWords.slice(0, 3));
+        .slice(0, 3);
+      tags.push(...words);
     }
 
-    // Extract keywords from excerpt
+    // Extract from excerpt - just get unique words
     if (source.excerpt) {
-      const excerptWords = source.excerpt
+      const words = source.excerpt
         .toLowerCase()
-        .replace(/[^\w\sçğıöşü]/g, ' ')
         .split(/\s+/)
         .filter(word => word.length > 4)
-        .filter(word => !['için','hakkında','ile','ve','veya','bu','bir','çok','üzerinde','kadar','göre','yapılmaktadır','edilmektedir'].includes(word));
-
-      tags.push(...excerptWords.slice(0, 2));
+        .slice(0, 2);
+      tags.push(...words);
     }
 
-    // Return unique tags, excluding duplicates, all lowercase
-    return [...new Set(tags)].map(tag => tag.toLowerCase()).slice(0, 5);
+    // Return unique tags, max 5
+    return [...new Set(tags)].slice(0, 5);
   };
 
   // Generate a follow-up question based on the excerpt
   const generateFollowUpQuestion = (excerpt: string, title: string): string => {
-    // Extract the main concept from the excerpt
+    // Extract key information from excerpt
+    const excerptText = excerpt.toLowerCase();
+
+    // Look for specific patterns in the excerpt
+    const hasPercentage = excerptText.includes('%');
+    const hasAmount = /\d+/.test(excerptText);
+    const hasCondition = excerptText.includes('şart') || excerptText.includes('koşul') || excerptText.includes('gerektirir');
+    const hasException = excerptText.includes('muaf') || excerptText.includes('istisna');
+    const hasDate = excerptText.match(/\d{4}/);
+
+    // Extract important phrases
     const sentences = excerpt.split('.').filter(s => s.trim().length > 20);
+
     if (sentences.length > 0) {
-      const mainSentence = sentences[0].trim();
-      return `${title} konusunda detaylı bilgi: "${mainSentence.substring(0, 100)}..."`;
+      const firstSentence = sentences[0].trim();
+
+      // If it contains percentage
+      if (hasPercentage) {
+        const percentageMatch = excerptText.match(/\d+%?/);
+        if (percentageMatch) {
+          return `${percentageMatch[0]} oranının uygulama şartları nelerdir?`;
+        }
+      }
+
+      // If it mentions conditions
+      if (hasCondition) {
+        const keyWords = firstSentence.split(' ').filter(w => w.length > 5).slice(0, 2);
+        if (keyWords.length > 0) {
+          return `${keyWords[0]} için gerekli şartlar?`;
+        }
+      }
+
+      // If it mentions exceptions
+      if (hasException) {
+        return 'Bu durumda istisnalar nelerdir?';
+      }
+
+      // Extract the main subject from the sentence
+      const words = firstSentence.split(' ');
+      const subjectWords = [];
+
+      for (let i = 3; i < words.length; i++) {
+        const word = words[i].toLowerCase().replace(/[^\w]/g, '');
+        if (word.length > 4 && !['için', 'hakkında', 'ile', 'göre', 'kadar', 'üzerinde', 'olan', 'olarak'].includes(word)) {
+          subjectWords.push(word);
+          if (subjectWords.length >= 2) break;
+        }
+      }
+
+      if (subjectWords.length > 0) {
+        const subject = subjectWords.join(' ').charAt(0).toUpperCase() + subjectWords.join(' ').slice(1);
+        return `${subject} hakkında detaylı bilgi`;
+      }
     }
-    return `${title} hakkında daha fazla bilgi`;
+
+    // Fallback to title-based question
+    if (title) {
+      const titleWords = title.split(' ').filter(w => w.length > 4);
+      if (titleWords.length > 0) {
+        const mainWord = titleWords[0].replace(/[^\w]/g, '');
+        return `${mainWord.charAt(0).toUpperCase() + mainWord.slice(1)} nedir?`;
+      }
+    }
+
+    return 'Bu konu hakkında daha fazla bilgi';
   };
 
   
@@ -217,7 +265,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                             <span
                               key={tagIndex}
                               className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
-                              onClick={() => onExcerptClick?.(`${tag} hakkında bilgi ver`)}
+                              onClick={() => onExcerptClick?.(tag)}
                             >
                               <Tag className="w-2.5 h-2.5" />
                               {tag}
