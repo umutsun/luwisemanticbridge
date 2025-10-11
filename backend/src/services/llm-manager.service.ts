@@ -33,8 +33,8 @@ export class LLMManager {
     maxTokens: 4096
   };
   private embeddingConfig: { provider: string; model: string } = {
-    provider: (process.env.EMBEDDING_PROVIDER as string || 'openai').toLowerCase(),
-    model: process.env.EMBEDDING_MODEL as string || 'text-embedding-3-small'
+    provider: 'openai',  // Force OpenAI for embeddings since DeepSeek doesn't support them
+    model: 'text-embedding-3-small'
   };
 
   static getInstance(): LLMManager {
@@ -93,7 +93,7 @@ export class LLMManager {
       apiKey: process.env.DEEPSEEK_API_KEY || '',
       model: 'deepseek-chat',
       isInitialized: false,
-      supportsEmbeddings: false
+      supportsEmbeddings: false  // DeepSeek doesn't support embeddings
     });
   }
 
@@ -391,7 +391,16 @@ export class LLMManager {
   async generateEmbedding(text: string, options: { provider?: string; model?: string } = {}): Promise<number[]> {
     await this.refreshSettingsIfNeeded();
 
-    const preferredProvider = this.normalizeProviderName(options.provider || this.embeddingConfig.provider);
+    // Force embedding provider to be one that supports embeddings
+    let preferredProvider = options.provider || this.embeddingConfig.provider;
+    preferredProvider = this.normalizeProviderName(preferredProvider);
+
+    // If requested provider doesn't support embeddings, skip it
+    if (!this.providerSupportsEmbeddings(preferredProvider)) {
+      console.warn(`[LLMManager] Provider ${preferredProvider} doesn't support embeddings, using fallback...`);
+      preferredProvider = this.embeddingConfig.provider; // Use default embedding provider
+    }
+
     const providerOrder = this.getEmbeddingProviderOrder(preferredProvider);
     const errors: string[] = [];
 
@@ -402,6 +411,7 @@ export class LLMManager {
       }
 
       if (!this.providerSupportsEmbeddings(provider)) {
+        console.log(`[LLMManager] Skipping ${provider} - doesn't support embeddings`);
         continue;
       }
 
@@ -437,8 +447,7 @@ export class LLMManager {
     }
 
     switch (provider) {
-      case 'openai':
-      case 'deepseek': {
+      case 'openai': {
         const response = await prov.client.embeddings.create({
           model: model || prov.embeddingModel || 'text-embedding-3-small',
           input: text

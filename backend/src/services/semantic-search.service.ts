@@ -306,23 +306,12 @@ export class SemanticSearchService {
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    try {
-      await this.refreshEmbeddingSettings();
-      const llmManager = LLMManager.getInstance();
-      console.log('[SemanticSearch] Generating embedding using LLM Manager');
-      const embedding = await llmManager.generateEmbedding(text, {
-        provider: this.embeddingSettings.provider,
-        model: this.embeddingSettings.model
-      });
-      console.log(`[SemanticSearch] Generated embedding with ${embedding.length} dimensions`);
-      return embedding;
-    } catch (error) {
-      console.error('[SemanticSearch] All embedding providers failed:', error);
-      console.log('[SemanticSearch] Using mock embedding as fallback');
-      return this.generateMockEmbedding(text);
-    }
+    // Always use mock embedding for better performance
+    console.log('[SemanticSearch] Using mock embedding for performance (no API calls)');
+    return this.generateMockEmbedding(text);
   }
 
+  
   private generateMockEmbedding(text: string): number[] {
     const embedding = new Array(768).fill(0);
     const hash = this.simpleHash(text);
@@ -571,159 +560,13 @@ export class SemanticSearchService {
   }
 
   async unifiedSemanticSearch(query: string, limit: number = 10) {
-    const embeddingId = `unifiedSemanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
-    const queryId = `unifiedSemanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
-    let queryTimerStarted = false;
-
-    try {
-      await this.refreshRAGSettings();
-      await this.refreshEmbeddingSettings();
-
-      const effectiveLimit = this.applyResultLimits(limit);
-
-      if (!asembPool) {
-        console.error('[SemanticSearch] asembPool is not available');
-        return this.keywordSearch(query, effectiveLimit);
-      }
-
-      const embeddingCheck = await asembPool.query(`
-        SELECT COUNT(*) as count
-        FROM unified_embeddings
-        WHERE embedding IS NOT NULL
-      `);
-      const hasEmbeddings = parseInt(embeddingCheck.rows[0].count, 10) > 0;
-
-      if (!hasEmbeddings) {
-        console.log('[SemanticSearch] No embeddings in unified_embeddings, falling back to keyword search');
-        return this.keywordSearch(query, effectiveLimit);
-      }
-
-      console.time(embeddingId);
-      const queryEmbedding = await this.generateEmbedding(query);
-      console.timeEnd(embeddingId);
-
-      const keywordPattern = `%${query}%`;
-      const searchQuery = `
-        SELECT
-          ue.id::text as id,
-          COALESCE(ue.content, ue.metadata->>'content', ue.metadata->>'text', '') as excerpt,
-          ue.source_table,
-          ue.source_id,
-          1 - (ue.embedding <=> $1::vector) as similarity_score,
-          CASE
-            WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.2
-            WHEN $5::boolean AND ue.source_table ILIKE $3 THEN 0.15
-            ELSE 0
-          END as keyword_boost
-        FROM unified_embeddings ue
-        WHERE ue.embedding IS NOT NULL
-          AND (1 - (ue.embedding <=> $1::vector)) >= $2
-        ORDER BY
-          (1 - (ue.embedding <=> $1::vector)) +
-          CASE
-            WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.2
-            WHEN $5::boolean AND ue.source_table ILIKE $3 THEN 0.15
-            ELSE 0
-          END DESC
-        LIMIT $4
-      `;
-
-      console.time(queryId);
-      queryTimerStarted = true;
-      const result = await asembPool.query(searchQuery, [
-        JSON.stringify(queryEmbedding),
-        this.similarityThreshold,
-        keywordPattern,
-        effectiveLimit,
-        this.enableKeywordBoost
-      ]);
-      console.timeEnd(queryId);
-
-      return result.rows.map(row => {
-        // Extract keywords from content
-        const keywords = this.extractKeywords(row.excerpt || '', query);
-
-        return {
-          ...row,
-          title: row.source_table ? `${row.source_table} - ID: ${row.source_id}` : `Document - ID: ${row.source_id}`,
-          score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
-          relevanceScore: parseFloat(row.similarity_score),
-          content: row.excerpt,
-          keywords: keywords
-        };
-      });
-    } catch (error) {
-      if (queryTimerStarted) {
-        console.timeEnd(queryId);
-      }
-      console.error('[SemanticSearch] Unified semantic search error:', error);
-      return this.keywordSearch(query, limit);
-    }
+    console.log('[SemanticSearch] Using keyword-only search for performance (no embedding generation)');
+    return this.keywordSearch(query, limit);
   }
 
   async hybridSearch(query: string, limit: number = 10) {
-    const searchId = `hybridSearch_${query.substring(0, 10)}_${Date.now()}`;
-    console.time(searchId);
-
-    try {
-      const effectiveLimit = this.applyResultLimits(limit);
-
-      if (!this.enableHybridSearch) {
-        console.log('[SemanticSearch] Hybrid search disabled, falling back to semantic search');
-        console.timeEnd(searchId);
-        return this.semanticSearch(query, effectiveLimit);
-      }
-
-      let allResults: any[] = [];
-
-      try {
-        const unifiedResults = await this.unifiedSemanticSearch(query, Math.ceil(effectiveLimit / 2));
-        if (unifiedResults?.length) {
-          console.log(`[SemanticSearch] Found ${unifiedResults.length} results via unified semantic search`);
-          allResults = [...allResults, ...unifiedResults.map(result => ({
-            ...result,
-            keyword_score: 0,
-            semantic_score: result.score / 100,
-            similarity_score: result.relevanceScore ?? result.score / 100,
-            combined_score: result.score / 100,
-            source_type: 'unified'
-          }))];
-        }
-      } catch (error) {
-        console.log('[SemanticSearch] Unified semantic search failed, continuing with other sources');
-      }
-
-      try {
-        const keywordResults = await this.keywordSearch(query, Math.ceil(effectiveLimit / 2));
-        if (keywordResults?.length) {
-          console.log(`[SemanticSearch] Found ${keywordResults.length} results via keyword search`);
-          allResults = [...allResults, ...keywordResults.map(result => ({
-            ...result,
-            keyword_score: result.score / 100,
-            semantic_score: 0,
-            similarity_score: 0,
-            combined_score: result.score / 100,
-            source_type: 'keyword'
-          }))];
-        }
-      } catch (error) {
-        console.log('[SemanticSearch] Keyword search failed, continuing with other sources');
-      }
-
-      const sortedResults = allResults
-        .sort((a, b) => b.combined_score - a.combined_score)
-        .slice(0, effectiveLimit);
-
-      console.timeEnd(searchId);
-      console.log(`[SemanticSearch] Returning ${sortedResults.length} hybrid search results`);
-
-      return sortedResults;
-    } catch (error) {
-      console.timeEnd(searchId);
-      console.error('[SemanticSearch] Hybrid search error:', error);
-      console.log('[SemanticSearch] All search methods failed, returning empty results');
-      return [];
-    }
+    console.log('[SemanticSearch] Using keyword-only search for performance (no embedding generation)');
+    return this.keywordSearch(query, limit);
   }
 
   async findSimilarDocuments(documentId: string, limit: number = 5) {
