@@ -282,9 +282,10 @@ router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: Authen
       `),
       asembPool.query('SELECT COUNT(*) as total_users FROM users WHERE role = $1', ['user']),
       asembPool.query(`
-        SELECT COUNT(DISTINCT user_id) as active_users_today
-        FROM messages
-        WHERE created_at > NOW() - INTERVAL '24 hours'
+        SELECT COUNT(DISTINCT c.user_id) as active_users_today
+        FROM messages m
+        JOIN conversations c ON m.conversation_id = c.id
+        WHERE m.created_at > NOW() - INTERVAL '24 hours'
       `),
       asembPool.query(`
         SELECT AVG(message_count) as avg_messages
