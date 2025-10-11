@@ -22,7 +22,8 @@ import {
   ChevronDown,
   LogOut,
   UserCircle,
-  Cpu
+  Cpu,
+  Plus
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -268,6 +269,19 @@ export default function ChatInterface() {
 
       if (response.ok) {
         console.log(`Model switched to: ${model}`);
+
+        // Update local state immediately for better UX
+        setChatbotSettings(prev => ({
+          ...prev,
+          activeChatModel: model
+        }));
+
+        // Also update the currentModel display name
+        const selectedModel = availableModels.find(m => m.model === model);
+        if (selectedModel) {
+          setCurrentModel(selectedModel.displayName);
+        }
+
         // Force refresh available models with a cache-busting parameter
         await fetchAvailableModels(true);
       }
@@ -537,9 +551,12 @@ export default function ChatInterface() {
                 variant="ghost"
                 size="sm"
                 onClick={clearChat}
+                className="gap-2 px-2 md:px-3"
+                title="Yeni Sohbet"
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Yeni Sohbet
+                <Plus className="w-4 h-4 md:hidden" />
+                <RefreshCw className="w-4 h-4 hidden md:inline" />
+                <span className="hidden md:inline">Yeni Sohbet</span>
               </Button>
 
               {/* User Dropdown */}
