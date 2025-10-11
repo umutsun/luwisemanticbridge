@@ -43,6 +43,7 @@ import llmStatusRoutes from './routes/llm-status.routes';
 import logsRoutes, { initializeLogWebSocket } from './routes/logs.routes';
 import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
 import { AuthService } from './services/auth.service';
+import { SettingsService } from './services/settings.service';
 
 
 // Initialize Express app
@@ -579,22 +580,61 @@ async function startServer() {
     }
   }
 
-    // Initialize AI Services (basic check from .env)
+    // Initialize AI Services (load from database first, fallback to .env)
   console.log('\n🤖 AI Services Status:');
+  const settingsService = SettingsService.getInstance();
   const aiServices = [
-    { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-3.5/4' },
-    { name: 'Claude', key: 'CLAUDE_API_KEY', model: 'Claude 3' },
-    { name: 'Gemini', key: 'GEMINI_API_KEY', model: 'Gemini Pro' },
-    { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek' }
+    { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-3.5/4', settingKey: 'openai.apiKey' },
+    { name: 'Claude', key: 'CLAUDE_API_KEY', model: 'Claude 3', settingKey: 'anthropic.apiKey' },
+    { name: 'Gemini', key: 'GEMINI_API_KEY', model: 'Gemini Pro', settingKey: 'google.apiKey' },
+    { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek', settingKey: 'deepseek.apiKey' }
   ];
 
-  aiServices.forEach(service => {
-    if (process.env[service.key]) {
-      console.log(`✅ ${service.name}: Available (${service.model}) [.env]`);
+  for (const service of aiServices) {
+    let isConfigured = false;
+    let source = 'not configured';
+
+    try {
+      // Try to get API key from database first (settings are stored as flat key-value pairs)
+      const allSettings = await settingsService.getAllSettings();
+      let parsedSettings = allSettings;
+
+      // If settings is a JSON string, parse it first
+      if (typeof allSettings === 'string') {
+        try {
+          parsedSettings = JSON.parse(allSettings);
+        } catch (parseError) {
+          console.error('Failed to parse settings JSON:', parseError);
+          parsedSettings = {};
+        }
+      }
+
+      // Access the API key directly using the flat key structure (e.g., 'deepseek.apiKey')
+      const dbApiKey = parsedSettings[service.settingKey];
+
+      if (dbApiKey && dbApiKey.trim() !== '') {
+        isConfigured = true;
+        source = 'database';
+      } else if (process.env[service.key]) {
+        // Fallback to environment variable
+        isConfigured = true;
+        source = '.env';
+      }
+    } catch (error) {
+      console.error(`Error checking ${service.name}:`, error);
+      // If database fails, check environment variable
+      if (process.env[service.key]) {
+        isConfigured = true;
+        source = '.env';
+      }
+    }
+
+    if (isConfigured) {
+      console.log(`✅ ${service.name}: Available (${service.model}) [${source}]`);
     } else {
       console.log(`❌ ${service.name}: Not configured`);
     }
-  });
+  }
 
     // Check Embedding settings (basic)
   console.log('\n🔤 Embedding Configuration:');
