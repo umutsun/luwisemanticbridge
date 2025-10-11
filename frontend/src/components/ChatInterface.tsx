@@ -713,7 +713,7 @@ export default function ChatInterface() {
                       </Avatar>
                     )}
 
-                    <div className={`max-w-[70%] ${
+                    <div className={`w-full ${
                       message.role === 'user' ? 'order-1' : 'order-2'
                     }`}>
                       <Card className={`${

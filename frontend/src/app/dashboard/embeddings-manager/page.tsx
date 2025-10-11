@@ -144,10 +144,12 @@ export default function EmbeddingsManagerPage() {
   const [embeddingStats, setEmbeddingStats] = useState<any>(null);
   const [batchSize, setBatchSize] = useState(100);
   const [workerCount, setWorkerCount] = useState(2);
+  const [chunkSize, setChunkSize] = useState(1000);
   const [embeddingMethod, setEmbeddingMethod] = useState('google-text-embedding-004');
   const [currentEmbeddingMethod, setCurrentEmbeddingMethod] = useState<string | null>(null);
   const [currentBatchSize, setCurrentBatchSize] = useState<number | null>(null);
   const [currentWorkerCount, setCurrentWorkerCount] = useState<number | null>(null);
+  const [currentChunkSize, setCurrentChunkSize] = useState<number | null>(null);
   const [isLoadingTables, setIsLoadingTables] = useState(true);
   const [displayProgress, setDisplayProgress] = useState<EmbeddingProgress | null>(null);
   const [migrationTables, setMigrationTables] = useState<string[]>([]);
@@ -250,33 +252,7 @@ export default function EmbeddingsManagerPage() {
           });
         }
 
-        // Check for HuggingFace (free providers)
-        if (settings['huggingface.apiKey'] && settings['huggingface.apiKey'].trim() !== '') {
-          providers.push({
-            id: 'e5-mistral',
-            name: 'E5-Multilingual (HuggingFace - Türkçe Destekli)',
-            type: 'huggingface',
-            free: true,
-            model: 'intfloat/multilingual-e5-large',
-            chunkSize: 512
-          });
-          providers.push({
-            id: 'bge-m3',
-            name: 'BGE-M3 (HuggingFace - Ücretsiz)',
-            type: 'huggingface',
-            free: true,
-            model: 'BAAI/bge-m3',
-            chunkSize: 8192
-          });
-          providers.push({
-            id: 'jina-embeddings-v2-small',
-            name: 'Jina AI jina-embeddings-v2-small (HuggingFace - Ücretsiz)',
-            type: 'huggingface',
-            free: true,
-            model: 'jinaai/jina-embeddings-v2-small-en',
-            chunkSize: 8192
-          });
-        }
+        // Removed HuggingFace models - they will be integrated separately
 
         // Always add local/test option
         providers.push({
@@ -615,6 +591,7 @@ export default function EmbeddingsManagerPage() {
     setCurrentEmbeddingMethod(null);
     setCurrentBatchSize(null);
     setCurrentWorkerCount(null);
+    setCurrentChunkSize(null);
     setProgressUpdateCount(0);
     // Note: Not refreshing tables here to avoid unnecessary API calls
   };
@@ -1125,6 +1102,7 @@ export default function EmbeddingsManagerPage() {
     setCurrentEmbeddingMethod(embeddingMethod);
     setCurrentBatchSize(batchSize);
     setCurrentWorkerCount(workerCount);
+    setCurrentChunkSize(chunkSize);
     setMigrationTables(tablesToUse);
 
     try {
@@ -1135,6 +1113,7 @@ export default function EmbeddingsManagerPage() {
           tables: tablesToUse,
           batchSize,
           workerCount,
+          chunkSize,
           resume,
           options: { embeddingMethod }
         })
@@ -1671,6 +1650,41 @@ export default function EmbeddingsManagerPage() {
                           )}
                         </SelectContent>
                       </Select>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Vektör Boyutu (Chunk Size)</Label>
+                    {progress?.status === 'processing' || progress?.status === 'paused' ? (
+                      <div className="p-2 border rounded-md bg-muted">
+                        <div className="text-sm">
+                          <span className="font-mono">{currentChunkSize || chunkSize}</span> karakter
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Provider limiti: {availableProviders.find(p => p.id === (currentEmbeddingMethod || embeddingMethod))?.chunkSize || 'N/A'} karakter
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <input
+                          type="range"
+                          min="100"
+                          max="8192"
+                          step="100"
+                          value={chunkSize}
+                          onChange={(e) => setChunkSize(parseInt(e.target.value))}
+                          disabled={progress?.status === 'processing' || progress?.status === 'paused'}
+                          className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary disabled:[&::-webkit-slider-thumb]:bg-muted-foreground/50"
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>100</span>
+                          <span className="font-mono text-foreground">{chunkSize}</span>
+                          <span>8192</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Provider limiti: {availableProviders.find(p => p.id === embeddingMethod)?.chunkSize || 'N/A'} karakter
+                        </div>
+                      </div>
                     )}
                   </div>
 

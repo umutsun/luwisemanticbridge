@@ -21,7 +21,7 @@ export function MessageSkeleton({ type = 'default', message }: MessageSkeletonPr
         )}
       </div>
 
-      <div className="flex-1 max-w-[80%] space-y-3">
+      <div className="flex-1 w-full space-y-3">
         {/* Status message */}
         {message && (
           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
