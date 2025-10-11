@@ -184,7 +184,13 @@ export default function ChatInterface() {
         ? `${baseUrl}?t=${Date.now()}`
         : baseUrl;
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
       if (response.ok) {
         const settings = await response.json();
         console.log('Fetched settings:', settings);
@@ -294,7 +300,8 @@ export default function ChatInterface() {
 
     // Listen for settings updates to refresh available models
     const handleSettingsUpdate = () => {
-      console.log('Settings updated, refreshing available models...');
+      console.log('Settings updated, clearing models and refreshing...');
+      setAvailableModels([]); // Clear models first
       fetchAvailableModels(true);
     };
 
