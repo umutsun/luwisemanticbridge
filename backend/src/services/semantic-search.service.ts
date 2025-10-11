@@ -25,6 +25,8 @@ export class SemanticSearchService {
   private minResults: number = 1;
   private enableHybridSearch: boolean = true;
   private enableKeywordBoost: boolean = true;
+  private parallelLLMCount: number = 5;
+  private parallelLLMBatchSize: number = 3;
   private readonly RAG_SETTINGS_TTL = 30000;
   private readonly EMBEDDING_SETTINGS_TTL = 30000;
   private lastRAGSettingsRefresh: number = 0;
@@ -61,6 +63,15 @@ export class SemanticSearchService {
       }
     }
     return undefined;
+  }
+
+  // Public getters for RAG settings
+  getParallelLLMCount(): number {
+    return this.parallelLLMCount;
+  }
+
+  getParallelLLMBatchSize(): number {
+    return this.parallelLLMBatchSize;
   }
 
   private normalizeProvider(provider?: string): string {
@@ -104,7 +115,7 @@ export class SemanticSearchService {
   private async loadRAGSettings(): Promise<void> {
     try {
       const result = await asembPool.query(
-        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
         [
           'ragSettings.similarityThreshold',
           'similarity_threshold',
@@ -114,7 +125,9 @@ export class SemanticSearchService {
           'ragSettings.enableKeywordBoost',
           'similarityThreshold',
           'maxResults',
-          'minResults'
+          'minResults',
+          'parallel_llm_count',
+          'parallel_llm_batch_size'
         ]
       );
 
@@ -160,6 +173,20 @@ export class SemanticSearchService {
             }
             break;
           }
+          case 'parallel_llm_count': {
+            const parsedCount = parseInt(value, 10);
+            if (!isNaN(parsedCount) && parsedCount > 0 && parsedCount <= 10) {
+              this.parallelLLMCount = parsedCount;
+            }
+            break;
+          }
+          case 'parallel_llm_batch_size': {
+            const parsedBatchSize = parseInt(value, 10);
+            if (!isNaN(parsedBatchSize) && parsedBatchSize > 0 && parsedBatchSize <= 20) {
+              this.parallelLLMBatchSize = parsedBatchSize;
+            }
+            break;
+          }
           default:
             break;
         }
@@ -172,7 +199,9 @@ export class SemanticSearchService {
         maxResults: this.maxResults,
         minResults: this.minResults,
         enableHybridSearch: this.enableHybridSearch,
-        enableKeywordBoost: this.enableKeywordBoost
+        enableKeywordBoost: this.enableKeywordBoost,
+        parallelLLMCount: this.parallelLLMCount,
+        parallelLLMBatchSize: this.parallelLLMBatchSize
       });
     } catch (error) {
       console.warn('[SemanticSearch] Failed to load RAG settings from database, using defaults:', error);

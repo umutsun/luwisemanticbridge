@@ -236,6 +236,10 @@ export class SettingsService {
             updated_at = CURRENT_TIMESTAMP
         `, [keyName, JSON.stringify(keyValue), category, `API key for ${keyName}`]);
 
+        // Clear cache when API key is updated
+        this.clearCache('all_settings');
+        logger.debug('Cache cleared due to API key update');
+
         return { success: true };
       } finally {
         client.release();

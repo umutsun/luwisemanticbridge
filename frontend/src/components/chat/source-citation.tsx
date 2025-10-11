@@ -123,40 +123,8 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
   // Handle tag click - Create meaningful search query
   const handleTagClick = (source: Source, tag: string) => {
-    // Create a meaningful query combining tag and source context
-    const sourceTitle = source.title || source.citation || '';
-    const sourceTable = source.sourceTable || '';
-
-    // Build intelligent query
-    let query = tag;
-
-    // Add context from source table
-    if (sourceTable) {
-      const tableContext = {
-        'OZELGELER': 'Özelge',
-        'DANISTAYKARARLARI': 'Danıştay Kararı',
-        'MAKALELER': 'Makale',
-        'SORUCEVAP': 'Soru Cevap'
-      }[sourceTable] || sourceTable;
-
-      query += ` ${tableContext}`;
-    }
-
-    // Add relevant part of title if it's not too long
-    if (sourceTitle && sourceTitle.length < 100) {
-      // Remove redundant parts
-      const cleanTitle = sourceTitle
-        .replace(/ - ID: \d+/g, '')
-        .replace(/^sorucevap -\s*/i, '')
-        .replace(/^ozelgeler -\s*/i, '')
-        .replace(/^danıştay kararları -\s*/i, '')
-        .replace(/^makaleler -\s*/i, '')
-        .trim();
-
-      if (cleanTitle && cleanTitle !== tag) {
-        query += ` "${cleanTitle}"`;
-      }
-    }
+    // Just use the tag text without generating long questions
+    const query = tag;
 
     // Trigger custom event for ChatInterface to handle
     window.dispatchEvent(new CustomEvent('tagClick', {

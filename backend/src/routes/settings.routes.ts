@@ -121,11 +121,11 @@ router.get('/', async (req: Request, res: Response) => {
         similarityThreshold: 0.014,
         maxResults: 15,
         minResults: 5,
-        enableHybridSearch: true,
-        enableKeywordBoost: true,
+        enableHybridSearch: false,
+        enableKeywordBoost: false,
         enableParallelLLM: true,
-        parallelLLMCount: 5,
-        parallelLLMBatchSize: 3
+        parallelLLMCount: 4,
+        parallelLLMBatchSize: 4
       },
       security: {
         enableAuth: false,
@@ -247,6 +247,38 @@ router.get('/', async (req: Request, res: Response) => {
     if (!apiKeysFound.huggingface && process.env.HUGGINGFACE_API_KEY) {
       config.huggingface.apiKey = process.env.HUGGINGFACE_API_KEY;
       console.log('⚠️ [SETTINGS] Using HuggingFace API key from environment (fallback)');
+    }
+
+    // Process RAG settings from database
+    if (key === 'similarity_threshold' || key === 'ragSettings.similarityThreshold') {
+      const threshold = parseFloat(value);
+      if (!isNaN(threshold) && threshold >= 0 && threshold <= 1) {
+        config.ragSettings.similarityThreshold = threshold;
+      }
+    } else if (key === 'max_results' || key === 'ragSettings.maxResults') {
+      const maxResults = parseInt(value, 10);
+      if (!isNaN(maxResults) && maxResults > 0) {
+        config.ragSettings.maxResults = maxResults;
+      }
+    } else if (key === 'min_results' || key === 'ragSettings.minResults') {
+      const minResults = parseInt(value, 10);
+      if (!isNaN(minResults) && minResults > 0) {
+        config.ragSettings.minResults = minResults;
+      }
+    } else if (key === 'enable_hybrid_search' || key === 'ragSettings.enableHybridSearch') {
+      config.ragSettings.enableHybridSearch = value === 'true' || value === true;
+    } else if (key === 'enable_keyword_boost' || key === 'ragSettings.enableKeywordBoost') {
+      config.ragSettings.enableKeywordBoost = value === 'true' || value === true;
+    } else if (key === 'parallel_llm_count') {
+      const count = parseInt(value, 10);
+      if (!isNaN(count) && count > 0 && count <= 10) {
+        config.ragSettings.parallelLLMCount = count;
+      }
+    } else if (key === 'parallel_llm_batch_size') {
+      const batchSize = parseInt(value, 10);
+      if (!isNaN(batchSize) && batchSize > 0 && batchSize <= 20) {
+        config.ragSettings.parallelLLMBatchSize = batchSize;
+      }
     }
 
     console.log('🔧 [SETTINGS] API Keys Status:');
@@ -687,6 +719,12 @@ router.post('/', async (req: Request, res: Response) => {
         );
       }
     }
+
+    // Clear settings cache after saving
+    const { SettingsService } = require('../services/settings.service');
+    const settingsService = SettingsService.getInstance();
+    settingsService.clearCache('all_settings');
+    console.log('✅ Settings cache cleared after save');
 
     res.json({ success: true });
   } catch (error) {
