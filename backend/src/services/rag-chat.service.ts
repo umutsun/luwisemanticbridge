@@ -1006,22 +1006,13 @@ Başlık: ${title}
 
         const cleanExcerpt = this.stripHtml(result.excerpt || result.content || '');
 
-        // Generate LLM-processed content and question for related topics
+        // DISABLE LLM generation for related topics for performance
         let processedContent = cleanExcerpt;
-        // Generate question based on content language (detect Turkish vs other)
-        const isTurkishContent = /[çğıöşüÇĞİÖŞÜ]/.test(cleanExcerpt) ||
-                                 /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
-        const questionTemplate = isTurkishContent ?
-          `${title} hakkında detaylı bilgi verir misiniz?` :
-          `Can you provide detailed information about ${title}?`;
-        let generatedQuestion = questionTemplate;
+        let generatedQuestion = '';
 
         try {
-          console.log(`🤖 Processing related topic: ${title.substring(0, 30)}...`);
-          // Skip LLM question generation for performance
-            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
-          processedContent = llmResult.processedContent;
-          generatedQuestion = llmResult.generatedQuestion;
+          console.log(`[Performance] Skipping LLM for related topic: ${title.substring(0, 30)}...`);
+          // Completely skip LLM processing
         } catch (error) {
           console.warn('LLM processing for related topic failed, using fallback:', error);
         }
