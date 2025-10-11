@@ -692,8 +692,25 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
   /**
    * Generate LLM-processed content and question from excerpt
+   * DISABLED FOR PERFORMANCE - Returns content as-is
    */
   private async generateContentAndQuestion(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
+    // Performance optimization: Skip LLM call for question generation
+    const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
+    const generatedQuestion = ''; // No question generation for speed
+
+    console.log(`[Performance] Skipping question generation for: ${title.substring(0, 30)}...`);
+
+    return {
+      processedContent: cleanExcerpt,
+      generatedQuestion
+    };
+  }
+
+  /**
+   * Generate LLM-processed content and question from excerpt (DISABLED)
+   */
+  private async generateContentAndQuestion_DISABLED(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
     try {
       console.log(`🤖 Attempting to generate question for: ${title.substring(0, 30)}...`);
       console.time(`LLM processing for: ${title.substring(0, 30)}...`);
