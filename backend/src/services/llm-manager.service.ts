@@ -148,6 +148,8 @@ export class LLMManager {
         this.actualModel = 'claude-3-5-sonnet-20241022';
       } else if (this.actualModel === 'claude-3-opus') {
         this.actualModel = 'claude-3-opus-20240229';
+      } else if (this.actualModel === 'deepseek-chat') {
+        this.actualModel = 'deepseek-chat'; // DeepSeek uses the same name
       }
 
       // Store configuration
@@ -611,8 +613,15 @@ export class LLMManager {
               throw new Error('DeepSeek client is not initialized');
             }
           }
+          // Check if client is properly initialized
+          if (!prov.client || typeof prov.client.chat !== 'object') {
+            throw new Error('DeepSeek client is not properly initialized');
+          }
+          // Ensure we're using the correct model name
+          const deepseekModel = this.actualModel || prov.model || 'deepseek-chat';
+          console.log(`🤖 Using DeepSeek model: ${deepseekModel}`);
           const deepseekResponse = await prov.client.chat.completions.create({
-            model: prov.model,
+            model: deepseekModel,
             max_tokens: maxTokens,
             temperature: temperature,
             messages: [
@@ -623,7 +632,7 @@ export class LLMManager {
           return {
             content: deepseekResponse.choices[0].message.content || '',
             provider: 'DeepSeek',
-            model: prov.model,
+            model: deepseekModel,
             fallbackUsed: provider !== preferredProvider
           };
 
