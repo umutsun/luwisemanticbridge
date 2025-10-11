@@ -1,8 +1,8 @@
-# ASB CLI - Agent Communication & Shared Memory System
+﻿# ASB CLI - Agent Communication & Shared Memory System
 
 ## 📡 Overview
 
-ASB CLI (Alice Semantic Bridge Command Line Interface) is a Redis-backed shared memory system that enables real-time communication and context sharing between multiple AI agents (Claude, Gemini, Codex) working on the same project.
+ASB CLI (Luwi Semantic Bridge Command Line Interface) is a Redis-backed shared memory system that enables real-time communication and context sharing between multiple AI agents (Claude, Gemini, Codex) working on the same project.
 
 ## 🔀 Git Worktree Integration
 

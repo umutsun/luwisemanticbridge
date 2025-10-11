@@ -185,7 +185,7 @@ router.get('/config', async (req: Request, res: Response) => {
         database: process.env.POSTGRES_DB || 'asemb',
         connected: false
       },
-      customer_database: {
+      source_database: {
         host: 'Loaded from settings',
         port: 'Loaded from settings',
         database: 'Loaded from settings',
@@ -228,10 +228,11 @@ router.get('/config', async (req: Request, res: Response) => {
       const settingsService = SettingsService.getInstance();
       const settings = await settingsService.getAllSettings();
 
-      if (settings.customer_database) {
-        configStatus.customer_database = {
-          ...configStatus.customer_database,
-          ...settings.customer_database,
+      if (settings.source_database || settings.customer_database) {
+        const dbSettings = settings.source_database || settings.customer_database;
+        configStatus.source_database = {
+          ...configStatus.source_database,
+          ...dbSettings,
           connected: false // Would need separate connection test
         };
       }

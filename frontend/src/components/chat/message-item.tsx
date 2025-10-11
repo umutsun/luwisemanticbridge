@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { User, Bot } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { SourceCitation } from './source-citation';
+import { MessageSkeleton } from './message-skeleton';
 
 /**
  * Highlights repeating keywords in text with markup
@@ -34,6 +35,16 @@ interface MessageItemProps {
 
 export function MessageItem({ message }: MessageItemProps) {
   const isUser = message.role === 'user';
+
+  // Show skeleton loading for streaming assistant messages
+  if (message.isStreaming && message.isLoading && !isUser) {
+    return (
+      <MessageSkeleton
+        type={message.status === 'searching' ? 'searching' : message.status === 'generating' ? 'generating' : 'default'}
+        message={message.statusMessage}
+      />
+    );
+  }
 
   // Calculate response quality based on sources
   const getResponseQuality = () => {
@@ -134,7 +145,14 @@ export function MessageItem({ message }: MessageItemProps) {
         />
         
         {message.sources && message.sources.length > 0 && (
-          <SourceCitation sources={message.sources} />
+          <SourceCitation
+            sources={message.sources}
+            onExcerptClick={(question) => {
+              // Send the question to the input field
+              const inputEvent = new CustomEvent('addToInput', { detail: question });
+              window.dispatchEvent(inputEvent);
+            }}
+          />
         )}
         
         <div className={cn(

@@ -607,7 +607,7 @@ app.get('/api/v2/health/config', (req, res) => {
         database: dbConfig.database,
         connected: true
       },
-      customer_database: {
+      source_database: {
         host: process.env.CUSTOM_DB_HOST || 'not_configured',
         port: process.env.CUSTOM_DB_PORT || '5432',
         database: process.env.CUSTOM_DB_NAME || 'not_configured',

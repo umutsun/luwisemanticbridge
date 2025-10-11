@@ -150,7 +150,7 @@ router.get('/all', async (req, res) => {
         dashboard: dashboardSettings,
         databases: {
           asemb: settings.asemb_database,
-          customer: settings.customer_database
+          source: settings.source_database || settings.customer_database
         },
         redis: settings.redis_config
       }

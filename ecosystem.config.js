@@ -57,8 +57,8 @@ module.exports = {
     // ==========================================
     {
       name: 'asb-frontend',
-      script: 'npx',
-      args: 'next start -p 3002',
+      script: 'npm',
+      args: 'start',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',

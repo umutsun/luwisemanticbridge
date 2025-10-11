@@ -953,7 +953,7 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                                 // Source information based on context
                                 let sourceType = 'database';
 
-                                // Get database name from customer_database settings
+                                // Get database name from source_database settings
                                 const dbSettings = await getDatabaseSettings();
                                 let sourceName = 'rag_chatbot'; // default fallback
                                 if (dbSettings && typeof dbSettings === 'object') {

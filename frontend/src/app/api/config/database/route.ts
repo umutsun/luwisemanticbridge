@@ -22,16 +22,16 @@ export async function GET() {
     let source = 'settings';
 
     try {
-      // Get customer database settings from ASEMB settings table
+      // Get source database settings from ASEMB settings table
       const result = await asembPool.query(`
-        SELECT value FROM settings WHERE key = 'customer_database'
+        SELECT value FROM settings WHERE key = 'source_database'
       `);
 
       if (result.rows.length > 0) {
         config = result.rows[0].value;
 
-        // Test connection to customer database
-        const customerPool = new Pool({
+        // Test connection to source database
+        const sourcePool = new Pool({
           host: config.host,
           port: config.port,
           database: config.database,
@@ -42,12 +42,12 @@ export async function GET() {
         });
 
         try {
-          await customerPool.query('SELECT 1');
+          await sourcePool.query('SELECT 1');
           status = 'connected';
         } catch (error) {
           status = 'disconnected';
         } finally {
-          await customerPool.end();
+          await sourcePool.end();
         }
       }
     } catch (error) {
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       // Save to ASEMB settings table
       await asembPool.query(`
         INSERT INTO settings (key, value, category, description)
-        VALUES ('customer_database', $1, 'database', 'Customer database connection settings')
+        VALUES ('source_database', $1, 'database', 'Source database connection settings')
         ON CONFLICT (key)
         DO UPDATE SET
           value = $1,

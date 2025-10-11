@@ -110,7 +110,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
 
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
+      // Hardcoded URL to fix fetch issues
+const API_BASE_URL = 'http://localhost:8083';
 
       if (authToken) {
         setStoredToken(authToken);
@@ -229,7 +230,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = async (newConfig: Config) => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
+      // Hardcoded URL to fix fetch issues
+const API_BASE_URL = 'http://localhost:8083';
       const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
         method: 'PUT',
         headers: {
@@ -245,6 +247,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       const result = await response.json();
       setConfig(result.config);
       setError(null);
+
+      // Dispatch event to notify components that settings have been updated
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settingsUpdated'));
+      }
     } catch (err) {
       console.error('Error updating config:', err);
       setError(err instanceof Error ? err.message : 'Failed to update configuration');

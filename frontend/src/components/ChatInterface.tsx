@@ -21,11 +21,19 @@ import {
   ExternalLink,
   ChevronDown,
   LogOut,
-  UserCircle
+  UserCircle,
+  Cpu
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
+import { MessageSkeleton } from '@/components/chat/message-skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface Message {
   id: string;
@@ -110,6 +118,8 @@ export default function ChatInterface() {
   const [isClient, setIsClient] = useState(false);
   const [visibleSourcesCount, setVisibleSourcesCount] = useState<{ [key: string]: number }>({});
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [availableModels, setAvailableModels] = useState<Array<{provider: string, model: string, displayName: string, description: string}>>([]);
+  const [currentModel, setCurrentModel] = useState<string>('Claude');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -160,7 +170,105 @@ export default function ChatInterface() {
         console.error('Failed to fetch chatbot settings:', err);
         setSettingsLoaded(true);
       });
+
+    // Fetch available models
+    fetchAvailableModels();
   }, []);
+
+  // Fetch available models
+  const fetchAvailableModels = async (forceRefresh = false) => {
+    try {
+      // Add cache-busting parameter if force refresh is requested
+      const baseUrl = config.getApiUrl('/api/v2/settings');
+      const url = forceRefresh
+        ? `${baseUrl}?t=${Date.now()}`
+        : baseUrl;
+
+      const response = await fetch(url);
+      if (response.ok) {
+        const settings = await response.json();
+        console.log('Fetched settings:', settings);
+        const models = [];
+
+        if (settings.openai?.apiKey) {
+          console.log('Adding OpenAI models');
+          models.push({
+            provider: 'openai',
+            model: 'openai/gpt-4o',
+            displayName: 'GPT-4o',
+            description: 'En yeni ve en güçlü'
+          });
+          models.push({
+            provider: 'openai',
+            model: 'openai/gpt-4o-mini',
+            displayName: 'GPT-4o Mini',
+            description: 'Hızlı ve ekonomik'
+          });
+        } else {
+          console.log('OpenAI API key not found');
+        }
+        if (settings.anthropic?.apiKey) {
+          models.push({
+            provider: 'anthropic',
+            model: 'anthropic/claude-3-5-sonnet-20241022',
+            displayName: 'Claude 3.5 Sonnet',
+            description: 'En güçlü model'
+          });
+        }
+        if (settings.google?.apiKey) {
+          console.log('Adding Google/Gemini models');
+          models.push({
+            provider: 'google',
+            model: 'google/gemini-1.5-pro',
+            displayName: 'Gemini 1.5 Pro',
+            description: 'Google AI'
+          });
+        } else {
+          console.log('Google API key not found');
+        }
+        if (settings.deepseek?.apiKey) {
+          console.log('Adding DeepSeek models');
+          models.push({
+            provider: 'deepseek',
+            model: 'deepseek/deepseek-chat',
+            displayName: 'DeepSeek Chat',
+            description: 'Genel amaçlı'
+          });
+        } else {
+          console.log('DeepSeek API key not found');
+        }
+
+        setAvailableModels(models);
+      }
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+    }
+  };
+
+  // Switch model
+  const switchModel = async (model: string) => {
+    try {
+      const response = await fetch(config.getApiUrl('/api/v2/settings'), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          llmSettings: {
+            activeChatModel: model
+          }
+        })
+      });
+
+      if (response.ok) {
+        console.log(`Model switched to: ${model}`);
+        // Force refresh available models with a cache-busting parameter
+        await fetchAvailableModels(true);
+      }
+    } catch (error) {
+      console.error('Error switching model:', error);
+    }
+  };
 
   // Listen for tag click events from SourceCitation component
   useEffect(() => {
@@ -173,6 +281,29 @@ export default function ChatInterface() {
     window.addEventListener('tagClick', handleTagClick as EventListener);
     return () => {
       window.removeEventListener('tagClick', handleTagClick as EventListener);
+    };
+  }, []);
+
+  // Listen for addToInput events from SourceCitation component
+  useEffect(() => {
+    const handleAddToInput = (event: CustomEvent) => {
+      const query = event.detail;
+      setInputText(query);
+      textareaRef.current?.focus();
+    };
+
+    // Listen for settings updates to refresh available models
+    const handleSettingsUpdate = () => {
+      console.log('Settings updated, refreshing available models...');
+      fetchAvailableModels(true);
+    };
+
+    window.addEventListener('addToInput', handleAddToInput as EventListener);
+    window.addEventListener('settingsUpdated', handleSettingsUpdate);
+
+    return () => {
+      window.removeEventListener('addToInput', handleAddToInput as EventListener);
+      window.removeEventListener('settingsUpdated', handleSettingsUpdate);
     };
   }, []);
 
@@ -291,7 +422,11 @@ export default function ChatInterface() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get response');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Chat API error:', response.status, errorText);
+        throw new Error(`Failed to get response: ${response.status} - ${errorText}`);
+      }
 
       const data = await response.json();
 
@@ -391,26 +526,6 @@ export default function ChatInterface() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Active Model Display */}
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-lg">
-                <Brain className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium">
-                  {(() => {
-                    const modelMap: { [key: string]: string } = {
-                      'deepseek/deepseek-chat': 'Deepseek',
-                      'deepseek-chat': 'Deepseek',
-                      'openai/gpt-4-turbo-preview': 'GPT-4 Turbo',
-                      'openai/gpt-4': 'GPT-4',
-                      'openai/gpt-3.5-turbo': 'GPT-3.5',
-                      'google/gemini-pro': 'Gemini Pro',
-                      'anthropic/claude-3-opus': 'Claude 3 Opus',
-                      'anthropic/claude-3-sonnet': 'Claude 3 Sonnet'
-                    };
-                    const activeModel = chatbotSettings.activeChatModel || 'google/gemini-pro';
-                    return modelMap[activeModel] || activeModel.split('/')[1] || activeModel;
-                  })()}
-                </span>
-              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -463,6 +578,43 @@ export default function ChatInterface() {
                   </div>
                 )}
               </div>
+
+              {/* Model Selector */}
+              {availableModels.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-2 px-3">
+                      <Cpu className="h-4 w-4" />
+                      <span className="hidden md:inline text-sm font-medium">
+                        {availableModels.find(m => m.model === chatbotSettings.activeChatModel)?.displayName || currentModel}
+                      </span>
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {availableModels.map((model) => (
+                      <DropdownMenuItem
+                        key={model.model}
+                        onClick={() => switchModel(model.model)}
+                        className={`cursor-pointer ${model.model === chatbotSettings.activeChatModel ? 'bg-accent' : ''}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`h-2 w-2 rounded-full ${
+                            model.provider === 'anthropic' ? 'bg-purple-500' :
+                            model.provider === 'google' ? 'bg-blue-500' :
+                            model.provider === 'openai' ? 'bg-green-500' :
+                            'bg-orange-500'
+                          }`} />
+                          <div>
+                            <p className="text-sm font-medium">{model.displayName}</p>
+                            <p className="text-xs text-muted-foreground">{model.description}</p>
+                          </div>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
               <ThemeToggle />
             </div>
@@ -541,11 +693,7 @@ export default function ChatInterface() {
                       }`}>
                         <CardContent className="p-3">
                           {message.isTyping ? (
-                            <div className="flex items-center gap-1">
-                              <div className="w-2 h-2 bg-current rounded-full animate-bounce" />
-                              <div className="w-2 h-2 bg-current rounded-full animate-bounce delay-100" />
-                              <div className="w-2 h-2 bg-current rounded-full animate-bounce delay-200" />
-                            </div>
+                            <MessageSkeleton />
                           ) : (
                             <>
                               <div className="flex items-start gap-2">

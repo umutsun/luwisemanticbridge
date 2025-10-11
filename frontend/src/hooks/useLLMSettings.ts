@@ -18,7 +18,7 @@ export const useLLMSettings = () => {
     addContext: true,
     temperature: 0.3,
     maxTokens: 100,
-    model: 'anthropic/claude-3-sonnet'
+    model: 'anthropic/claude-3-5-sonnet'
   });
   const [loading, setLoading] = useState(true);
 

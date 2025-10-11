@@ -3,6 +3,7 @@ import { ragChat } from '../services/rag-chat.service';
 import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
 import { asembPool } from '../config/database.config';
+import { chatWss, chatConnections } from '../server';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();
@@ -16,7 +17,7 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       body: req.body,
       headers: req.headers['content-type']
     });
-    
+
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
@@ -32,19 +33,46 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       language,
       responseStyle,
       enableSemanticAnalysis = false,
-      trackUserInsights = false
+      trackUserInsights = false,
+      stream = false,
+      clientId
     } = req.body;
 
     const userId = req.user.userId;
-    
+
     if (!message || message.trim() === '') {
       console.log('Message validation failed:', { message });
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    console.log('Processing message:', { message, conversationId, userId, temperature });
-    
-    // Pass all options to processMessage
+    console.log('Processing message:', { message, conversationId, userId, temperature, stream });
+
+    // Check if WebSocket streaming is requested
+    if (stream && clientId && chatWss) {
+      const wsConnection = chatConnections.get(clientId);
+      if (wsConnection) {
+        // Start streaming response
+        streamChatResponse(wsConnection, {
+          message,
+          conversationId,
+          userId,
+          temperature,
+          model,
+          systemPrompt,
+          ragWeight,
+          useLocalDb,
+          language,
+          responseStyle,
+          enableSemanticAnalysis,
+          trackUserInsights,
+          req
+        });
+        res.json({ streaming: true, clientId });
+        return;
+      }
+    }
+
+    // Non-streaming response (fallback)
     const result = await ragChat.processMessage(message, conversationId, userId, {
       temperature,
       model,
@@ -56,7 +84,7 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       enableSemanticAnalysis,
       trackUserInsights
     });
-    
+
     console.log('Chat response:', {
       hasResponse: !!result.response,
       sourcesCount: result.sources?.length || 0
@@ -93,9 +121,9 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
     res.json(result);
   } catch (error: any) {
     console.error('Chat error details:', error);
-    res.status(500).json({ 
-      error: 'Chat processing failed', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    res.status(500).json({
+      error: 'Chat processing failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -264,6 +292,9 @@ router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: Authen
 
     console.log('Getting dashboard stats for admin user');
 
+    // Import pool if asembPool is undefined
+    const pool = asembPool || (await import('../config/database')).default;
+
     // Get global chat statistics
     const [
       totalConversationsResult,
@@ -273,21 +304,21 @@ router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: Authen
       activeUsersTodayResult,
       avgMessagesResult
     ] = await Promise.all([
-      asembPool.query('SELECT COUNT(*) as total_conversations FROM conversations'),
-      asembPool.query('SELECT COUNT(*) as total_messages FROM messages'),
-      asembPool.query(`
+      pool.query('SELECT COUNT(*) as total_conversations FROM conversations'),
+      pool.query('SELECT COUNT(*) as total_messages FROM messages'),
+      pool.query(`
         SELECT COUNT(*) as recent_messages
         FROM messages
         WHERE created_at > NOW() - INTERVAL '24 hours'
       `),
-      asembPool.query('SELECT COUNT(*) as total_users FROM users WHERE role = $1', ['user']),
-      asembPool.query(`
+      pool.query('SELECT COUNT(*) as total_users FROM users WHERE role = $1', ['user']),
+      pool.query(`
         SELECT COUNT(DISTINCT c.user_id) as active_users_today
         FROM messages m
         JOIN conversations c ON m.conversation_id = c.id
         WHERE m.created_at > NOW() - INTERVAL '24 hours'
       `),
-      asembPool.query(`
+      pool.query(`
         SELECT AVG(message_count) as avg_messages
         FROM (
           SELECT COUNT(*) as message_count
@@ -451,5 +482,172 @@ router.post('/api/v2/chat/load-more-results', authenticateToken, async (req: Aut
     });
   }
 });
+
+/**
+ * Streaming chat response via WebSocket
+ */
+async function streamChatResponse(
+  ws: any,
+  options: {
+    message: string;
+    conversationId?: string;
+    userId: string;
+    temperature?: number;
+    model?: string;
+    systemPrompt?: string;
+    ragWeight?: number;
+    useLocalDb?: boolean;
+    language?: string;
+    responseStyle?: string;
+    enableSemanticAnalysis?: boolean;
+    trackUserInsights?: boolean;
+    req: any;
+  }
+) {
+  const { message, conversationId, userId, req } = options;
+
+  try {
+    // Send initial status
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'status',
+        status: 'searching',
+        message: 'Aramalar yapılıyor...'
+      }));
+    }
+
+    // Perform search directly using semantic search
+    const { semanticSearch } = await import('../services/semantic-search.service');
+    const ragChatModule = await import('../services/rag-chat.service');
+
+    // Create a simple settings service
+    const settingsService = {
+      async getSetting(key: string): Promise<string | null> {
+        try {
+          const { default: pool } = await import('../config/database');
+          const result = await pool.query(
+            'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
+            [key]
+          );
+          return result.rows[0]?.setting_value || null;
+        } catch (error) {
+          console.error('Error fetching setting:', error);
+          return null;
+        }
+      }
+    };
+
+    // Get search settings
+    const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || '7');
+    const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || '0.014');
+
+    // Perform semantic search
+    let allResults = [];
+    let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+
+    if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
+      try {
+        const pool = await import('../config/database').then(m => m.default);
+        const result = await pool.query(
+          "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
+        );
+        useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
+      } catch (error) {
+        // Use default
+      }
+    }
+
+    if (useUnifiedEmbeddings) {
+      allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
+    } else {
+      allResults = await semanticSearch.hybridSearch(message, maxResults);
+    }
+
+    // Filter and sort results
+    let searchResults = allResults
+      .filter(result => {
+        const score = result.score || (result.similarity_score * 100) || 0;
+        return score >= minThreshold;
+      })
+      .sort((a, b) => {
+        const scoreA = a.score || (a.similarity_score * 100) || 0;
+        const scoreB = b.score || (b.similarity_score * 100) || 0;
+        return scoreB - scoreA;
+      });
+
+    // Format sources
+    const formattedSources = await ragChat.formatSources(searchResults);
+
+    // Send search results
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'sources',
+        sources: formattedSources,
+        hasMore: searchResults.length > maxResults
+      }));
+    }
+
+    // Send generating status
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'status',
+        status: 'generating',
+        message: 'Yanıt oluşturuluyor...'
+      }));
+    }
+
+    // Generate the full response
+    const result = await ragChat.processMessage(message, conversationId, userId, options);
+
+    // Send final response
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'complete',
+        response: result.response,
+        sources: result.sources,
+        conversationId: result.conversationId,
+        followUpQuestions: result.followUpQuestions,
+        relatedTopics: result.relatedTopics
+      }));
+    }
+
+    // Track user usage
+    try {
+      const trackingData: any = {
+        message,
+        responseLength: result.response?.length || 0,
+        sourcesCount: result.sources?.length || 0,
+        ip_address: req.ip,
+        user_agent: req.get('User-Agent'),
+        streamed: true
+      };
+
+      if (options.enableSemanticAnalysis || options.trackUserInsights) {
+        trackingData.semanticAnalysis = {
+          intent: result.intent || 'informational',
+          topics: result.topics || [],
+          keywords: result.keywords || [],
+          sentiment: result.sentiment || 'neutral',
+          complexity: result.complexity || 'medium'
+        };
+        trackingData.userInsights = options.trackUserInsights;
+      }
+
+      await subscriptionService.trackUserUsage(userId, 'chat_query', trackingData);
+    } catch (trackingError) {
+      console.error('Usage tracking error:', trackingError);
+    }
+
+  } catch (error: any) {
+    console.error('Streaming chat error:', error);
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: 'Chat processing failed',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }));
+    }
+  }
+}
 
 export default router;

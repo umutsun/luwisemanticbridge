@@ -1,20 +1,27 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageList } from './message-list';
 import { ChatInput } from './chat-input';
 import { useChatStore } from '@/lib/store/chat-store';
 import { useChat } from '@/lib/hooks/use-chat';
+import { useChatStream } from '@/lib/hooks/use-chat-stream';
 
 export function ChatContainer() {
-  const { 
-    getCurrentMessages, 
+  const {
+    getCurrentMessages,
     isLoading,
     currentConversationId,
-    createNewConversation 
+    createNewConversation
   } = useChatStore();
-  
-  const { sendMessage } = useChat();
+
+  const [useStreaming, setUseStreaming] = useState(true); // Enable streaming by default
+
+  // Use streaming or regular chat based on flag
+  const { sendMessage: sendStreamingMessage } = useChatStream();
+  const { sendMessage: sendRegularMessage } = useChat();
+
+  const sendMessage = useStreaming ? sendStreamingMessage : sendRegularMessage;
   const messages = getCurrentMessages();
 
   useEffect(() => {

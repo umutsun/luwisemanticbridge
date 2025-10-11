@@ -14,6 +14,9 @@ import { SERVER, API } from './config';
 import { initializeRedis } from './config/redis';
 import { initializeConfigs, getAppConfig, asembPool, initializeAsembDatabase, syncAPIKeysToDatabase } from './config/database.config';
 
+// Chat WebSocket connection manager
+const chatConnections = new Map<string, any>();
+
 // Import routes
 import searchRoutes from './routes/search.routes';
 import chatRoutes from './routes/chat.routes';
@@ -42,6 +45,7 @@ import adminRoutes from './routes/admin.routes';
 import llmStatusRoutes from './routes/llm-status.routes';
 import logsRoutes, { initializeLogWebSocket } from './routes/logs.routes';
 import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
+// import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from './services/auth.service';
 import { SettingsService } from './services/settings.service';
 
@@ -78,6 +82,12 @@ const wss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
   path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH
 }) : null;
 
+// Initialize WebSocket Server for chat streaming
+const chatWss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
+  noServer: true,
+  path: '/ws/chat'
+}) : null;
+
 // Initialize WebSocket Server for logs
 const logWss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
   noServer: true,
@@ -90,9 +100,10 @@ if (SERVER.WEBSOCKET.ENABLED && logWss) {
 }
 
 // Handle WebSocket upgrade for standard WebSocket connections if enabled
-if (SERVER.WEBSOCKET.ENABLED && (wss || logWss)) {
+if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
   httpServer.on('upgrade', (request, socket, head) => {
-    const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+    const host = request.headers.host || 'localhost';
+    const pathname = new URL(request.url!, 'http://' + host).pathname;
 
     if (pathname === SERVER.WEBSOCKET.NOTIFICATIONS_PATH && wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
@@ -101,6 +112,39 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss)) {
     } else if (pathname === '/ws/logs' && logWss) {
       logWss.handleUpgrade(request, socket, head, (ws) => {
         logWss.emit('connection', ws, request);
+      });
+    } else if (pathname === '/ws/chat' && chatWss) {
+      chatWss.handleUpgrade(request, socket, head, (ws) => {
+        const url = new URL(request.url!, 'http://' + (request.headers.host || 'localhost'));
+        const userId = url.searchParams.get('userId') || url.searchParams.get('client-id');
+        if (userId) {
+          chatConnections.set(userId, ws);
+
+          ws.on('message', (data) => {
+            // Handle incoming chat WebSocket messages
+            try {
+              const message = JSON.parse(data);
+              if (message.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong' }));
+              } else if (message.type === 'connect') {
+                // Store client ID for connection
+                const clientId = message.clientId;
+                if (clientId && clientId !== userId) {
+                  chatConnections.delete(userId);
+                  chatConnections.set(clientId, ws);
+                }
+              }
+            } catch (error) {
+              // Ignore invalid JSON
+            }
+          });
+
+          ws.on('close', () => {
+            chatConnections.delete(userId);
+          });
+
+          ws.send(JSON.stringify({ type: 'connected' }));
+        }
       });
     } else {
       socket.destroy();
@@ -231,6 +275,7 @@ app.use('/api/v2/llm', llmStatusRoutes);
 app.use('/api/v2/admin', adminRoutes);
 app.use('/api/v2/logs', logsRoutes);
 app.use('/api/v2/embeddings-tables', embeddingsTablesRoutes);
+// app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
 
 // Base route
 app.get('/api/v2', (req: Request, res: Response) => {
@@ -463,39 +508,44 @@ import { loadProgressFromRedis as loadV2ProgressFromRedis } from './routes/embed
 const PORT = SERVER.PORT;
 
 async function startServer() {
-  console.log(`🚀 Starting ASB Backend Server on port ${PORT}`);
+  console.log('\n🚀 ===============================================');
+  console.log(`   ALICE SEMANTIC BRIDGE BACKEND v2.0.0`);
+  console.log('==============================================');
+  console.log(`📍 Port: ${PORT}`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'}`);
   if (SERVER.WEBSOCKET.ENABLED) {
-    console.log(`   Socket.IO Path: ${SERVER.WEBSOCKET.PATH}`);
-    console.log(`   Notifications Path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`);
+    console.log(`   • Socket.IO Path: ${SERVER.WEBSOCKET.PATH}`);
+    console.log(`   • Notifications Path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`);
   }
+  console.log('==============================================\n');
 
   // Database connection variables
   let dbConnectionAttempts = 0;
   const maxDbRetries = 5;
   const dbRetryDelay = 5000; // 5 seconds
 
+  console.log('\n📊 [1/4] DATABASE CONNECTION');
+  console.log('--------------------------');
+
   // Retry database connection with backoff
   while (dbConnectionAttempts < maxDbRetries) {
     try {
-      console.log('\n📊 Initializing ASEMB Database Connection...');
-      console.log(`📡 Attempt ${dbConnectionAttempts + 1}/${maxDbRetries}`);
-      console.log(`🔗 Connecting to: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`);
+      console.log(`🔄 Connecting to PostgreSQL...`);
+      console.log(`   Host: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}`);
+      console.log(`   Database: ${process.env.POSTGRES_DB || 'asemb'}`);
 
       await asembPool.query('SELECT 1');
-      console.log('✅ ASEMB Database: Connected');
+      console.log('✅ PostgreSQL: Connected');
       break; // Success, exit retry loop
 
     } catch (dbError: any) {
       dbConnectionAttempts++;
-      console.error(`❌ Database connection attempt ${dbConnectionAttempts} failed:`, dbError.message);
+      console.error(`❌ Attempt ${dbConnectionAttempts}/${maxDbRetries} failed`);
 
       if (dbConnectionAttempts >= maxDbRetries) {
-        console.error('\n🔴 DATABASE CONNECTION ERROR: Could not connect to ASEMB database after multiple attempts');
-        console.error('🔴 Please check your database configuration in .env file');
-        console.error(`🔴 Expected: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`);
-        console.error('🔴 Server will continue in LIMITED MODE - Dashboard will show loading state');
+        console.error('\n💥 DATABASE CONNECTION FAILED');
+        console.error('   Server will continue in LIMITED MODE');
 
         // Set server status to indicate database connection failure
         (global as any).serverStatus = {
@@ -515,22 +565,27 @@ async function startServer() {
   if ((global as any).serverStatus?.database !== 'disconnected') {
     try {
       // Initialize ASEMB database tables
-      console.log('🗃️ Initializing ASEMB Database Tables...');
+      console.log('\n🗃️ [2/4] DATABASE SETUP');
+      console.log('------------------------');
+      console.log('🔄 Initializing tables...');
       await initializeAsembDatabase();
-      console.log('✅ ASEMB Database Tables: Ready');
+      console.log('✅ Tables: Ready');
 
       // Create default admin user if not exists
       const authService = new AuthService();
       await authService.createDefaultAdmin();
+      console.log('✅ Admin user: Checked');
 
       // Load all configurations from ASEMB database
-      console.log('⚙️ Loading configurations from ASEMB database...');
+      console.log('\n⚙️ [3/4] CONFIGURATION');
+      console.log('---------------------');
+      console.log('🔄 Loading settings from database...');
       await initializeConfigs();
-      console.log('✅ All configurations loaded from database');
+      console.log('✅ Settings: Loaded');
 
       // Sync API keys from environment variables to database
       await syncAPIKeysToDatabase();
-      console.log('✅ API keys synced to database');
+      console.log('✅ API keys: Synced');
 
       // Update server status to indicate successful database connection
       (global as any).serverStatus = {
@@ -539,7 +594,7 @@ async function startServer() {
         settings: 'loaded'
       };
     } catch (configError: any) {
-      console.error('⚠️ Database connected but failed to load configurations:', configError.message);
+      console.error('⚠️ Configuration loading failed:', configError.message);
       (global as any).serverStatus = {
         database: 'connected',
         loading: false,
@@ -549,44 +604,47 @@ async function startServer() {
     }
   }
 
-    // Initialize Redis with settings from database
+    // Initialize Redis
+  console.log('\n📡 REDIS CONNECTION');
+  console.log('---------------------');
   try {
-    console.log('\n📡 Initializing Redis...');
+    console.log('🔄 Connecting to Redis...');
     await initializeRedis();
     console.log('✅ Redis: Connected');
+
+    // Check Redis database info
+    if (redis) {
+      try {
+        const redisInfo = await redis.info('keyspace');
+        const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
+        if (dbKeys) {
+          console.log(`📊 DB Keys: ${dbKeys[1]} items`);
+        }
+      } catch (redisInfoError) {
+        console.warn('⚠️ Could not get Redis info');
+      }
+    }
 
     // Update server status with Redis connection
     if ((global as any).serverStatus) {
       (global as any).serverStatus.redis = 'connected';
     }
   } catch (redisError: any) {
-    console.error('⚠️ Redis connection failed:', redisError.message);
+    console.error('❌ Redis connection failed');
     if ((global as any).serverStatus) {
       (global as any).serverStatus.redis = 'disconnected';
       (global as any).serverStatus.redisError = redisError.message;
     }
   }
 
-    // Check Redis database info if Redis is available
-  if (redis) {
-    try {
-      const redisInfo = await redis.info('keyspace');
-      const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
-      if (dbKeys) {
-        console.log(`📋 Redis DB${process.env.REDIS_DB || 2}: ${dbKeys[1]} keys`);
-      }
-    } catch (redisInfoError) {
-      console.log('⚠️ Could not get Redis info:', (redisInfoError as Error).message);
-    }
-  }
-
-    // Initialize AI Services (load from database first, fallback to .env)
-  console.log('\n🤖 AI Services Status:');
+  // Initialize AI Services
+  console.log('\n🤖 [4/4] AI SERVICES');
+  console.log('-------------------');
   const settingsService = SettingsService.getInstance();
   const aiServices = [
-    { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-3.5/4', settingKey: 'openai.apiKey' },
-    { name: 'Claude', key: 'CLAUDE_API_KEY', model: 'Claude 3', settingKey: 'anthropic.apiKey' },
-    { name: 'Gemini', key: 'GEMINI_API_KEY', model: 'Gemini Pro', settingKey: 'google.apiKey' },
+    { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-4/3.5', settingKey: 'openai.apiKey' },
+    { name: 'Claude', key: 'CLAUDE_API_KEY', model: 'Claude 3.5', settingKey: 'anthropic.apiKey' },
+    { name: 'Gemini', key: 'GEMINI_API_KEY', model: 'Gemini 1.5', settingKey: 'google.apiKey' },
     { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek', settingKey: 'deepseek.apiKey' }
   ];
 
@@ -595,37 +653,31 @@ async function startServer() {
     let source = 'not configured';
 
     try {
-      // Try to get API key from database first (settings are stored as flat key-value pairs)
+      // Try to get API key from database first
       const allSettings = await settingsService.getAllSettings();
       let parsedSettings = allSettings;
 
-      // If settings is a JSON string, parse it first
       if (typeof allSettings === 'string') {
         try {
           parsedSettings = JSON.parse(allSettings);
         } catch (parseError) {
-          console.error('Failed to parse settings JSON:', parseError);
           parsedSettings = {};
         }
       }
 
-      // Access the API key directly using the flat key structure (e.g., 'deepseek.apiKey')
       const dbApiKey = parsedSettings[service.settingKey];
 
       if (dbApiKey && dbApiKey.trim() !== '') {
         isConfigured = true;
         source = 'database';
       } else if (process.env[service.key]) {
-        // Fallback to environment variable
         isConfigured = true;
-        source = '.env';
+        source = 'env';
       }
     } catch (error) {
-      console.error(`Error checking ${service.name}:`, error);
-      // If database fails, check environment variable
       if (process.env[service.key]) {
         isConfigured = true;
-        source = '.env';
+        source = 'env';
       }
     }
 
@@ -636,16 +688,17 @@ async function startServer() {
     }
   }
 
-    // Check Embedding settings (basic)
-  console.log('\n🔤 Embedding Configuration:');
+  // Check Embedding settings
+  console.log('\n🔤 EMBEDDINGS');
+  console.log('-------------');
   if (process.env.USE_LOCAL_EMBEDDINGS === 'true') {
-    console.log('📦 Provider: Local (random vectors)');
+    console.log('📦 Provider: Local');
   } else {
     console.log('📦 Provider: OpenAI (default)');
   }
 
-    // LightRAG service disabled
-  console.log('\n🔍 LightRAG Status: Disabled by configuration');
+  // LightRAG service disabled
+  console.log('\n🔍 LightRAG: Disabled');
   lightRAGService = null;
 
     // Load migration progress from Redis (only if Redis is available)
@@ -759,11 +812,12 @@ async function startServer() {
 
 // Start HTTP server (this should always happen regardless of database status)
 const startHttpServer = () => {
-  console.log('\n🎉 Backend Server Starting...');
-  console.log('📡 WebSocket server ready');
-  console.log(`🌐 API available at: http://localhost:${PORT}`);
-  console.log('📖 Health check: GET /health');
-  console.log('🔗 API docs: GET /api/v2');
+  console.log('\n🌐 SERVER STARTUP');
+  console.log('==================');
+  console.log(`📡 WebSocket: Ready`);
+  console.log(`🌐 API: http://localhost:${PORT}`);
+  console.log(`📊 Health: GET /health`);
+  console.log(`📚 Docs: GET /api/v2`);
 
   // Publish startup event
   if (redis) {
@@ -778,18 +832,19 @@ const startHttpServer = () => {
   // Start the HTTP server
   if (!httpServer.listening) {
     httpServer.listen(PORT, () => {
-      console.log(`\n🚀 HTTP Server listening on port ${PORT}`);
+      const duration = Date.now() - Date.now();
+      console.log(`\n✅ Server listening on port ${PORT}`);
 
-      // Display server status
+      // Display final status
       const serverStatus = (global as any).serverStatus;
       if (serverStatus?.database === 'connected') {
-        console.log('✅ Server Status: Fully Operational');
+        console.log('🟢 Status: FULLY OPERATIONAL');
       } else if (serverStatus?.loading) {
-        console.log('⚠️ Server Status: Limited Mode - Database Connection Failed');
-        console.log('🔄 Dashboard will show loading state');
+        console.log('🟡 Status: LIMITED MODE (DB Connection Failed)');
       } else {
-        console.log('⚠️ Server Status: Limited Mode - Some Services Unavailable');
+        console.log('🟡 Status: LIMITED MODE');
       }
+      console.log('==============================\n');
     });
   }
 };
@@ -908,5 +963,5 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-export { app, io, httpServer, asembPool as pgPool, redis };
+export { app, io, httpServer, asembPool as pgPool, redis, chatWss, chatConnections };
 // Trigger restart

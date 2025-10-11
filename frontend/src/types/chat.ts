@@ -5,6 +5,10 @@ export interface Message {
   timestamp: Date;
   sources?: Source[];
   isLoading?: boolean;
+  isStreaming?: boolean;
+  status?: 'searching' | 'generating' | 'complete' | 'error';
+  statusMessage?: string;
+  relatedTopics?: Source[];
 }
 
 export interface Source {

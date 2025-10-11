@@ -3,7 +3,7 @@
  * Provides intelligent query generation and semantic context for enhanced search capabilities
  */
 
-import { TABLES, SOURCE_TYPE_DISPLAYS } from '../config';
+import { getTableDisplayName as getDynamicTableDisplayName } from './table-names';
 
 export interface SemanticContext {
   category?: string;
@@ -329,7 +329,7 @@ export function createEnhancedSourceClickHandler(
     const keywords = extractKeywords(title + ' ' + excerpt + ' ' + content);
 
     // Generate contextual question
-    question = generateQuestionFromContext(title, content || excerpt, category, sourceTable, keywords);
+    question = await generateQuestionFromContext(title, content || excerpt, category, sourceTable, keywords);
 
     console.log('Generated contextual question:', question);
   }
@@ -391,31 +391,34 @@ function extractKeywords(text: string): string[] {
 /**
  * Generate contextual question from title and metadata
  */
-function generateQuestionFromContext(title: string, content: string, category: string, sourceTable: string, keywords: string[]): string {
+async function generateQuestionFromContext(title: string, content: string, category: string, sourceTable: string, keywords: string[]): Promise<string> {
   // Clean title for question generation
   const cleanTitle = cleanSourceTitle(title);
 
+  // Get dynamic table names
+  const tables = await getDynamicTables();
+
   // Category-specific question patterns
-  if (category === 'Mevzuat' || sourceTable === TABLES.MEVZUAT || sourceTable === 'MEVZUAT') {
+  if (category === 'Mevzuat' || sourceTable === tables.MEVZUAT || sourceTable === 'MEVZUAT') {
     if (keywords.some(k => k.includes('Vergi'))) {
       return `${cleanTitle} konusunda vergisel yükümlülükler nelerdir?`;
     }
     return `${cleanTitle} hükmünün uygulaması nasıl yapılır?`;
   }
 
-  if (sourceTable === TABLES.DANISTAY_KARARLARI || sourceTable === 'DANISTAYKARARLARI' || category === 'İçtihat') {
+  if (sourceTable === tables.DANISTAY_KARARLARI || sourceTable === 'DANISTAYKARARLARI' || category === 'İçtihat') {
     return `${cleanTitle} kararının emsal değeri ve uygulaması hakkında bilgi verebilir misiniz?`;
   }
 
-  if (sourceTable === TABLES.OZELGELER || sourceTable === 'OZELGELER') {
+  if (sourceTable === tables.OZELGELER || sourceTable === 'OZELGELER') {
     return `${cleanTitle} özelgesinin kapsamı ve şartları nelerdir?`;
   }
 
-  if (sourceTable === TABLES.MAKALELER || sourceTable === 'Makaleler') {
+  if (sourceTable === tables.MAKALELER || sourceTable === 'Makaleler') {
     return `${cleanTitle} konusuyla ilgili görüşleriniz nelerdir?`;
   }
 
-  if (sourceTable === TABLES.SORU_CEVAP || sourceTable === 'sorucevap') {
+  if (sourceTable === tables.SORU_CEVAP || sourceTable === 'sorucevap') {
     return `${cleanTitle} sorusuna benzer durumlar için ne yapmalıyım?`;
   }
 
@@ -439,6 +442,6 @@ function generateQuestionFromContext(title: string, content: string, category: s
 /**
  * Helper function to get table display names (consistent with frontend)
  */
-function getTableDisplayName(tableName: string): string {
-  return SOURCE_TYPE_DISPLAYS[tableName as keyof typeof SOURCE_TYPE_DISPLAYS] || tableName;
+async function getTableDisplayName(tableName: string): Promise<string> {
+  return await getDynamicTableDisplayName(tableName);
 }

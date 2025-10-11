@@ -245,7 +245,7 @@ export class SemanticSearchService {
       let model = settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
 
       // Normalize provider name
-      provider = this.normalizeProviderName(provider);
+      provider = this.normalizeProvider(provider);
 
       // Set default model based on provider
       if (!model || model === 'text-embedding-004') {
@@ -582,13 +582,13 @@ export class SemanticSearchService {
   }
 
   async unifiedSemanticSearch(query: string, limit: number = 10) {
-    console.log('[SemanticSearch] Using keyword-only search for performance (no embedding generation)');
-    return this.keywordSearch(query, limit);
+    // Use the real semantic search with embeddings
+    return this.semanticSearch(query, limit);
   }
 
   async hybridSearch(query: string, limit: number = 10) {
-    console.log('[SemanticSearch] Using keyword-only search for performance (no embedding generation)');
-    return this.keywordSearch(query, limit);
+    // Use the real semantic search with embeddings
+    return this.semanticSearch(query, limit);
   }
 
   async findSimilarDocuments(documentId: string, limit: number = 5) {

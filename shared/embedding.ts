@@ -1,5 +1,5 @@
-/**
- * Alice Semantic Bridge - Enhanced Embeddings Service
+﻿/**
+ * Luwi Semantic Bridge - Enhanced Embeddings Service
  * @author Gemini (AI Integration Lead)
  */
 

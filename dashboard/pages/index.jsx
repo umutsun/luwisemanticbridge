@@ -54,7 +54,7 @@ export default function Dashboard() {
   });
   const [configStatus, setConfigStatus] = useState({
     asemb_database: { connected: false },
-    customer_database: { connected: false },
+    source_database: { connected: false },
     redis: { connected: false }
   });
 
@@ -544,30 +544,30 @@ function SettingsComponent({ configStatus, systemHealth }) {
             </div>
           </div>
 
-          {/* Customer Database */}
+          {/* Source Database */}
           <div className="border rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-3">Customer Database</h3>
+            <h3 className="text-lg font-semibold mb-3">Source Database</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Host</span>
-                <span className="text-sm font-medium">{configStatus.customer_database.host}</span>
+                <span className="text-sm font-medium">{configStatus.source_database.host}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Port</span>
-                <span className="text-sm font-medium">{configStatus.customer_database.port}</span>
+                <span className="text-sm font-medium">{configStatus.source_database.port}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Database</span>
-                <span className="text-sm font-medium">{configStatus.customer_database.database}</span>
+                <span className="text-sm font-medium">{configStatus.source_database.database}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Status</span>
                 <span className={`px-2 py-1 text-xs rounded-full ${
-                  configStatus.customer_database.connected
+                  configStatus.source_database.connected
                     ? 'text-green-600 bg-green-100'
                     : 'text-red-600 bg-red-100'
                 }`}>
-                  {configStatus.customer_database.connected ? 'Connected' : 'Disconnected'}
+                  {configStatus.source_database.connected ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
             </div>

@@ -1,6 +1,6 @@
-"use strict";
+﻿"use strict";
 /**
- * Alice Semantic Bridge - Intelligent Chunking Strategies
+ * Luwi Semantic Bridge - Intelligent Chunking Strategies
  * @author Gemini (AI Integration Lead)
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {

@@ -57,7 +57,7 @@ export default function ChatbotSettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8083/api/v2/chatbot/settings');
+      const response = await fetch('http://localhost:8084/api/v2/chatbot/settings');
       const data = await response.json();
       
       setSettings({
@@ -87,7 +87,7 @@ export default function ChatbotSettingsPage() {
     setMessage(null);
     
     try {
-      const response = await fetch('http://localhost:8083/api/v2/chatbot/settings', {
+      const response = await fetch('http://localhost:8084/api/v2/chatbot/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,7 +119,7 @@ export default function ChatbotSettingsPage() {
     }
     
     try {
-      const response = await fetch('http://localhost:8083/api/v2/chatbot/settings', {
+      const response = await fetch('http://localhost:8084/api/v2/chatbot/settings', {
         method: 'DELETE'
       });
       

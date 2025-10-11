@@ -93,7 +93,7 @@ export default function Header() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [connectionProgress, setConnectionProgress] = useState(0);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  
+    
   useEffect(() => {
     // Get user from localStorage
     const storedUser = localStorage.getItem('user');
@@ -108,6 +108,7 @@ export default function Header() {
     return () => clearInterval(interval);
   }, []);
 
+  
   const fetchSystemStatus = async () => {
     if (isConnecting) {
       let progress = 0;
@@ -155,8 +156,9 @@ export default function Header() {
             displayName: 'Claude 3 Sonnet'
           };
 
+          let settings = null;
           try {
-            const settings = await getAppSettings();
+            settings = await getAppSettings();
             if (settings && settings.llmSettings?.activeChatModel) {
               const modelParts = settings.llmSettings.activeChatModel.split('/');
               if (modelParts.length >= 2) {
@@ -420,6 +422,7 @@ export default function Header() {
             {/* Notification Center */}
             <NotificationCenter />
 
+            
             {/* System Status - Minimal Zen Design */}
             <div className="hidden sm:block">
               <DropdownMenu>

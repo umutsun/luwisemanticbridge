@@ -653,70 +653,100 @@ router.get('/ai', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     const settings = req.body;
+    console.log('🔧 [SETTINGS] Saving settings:', Object.keys(settings));
 
-    // Handle both LLM and RAG settings
+    // Handle both flat and nested config structures
     const settingsToSave = [];
 
-    // LLM Settings
-    if (settings.activeChatModel) {
-      settingsToSave.push({ key: 'active_chat_model', value: settings.activeChatModel });
-    }
-    if (settings.activeEmbeddingModel) {
-      settingsToSave.push({ key: 'active_embedding_model', value: settings.activeEmbeddingModel });
-    }
-    if (settings.temperature !== undefined) {
-      settingsToSave.push({ key: 'temperature', value: settings.temperature.toString() });
-    }
-    if (settings.topP !== undefined) {
-      settingsToSave.push({ key: 'top_p', value: settings.topP.toString() });
-    }
-    if (settings.maxTokens !== undefined) {
-      settingsToSave.push({ key: 'max_tokens', value: settings.maxTokens.toString() });
-    }
-    if (settings.streamResponse !== undefined) {
-      settingsToSave.push({ key: 'stream_response', value: settings.streamResponse.toString() });
+    // Helper function to extract settings from nested objects
+    const extractSettings = (obj: any, prefix: string = '') => {
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Recursively extract from nested objects
+          extractSettings(value, prefix ? `${prefix}.${key}` : key);
+        } else {
+          // Convert nested key to flat format
+          const flatKey = prefix ? `${prefix}.${key}` : key;
+          const stringValue = typeof value === 'boolean' ? value.toString() :
+                            typeof value === 'number' ? value.toString() :
+                            value;
+          settingsToSave.push({ key: flatKey, value: stringValue });
+        }
+      }
+    };
+
+    // Extract all settings from the nested config
+    extractSettings(settings);
+
+    // Special handling for LLM settings with camelCase to snake_case conversion
+    const llmSettings = settings.llmSettings;
+    if (llmSettings) {
+      if (llmSettings.activeChatModel !== undefined) {
+        settingsToSave.push({ key: 'active_chat_model', value: llmSettings.activeChatModel });
+      }
+      if (llmSettings.activeEmbeddingModel !== undefined) {
+        settingsToSave.push({ key: 'active_embedding_model', value: llmSettings.activeEmbeddingModel });
+      }
+      if (llmSettings.temperature !== undefined) {
+        settingsToSave.push({ key: 'llmSettings.temperature', value: llmSettings.temperature.toString() });
+      }
+      if (llmSettings.topP !== undefined) {
+        settingsToSave.push({ key: 'llmSettings.topP', value: llmSettings.topP.toString() });
+      }
+      if (llmSettings.maxTokens !== undefined) {
+        settingsToSave.push({ key: 'llmSettings.maxTokens', value: llmSettings.maxTokens.toString() });
+      }
+      if (llmSettings.streamResponse !== undefined) {
+        settingsToSave.push({ key: 'llmSettings.streamResponse', value: llmSettings.streamResponse.toString() });
+      }
+      if (llmSettings.ragWeight !== undefined) {
+        settingsToSave.push({ key: 'llmSettings.ragWeight', value: llmSettings.ragWeight.toString() });
+      }
+      if (llmSettings.llmKnowledgeWeight !== undefined) {
+        settingsToSave.push({ key: 'llmSettings.llmKnowledgeWeight', value: llmSettings.llmKnowledgeWeight.toString() });
+      }
     }
 
-    // RAG Settings
-    if (settings.similarityThreshold !== undefined) {
-      settingsToSave.push({ key: 'similarity_threshold', value: settings.similarityThreshold.toString() });
-    }
-    if (settings.minResults !== undefined) {
-      settingsToSave.push({ key: 'min_results', value: settings.minResults.toString() });
-    }
-    if (settings.maxResults !== undefined) {
-      settingsToSave.push({ key: 'max_results', value: settings.maxResults.toString() });
-    }
-    if (settings.enableHybridSearch !== undefined) {
-      settingsToSave.push({ key: 'enable_hybrid_search', value: settings.enableHybridSearch.toString() });
-    }
-    if (settings.enableKeywordBoost !== undefined) {
-      settingsToSave.push({ key: 'enable_keyword_boost', value: settings.enableKeywordBoost.toString() });
-    }
-    if (settings.parallelLLMCount !== undefined) {
-      settingsToSave.push({ key: 'parallel_llm_count', value: settings.parallelLLMCount.toString() });
-    }
-    if (settings.parallelLLMBatchSize !== undefined) {
-      settingsToSave.push({ key: 'parallel_llm_batch_size', value: settings.parallelLLMBatchSize.toString() });
+    // Special handling for RAG settings
+    const ragSettings = settings.ragSettings;
+    if (ragSettings) {
+      if (ragSettings.similarityThreshold !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.similarityThreshold', value: ragSettings.similarityThreshold.toString() });
+      }
+      if (ragSettings.minResults !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.minResults', value: ragSettings.minResults.toString() });
+      }
+      if (ragSettings.maxResults !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.maxResults', value: ragSettings.maxResults.toString() });
+      }
+      if (ragSettings.enableHybridSearch !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.enableHybridSearch', value: ragSettings.enableHybridSearch.toString() });
+      }
+      if (ragSettings.enableKeywordBoost !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.enableKeywordBoost', value: ragSettings.enableKeywordBoost.toString() });
+      }
+      if (ragSettings.parallelLLMCount !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.parallelLLMCount', value: ragSettings.parallelLLMCount.toString() });
+      }
+      if (ragSettings.parallelLLMBatchSize !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.parallelLLMBatchSize', value: ragSettings.parallelLLMBatchSize.toString() });
+      }
+      if (ragSettings.batchSize !== undefined) {
+        settingsToSave.push({ key: 'ragSettings.batchSize', value: ragSettings.batchSize.toString() });
+      }
     }
 
     // Save each setting
     for (const setting of settingsToSave) {
-      const checkResult = await asembPool.query(
-        'SELECT key FROM settings WHERE key = $1',
-        [setting.key]
-      );
-
-      if (checkResult.rows.length === 0) {
+      if (setting.key && setting.value !== undefined) {
         await asembPool.query(
-          'INSERT INTO settings (key, value) VALUES ($1, $2)',
+          `INSERT INTO settings (key, value, updated_at)
+           VALUES ($1, $2, CURRENT_TIMESTAMP)
+           ON CONFLICT (key)
+           DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
           [setting.key, setting.value]
         );
-      } else {
-        await asembPool.query(
-          'UPDATE settings SET value = $1 WHERE key = $2',
-          [setting.value, setting.key]
-        );
+        console.log(`✅ Saved setting: ${setting.key} = ${setting.value}`);
       }
     }
 
@@ -726,10 +756,10 @@ router.post('/', async (req: Request, res: Response) => {
     settingsService.clearCache('all_settings');
     console.log('✅ Settings cache cleared after save');
 
-    res.json({ success: true });
+    res.json({ success: true, message: 'Settings saved successfully' });
   } catch (error) {
     console.error('Error saving settings:', error);
-    res.status(500).json({ error: 'Failed to save settings' });
+    res.status(500).json({ error: 'Failed to save settings', details: error.message });
   }
 });
 

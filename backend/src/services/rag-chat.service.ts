@@ -190,7 +190,15 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
     try {
       // 1. Create or get conversation
       const convId = conversationId || uuidv4();
-      await this.ensureConversation(convId, userId, message);
+
+      if (!conversationId) {
+        await this.ensureConversation(convId, userId, message);
+        // Log new conversation start
+        await this.logActivity(userId, 'chat_start', { conversationId: convId, firstMessage: message });
+      } else {
+        // Log activity for existing conversation
+        await this.logActivity(userId, 'chat_message', { conversationId: convId });
+      }
 
       // Get system prompt from database or use default
       const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
@@ -280,18 +288,34 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // Generate response using LLM Manager
       const fullPrompt = `BAĞLAM:\n${simpleContext}\n\nSORU: ${message}`;
       console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
+
+      // Get active model from settings
+      const activeModel = await settingsService.getSetting('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet';
+      const providerFromModel = this.extractProviderFromModel(activeModel);
+
       const response = await llmManager.generateChatResponse(
         fullPrompt,
         {
           temperature: options.temperature,
           maxTokens: options.maxTokens,
-          systemPrompt: systemPrompt
+          systemPrompt: systemPrompt,
+          preferredProvider: providerFromModel  // Pass the active model as preferred
         }
       );
 
       // 5. Save messages to database
       await this.saveMessage(convId, 'user', message);
-      await this.saveMessage(convId, 'assistant', response.content, searchResults);
+      await this.saveMessage(convId, 'assistant', response.content, searchResults, response.model);
+
+      // Log if fallback was used
+      if (response.fallbackUsed) {
+        console.log(`⚠️ Fallback was used - active model ${providerFromModel} was not available`);
+        await this.logActivity(userId, 'model_fallback', {
+          activeModel: activeModel,
+          actualProvider: response.provider,
+          fallbackUsed: true
+        });
+      }
 
       // 6. Format sources for frontend with natural language summaries
       const formattedSources = await this.formatSources(searchResults);
@@ -330,7 +354,10 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         provider: response.provider,
         model: response.model || response.provider,
         providerDisplayName: getProviderDisplayName(response.provider || '', options.language || 'tr'),
-        language: options.language || 'tr'
+        language: options.language || 'tr',
+        fallbackUsed: response.fallbackUsed || false,
+        originalModel: activeModel,
+        actualProvider: response.provider
       };
     } catch (error) {
       console.error('RAG chat error:', error);
@@ -430,6 +457,17 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
     // Default category if no source_table
     return 'Document';
+  }
+
+  /**
+   * Extract provider name from model string
+   */
+  private extractProviderFromModel(model: string): string {
+    if (model.includes('claude') || model.includes('anthropic')) return 'claude';
+    if (model.includes('openai') || model.includes('gpt')) return 'openai';
+    if (model.includes('gemini') || model.includes('google')) return 'gemini';
+    if (model.includes('deepseek')) return 'deepseek';
+    return 'claude'; // default
   }
 
   /**
@@ -829,11 +867,12 @@ Başlık: ${title}
     conversationId: string,
     role: string,
     content: string,
-    sources?: any[]
+    sources?: any[],
+    model?: string
   ) {
     const query = `
-      INSERT INTO messages (id, conversation_id, role, content, sources, created_at)
-      VALUES ($1, $2, $3, $4, $5, NOW())
+      INSERT INTO messages (id, conversation_id, role, content, sources, model, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
     `;
 
     await this.pool.query(query, [
@@ -841,8 +880,114 @@ Başlık: ${title}
       conversationId,
       role,
       content,
-      sources ? JSON.stringify(sources) : null
+      sources ? JSON.stringify(sources) : null,
+      model || null
     ]);
+  }
+
+  /**
+   * Log activity for dashboard monitoring
+   */
+  private async logActivity(
+    userId: string,
+    activityType: 'model_change' | 'chat_start' | 'chat_message' | 'settings_change',
+    details: any
+  ) {
+    try {
+      // Ensure tables exist
+      await this.ensureTables();
+
+      const query = `
+        INSERT INTO activity_log (id, user_id, activity_type, details, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+      `;
+
+      await this.pool.query(query, [
+        uuidv4(),
+        userId,
+        activityType,
+        JSON.stringify(details)
+      ]);
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+  }
+
+  /**
+   * Ensure database tables and columns exist
+   */
+  private async ensureTables() {
+    try {
+      const startTime = Date.now();
+
+      // Check and add model column to messages table
+      console.log('🔧 Checking messages table structure...');
+      const modelColumnCheck = await this.pool.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'messages' AND column_name = 'model'
+      `);
+
+      if (modelColumnCheck.rows.length === 0) {
+        console.log('➕ Adding model column to messages table...');
+        await this.pool.query(`ALTER TABLE messages ADD COLUMN model VARCHAR(255)`);
+        await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model)`);
+        console.log('✅ Added model column to messages table');
+      } else {
+        console.log('✅ Model column already exists in messages table');
+      }
+
+      // Create activity_log table if not exists
+      console.log('🔧 Checking activity_log table...');
+
+      // First check if table exists
+      const tableCheck = await this.pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public'
+          AND table_name = 'activity_log'
+        )
+      `);
+
+      if (!tableCheck.rows[0].exists) {
+        console.log('➕ Creating activity_log table...');
+        await this.pool.query(`
+          CREATE TABLE activity_log (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id VARCHAR(255) NOT NULL,
+            activity_type VARCHAR(50) NOT NULL CHECK (activity_type IN ('model_change', 'chat_start', 'chat_message', 'settings_change')),
+            details JSONB,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          )
+        `);
+
+        // Create indexes
+        await this.pool.query(`CREATE INDEX idx_activity_log_user_id ON activity_log(user_id)`);
+        await this.pool.query(`CREATE INDEX idx_activity_log_activity_type ON activity_log(activity_type)`);
+        await this.pool.query(`CREATE INDEX idx_activity_log_created_at ON activity_log(created_at DESC)`);
+
+        console.log('✅ Activity log table created successfully');
+      } else {
+        // Check if user_id column exists in the table
+        const userIdColumnCheck = await this.pool.query(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'activity_log' AND column_name = 'user_id'
+        `);
+
+        if (userIdColumnCheck.rows.length === 0) {
+          console.log('➕ Adding user_id column to activity_log table...');
+          await this.pool.query(`ALTER TABLE activity_log ADD COLUMN user_id VARCHAR(255) NOT NULL DEFAULT ''`);
+          console.log('✅ Added user_id column to activity_log table');
+        } else {
+          console.log('✅ Activity log table already exists with proper columns');
+        }
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ Database schema check completed in ${duration}ms`);
+    } catch (error) {
+      console.error('❌ Failed to ensure tables:', error);
+      throw error; // Re-throw to see the full error
+    }
   }
 
   /**
@@ -1205,50 +1350,111 @@ Başlık: ${title}
           AND created_at > NOW() - INTERVAL '7 days'
         GROUP BY content
         ORDER BY count DESC
-        LIMIT 20
+        LIMIT 10
       `;
 
       const recentResult = await this.pool.query(recentSearchesQuery);
       const recentQuestions = recentResult.rows.map(r => r.content);
 
-      // Pre-defined popular questions based on database content
-      const popularQuestions = [
-        'KDV iadesi nasıl alınır?',
-        'E-fatura zorunluluğu kimleri kapsar?',
-        'Gelir vergisi dilimleri 2024',
-        'KDV tevkifatı oranları nedir?',
-        'Geçici vergi nasıl hesaplanır?',
-        'Stopaj oranları hangi ödemelerde uygulanır?',
-        'Vergi dairesi işlemleri nasıl yapılır?',
-        'Ar-Ge indirimi şartları nelerdir?',
-        'KDV beyannamesi ne zaman verilir?',
-        'Mücbir sebep halleri nelerdir?',
-        'Transfer fiyatlandırması nedir?',
-        'Vergi cezaları ve indirim oranları',
-        'E-defter uygulaması zorunlu mu?',
-        'İhracatta KDV istisnası nasıl uygulanır?',
-        'Kurumlar vergisi istisnaları nelerdir?',
-        'Damga vergisi oranları nedir?',
-        'Motorlu taşıtlar vergisi hesaplama',
-        'Özelge başvurusu nasıl yapılır?',
-        'Vergi incelemesi süreçleri',
-        'Dijital hizmet vergisi kimleri kapsar?'
+      // Get recent documents from database to generate relevant questions
+      const recentDocsQuery = `
+        SELECT title, content
+        FROM documents
+        WHERE created_at > NOW() - INTERVAL '30 days'
+          AND (content IS NOT NULL AND content != '')
+        ORDER BY created_at DESC
+        LIMIT 20
+      `;
+
+      const docsResult = await this.pool.query(recentDocsQuery);
+      const docQuestions: string[] = [];
+
+      // Generate questions based on actual document titles
+      for (const doc of docsResult.rows) {
+        const title = doc.title || '';
+
+        // Generate contextual questions based on document title
+        if (title.includes('KDV') || title.includes('KDV')) {
+          docQuestions.push(`${title} nasıl uygulanır?`);
+          docQuestions.push(`${title} ile ilgili esaslar nelerdir?`);
+        } else if (title.includes('vergi') || title.includes('Vergi')) {
+          docQuestions.push(`${title} hakkında bilinmesi gerekenler`);
+          docQuestions.push(`${title} ne zaman geçerlidir?`);
+        } else if (title.includes('beyanname') || title.includes('Beyanname')) {
+          docQuestions.push(`${title} verilme süresi`);
+          docQuestions.push(`${title} nasıl doldurulur?`);
+        } else if (title.includes('stopaj') || title.includes('tevkifat')) {
+          docQuestions.push(`${title} oranları`);
+          docQuestions.push(`${title} hesaplama yöntemi`);
+        } else {
+          // Generic questions for other documents
+          docQuestions.push(`${title} nedir?`);
+          docQuestions.push(`${title} ile ilgili usuller`);
+        }
+
+        if (docQuestions.length >= 10) break;
+      }
+
+      // Get most searched tax topics from all documents
+      const topicsQuery = `
+        SELECT DISTINCT
+          CASE
+            WHEN title ILIKE '%KDV%' THEN 'KDV'
+            WHEN title ILIKE '%gelir vergisi%' THEN 'Gelir Vergisi'
+            WHEN title ILIKE '%kurumlar vergisi%' THEN 'Kurumlar Vergisi'
+            WHEN title ILIKE '%stopaj%' THEN 'Stopaj'
+            WHEN title ILIKE '%tevkifat%' THEN 'Tevkifat'
+            WHEN title ILIKE '%beyanname%' THEN 'Beyanname'
+            WHEN title ILIKE '%e-fatura%' THEN 'E-fatura'
+            WHEN title ILIKE '%e-defter%' THEN 'E-defter'
+            WHEN title ILIKE '%ithalat%' OR title ILIKE '%ihracat%' THEN 'Dış Ticaret'
+            WHEN title ILIKE '%Özelge%' OR title ILIKE '%özelge%' THEN 'Özelge'
+            WHEN title ILIKE '%damga vergisi%' THEN 'Damga Vergisi'
+            WHEN title ILIKE '%MTV%' OR title ILIKE '%motorlu taşıt%' THEN 'Motorlu Taşıtlar Vergisi'
+            ELSE 'Diğer'
+          END as topic
+        FROM documents
+        WHERE created_at > NOW() - INTERVAL '30 days'
+        LIMIT 10
+      `;
+
+      const topicsResult = await this.pool.query(topicsQuery);
+      const topicQuestions: string[] = [];
+
+      for (const topic of topicsResult.rows) {
+        const topicName = topic.topic;
+        if (topicName && topicName !== 'Diğer') {
+          topicQuestions.push(`${topicName} ile ilgili son düzenlemeler`);
+          topicQuestions.push(`${topicName} beyan ve ödeme takvimi`);
+        }
+      }
+
+      // Combine all questions, prioritize recent searches
+      const allQuestions = [
+        ...new Set([...recentQuestions, ...docQuestions, ...topicQuestions])
       ];
 
-      // Combine recent searches with popular questions, remove duplicates
-      const allQuestions = [...new Set([...recentQuestions, ...popularQuestions])];
-      
+      // If no questions from database, use minimal tax-related questions
+      if (allQuestions.length === 0) {
+        return [
+          'Son vergi duyuruları nelerdir?',
+          'Beyanname süreçleri hakkında bilgi al',
+          'Vergi iade işlemleri nasıl yapılır?',
+          'Mevzuat değişiklikleri hakkında bilgi'
+        ];
+      }
+
       // Randomly select 4 questions
       const shuffled = allQuestions.sort(() => 0.5 - Math.random());
       return shuffled.slice(0, 4);
     } catch (error) {
       console.error('Error getting popular questions:', error);
-      // Return default questions if error
+      // Return minimal default questions if error
       return [
-        'KDV iadesi nasıl alınır?',
-        'E-fatura zorunluluğu kimleri kapsar?',
-        'Gelir vergisi dilimleri 2024',
-        'Geçici vergi nasıl hesaplanır?'
+        'Vergi danışmanlığı için nasıl yardımcı olabilirim?',
+        'Mevzuat sorgulaması yapabilir miyim?',
+        'Son düzenlemeler hakkında bilgi',
+        'Beyanname işlemleri hakkında yardım'
       ];
     }
   }

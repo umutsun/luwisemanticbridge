@@ -17,13 +17,13 @@ const defaultSettings = [
   // OpenAI settings
   { key: 'openai.apiKey', value: process.env.OPENAI_API_KEY || '' },
   { key: 'openai.model', value: process.env.OPENAI_MODEL || 'gpt-4o-mini' },
-  { key: 'openai.embeddingModel', value: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small' },
+  { key: 'openai.embeddingModel', value: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-large' },
   { key: 'openai.maxTokens', value: '4096' },
   { key: 'openai.temperature', value: '0.7' },
 
   // Anthropic settings
   { key: 'anthropic.apiKey', value: process.env.CLAUDE_API_KEY || '' },
-  { key: 'anthropic.model', value: 'claude-3-opus-20240229' },
+  { key: 'anthropic.model', value: 'claude-3-5-sonnet-20241022' },
   { key: 'anthropic.maxTokens', value: '4096' },
 
   // Gemini settings
@@ -60,8 +60,8 @@ const defaultSettings = [
   { key: 'scraper.userAgent', value: 'ASB Web Scraper' },
 
   // Embeddings settings
-  { key: 'embeddings.provider', value: process.env.EMBEDDING_PROVIDER || 'openai' },
-  { key: 'embeddings.model', value: process.env.EMBEDDING_MODEL || 'text-embedding-3-small' },
+  { key: 'embeddings.provider', value: process.env.EMBEDDING_PROVIDER || 'google' },
+  { key: 'embeddings.model', value: process.env.EMBEDDING_MODEL || 'text-embedding-004' },
   { key: 'embeddings.batchSize', value: '100' },
   { key: 'embeddings.maxTokens', value: '8192' },
   { key: 'embeddings.dimension', value: '1536' },
@@ -77,17 +77,17 @@ const defaultSettings = [
   { key: 'dataSource.prioritySource', value: 'local' },
 
   // LLM settings
-  { key: 'llmSettings.temperature', value: '0.1' },
+  { key: 'llmSettings.temperature', value: '0.3' },
   { key: 'llmSettings.topP', value: '0.9' },
-  { key: 'llmSettings.maxTokens', value: '2048' },
+  { key: 'llmSettings.maxTokens', value: '4096' },
   { key: 'llmSettings.presencePenalty', value: '0' },
   { key: 'llmSettings.frequencyPenalty', value: '0' },
   { key: 'llmSettings.ragWeight', value: '95' },
   { key: 'llmSettings.llmKnowledgeWeight', value: '5' },
   { key: 'llmSettings.streamResponse', value: 'true' },
   { key: 'llmSettings.systemPrompt', value: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver.' },
-  { key: 'llmSettings.activeChatModel', value: 'openai/gpt-4o-mini' },
-  { key: 'llmSettings.activeEmbeddingModel', value: 'openai/text-embedding-3-small' },
+  { key: 'llmSettings.activeChatModel', value: 'anthropic/claude-3-5-sonnet' },
+  { key: 'llmSettings.activeEmbeddingModel', value: 'google/text-embedding-004' },
   { key: 'llmSettings.responseStyle', value: 'professional' },
   { key: 'llmSettings.language', value: 'tr' },
 

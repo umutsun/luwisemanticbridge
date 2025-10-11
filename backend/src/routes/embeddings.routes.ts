@@ -676,7 +676,10 @@ router.get('/stats', async (req: Request, res: Response) => {
     const tables = [];
     let totalRecords = 0;
     let embeddedRecords = totalEmbeddings;
-    
+
+    // Get database name dynamically
+    const sourceDatabaseName = await getSourceDatabaseName();
+
     // Get statistics from source tables dynamically
     const targetTables = await getAvailableTables();
     
@@ -710,7 +713,7 @@ router.get('/stats', async (req: Request, res: Response) => {
         if (sourceCount > 0 || embedded > 0) {
           tables.push({
             name: tableName,
-            database: process.env.POSTGRES_DB || 'postgres',
+            database: sourceDatabaseName,
             schema: 'public',
             count: sourceCount,
             embedded: embedded,
@@ -748,7 +751,7 @@ router.get('/stats', async (req: Request, res: Response) => {
         time: row.time
       })),
       // Old format for backward compatibility
-      database: 'asemb',
+      database: sourceDatabaseName,
       totalRecords,
       embeddedRecords,
       pendingRecords: Math.max(0, totalRecords - embeddedRecords),
@@ -1563,7 +1566,7 @@ router.get('/tables', async (req: Request, res: Response) => {
     // Get database name from settings dynamically
     let databaseName = process.env.POSTGRES_DB || 'postgres'; // Default database name
     try {
-      // Get database name from customer_database settings
+      // Get database name from source_database settings
       const dbSettings = await getDatabaseSettings();
       if (dbSettings && typeof dbSettings === 'object') {
         // Check all possible field names
@@ -1815,6 +1818,24 @@ async function updateMigrationHistory(
   }
 }
 
+// Get source database name from settings
+async function getSourceDatabaseName(): Promise<string> {
+  try {
+    const dbSettings = await getDatabaseSettings();
+    // Try different possible field names for database name
+    return dbSettings.database ||
+           dbSettings.name ||
+           dbSettings.databaseName ||
+           dbSettings.sourceDatabase ||
+           dbSettings.dbName ||
+           process.env.POSTGRES_DB ||
+           'asemb'; // Default fallback
+  } catch (error) {
+    console.error('Error getting source database name:', error);
+    return process.env.POSTGRES_DB || 'asemb'; // fallback
+  }
+}
+
 // Background migration process
 async function processMigration(tables: string[], batchSize: number, migrationId: string, workerId: number = 1, isResume: boolean = false, providedSettings?: any) {
   try {
@@ -1825,6 +1846,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
     // Get dynamic source pool and target tables from settings
     const sourcePool = await getSourcePool();
     const targetTables = await getTargetTables();
+    const sourceDatabaseName = await getSourceDatabaseName(); // Get database name dynamically
 
     // Add initial delay to make progress visible in UI
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -2433,7 +2455,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                     updated_at = NOW()`,
                   [
                     'database',
-                    'rag_chatbot',
+                    sourceDatabaseName,
                     displayNames[table] || table,
                     row[primaryKey].toString(),
                     `${displayNames[table] || table} - ID: ${row[primaryKey]}`,

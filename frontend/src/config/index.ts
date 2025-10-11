@@ -3,17 +3,11 @@
  * All hardcoded values should be moved here
  */
 
-// Database Table Names
+// Database Table Names - Use dynamic table names from database
+// Import getDynamicTables from utils/table-names for dynamic table names
 export const TABLES = {
-  OZELGELER: 'Özelgeler',
-  DANISTAY_KARARLARI: 'Danıştay Kararları',
-  MEVZUAT: 'Mevzuat',
-  MAKALELER: 'Makaleler',
-  DOKUMAN: 'Dokümanlar',
-  SORU_CEVAP: 'Soru-Cevap',
-  DOCUMENTS: 'documents',
-  CONVERSATIONS: 'conversations',
-  MESSAGES: 'messages',
+  // Legacy support - these will be replaced with dynamic values
+  // Use getDynamicTables() instead for new code
 } as const;
 
 // API Configuration
@@ -82,8 +76,8 @@ export const UI = {
 // LLM Configuration
 export const LLM = {
   DEFAULT_SETTINGS: {
-    TEMPERATURE: 0.1,
-    MAX_TOKENS: 2048,
+    TEMPERATURE: 0.3,
+    MAX_TOKENS: 4096,
     TOP_P: 0.1,
     PRESENCE_PENALTY: 0,
     FREQUENCY_PENALTY: 0,
@@ -91,22 +85,24 @@ export const LLM = {
     LLM_KNOWLEDGE_WEIGHT: 0,
   },
   MODELS: {
-    DEFAULT: 'anthropic/claude-3-sonnet',
-    FALLBACK: 'openai/gpt-3.5-turbo',
+    DEFAULT: 'anthropic/claude-3-5-sonnet',
+    FALLBACK: 'openai/gpt-4o-mini',
+  },
+  EMBEDDINGS: {
+    DEFAULT_PROVIDER: 'google',
+    DEFAULT_MODEL: 'text-embedding-004',
+    MODELS: {
+      OPENAI: 'text-embedding-3-large',
+      GOOGLE: 'text-embedding-004',
+    },
   },
 } as const;
 
-// Source Type Display Names
+// Source Type Display Names - Use dynamic values from database
+// Legacy support - these will be replaced with dynamic values
 export const SOURCE_TYPE_DISPLAYS = {
-  OZELGELER: 'Özelgeler',
-  DANISTAYKARARLARI: 'Danıştay',
-  MAKALELER: 'Makaleler',
-  DOKUMAN: 'Dokümanlar',
-  MEVZUAT: 'Mevzuat',
-  sorucevap: 'Soru-Cevap',
-  documents: 'Dokümanlar',
-  conversations: 'Sohbetler',
-  messages: 'Mesajlar',
+  // Legacy support - these will be replaced with dynamic values
+  // Use getDynamicTables() from utils/table-names instead
 } as const;
 
 // Default Configuration

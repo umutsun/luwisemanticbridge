@@ -486,17 +486,17 @@ export async function initializeAsembDatabase() {
 // Save database settings
 export async function saveDatabaseSettings(settings: any) {
   const client = await asembPool.connect();
-  
+
   try {
     await client.query(`
       INSERT INTO settings (key, value, category, description)
-      VALUES ('customer_database', $1, 'database', 'Customer database connection settings')
-      ON CONFLICT (key) 
-      DO UPDATE SET 
+      VALUES ('source_database', $1, 'database', 'Source database connection settings')
+      ON CONFLICT (key)
+      DO UPDATE SET
         value = $1,
         updated_at = CURRENT_TIMESTAMP
     `, [JSON.stringify(settings)]);
-    
+
     return { success: true };
   } catch (error: any) {
     console.error('Failed to save database settings:', error);
@@ -511,14 +511,50 @@ export async function getDatabaseSettings() {
   let client;
   try {
     client = await asembPool.connect();
-    // First try to get source_database (new key), if not found fallback to customer_database (old key)
+    // First try to get database configuration from frontend settings (newest method)
+    console.log('DEBUG: Checking for frontend database settings...');
+
+    // Get all database-related settings from frontend
+    const dbSettings = await client.query(`
+      SELECT key, value FROM settings
+      WHERE key LIKE 'database.%'
+      ORDER BY key
+    `);
+
+    if (dbSettings.rows.length > 0) {
+      // Reconstruct database config from individual settings
+      const dbConfig: any = {};
+      dbSettings.rows.forEach(row => {
+        const key = row.key.replace('database.', '');
+        const value = row.value;
+
+        // Parse value based on key
+        if (key === 'port' || key === 'maxConnections') {
+          dbConfig[key] = parseInt(value);
+        } else if (key === 'ssl') {
+          dbConfig[key] = value === 'true' || value === true;
+        } else {
+          dbConfig[key] = value;
+        }
+      });
+
+      console.log('DEBUG: Found frontend database settings:', dbConfig);
+
+      // Return in the expected format
+      return {
+        database: dbConfig
+      };
+    }
+
+    // If no frontend settings found, try source_database (new key)
+    console.log('DEBUG: No frontend settings found, trying source_database...');
     let result = await client.query(`
       SELECT value FROM settings WHERE key = 'source_database'
     `);
 
-    // If source_database not found, try customer_database for backward compatibility
+    // If source_database not found, try legacy customer_database for backward compatibility
     if (result.rows.length === 0) {
-      console.log('DEBUG: source_database not found, trying customer_database for backward compatibility');
+      console.log('DEBUG: source_database not found, trying legacy customer_database for backward compatibility');
       result = await client.query(`
         SELECT value FROM settings WHERE key = 'customer_database'
       `);

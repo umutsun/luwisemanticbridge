@@ -2,16 +2,17 @@
 
 import { useState } from 'react';
 import { Source } from '@/types/chat';
-import { ExternalLink, FileText, Scale, BookOpen, MessageSquare, Database, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { ExternalLink, FileText, Scale, BookOpen, MessageSquare, Database, ChevronDown, ChevronUp, Plus, Tag } from 'lucide-react';
 
 interface SourceCitationProps {
   sources: Source[];
   onLoadMore?: () => void;
   hasMore?: boolean;
   showLoadMore?: boolean;
+  onExcerptClick?: (question: string) => void;
 }
 
-export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadMore = false }: SourceCitationProps) {
+export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadMore = false, onExcerptClick }: SourceCitationProps) {
   if (!sources || sources.length === 0) return null;
 
   // State for showing/hiding sources (progressive loading)
@@ -76,6 +77,55 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   const confidence = calculateConfidence();
   const confidenceColor = confidence >= 85 ? 'text-green-600' : confidence >= 70 ? 'text-yellow-600' : 'text-orange-600';
   const confidenceText = confidence >= 85 ? 'Yüksek' : confidence >= 70 ? 'Orta' : 'Düşük';
+
+  // Extract meaningful keywords/tags from source
+  const extractTags = (source: Source): string[] => {
+    const tags: string[] = [];
+
+    // Add category if available
+    if (source.category) {
+      tags.push(source.category);
+    }
+
+    // Extract keywords from title
+    if (source.title) {
+      // Remove common words and extract meaningful terms
+      const titleWords = source.title
+        .toLowerCase()
+        .replace(/[^\w\sçğıöşü]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 3)
+        .filter(word => !['için','hakkında','ile','ve','veya','bu','bir','çok','üzerinde','kadar'].includes(word));
+
+      tags.push(...titleWords.slice(0, 3));
+    }
+
+    // Extract keywords from excerpt
+    if (source.excerpt) {
+      const excerptWords = source.excerpt
+        .toLowerCase()
+        .replace(/[^\w\sçğıöşü]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 4)
+        .filter(word => !['için','hakkında','ile','ve','veya','bu','bir','çok','üzerinde','kadar','göre','yapılmaktadır','edilmektedir'].includes(word));
+
+      tags.push(...excerptWords.slice(0, 2));
+    }
+
+    // Return unique tags, excluding duplicates, all lowercase
+    return [...new Set(tags)].map(tag => tag.toLowerCase()).slice(0, 5);
+  };
+
+  // Generate a follow-up question based on the excerpt
+  const generateFollowUpQuestion = (excerpt: string, title: string): string => {
+    // Extract the main concept from the excerpt
+    const sentences = excerpt.split('.').filter(s => s.trim().length > 20);
+    if (sentences.length > 0) {
+      const mainSentence = sentences[0].trim();
+      return `${title} konusunda detaylı bilgi: "${mainSentence.substring(0, 100)}..."`;
+    }
+    return `${title} hakkında daha fazla bilgi`;
+  };
 
   
   
@@ -157,8 +207,42 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                   </div>
 
   
+                  {/* Tags */}
+                  {(() => {
+                    const tags = extractTags(source);
+                    if (tags.length > 0) {
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {tags.map((tag, tagIndex) => (
+                            <span
+                              key={tagIndex}
+                              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
+                              onClick={() => onExcerptClick?.(`${tag} hakkında bilgi ver`)}
+                            >
+                              <Tag className="w-2.5 h-2.5" />
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   {source.excerpt && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2 leading-relaxed">
+                    <p
+                      className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2 leading-relaxed hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors"
+                      onClick={() => {
+                        if (onExcerptClick) {
+                          const question = generateFollowUpQuestion(
+                            source.excerpt!,
+                            source.citation || source.title || 'Bu kaynak'
+                          );
+                          onExcerptClick(question);
+                        }
+                      }}
+                      title="Bu kaynak hakkında soru sor"
+                    >
                       {source.excerpt}
                     </p>
                   )}

@@ -1,12 +1,11 @@
 // API Configuration
 // All API endpoints and URLs should be configured here
-import { SERVER } from './index';
 
 const config = {
   // Base URLs from environment variables
   api: {
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`,
-    websocketUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`,
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || `http://localhost:8083`,
+    websocketUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:8083`,
   },
   
   // API Endpoints
@@ -86,7 +85,7 @@ export default config;
 export const getEndpoint = (category: keyof typeof config.endpoints, endpoint: string): string => {
   const categoryEndpoints = config.endpoints[category];
   if (categoryEndpoints && endpoint in categoryEndpoints) {
-    const url = categoryEndpoints[endpoint as keyof typeof categoryEndpoints];
+    const url = categoryEndpoints[endpoint as keyof typeof categoryEndpoints] as string;
     // If it's already an absolute URL, return it as-is
     if (url.startsWith('http://') || url.startsWith('https://')) {
       return url;

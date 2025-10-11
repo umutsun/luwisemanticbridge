@@ -1830,7 +1830,7 @@ export default function EmbeddingsManagerPage() {
                             <div className="font-medium flex items-center gap-2">
                               {table.displayName}
                               <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 rounded font-mono">
-                                {table.database || 'rag_chatbot'}
+                                {table.database}
                               </span>
                               {isFullyEmbedded && (
                                 <CheckCircle className="w-4 h-4 text-green-600" />

@@ -20,6 +20,7 @@ export class LLMManager {
   private static instance: LLMManager;
   private providers: Map<string, LLMProvider> = new Map();
   private defaultProvider: string = 'claude';
+  private actualModel: string = 'claude-3-5-sonnet-20241022';
   private fallbackOrder: string[] = [];
   private lastSettingsCheck: number = 0;
   private readonly SETTINGS_CACHE_TTL = 30000; // 30 seconds
@@ -33,9 +34,10 @@ export class LLMManager {
     maxTokens: 4096
   };
   private embeddingConfig: { provider: string; model: string } = {
-    provider: 'openai',  // Force OpenAI for embeddings since DeepSeek doesn't support them
-    model: 'text-embedding-3-small'
+    provider: 'google',  // Use Google for better performance
+    model: 'text-embedding-004'
   };
+  private lastLoggedConfig: { provider?: string; model?: string } = {};
 
   static getInstance(): LLMManager {
     if (!LLMManager.instance) {
@@ -65,7 +67,7 @@ export class LLMManager {
     this.providers.set('claude', {
       name: 'claude',
       apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || '',
-      model: 'claude-3-sonnet-20240229',
+      model: 'claude-3-5-sonnet-20241022',  // Claude Sonnet 4.5 equivalent
       isInitialized: false,
       supportsEmbeddings: false
     });
@@ -73,25 +75,25 @@ export class LLMManager {
     this.providers.set('openai', {
       name: 'openai',
       apiKey: process.env.OPENAI_API_KEY || '',
-      model: 'gpt-4',
+      model: 'gpt-4o-mini',  // GPT-4o Mini for optimal performance
       isInitialized: false,
       supportsEmbeddings: true,
-      embeddingModel: 'text-embedding-3-small'
+      embeddingModel: 'text-embedding-3-large'  // Latest embedding model
     });
 
     this.providers.set('gemini', {
       name: 'gemini',
       apiKey: process.env.GEMINI_API_KEY || '',
-      model: 'gemini-1.5-pro',
+      model: 'gemini-2.0-flash-exp',  // Latest Gemini 2.0 model
       isInitialized: false,
       supportsEmbeddings: true,
-      embeddingModel: 'text-embedding-004'
+      embeddingModel: 'text-embedding-004'  // Latest Google embedding model
     });
 
     this.providers.set('deepseek', {
       name: 'deepseek',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
-      model: 'deepseek-chat',
+      model: 'deepseek-chat',  // DeepSeek chat model
       isInitialized: false,
       supportsEmbeddings: false  // DeepSeek doesn't support embeddings
     });
@@ -135,8 +137,18 @@ export class LLMManager {
       });
 
       // Update default provider
-      const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'] || 'anthropic/claude-3-sonnet';
+      const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'] || 'anthropic/claude-3-5-sonnet';
       this.defaultProvider = this.extractProviderFromModel(activeModel);
+
+      // Store the actual model name without provider prefix
+      this.actualModel = activeModel.includes('/') ? activeModel.split('/')[1] : activeModel;
+
+      // Map common model names to their actual API names
+      if (this.actualModel === 'claude-3-5-sonnet') {
+        this.actualModel = 'claude-3-5-sonnet-20241022';
+      } else if (this.actualModel === 'claude-3-opus') {
+        this.actualModel = 'claude-3-opus-20240229';
+      }
 
       // Store configuration
       this.config = {
@@ -148,12 +160,12 @@ export class LLMManager {
       // Update API keys and models
       this.updateProviderSettings('claude', {
         apiKey: settings['anthropic.apiKey'] || settings['claude.apiKey'] || this.providers.get('claude')?.apiKey,
-        model: settings['llmSettings.claudeModel'] || 'claude-3-sonnet-20240229'
+        model: this.actualModel || 'claude-3-5-sonnet-20241022'
       });
 
       this.updateProviderSettings('openai', {
         apiKey: settings['openai.apiKey'] || this.providers.get('openai')?.apiKey,
-        model: settings['llmSettings.openaiModel'] || 'gpt-4'
+        model: settings['llmSettings.openaiModel'] || 'gpt-4o'
       });
 
       this.updateProviderSettings('gemini', {
@@ -179,10 +191,13 @@ export class LLMManager {
       // Set fallback order (default provider first, then others)
       this.fallbackOrder = this.generateFallbackOrder();
 
-      console.log(`🤖 LLM Manager - Default provider: ${this.defaultProvider}`);
-      console.log(`🤖 LLM Manager - Model: ${activeModel}`);
-      console.log(`🤖 LLM Manager - Fallback order: ${this.fallbackOrder.join(', ')}`);
-      console.log(`🤖 LLM Manager - Config:`, this.config);
+      // Only log on startup or when changed
+      if (!this.lastLoggedConfig || this.lastLoggedConfig.provider !== this.defaultProvider || this.lastLoggedConfig.model !== this.actualModel) {
+        console.log(`🤖 LLM Manager - Default provider: ${this.defaultProvider}`);
+        console.log(`🤖 LLM Manager - Model: ${this.actualModel}`);
+        console.log(`🤖 LLM Manager - Fallback order: ${this.fallbackOrder.join(', ')}`);
+        this.lastLoggedConfig = { provider: this.defaultProvider, model: this.actualModel };
+      }
 
     } catch (error) {
       console.warn('⚠️ Failed to load LLM settings from database:', error);
@@ -250,10 +265,18 @@ export class LLMManager {
   }
 
   private getEmbeddingProviderOrder(preferredProvider?: string): string[] {
-    const fallback = [...this.fallbackOrder];
+    // DeepSeek doesn't support embeddings, so exclude it
+    // Google embeddings are prioritized for performance
+    const embeddingProviders = ['google', 'openai', 'gemini'];
+    const fallback = [...this.fallbackOrder].filter(p => embeddingProviders.includes(p));
     const normalizedPreferred = preferredProvider ? this.normalizeProviderName(preferredProvider) : undefined;
-    const order = normalizedPreferred ? [normalizedPreferred, ...fallback] : fallback;
-    return Array.from(new Set(order));
+
+    if (normalizedPreferred && embeddingProviders.includes(normalizedPreferred)) {
+      return Array.from(new Set([normalizedPreferred, ...fallback]));
+    }
+
+    // Default order: Google -> OpenAI -> Gemini
+    return ['google', 'openai', 'gemini'];
   }
 
   /**
@@ -482,8 +505,9 @@ export class LLMManager {
       temperature?: number;
       maxTokens?: number;
       systemPrompt?: string;
+      preferredProvider?: string; // Add preferred provider option
     } = {}
-  ): Promise<{ content: string; provider: string; model: string }> {
+  ): Promise<{ content: string; provider: string; model: string; fallbackUsed?: boolean }> {
     await this.refreshSettingsIfNeeded();
 
     // Use provided options || fall back to config from database
@@ -493,22 +517,37 @@ export class LLMManager {
     const systemPrompt = options.systemPrompt !== undefined ? options.systemPrompt : this.config.systemPrompt;
 
     console.log(`🌡️ LLM Manager - options.temperature: ${options.temperature}, final temperature: ${temperature}`);
-    const provider = await this.getAvailableProvider();
+
+    // Try the preferred provider first (default provider or user's choice)
+    const preferredProvider = options.preferredProvider || this.defaultProvider;
+    let provider = preferredProvider;
+
+    // Check if preferred provider is available
+    const prov = this.providers.get(provider);
+    if (!prov || !prov.isInitialized || !prov.apiKey) {
+      console.log(`⚠️ Preferred provider ${provider} not available, trying fallback...`);
+      provider = await this.getAvailableProvider();
+    }
 
     if (!provider) {
       throw new Error('LLM e bağlanılamadı. Lütfen API anahtarlarınızı kontrol edin.');
     }
 
-    const prov = this.providers.get(provider);
-    if (!prov || !prov.client) {
+    const activeProv = this.providers.get(provider);
+    if (!activeProv || !activeProv.client) {
       throw new Error(`Provider ${provider} not initialized`);
     }
 
-    console.log(`🤖 Using ${provider} for chat response`);
+    console.log(`🤖 Using ${provider} for chat response${provider !== preferredProvider ? ' (FALLBACK)' : ''}`);
 
     try {
       switch (provider) {
         case 'claude':
+          if (!prov.isInitialized || !prov.client) {
+            if (!this.initializeProvider(provider)) {
+              throw new Error('Claude client is not initialized');
+            }
+          }
           const claudeResponse = await prov.client.messages.create({
             model: prov.model,
             max_tokens: maxTokens,
@@ -519,10 +558,16 @@ export class LLMManager {
           return {
             content: claudeResponse.content[0].type === 'text' ? claudeResponse.content[0].text : '',
             provider: 'Claude',
-            model: prov.model
+            model: prov.model,
+            fallbackUsed: provider !== preferredProvider
           };
 
         case 'openai':
+          if (!prov.isInitialized || !prov.client) {
+            if (!this.initializeProvider(provider)) {
+              throw new Error('OpenAI client is not initialized');
+            }
+          }
           const openaiResponse = await prov.client.chat.completions.create({
             model: prov.model,
             max_tokens: maxTokens,
@@ -535,10 +580,20 @@ export class LLMManager {
           return {
             content: openaiResponse.choices[0].message.content || '',
             provider: 'OpenAI',
-            model: prov.model
+            model: prov.model,
+            fallbackUsed: provider !== preferredProvider
           };
 
         case 'gemini':
+          if (!prov.isInitialized || !prov.client) {
+            if (!this.initializeProvider(provider)) {
+              throw new Error('Gemini client is not initialized');
+            }
+          }
+          // Check if client is properly initialized
+          if (!prov.client || typeof prov.client.getGenerativeModel !== 'function') {
+            throw new Error('Gemini client is not properly initialized');
+          }
           const geminiModel = prov.client.getGenerativeModel({ model: prov.model });
           // Gemini expects content in a different format - no role field, just parts
           const prompt = `${systemPrompt}\n\n${message}`;
@@ -546,10 +601,16 @@ export class LLMManager {
           return {
             content: geminiResponse.response.text() || '',
             provider: 'Gemini',
-            model: prov.model
+            model: prov.model,
+            fallbackUsed: provider !== preferredProvider
           };
 
         case 'deepseek':
+          if (!prov.isInitialized || !prov.client) {
+            if (!this.initializeProvider(provider)) {
+              throw new Error('DeepSeek client is not initialized');
+            }
+          }
           const deepseekResponse = await prov.client.chat.completions.create({
             model: prov.model,
             max_tokens: maxTokens,
@@ -562,7 +623,8 @@ export class LLMManager {
           return {
             content: deepseekResponse.choices[0].message.content || '',
             provider: 'DeepSeek',
-            model: prov.model
+            model: prov.model,
+            fallbackUsed: provider !== preferredProvider
           };
 
         default:
@@ -571,26 +633,45 @@ export class LLMManager {
     } catch (error) {
       console.error(`❌ Chat response failed with ${provider}:`, error);
 
-      // Try fallback
-      const currentIndex = this.fallbackOrder.indexOf(provider);
-      const nextProviders = this.fallbackOrder.slice(currentIndex + 1);
+      // Only fallback if this was the preferred provider
+      if (provider === preferredProvider) {
+        console.log(`⚠️ Preferred provider ${provider} failed, trying fallback providers...`);
 
-      for (const nextProvider of nextProviders) {
-        try {
-          console.log(`🔄 Falling back to ${nextProvider}...`);
-          const nextProv = this.providers.get(nextProvider);
-          if (nextProv && nextProv.apiKey) {
-            if (!nextProv.isInitialized) {
-              this.initializeProvider(nextProvider);
+        // Try fallback providers
+        const currentIndex = this.fallbackOrder.indexOf(provider);
+        const nextProviders = this.fallbackOrder.slice(currentIndex + 1);
+
+        for (const nextProvider of nextProviders) {
+          try {
+            console.log(`🔄 Falling back to ${nextProvider}...`);
+            const nextProv = this.providers.get(nextProvider);
+            if (nextProv && nextProv.apiKey) {
+              if (!nextProv.isInitialized) {
+                if (!this.initializeProvider(nextProvider)) {
+                  console.warn(`⚠️ Failed to initialize fallback provider ${nextProvider}`);
+                  continue;
+                }
+              }
+
+              // Recursive call with fallback provider as preferred
+              const result = await this.generateChatResponse(message, {
+                ...options,
+                preferredProvider: nextProvider
+              });
+
+              // Mark that fallback was used
+              return {
+                ...result,
+                fallbackUsed: true
+              };
             }
-            return await this.generateChatResponse(message, options);
+          } catch (e) {
+            console.warn(`⚠️ Fallback to ${nextProvider} also failed:`, e);
           }
-        } catch (e) {
-          console.warn(`⚠️ Fallback to ${nextProvider} also failed:`, e);
         }
       }
 
-      throw new Error('LLM e bağlanılamadı. Lütfen daha sonra tekrar deneyin.');
+      throw new Error(`LLM provider ${provider} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
