@@ -47,107 +47,41 @@ router.get('/all', async (req, res) => {
 
       for (const row of ragTablesResult.rows) {
         const tableName = row.table_name;
-        // Get display name from unified_embeddings table dynamically
-      let displayName = tableName; // Default to table name
 
-      // Try to get display name from unified_embeddings source_table with proper encoding
-      const sourceTableResult = await asembClient.query({
-        text: `
-          SELECT DISTINCT source_table
-          FROM unified_embeddings
-          WHERE LOWER(source_table) = LOWER($1) OR LOWER(source_table) = LOWER($2)
-          LIMIT 1
-        `,
-        values: [tableName, tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())]
-      });
+        // Create a display name from table name
+        let displayName = tableName
+          .replace(/_/g, ' ')  // Replace underscores with spaces
+          .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize first letter of each word
 
-      if (sourceTableResult.rows.length > 0) {
-        displayName = sourceTableResult.rows[0].source_table;
-      }
-
-        // Get record count from RAG_CHATBOT
+        // Get record count from source database
         const recordCount = await ragChatbotPool.query(
           `SELECT COUNT(*) FROM public.${tableName}`
         );
         const totalRecords = parseInt(recordCount.rows[0].count);
 
-        // Get embedded record count from unified_embeddings table in ASEMb
+        // Initialize embedded count to 0 (will be updated if embeddings table exists)
         let embeddedCount = 0;
+
+        // Check if there's an embeddings table for this source table
         try {
-          // Create a dynamic mapping based on actual data from unified_embeddings
-          // First, get all unique source_table names from unified_embeddings
-          const allSourceTablesResult = await asembClient.query(`
-            SELECT DISTINCT source_table, COUNT(DISTINCT source_id) as record_count
-            FROM unified_embeddings
-            GROUP BY source_table
-            ORDER BY source_table
-          `);
+          // Check for embeddings table with pattern: embeddings_<table_name>
+          const embeddingTableName = `embeddings_${tableName.toLowerCase()}`;
+          const embeddingTableCheck = await ragChatbotPool.query(`
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables
+              WHERE table_schema = 'public'
+              AND table_name = $1
+            );
+          `, [embeddingTableName]);
 
-          // Create dynamic mapping by comparing table names with source_table names
-          const possibleSourceNames = [];
-
-          // Add exact table name match
-          possibleSourceNames.push(tableName);
-
-          // Add formatted display name match
-          possibleSourceNames.push(displayName);
-
-          // Add matches from actual unified_embeddings data
-          for (const sourceRow of allSourceTablesResult.rows) {
-            const sourceTable = sourceRow.source_table;
-
-            // Check if source_table name matches our table name (case insensitive)
-            if (sourceTable.toLowerCase() === tableName.toLowerCase()) {
-              possibleSourceNames.push(sourceTable);
-            }
-
-            // Check if source_table name contains our table name (case insensitive)
-            if (sourceTable.toLowerCase().includes(tableName.toLowerCase()) ||
-                tableName.toLowerCase().includes(sourceTable.toLowerCase())) {
-              possibleSourceNames.push(sourceTable);
-            }
-
-            // Check for partial matches with common variations
-            const tableVariations = [
-              tableName.replace(/_/g, '').toLowerCase(),
-              tableName.replace(/geler$/, 'ler').toLowerCase(), // Handle pluralization
-              tableName.replace(/lar$/, '').toLowerCase(), // Handle pluralization
-              tableName.replace(/kararlari/, 'karar').toLowerCase(),
-              tableName.replace(/cevap/, 'soru-cevap').toLowerCase()
-            ];
-
-            const sourceVariations = [
-              sourceTable.replace(/[^a-zA-Z0-9]/g, '').toLowerCase(),
-              sourceTable.replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
-                .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c').toLowerCase()
-            ];
-
-            for (const tableVar of tableVariations) {
-              for (const sourceVar of sourceVariations) {
-                if (sourceVar.includes(tableVar) || tableVar.includes(sourceVar)) {
-                  if (!possibleSourceNames.includes(sourceTable)) {
-                    possibleSourceNames.push(sourceTable);
-                  }
-                }
-              }
-            }
+          if (embeddingTableCheck.rows[0].exists) {
+            // Count embeddings in the embeddings table
+            const embeddingCountResult = await ragChatbotPool.query(`
+              SELECT COUNT(*) as count
+              FROM public.${embeddingTableName}
+            `);
+            embeddedCount = parseInt(embeddingCountResult.rows[0].count);
           }
-
-          // Remove duplicates while preserving order
-          const uniqueSourceNames = [...new Set(possibleSourceNames)];
-
-          // Query unified_embeddings table for all possible source names
-          if (uniqueSourceNames.length > 0) {
-            const placeholders = uniqueSourceNames.map((_, index) => `$${index + 1}`).join(', ');
-            const embeddingCountResult = await asembClient.query(`
-              SELECT COUNT(DISTINCT source_id) as count
-              FROM unified_embeddings
-              WHERE source_table IN (${placeholders})
-            `, uniqueSourceNames);
-
-            embeddedCount = parseInt(embeddingCountResult.rows[0]?.count || '0');
-          }
-
         } catch (error) {
           console.log(`Could not get embedding count for ${tableName}:`, error.message);
           embeddedCount = 0;

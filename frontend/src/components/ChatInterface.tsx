@@ -143,8 +143,8 @@ export default function ChatInterface() {
 
     // Fetch chatbot settings and active model
     Promise.all([
-      fetch(config.getApiUrl('/api/v2/chatbot/settings')),
-      fetch(config.getApiUrl('/api/v2/settings/'))
+      fetch('/api/v2/chatbot/settings'),
+      fetch('/api/v2/settings/')
     ])
       .then(async ([chatbotRes, settingsRes]) => {
         const chatbotData = chatbotRes.ok ? await chatbotRes.json() : {};
@@ -179,8 +179,8 @@ export default function ChatInterface() {
   // Fetch available models
   const fetchAvailableModels = async (forceRefresh = false) => {
     try {
-      // Add cache-busting parameter if force refresh is requested
-      const baseUrl = config.getApiUrl('/api/v2/settings');
+      // Use relative URL to leverage Next.js rewrites
+      const baseUrl = '/api/v2/settings';
       const url = forceRefresh
         ? `${baseUrl}?t=${Date.now()}`
         : baseUrl;
@@ -202,14 +202,8 @@ export default function ChatInterface() {
           models.push({
             provider: 'openai',
             model: 'openai/gpt-4o',
-            displayName: 'GPT-4o',
-            description: 'En yeni ve en güçlü'
-          });
-          models.push({
-            provider: 'openai',
-            model: 'openai/gpt-4o-mini',
-            displayName: 'GPT-4o Mini',
-            description: 'Hızlı ve ekonomik'
+            displayName: 'ChatGPT',
+            description: 'OpenAI GPT'
           });
         } else {
           console.log('OpenAI API key not found');
@@ -218,8 +212,8 @@ export default function ChatInterface() {
           models.push({
             provider: 'anthropic',
             model: 'anthropic/claude-3-5-sonnet-20241022',
-            displayName: 'Claude 3.5 Sonnet',
-            description: 'En güçlü model'
+            displayName: 'Claude',
+            description: 'Anthropic Claude'
           });
         }
         if (settings.google?.apiKey) {
@@ -227,8 +221,8 @@ export default function ChatInterface() {
           models.push({
             provider: 'google',
             model: 'google/gemini-1.5-pro',
-            displayName: 'Gemini 1.5 Pro',
-            description: 'Google AI'
+            displayName: 'Gemini',
+            description: 'Google Gemini'
           });
         } else {
           console.log('Google API key not found');
@@ -238,8 +232,8 @@ export default function ChatInterface() {
           models.push({
             provider: 'deepseek',
             model: 'deepseek/deepseek-chat',
-            displayName: 'DeepSeek Chat',
-            description: 'Genel amaçlı'
+            displayName: 'DeepSeek',
+            description: 'DeepSeek AI'
           });
         } else {
           console.log('DeepSeek API key not found');
@@ -255,7 +249,7 @@ export default function ChatInterface() {
   // Switch model
   const switchModel = async (model: string) => {
     try {
-      const response = await fetch(config.getApiUrl('/api/v2/settings'), {
+      const response = await fetch('/api/v2/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -551,12 +545,10 @@ export default function ChatInterface() {
                 variant="ghost"
                 size="sm"
                 onClick={clearChat}
-                className="gap-2 px-2 md:px-3"
+                className="gap-2 px-2"
                 title="Yeni Sohbet"
               >
-                <Plus className="w-4 h-4 md:hidden" />
-                <RefreshCw className="w-4 h-4 hidden md:inline" />
-                <span className="hidden md:inline">Yeni Sohbet</span>
+                <Plus className="w-4 h-4" />
               </Button>
 
               {/* User Dropdown */}
@@ -609,33 +601,49 @@ export default function ChatInterface() {
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2 px-3">
                       <Cpu className="h-4 w-4" />
-                      <span className="hidden md:inline text-sm font-medium">
-                        {availableModels.find(m => m.model === chatbotSettings.activeChatModel)?.displayName || currentModel}
-                      </span>
                       <ChevronDown className="h-3 w-3" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    {availableModels.map((model) => (
-                      <DropdownMenuItem
-                        key={model.model}
-                        onClick={() => switchModel(model.model)}
-                        className={`cursor-pointer ${model.model === chatbotSettings.activeChatModel ? 'bg-accent' : ''}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full ${
-                            model.provider === 'anthropic' ? 'bg-purple-500' :
-                            model.provider === 'google' ? 'bg-blue-500' :
-                            model.provider === 'openai' ? 'bg-green-500' :
-                            'bg-orange-500'
-                          }`} />
-                          <div>
-                            <p className="text-sm font-medium">{model.displayName}</p>
-                            <p className="text-xs text-muted-foreground">{model.description}</p>
-                          </div>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
+                    {availableModels
+                      .sort((a, b) => {
+                        // Active model comes first
+                        const aActive = a.model === chatbotSettings.activeChatModel;
+                        const bActive = b.model === chatbotSettings.activeChatModel;
+                        if (aActive && !bActive) return -1;
+                        if (!aActive && bActive) return 1;
+                        return 0;
+                      })
+                      .map((model) => {
+                        const isActive = model.model === chatbotSettings.activeChatModel;
+                        return (
+                          <DropdownMenuItem
+                            key={model.model}
+                            onClick={() => switchModel(model.model)}
+                            className={`cursor-pointer ${isActive ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : ''}`}
+                          >
+                            <div className="flex items-center gap-2 w-full">
+                              <div className={`h-2 w-2 rounded-full ${
+                                isActive
+                                  ? 'bg-green-500'
+                                  : model.provider === 'anthropic'
+                                    ? 'bg-purple-500'
+                                    : model.provider === 'google'
+                                      ? 'bg-blue-500'
+                                      : model.provider === 'openai'
+                                        ? 'bg-green-500'
+                                        : 'bg-orange-500'
+                              }`} />
+                              <div className="flex-1">
+                                <p className={`text-sm font-medium ${isActive ? 'text-green-700 dark:text-green-300' : ''}`}>
+                                  {model.displayName} {isActive && '(Aktif)'}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{model.description}</p>
+                              </div>
+                            </div>
+                          </DropdownMenuItem>
+                        );
+                      })}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}

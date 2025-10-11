@@ -161,6 +161,7 @@ export default function EmbeddingsManagerPage() {
   const [cleanupRecommendations, setCleanupRecommendations] = useState<string[]>([]);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [tokenStats, setTokenStats] = useState<any>(null);
+  const [availableProviders, setAvailableProviders] = useState<any[]>([]);
   const { toast } = useToast();
   const userPausedRef = useRef(false);
   const lastAutoResumeRef = useRef(0); // Track last auto-resume timestamp
@@ -205,6 +206,100 @@ export default function EmbeddingsManagerPage() {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
     return num.toLocaleString('tr-TR');
+  };
+
+  // Fetch available API keys and their providers
+  const fetchAvailableProviders = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/settings/all?t=${Date.now()}`);
+      if (response.ok) {
+        const settings = await response.json();
+
+        // Determine which providers have API keys
+        const providers = [];
+
+        // Check for OpenAI
+        if (settings['openai.apiKey'] && settings['openai.apiKey'].trim() !== '') {
+          providers.push({
+            id: 'openai-text-embedding-3-large',
+            name: 'OpenAI text-embedding-3-large',
+            type: 'openai',
+            free: false,
+            model: 'text-embedding-3-large',
+            chunkSize: 8191
+          });
+          providers.push({
+            id: 'openai-text-embedding-3-small',
+            name: 'OpenAI text-embedding-3-small',
+            type: 'openai',
+            free: false,
+            model: 'text-embedding-3-small',
+            chunkSize: 8191
+          });
+        }
+
+        // Check for Google
+        if (settings['google.apiKey'] && settings['google.apiKey'].trim() !== '') {
+          providers.push({
+            id: 'google-text-embedding-004',
+            name: 'Google text-embedding-004',
+            type: 'google',
+            free: false,
+            model: 'text-embedding-004',
+            chunkSize: 2048
+          });
+        }
+
+        // Check for HuggingFace (free providers)
+        if (settings['huggingface.apiKey'] && settings['huggingface.apiKey'].trim() !== '') {
+          providers.push({
+            id: 'e5-mistral',
+            name: 'E5-Multilingual (HuggingFace - Türkçe Destekli)',
+            type: 'huggingface',
+            free: true,
+            model: 'intfloat/multilingual-e5-large',
+            chunkSize: 512
+          });
+          providers.push({
+            id: 'bge-m3',
+            name: 'BGE-M3 (HuggingFace - Ücretsiz)',
+            type: 'huggingface',
+            free: true,
+            model: 'BAAI/bge-m3',
+            chunkSize: 8192
+          });
+          providers.push({
+            id: 'jina-embeddings-v2-small',
+            name: 'Jina AI jina-embeddings-v2-small (HuggingFace - Ücretsiz)',
+            type: 'huggingface',
+            free: true,
+            model: 'jinaai/jina-embeddings-v2-small-en',
+            chunkSize: 8192
+          });
+        }
+
+        // Always add local/test option
+        providers.push({
+          id: 'local',
+          name: 'Local (Test)',
+          type: 'local',
+          free: true,
+          model: 'local',
+          chunkSize: 1000
+        });
+
+        setAvailableProviders(providers);
+
+        // Check if current embedding method is still available
+        const isCurrentAvailable = providers.some(p => p.id === embeddingMethod);
+        if (!isCurrentAvailable && providers.length > 0) {
+          // Set to first available provider
+          setEmbeddingMethod(providers[0].id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch available providers:', error);
+    }
   };
 
   // Fetch token statistics
@@ -445,6 +540,9 @@ export default function EmbeddingsManagerPage() {
   const fetchAvailableTablesAndStats = async () => {
     setIsLoadingTables(true);
     try {
+      // Fetch available providers first
+      await fetchAvailableProviders();
+
       // Use the new embeddings-tables endpoint that correctly maps tables
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings-tables/all?t=${Date.now()}`, {
         cache: 'no-cache',
@@ -1545,30 +1643,10 @@ export default function EmbeddingsManagerPage() {
                     <Label className="text-sm font-medium">Embedding Provider</Label>
                     {progress?.status === 'processing' || progress?.status === 'paused' ? (
                       <div className="p-2 border rounded-md bg-muted">
-                        {currentEmbeddingMethod === 'e5-mistral' && 'E5-Mistral-7B (HuggingFace - Ücretsiz)'}
-                        {currentEmbeddingMethod === 'bge-m3' && 'BGE-M3 (HuggingFace - Ücretsiz)'}
-                        {currentEmbeddingMethod === 'mistral' && 'Mistral-7B (HuggingFace - Ücretsiz)'}
-                        {currentEmbeddingMethod === 'openai-text-embedding-3-large' && 'OpenAI text-embedding-3-large (Ücretli)'}
-                        {currentEmbeddingMethod === 'openai-text-embedding-3-small' && 'OpenAI text-embedding-3-small (Ücretli)'}
-                        {currentEmbeddingMethod === 'cohere-embed-v3' && 'Cohere embed-v3.0 (Ücretli)'}
-                        {currentEmbeddingMethod === 'voyage-large-2' && 'Voyage AI voyage-large-2 (Ücretli)'}
-                        {currentEmbeddingMethod === 'google-text-embedding-004' && 'Google text-embedding-004 (Ücretli)'}
-                        {currentEmbeddingMethod === 'jina-embeddings-v2' && 'Jina AI jina-embeddings-v2 (API - Ücretli)'}
-                        {currentEmbeddingMethod === 'jina-embeddings-v2-small' && 'Jina AI jina-embeddings-v2-small (HuggingFace - Ücretsiz)'}
-                        {currentEmbeddingMethod === 'all-mpnet-base-v2' && 'all-mpnet-base-v2 (HuggingFace - Ücretsiz)'}
-                        {currentEmbeddingMethod === 'local' && 'Local (Basit)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'e5-mistral' && 'E5-Mistral-7B (HuggingFace - Ücretsiz)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'bge-m3' && 'BGE-M3 (HuggingFace - Ücretsiz)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'mistral' && 'Mistral-7B (HuggingFace - Ücretsiz)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'openai-text-embedding-3-large' && 'OpenAI text-embedding-3-large (Ücretli)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'openai-text-embedding-3-small' && 'OpenAI text-embedding-3-small (Ücretli)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'cohere-embed-v3' && 'Cohere embed-v3.0 (Ücretli)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'voyage-large-2' && 'Voyage AI voyage-large-2 (Ücretli)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'google-text-embedding-004' && 'Google text-embedding-004 (Ücretli)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'jina-embeddings-v2' && 'Jina AI jina-embeddings-v2 (API - Ücretli)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'jina-embeddings-v2-small' && 'Jina AI jina-embeddings-v2-small (HuggingFace - Ücretsiz)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'all-mpnet-base-v2' && 'all-mpnet-base-v2 (HuggingFace - Ücretsiz)'}
-                        {!currentEmbeddingMethod && embeddingMethod === 'local' && 'Local (Basit)'}
+                        {(() => {
+                          const provider = availableProviders.find(p => p.id === (currentEmbeddingMethod || embeddingMethod));
+                          return provider ? provider.name : 'Loading...';
+                        })()}
                       </div>
                     ) : (
                       <Select
@@ -1580,18 +1658,17 @@ export default function EmbeddingsManagerPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="e5-mistral">E5-Multilingual (HuggingFace - Türkçe Destekli)</SelectItem>
-                          <SelectItem value="bge-m3">BGE-M3 (HuggingFace - Ücretsiz)</SelectItem>
-                          <SelectItem value="mistral">Mistral-7B (HuggingFace - Ücretsiz)</SelectItem>
-                          <SelectItem value="openai-text-embedding-3-large">OpenAI text-embedding-3-large (Ücretli)</SelectItem>
-                          <SelectItem value="openai-text-embedding-3-small">OpenAI text-embedding-3-small (Ücretli)</SelectItem>
-                          <SelectItem value="cohere-embed-v3">Cohere embed-v3.0 (Ücretli)</SelectItem>
-                          <SelectItem value="voyage-large-2">Voyage AI voyage-large-2 (Ücretli)</SelectItem>
-                          <SelectItem value="google-text-embedding-004">Google text-embedding-004 (Ücretli)</SelectItem>
-                          <SelectItem value="jina-embeddings-v2">Jina AI jina-embeddings-v2 (API - Ücretli)</SelectItem>
-                          <SelectItem value="jina-embeddings-v2-small">Jina AI jina-embeddings-v2-small (HuggingFace - Ücretsiz)</SelectItem>
-                          <SelectItem value="all-mpnet-base-v2">all-mpnet-base-v2 (HuggingFace - Ücretsiz)</SelectItem>
-                          <SelectItem value="local">Local (Test)</SelectItem>
+                          {availableProviders.length > 0 ? (
+                            availableProviders.map(provider => (
+                              <SelectItem key={provider.id} value={provider.id}>
+                                {provider.name}
+                                {!provider.free && <span className="text-xs text-orange-500 ml-2">(Ücretli)</span>}
+                                {provider.free && <span className="text-xs text-green-500 ml-2">(Ücretsiz)</span>}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="local" disabled>Yükleniyor...</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     )}
