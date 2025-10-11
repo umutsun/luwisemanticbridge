@@ -77,61 +77,8 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
   const confidenceColor = confidence >= 85 ? 'text-green-600' : confidence >= 70 ? 'text-yellow-600' : 'text-orange-600';
   const confidenceText = confidence >= 85 ? 'Yüksek' : confidence >= 70 ? 'Orta' : 'Düşük';
 
-  // Smart tag extraction - More intelligent keyword extraction
-  const getSmartTags = (source: Source): string[] => {
-    const tags: string[] = [];
-    const title = (source.title || source.citation || '').toLowerCase();
-    const excerpt = (source.excerpt || '').toLowerCase();
-    const content = title + ' ' + excerpt;
-
-    // Extract specific legal/tax terms
-    const legalTerms = [
-      'KDV', 'Stopaj', 'ÖTV', 'Damga Vergisi', 'Gelir Vergisi', 'Kurumlar Vergisi',
-      'Kira', 'Sözleşme', 'Tazminat', 'İhbar', 'Kıdem', 'İşçi', 'İşveren',
-      'Mükellef', 'Beyanname', 'Tarhiyat', 'Cezai Şart', 'Vergi Ziyai',
-      'Muafiyet', 'İstisna', 'Oran', 'Tutar', 'Süre'
-    ];
-
-    // Find terms in content
-    legalTerms.forEach(term => {
-      if (content.includes(term.toLowerCase()) && !tags.includes(term)) {
-        tags.push(term);
-      }
-    });
-
-    // Extract percentages
-    const percentMatches = content.match(/(\d+)%/g);
-    if (percentMatches) {
-      percentMatches.forEach(match => {
-        if (!tags.includes(match)) {
-          tags.push(match);
-        }
-      });
-    }
-
-    // Extract dates/periods
-    const dateMatches = content.match(/(\d{4})/g);
-    if (dateMatches && dateMatches.length > 0) {
-      const year = dateMatches[0];
-      if (parseInt(year) >= 2000 && parseInt(year) <= 2030 && !tags.includes(year)) {
-        tags.push(year);
-      }
-    }
-
-    return tags.slice(0, 4); // Limit to 4 tags
-  };
-
-  // Handle tag click - Create meaningful search query
-  const handleTagClick = (source: Source, tag: string) => {
-    // Just use the tag text without generating long questions
-    const query = tag;
-
-    // Trigger custom event for ChatInterface to handle
-    window.dispatchEvent(new CustomEvent('tagClick', {
-      detail: { query, source, tag }
-    }));
-  };
-
+  
+  
   return (
     <div className="mt-4 pt-3 border-t border-gray-100/60 dark:border-gray-600/30">
       <div className="space-y-2">
@@ -154,7 +101,14 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                     <div className="flex items-center gap-1 mb-2">
                       {getSourceIcon(source.sourceTable)}
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getBadgeColor(source.sourceTable)}`}>
-                        {getSourceTableName(source.sourceTable)}
+                        {(() => {
+                          const tableName = getSourceTableName(source.sourceTable);
+                          // Don't show duplicate table names in badge
+                          if (source.title && source.title.toLowerCase().includes(tableName.toLowerCase())) {
+                            return tableName; // Show only once
+                          }
+                          return tableName;
+                        })()}
                       </span>
                     </div>
                   ) : (
@@ -202,27 +156,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                     )}
                   </div>
 
-                  {/* Smart Tags - Extracted from content */}
-                  {(() => {
-                    const tags = getSmartTags(source);
-                    if (tags.length === 0) return null;
-
-                    return (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {tags.map((tag, tagIndex) => (
-                          <button
-                            key={tagIndex}
-                            onClick={() => handleTagClick(source, tag)}
-                            className="text-xs px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-full transition-colors cursor-pointer hover:scale-105 transform"
-                            title={`"${tag}" ile ilgili soru sor`}
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    );
-                  })()}
-
+  
                   {source.excerpt && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2 leading-relaxed">
                       {source.excerpt}
