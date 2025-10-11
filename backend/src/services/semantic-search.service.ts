@@ -218,14 +218,7 @@ export class SemanticSearchService {
 
   private async loadEmbeddingSettings(): Promise<void> {
     try {
-      // Since we've migrated embeddings to use Google text-embedding-004 (768 dimensions),
-      // we'll hardcode the provider to google to ensure compatibility
-      const provider = 'google';
-      const model = 'text-embedding-004';
-      const targetDimensions = 768;
-
-      console.log('[SemanticSearch] Using Google embedding provider for 768-dimension embeddings (migrated database)');
-
+      // Get embedding provider and model from settings, fall back to Google if not set
       const result = await asembPool.query(
         'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [
@@ -247,6 +240,18 @@ export class SemanticSearchService {
         return acc;
       }, {});
 
+      // Determine provider and model from settings
+      let provider = settings.embedding_provider || settings.embeddingsprovider || 'google';
+      let model = settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
+
+      // Normalize provider name
+      provider = this.normalizeProviderName(provider);
+
+      // Set default model based on provider
+      if (!model || model === 'text-embedding-004') {
+        model = this.getDefaultEmbeddingModel(provider);
+      }
+
       this.embeddingSettings = {
         provider,
         model,
@@ -260,15 +265,14 @@ export class SemanticSearchService {
       console.log('[SemanticSearch] Embedding settings loaded', {
         provider: this.embeddingSettings.provider,
         model: this.embeddingSettings.model,
-        targetDimensions,
         hasGoogleKey: !!this.embeddingSettings.googleApiKey,
         hasOpenAIKey: !!this.embeddingSettings.openaiApiKey
       });
     } catch (error) {
       console.warn('[SemanticSearch] Failed to load embedding settings from database, using defaults:', error);
-      // Default to Google embeddings (768 dimensions) for compatibility
+      // Default to Google embeddings for compatibility
       const provider = 'google';
-      const model = 'text-embedding-004';
+      const model = this.getDefaultEmbeddingModel(provider);
       this.embeddingSettings = {
         provider,
         model,
@@ -306,9 +310,27 @@ export class SemanticSearchService {
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    // Always use mock embedding for better performance
-    console.log('[SemanticSearch] Using mock embedding for performance (no API calls)');
-    return this.generateMockEmbedding(text);
+    try {
+      await this.refreshEmbeddingSettings();
+      const llmManager = LLMManager.getInstance();
+
+      // Use active embedding provider from settings or fall back to default
+      const embeddingProvider = this.embeddingSettings.provider || 'openai';
+      const embeddingModel = this.embeddingSettings.model;
+
+      console.log(`[SemanticSearch] Generating embedding using ${embeddingProvider} (${embeddingModel})`);
+      const embedding = await llmManager.generateEmbedding(text, {
+        provider: embeddingProvider,
+        model: embeddingModel
+      });
+
+      console.log(`[SemanticSearch] Generated embedding with ${embedding.length} dimensions`);
+      return embedding;
+    } catch (error) {
+      console.error('[SemanticSearch] Embedding generation failed:', error);
+      console.log('[SemanticSearch] Using mock embedding as fallback');
+      return this.generateMockEmbedding(text);
+    }
   }
 
   
