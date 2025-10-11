@@ -481,9 +481,9 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       10
     );
     const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
-    const enableLLMGeneration = true; // Keep LLM features but optimize
+    const enableLLMGeneration = false; // DISABLE LLM generation for performance
 
-    console.log(`🚀 Formatting ${searchResults.length} sources with ENHANCED parallel LLM: ${enableLLMGeneration} (PARALLEL: ${enableParallelLLM}, MAX_CONCURRENT: ${parallelCount}, BATCH: ${batchSize})`);
+    console.log(`🚀 Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for performance)`);
 
     if (enableParallelLLM && searchResults.length > 1) {
       // ENHANCED: Process sources with dynamic concurrency based on parallelCount
