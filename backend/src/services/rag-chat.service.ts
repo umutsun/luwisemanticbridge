@@ -582,7 +582,8 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         if (enableLLMGeneration) {
           try {
             console.time(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
-            const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
+            // Skip LLM question generation for performance
+            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
             processedContent = llmResult.processedContent;
             generatedQuestion = llmResult.generatedQuestion;
             console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
@@ -1017,7 +1018,8 @@ Başlık: ${title}
 
         try {
           console.log(`🤖 Processing related topic: ${title.substring(0, 30)}...`);
-          const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
+          // Skip LLM question generation for performance
+            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
           processedContent = llmResult.processedContent;
           generatedQuestion = llmResult.generatedQuestion;
         } catch (error) {
@@ -1161,7 +1163,8 @@ Başlık: ${title}
 
         try {
           console.log(`🤖 Processing paginated result: ${title.substring(0, 30)}...`);
-          const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
+          // Skip LLM question generation for performance
+            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
           processedContent = llmResult.processedContent;
           generatedQuestion = llmResult.generatedQuestion;
         } catch (error) {
@@ -1292,7 +1295,8 @@ Başlık: ${title}
     // Generate LLM content if enabled
     if (enableLLMGeneration) {
       try {
-        const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
+        // Skip LLM question generation for performance
+            const llmResult = { processedContent: cleanExcerpt, generatedQuestion: '' };
         processedContent = llmResult.processedContent;
         generatedQuestion = llmResult.generatedQuestion;
       } catch (error) {
