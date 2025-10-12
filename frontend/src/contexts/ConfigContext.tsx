@@ -111,7 +111,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       setLoading(true);
 
       // Hardcoded URL to fix fetch issues
-const API_BASE_URL = 'http://localhost:8083';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 
       if (authToken) {
         setStoredToken(authToken);
@@ -231,7 +231,7 @@ const API_BASE_URL = 'http://localhost:8083';
   const updateConfig = async (newConfig: Config) => {
     try {
       // Hardcoded URL to fix fetch issues
-const API_BASE_URL = 'http://localhost:8083';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
         method: 'PUT',
         headers: {

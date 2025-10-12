@@ -107,7 +107,7 @@ export default function DocumentManager() {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/documents`);
       if (response.ok) {
         const data = await response.json();
@@ -131,7 +131,7 @@ export default function DocumentManager() {
     setSuccess('');
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/documents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,7 +190,7 @@ export default function DocumentManager() {
     try {
       // For files that need server processing (PDF, Office docs), use backend upload
       if (file.type.includes('pdf') || file.type.includes('officedocument') || file.type.includes('msword') || file.type.includes('spreadsheet')) {
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
         const formData = new FormData();
         formData.append('file', file);
 
@@ -227,7 +227,7 @@ export default function DocumentManager() {
     if (!confirm('Bu dokümanı silmek istediğinizden emin misiniz?')) return;
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/documents/${id}`, {
         method: 'DELETE'
       });
@@ -250,7 +250,7 @@ export default function DocumentManager() {
     if (!editingDocument) return;
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/documents/${editingDocument.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -315,7 +315,7 @@ export default function DocumentManager() {
     setEmbeddingStatus('');
     setError('');
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
     const totalDocuments = selectedDocuments.length;
     let processedDocuments = 0;
 
@@ -362,7 +362,7 @@ export default function DocumentManager() {
     if (!confirm('Bu dokümanın embedding\'lerini silmek istediğinizden emin misiniz?')) return;
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/documents/${docId}/embeddings`, {
         method: 'DELETE'
       });
@@ -610,7 +610,7 @@ export default function DocumentManager() {
                                       variant="ghost"
                                       onClick={async () => {
                                         try {
-                                          const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+                                          const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
                                           const response = await fetch(`${baseUrl}/api/v2/documents/${doc.id}/embeddings`, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' }
@@ -804,7 +804,7 @@ export default function DocumentManager() {
                       if (!newUrl) return;
                       setUploading(true);
                       try {
-                        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper`, {
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ url: newUrl })

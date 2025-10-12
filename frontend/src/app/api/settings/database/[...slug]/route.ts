@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-const BASE_URL = process.env.ASB_API_URL || 'http://localhost:8083';
+const BASE_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 
 async function handler(req: NextRequest) {
   const slugPath = req.nextUrl.pathname.replace('/api/settings/database', '');

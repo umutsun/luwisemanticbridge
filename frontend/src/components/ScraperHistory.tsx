@@ -51,7 +51,7 @@ export default function ScraperHistory({ onSelectContent, onProcessContent }: Sc
   const fetchHistory = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper/history`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper/history`);
       if (response.ok) {
         const data = await response.json();
         setHistory(data);
@@ -67,7 +67,7 @@ export default function ScraperHistory({ onSelectContent, onProcessContent }: Sc
     if (!confirm('Bu içeriği silmek istediğinizden emin misiniz?')) return;
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper/history/${id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/scraper/history/${id}`, {
         method: 'DELETE'
       });
       

@@ -283,14 +283,14 @@ export default function DashboardPage() {
     const fetchChatStats = async () => {
       try {
         // Try dashboard stats first (for admin users)
-        const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/dashboard-stats`);
+        const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/dashboard-stats`);
 
         if (response.ok) {
           const data = await response.json();
           setChatStats(data);
         } else if (response.status === 403) {
           // If not admin, try user-specific stats
-          const userResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/stats`);
+          const userResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/stats`);
 
           if (userResponse.ok) {
             const userData = await userResponse.json();

@@ -202,7 +202,7 @@ export default function DocumentManagerPage() {
   const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/documents`);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/documents`);
       const data = await response.json();
       setDocuments(data.documents || []);
     } catch (error) {
@@ -234,7 +234,7 @@ export default function DocumentManagerPage() {
         });
       }, 200);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/documents/upload`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/documents/upload`, {
         method: 'POST',
         body: formData,
       });

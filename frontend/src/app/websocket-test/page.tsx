@@ -16,7 +16,7 @@ export default function WebSocketTest() {
   };
 
   // Test WebSocket connection
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 
   const { socket, isConnected } = useSocketIO(backendUrl);
 

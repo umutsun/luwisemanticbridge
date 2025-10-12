@@ -778,7 +778,7 @@ export default function SettingsPage() {
     setEmailTestResult(null);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/settings/test-email`, {
         method: 'POST',
         headers: {

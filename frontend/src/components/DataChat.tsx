@@ -88,7 +88,7 @@ export default function DataChat() {
   const [activeModel, setActiveModel] = useState<string>('Claude 3');
 
   // WebSocket connection - Connect to backend port, not frontend port
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
   console.log('DataChat: Connecting to WebSocket at:', backendUrl);
   const { socket, isConnected } = useSocketIO(backendUrl);
 
