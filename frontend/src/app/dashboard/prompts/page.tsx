@@ -346,7 +346,7 @@ export default function PromptsPage() {
       });
 
       if (response.ok) {
-        setSuccess(`Unified embeddings ${newEnabled ? 'enabled' : 'disabled'}`);
+        setSuccess('Unified embeddings ' + (newEnabled ? 'enabled' : 'disabled'));
         setTimeout(() => setSuccess(''), 3000);
 
         // Refresh embeddings data after enabling
@@ -882,7 +882,7 @@ export default function PromptsPage() {
                             disabled={!provider.available}
                           >
                             <div className="flex items-center gap-2">
-                              <div className={`w-2 h-2 rounded-full ${provider.available ? 'bg-green-500' : 'bg-red-500'}`} />
+                              <div className={'w-2 h-2 rounded-full ' + (provider.available ? 'bg-green-500' : 'bg-red-500')} />
                               {provider.name}
                               {!provider.available && <span className="text-xs text-muted-foreground">(Not configured)</span>}
                             </div>
@@ -1022,7 +1022,7 @@ export default function PromptsPage() {
                   {llmProviders.map((provider) => (
                     <div key={provider.id} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${provider.available ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div className={'w-3 h-3 rounded-full ' + (provider.available ? 'bg-green-500' : 'bg-red-500')} />
                         <div>
                           <p className="font-medium">{provider.name}</p>
                           <p className="text-xs text-muted-foreground">{provider.id}</p>
