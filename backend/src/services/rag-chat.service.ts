@@ -873,20 +873,18 @@ Başlık: ${title}
    */
   private async logActivity(
     userId: string,
-    activityType: 'model_change' | 'chat_start' | 'chat_message' | 'settings_change',
+    activityType: 'model_change' | 'chat_start' | 'chat_message' | 'settings_change' | 'model_fallback',
     details: any
   ) {
     try {
-      // Ensure tables exist
-      await this.ensureTables();
-
+      // Use user_activity_logs table instead of activity_log
       const query = `
-        INSERT INTO activity_log (id, user_id, activity_type, details, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
+        INSERT INTO user_activity_logs (user_id, action, details, created_at)
+        VALUES ($1, $2, $3, NOW())
+        RETURNING id
       `;
 
       await this.pool.query(query, [
-        uuidv4(),
         userId,
         activityType,
         JSON.stringify(details)
