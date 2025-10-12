@@ -34,7 +34,7 @@ export class LLMManager {
     maxTokens: 4096
   };
   private embeddingConfig: { provider: string; model: string } = {
-    provider: 'google',  // Use Google for better performance
+    provider: 'google',  // Use Google to avoid OpenAI API key issues
     model: 'text-embedding-004'
   };
   private lastLoggedConfig: { provider?: string; model?: string } = {};
@@ -159,8 +159,8 @@ export class LLMManager {
         this.actualModel = 'claude-3-5-sonnet-latest';
       } else if (this.actualModel === 'claude-3-sonnet' || this.actualModel === 'claude-3-sonnet-20240229') {
         // Map deprecated model to latest version
-        console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-latest');
-        this.actualModel = 'claude-3-5-sonnet-latest';
+        console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
+        this.actualModel = 'claude-3-5-sonnet-20241022';
       } else if (this.actualModel === 'claude-3-opus') {
         this.actualModel = 'claude-3-opus-20240229';
       } else if (this.actualModel === 'deepseek-chat') {
@@ -593,7 +593,11 @@ export class LLMManager {
       } else {
         // User specified a different provider - try fallbacks
         console.log(`⚠️ Preferred provider ${provider} not available, trying fallback...`);
-        provider = await this.getAvailableProvider();
+        const availableProvider = await this.getAvailableProvider();
+        if (!availableProvider) {
+          throw new Error('LLM e bağlanılamadı. Lütfen API anahtarlarınızı kontrol edin.');
+        }
+        provider = availableProvider;
       }
     }
 
@@ -611,13 +615,13 @@ export class LLMManager {
     try {
       switch (provider) {
         case 'claude':
-          if (!prov.isInitialized || !prov.client) {
+          if (!prov?.isInitialized || !prov?.client) {
             if (!this.initializeProvider(provider)) {
               throw new Error('Claude client is not initialized');
             }
           }
-          const claudeResponse = await prov.client.messages.create({
-            model: prov.model,
+          const claudeResponse = await prov!.client.messages.create({
+            model: prov!.model,
             max_tokens: maxTokens,
             temperature: temperature,
             system: systemPrompt,
@@ -626,18 +630,18 @@ export class LLMManager {
           return {
             content: claudeResponse.content[0].type === 'text' ? claudeResponse.content[0].text : '',
             provider: 'Claude',
-            model: prov.model,
+            model: prov!.model,
             fallbackUsed: provider !== preferredProvider
           };
 
         case 'openai':
-          if (!prov.isInitialized || !prov.client) {
+          if (!prov?.isInitialized || !prov?.client) {
             if (!this.initializeProvider(provider)) {
               throw new Error('OpenAI client is not initialized');
             }
           }
-          const openaiResponse = await prov.client.chat.completions.create({
-            model: prov.model,
+          const openaiResponse = await prov!.client.chat.completions.create({
+            model: prov!.model,
             max_tokens: maxTokens,
             temperature: temperature,
             messages: [
@@ -648,28 +652,28 @@ export class LLMManager {
           return {
             content: openaiResponse.choices[0].message.content || '',
             provider: 'OpenAI',
-            model: prov.model,
+            model: prov!.model,
             fallbackUsed: provider !== preferredProvider
           };
 
         case 'gemini':
-          if (!prov.isInitialized || !prov.client) {
+          if (!prov?.isInitialized || !prov?.client) {
             if (!this.initializeProvider(provider)) {
               throw new Error('Gemini client is not initialized');
             }
           }
           // Check if client is properly initialized
-          if (!prov.client || typeof prov.client.getGenerativeModel !== 'function') {
+          if (!prov?.client || typeof prov!.client.getGenerativeModel !== 'function') {
             throw new Error('Gemini client is not properly initialized');
           }
-          const geminiModel = prov.client.getGenerativeModel({ model: prov.model });
+          const geminiModel = prov!.client.getGenerativeModel({ model: prov!.model });
           // Gemini expects content in a different format - no role field, just parts
           const prompt = `${systemPrompt}\n\n${message}`;
           const geminiResponse = await geminiModel.generateContent(prompt);
           return {
             content: geminiResponse.response.text() || '',
             provider: 'Gemini',
-            model: prov.model,
+            model: prov!.model,
             fallbackUsed: provider !== preferredProvider
           };
 
@@ -680,20 +684,20 @@ export class LLMManager {
             throw new Error('DeepSeek client is not initialized');
           }
           // Triple-check after initialization
-          if (!prov.client) {
+          if (!prov?.client) {
             console.error('❌ DeepSeek client is null after initialization');
             throw new Error('DeepSeek client creation failed');
           }
           console.log('✅ DeepSeek client verified:', {
-            hasClient: !!prov.client,
-            isInitialized: prov.isInitialized,
-            hasChat: !!(prov.client && (prov.client as any).chat),
-            hasCompletions: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions)
+            hasClient: !!prov!.client,
+            isInitialized: prov!.isInitialized,
+            hasChat: !!(prov!.client && (prov!.client as any).chat),
+            hasCompletions: !!(prov!.client && (prov!.client as any).chat && (prov!.client as any).chat.completions)
           });
           // Ensure we're using the correct model name
-          const deepseekModel = this.actualModel || prov.model || 'deepseek-chat';
+          const deepseekModel = this.actualModel || prov!.model || 'deepseek-chat';
           console.log(`🤖 Using DeepSeek model: ${deepseekModel}`);
-          const deepseekResponse = await prov.client.chat.completions.create({
+          const deepseekResponse = await prov!.client.chat.completions.create({
             model: deepseekModel,
             max_tokens: maxTokens,
             temperature: temperature,

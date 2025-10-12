@@ -3,6 +3,7 @@ import { ragChat } from '../services/rag-chat.service';
 import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
 import { asembPool } from '../config/database.config';
+import dbConfig from '../config/database';
 import { chatWss, chatConnections } from '../server';
 
 const router = Router();
@@ -103,11 +104,11 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       // Add semantic analysis if enabled
       if (enableSemanticAnalysis || trackUserInsights) {
         trackingData.semanticAnalysis = {
-          intent: result.intent || 'informational',
-          topics: result.topics || [],
-          keywords: result.keywords || [],
-          sentiment: result.sentiment || 'neutral',
-          complexity: result.complexity || 'medium'
+          intent: (result as any).intent || 'informational',
+          topics: (result as any).topics || [],
+          keywords: (result as any).keywords || [],
+          sentiment: (result as any).sentiment || 'neutral',
+          complexity: (result as any).complexity || 'medium'
         };
         trackingData.userInsights = trackUserInsights;
       }
@@ -224,7 +225,7 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
     console.log(`Getting chat stats for user: ${userId}`);
 
     // Use existing database connection pool
-    const { asembPool } = await import('../config/database');
+    const pool = asembPool;
 
     // Get basic chat statistics
     const [
@@ -293,7 +294,7 @@ router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: Authen
     console.log('Getting dashboard stats for admin user');
 
     // Import pool if asembPool is undefined
-    const pool = asembPool || (await import('../config/database')).default;
+    const pool = asembPool;
 
     // Get global chat statistics
     const [
@@ -576,7 +577,8 @@ async function streamChatResponse(
       });
 
     // Format sources
-    const formattedSources = await ragChat.formatSources(searchResults);
+    // Access private method through type assertion
+    const formattedSources = await (ragChat as any).formatSources(searchResults);
 
     // Send search results
     if (ws.readyState === ws.OPEN) {
@@ -606,7 +608,7 @@ async function streamChatResponse(
         response: result.response,
         sources: result.sources,
         conversationId: result.conversationId,
-        followUpQuestions: result.followUpQuestions,
+        followUpQuestions: (result as any).followUpQuestions,
         relatedTopics: result.relatedTopics
       }));
     }
@@ -624,11 +626,11 @@ async function streamChatResponse(
 
       if (options.enableSemanticAnalysis || options.trackUserInsights) {
         trackingData.semanticAnalysis = {
-          intent: result.intent || 'informational',
-          topics: result.topics || [],
-          keywords: result.keywords || [],
-          sentiment: result.sentiment || 'neutral',
-          complexity: result.complexity || 'medium'
+          intent: (result as any).intent || 'informational',
+          topics: (result as any).topics || [],
+          keywords: (result as any).keywords || [],
+          sentiment: (result as any).sentiment || 'neutral',
+          complexity: (result as any).complexity || 'medium'
         };
         trackingData.userInsights = options.trackUserInsights;
       }
