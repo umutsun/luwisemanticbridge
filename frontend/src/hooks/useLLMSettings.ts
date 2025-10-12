@@ -12,7 +12,7 @@ export interface LLMSettings {
 
 export const useLLMSettings = () => {
   const [settings, setSettings] = useState<LLMSettings>({
-    maxLength: 150,
+    maxLength: 600,
     style: 'professional',
     preserveEntities: true,
     addContext: true,
@@ -32,7 +32,7 @@ export const useLLMSettings = () => {
 
           // Extract LLM-related settings
           const llmSettings: LLMSettings = {
-            maxLength: data.llm?.maxLength || 150,
+            maxLength: data.llm?.maxLength || 600,
             style: data.llm?.style || 'professional',
             preserveEntities: data.llm?.preserveEntities ?? true,
             addContext: data.llm?.addContext ?? true,

@@ -261,6 +261,15 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const { token } = useAuth();
+
+  // API Test states
+  const [testProvider, setTestProvider] = useState<string>('');
+  const [testModel, setTestModel] = useState<string>('');
+  const [testingApi, setTestingApi] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; model?: string; tokens?: { input: number; output: number; total?: number } } | null>(null);
+  const [showActiveOption, setShowActiveOption] = useState(false);
+  const [canActivate, setCanActivate] = useState(false);
+
   const [config, setConfig] = useState<Config>({
     app: {
       name: 'Luwi Semantic Bridge',
@@ -658,6 +667,170 @@ export default function SettingsPage() {
       });
     }
     setTesting(null);
+  };
+
+  // Provider models
+  const providerModels = {
+    openai: [
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-4o',
+      'gpt-4o-mini',
+      'gpt-3.5-turbo'
+    ],
+    google: [
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-1.0-pro'
+    ],
+    anthropic: [
+      'claude-3-5-sonnet-20241022',
+      'claude-3-opus-20240229',
+      'claude-3-sonnet-20240229',
+      'claude-3-haiku-20240307'
+    ],
+    deepseek: [
+      'deepseek-chat',
+      'deepseek-coder'
+    ]
+  };
+
+  const handleProviderChange = (provider: string) => {
+    setTestProvider(provider);
+    setTestModel('');
+    setTestResult(null);
+    setShowActiveOption(false);
+    setCanActivate(false);
+  };
+
+  const handleActivateModel = () => {
+    if (testProvider && testModel && canActivate) {
+      // Set as active model
+      updateConfig('llmSettings.activeChatModel', `${testProvider}/${testModel}`);
+
+      // Save token usage info for tracking
+      if (testResult?.tokens) {
+        // Store token info for future tracking
+        updateConfig('llmSettings.lastTestTokens', {
+          model: testModel,
+          provider: testProvider,
+          input: testResult.tokens.input,
+          output: testResult.tokens.output,
+          total: testResult.tokens.total || testResult.tokens.input + testResult.tokens.output,
+          testedAt: new Date().toISOString()
+        });
+      }
+
+      toast({
+        title: 'Model Activated',
+        description: `${testProvider} - ${testModel} is now the active model`,
+      });
+
+      setShowActiveOption(false);
+    }
+  };
+
+  const testApiKey = async () => {
+    if (!testProvider || !testModel) {
+      toast({
+        title: 'Error',
+        description: 'Please select both provider and model',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingApi(true);
+    setTestResult(null);
+
+    try {
+      // Get the API key for selected provider
+      let apiKey = '';
+      switch(testProvider) {
+        case 'openai':
+          apiKey = config.openai.apiKey;
+          break;
+        case 'google':
+          apiKey = config.google.apiKey;
+          break;
+        case 'anthropic':
+          apiKey = config.anthropic.apiKey;
+          break;
+        case 'deepseek':
+          apiKey = config.deepseek?.apiKey || '';
+          break;
+      }
+
+      if (!apiKey) {
+        toast({
+          title: 'Error',
+          description: `No API key found for ${testProvider}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const response = await fetch(buildApiUrl('/api/v2/settings/test', testProvider), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          model: testModel
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Build success message with token usage if available
+        let successMessage = `${testProvider.charAt(0).toUpperCase() + testProvider.slice(1)} API key and model "${testModel}" are valid`;
+        if (result.tokens) {
+          successMessage += ` (Tokens used: ${result.tokens.total || result.tokens.input + result.tokens.output})`;
+        }
+
+        setTestResult({
+          success: true,
+          message: successMessage,
+          model: result.model || testModel,
+          tokens: result.tokens
+        });
+
+        setShowActiveOption(true);
+        setCanActivate(true);
+
+        toast({
+          title: 'Success',
+          description: `${testProvider} API key validated successfully - Model: ${testModel}`,
+        });
+      } else {
+        setTestResult({
+          success: false,
+          message: result.error || 'API key validation failed'
+        });
+        setShowActiveOption(false);
+        setCanActivate(false);
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to validate API key',
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      console.error('API key test error:', error);
+      setTestResult({
+        success: false,
+        message: error.message || 'Failed to test API key'
+      });
+      toast({
+        title: 'Error',
+        description: 'Failed to test API key',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingApi(false);
+    }
   };
 
   const migrateFromMySQL = async () => {
@@ -1909,28 +2082,6 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Active Model</Label>
-                    <Select
-                      value={config.llmSettings.activeChatModel}
-                      onValueChange={(value) => updateConfig('llmSettings.activeChatModel', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="deepseek/deepseek-chat">DeepSeek Chat</SelectItem>
-                        <SelectItem value="openai/gpt-4-turbo-preview">OpenAI GPT-4 Turbo</SelectItem>
-                        <SelectItem value="openai/gpt-4">OpenAI GPT-4</SelectItem>
-                        <SelectItem value="openai/gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</SelectItem>
-                        <SelectItem value="google/gemini-1.5-pro">Google Gemini 1.5 Pro</SelectItem>
-                        <SelectItem value="google/gemini-1.5-flash">Google Gemini 1.5 Flash</SelectItem>
-                        <SelectItem value="anthropic/claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</SelectItem>
-                        <SelectItem value="anthropic/claude-3-5-haiku-20241022">Claude 3.5 Haiku</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
                   <div className="flex items-center space-x-2">
                     <Switch
                       id="streamResponse"
@@ -1938,6 +2089,118 @@ export default function SettingsPage() {
                       onCheckedChange={(checked) => updateConfig('llmSettings.streamResponse', checked)}
                     />
                     <Label htmlFor="streamResponse">Stream Responses</Label>
+                  </div>
+
+                  {/* API Key Test Section */}
+                  <div className="border-t pt-4">
+                    <Label className="text-sm font-medium mb-3">Test & Activate Model</Label>
+                    <div className="space-y-3">
+                      <Select
+                        value={testProvider}
+                        onValueChange={handleProviderChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select provider" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="openai">OpenAI</SelectItem>
+                          <SelectItem value="google">Google Gemini</SelectItem>
+                          <SelectItem value="anthropic">Anthropic Claude</SelectItem>
+                          <SelectItem value="deepseek">DeepSeek</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {testProvider && (
+                        <Select
+                          value={testModel}
+                          onValueChange={setTestModel}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select model" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {providerModels[testProvider as keyof typeof providerModels]?.map(model => (
+                              <SelectItem key={model} value={model}>{model}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={testApiKey}
+                          disabled={testingApi || !testProvider || !testModel}
+                          variant="outline"
+                          size="sm"
+                        >
+                          {testingApi ? (
+                            <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-2" />
+                          )}
+                          Test API
+                        </Button>
+                      </div>
+
+                      {testResult && (
+                        <Alert className={testResult.success
+                          ? 'border-green-500/30 bg-green-500/5 dark:bg-green-500/10 dark:border-green-500/50'
+                          : 'border-red-500/30 bg-red-500/5 dark:bg-red-500/10 dark:border-red-500/50'}>
+                          <AlertDescription className={testResult.success
+                            ? 'text-green-800 dark:text-green-300'
+                            : 'text-red-800 dark:text-red-300'}>
+                            {testResult.message}
+                            {testResult.model && (
+                              <p className="text-sm mt-1 opacity-80">Model: {testResult.model}</p>
+                            )}
+                            {testResult.tokens && (
+                              <div className="text-sm mt-3 p-2 bg-black/5 dark:bg-white/5 rounded-md">
+                                <p className="font-medium mb-2">Token Usage:</p>
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                  <div>
+                                    <span className="opacity-70">Input:</span>
+                                    <span className="ml-1 font-medium">{testResult.tokens.input}</span>
+                                  </div>
+                                  <div>
+                                    <span className="opacity-70">Output:</span>
+                                    <span className="ml-1 font-medium">{testResult.tokens.output}</span>
+                                  </div>
+                                  <div>
+                                    <span className="opacity-70">Total:</span>
+                                    <span className="ml-1 font-semibold">{testResult.tokens.total || testResult.tokens.input + testResult.tokens.output}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {testResult.success && showActiveOption && (
+                              <div className="mt-4 pt-3 border-t border-current/20">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <Switch
+                                      id="activateModel"
+                                      checked={canActivate}
+                                      onCheckedChange={setCanActivate}
+                                    />
+                                    <Label htmlFor="activateModel" className="text-sm font-medium">
+                                      Activate as default model
+                                    </Label>
+                                  </div>
+                                  <Button
+                                    onClick={handleActivateModel}
+                                    disabled={!canActivate}
+                                    size="sm"
+                                    variant="default"
+                                  >
+                                    Save & Activate
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>

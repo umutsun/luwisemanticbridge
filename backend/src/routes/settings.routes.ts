@@ -846,36 +846,85 @@ router.post('/ai', async (req: Request, res: Response) => {
 // Test API key - Generic endpoint for multiple providers
 router.post('/test/:provider', async (req: Request, res: Response) => {
   const { provider } = req.params;
-  const { apiKey } = req.body;
+  const { apiKey, model } = req.body;
 
   if (!apiKey) {
     return res.status(400).json({ success: false, error: 'API key is required' });
+  }
+
+  if (!model) {
+    return res.status(400).json({ success: false, error: 'Model name is required' });
   }
 
   try {
     switch(provider) {
       case 'openai':
         const openai = new (require('openai'))({ apiKey });
-        await openai.models.list(); // Simple API call to test the key
-        res.json({ success: true, message: 'OpenAI API key is valid' });
+
+        // Test with specific model and get usage info
+        const completion = await openai.chat.completions.create({
+          model: model,
+          messages: [{ role: 'user', content: 'Hello, this is a test.' }],
+          max_tokens: 5,
+          temperature: 0
+        });
+
+        res.json({
+          success: true,
+          message: `OpenAI API key and model "${model}" are valid`,
+          model: model,
+          tokens: {
+            input: completion.usage?.prompt_tokens || 0,
+            output: completion.usage?.completion_tokens || 0,
+            total: completion.usage?.total_tokens || 0
+          }
+        });
         break;
 
       case 'google':
-        // Test Google API key
-        await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        res.json({ success: true, message: 'Google API key is valid' });
+      case 'gemini':
+        // Test Google/Gemini API key with specific model
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const geminiModel = genAI.getGenerativeModel({ model: model });
+
+        const result = await geminiModel.generateContent('Hello, this is a test.');
+        const response = await result.response;
+
+        res.json({
+          success: true,
+          message: `Google API key and model "${model}" are valid`,
+          model: model,
+          tokens: {
+            input: response.usageMetadata?.promptTokenCount || 0,
+            output: response.usageMetadata?.candidatesTokenCount || 0,
+            total: response.usageMetadata?.totalTokenCount || 0
+          }
+        });
         break;
 
       case 'anthropic':
-        // Test Anthropic API key
+      case 'claude':
+        // Test Anthropic/Claude API key with specific model
         const Anthropic = require('@anthropic-ai/sdk');
         const anthropic = new Anthropic({ apiKey });
-        await anthropic.messages.create({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1,
-          messages: [{ role: 'user', content: 'test' }]
+
+        const claudeResponse = await anthropic.messages.create({
+          model: model,
+          max_tokens: 5,
+          messages: [{ role: 'user', content: 'Hello, this is a test.' }]
         });
-        res.json({ success: true, message: 'Anthropic API key is valid' });
+
+        res.json({
+          success: true,
+          message: `Anthropic API key and model "${model}" are valid`,
+          model: model,
+          tokens: {
+            input: claudeResponse.usage?.input_tokens || 0,
+            output: claudeResponse.usage?.output_tokens || 0,
+            total: claudeResponse.usage?.input_tokens + claudeResponse.usage?.output_tokens || 0
+          }
+        });
         break;
       case 'deepseek':
         // Test DeepSeek API key

@@ -382,7 +382,9 @@ export class LLMManager {
     try {
       switch (provider) {
         case 'claude':
+          console.log('🔧 Initializing Claude provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
           prov.client = new Anthropic({ apiKey: prov.apiKey });
+          console.log('✅ Claude client created successfully');
           break;
         case 'openai':
           prov.client = new OpenAI({ apiKey: prov.apiKey });
@@ -639,6 +641,9 @@ export class LLMManager {
               throw new Error('Claude client is not initialized');
             }
           }
+
+          console.log(`🤖 Calling Claude with model: ${prov!.model}, maxTokens: ${maxTokens}, temperature: ${temperature}`);
+
           const claudeResponse = await prov!.client.messages.create({
             model: prov!.model,
             max_tokens: maxTokens,
@@ -646,8 +651,20 @@ export class LLMManager {
             system: systemPrompt,
             messages: [{ role: 'user', content: message }]
           });
+
+          console.log(`✅ Claude response received, content blocks: ${claudeResponse.content?.length || 0}`);
+
+          // Extract text content from Claude response
+          let content = '';
+          if (claudeResponse.content && claudeResponse.content.length > 0) {
+            const textBlock = claudeResponse.content.find((block: any) => block.type === 'text');
+            if (textBlock && textBlock.text) {
+              content = textBlock.text;
+            }
+          }
+
           return {
-            content: claudeResponse.content[0].type === 'text' ? claudeResponse.content[0].text : '',
+            content: content,
             provider: 'Claude',
             model: prov!.model,
             fallbackUsed: provider !== preferredProvider
@@ -762,8 +779,16 @@ export class LLMManager {
         default:
           throw new Error(`Unknown provider: ${provider}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Chat response failed with ${provider}:`, error);
+      console.error(`Error details:`, {
+        name: error.name,
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        type: error.type,
+        error: error.error
+      });
 
       // IMPORTANT: Don't use fallbacks for the active provider from settings
       // Only fallback if this was a user-specified preferred provider

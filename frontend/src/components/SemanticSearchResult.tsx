@@ -59,7 +59,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
     const completeExcerpt = async () => {
       try {
         const llmCompleted = await completeExcerptWithLLM(excerpt || content, {
-          maxLength: llmSettings?.maxLength || 160,
+          maxLength: llmSettings?.maxLength || 600,
           style: llmSettings?.style || 'professional',
           preserveEntities: llmSettings?.preserveEntities
         });
@@ -67,7 +67,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
       } catch (error) {
         // Fallback to rule-based completion
         const fallback = completeExcerpt(excerpt || content, {
-          maxLength: llmSettings?.maxLength || 160,
+          maxLength: llmSettings?.maxLength || 600,
           preserveSentences: true,
           preserveKeywords: true
         });

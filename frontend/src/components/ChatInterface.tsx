@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 import config, { getEndpoint } from '@/config/api.config';
 import {
   Send,
@@ -114,6 +115,7 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [visibleSourcesCount, setVisibleSourcesCount] = useState<{ [key: string]: number }>({});
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -135,8 +137,10 @@ export default function ChatInterface() {
     setIsClient(true);
 
     // Fetch popular questions from backend
+    setIsSuggestionsLoading(true);
     fetchSuggestedQuestions().then(questions => {
       setSuggestedQuestions(questions);
+      setIsSuggestionsLoading(false);
     });
 
     // Fetch chatbot settings and active model
@@ -515,8 +519,10 @@ export default function ChatInterface() {
     }]);
     setShowSuggestions(true);
     if (typeof window !== 'undefined') {
+      setIsSuggestionsLoading(true);
       fetchSuggestedQuestions().then(questions => {
         setSuggestedQuestions(questions);
+        setIsSuggestionsLoading(false);
       });
     }
   };
@@ -660,38 +666,41 @@ export default function ChatInterface() {
           <ScrollArea className="h-[calc(100vh-12rem)]">
             <div className="space-y-4 py-4">
               {/* Suggestions for new conversations */}
-              {isClient && showSuggestions && messages.length === 1 && suggestedQuestions.length > 0 && (
+              {isClient && showSuggestions && messages.length === 1 && !isSuggestionsLoading && suggestedQuestions.length > 0 && (
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-3 my-8"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="my-8"
                 >
-                  <div className="col-span-full text-center mb-4">
-                    <h2 className="text-lg font-semibold text-muted-foreground">
-                      Başlamak için bir konu seçin veya sorunuzu yazın
-                    </h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Her yenilemede farklı öneriler gösterilir
-                    </p>
-                  </div>
-                  {suggestedQuestions.map((question, index) => (
-                    <motion.button
-                      key={index}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      onClick={() => handleSuggestionClick(question)}
-                      className="text-left p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/60" />
-                          <span className="text-sm">{question}</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="col-span-full text-center mb-4">
+                      <h2 className="text-lg font-semibold text-muted-foreground">
+                        Başlamak için bir konu seçin veya sorunuzu yazın
+                      </h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Her yenilemede farklı öneriler gösterilir
+                      </p>
+                    </div>
+                    {suggestedQuestions.map((question, index) => (
+                      <motion.button
+                        key={index}
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1 }}
+                        onClick={() => handleSuggestionClick(question)}
+                        className="text-left p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/60" />
+                            <span className="text-sm">{question}</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
-                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </motion.button>
-                  ))}
+                      </motion.button>
+                    ))}
+                  </div>
                 </motion.div>
               )}
 
@@ -791,19 +800,19 @@ export default function ChatInterface() {
                                                           }
                                                         }
 
-                                                        if (excerpt.length > 250) {
-                                                          const truncated = excerpt.substring(0, 250);
+                                                        if (excerpt.length > 1000) {
+                                                          const truncated = excerpt.substring(0, 1000);
                                                           const lastSentenceEnd = Math.max(
                                                             truncated.lastIndexOf('.'),
                                                             truncated.lastIndexOf('!'),
                                                             truncated.lastIndexOf('?')
                                                           );
 
-                                                          if (lastSentenceEnd > 150) {
+                                                          if (lastSentenceEnd > 600) {
                                                             excerpt = truncated.substring(0, lastSentenceEnd + 1);
                                                           } else {
                                                             const lastSpace = truncated.lastIndexOf(' ');
-                                                            excerpt = lastSpace > 100 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+                                                            excerpt = lastSpace > 200 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
                                                           }
                                                         }
 

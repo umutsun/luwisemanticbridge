@@ -18,7 +18,7 @@ export const completeExcerptWithLLM = async (
   const { settings: llmSettings } = useLLMSettings();
 
   const {
-    maxLength = llmSettings?.maxLength || 150,
+    maxLength = llmSettings?.maxLength || 600,
     style = llmSettings?.style || 'professional',
     preserveEntities = llmSettings?.preserveEntities ?? true,
     addContext = llmSettings?.addContext ?? true

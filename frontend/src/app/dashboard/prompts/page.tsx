@@ -95,7 +95,13 @@ export default function PromptsPage() {
   const [llmProviders, setLlmProviders] = useState<LLMProvider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState('gemini');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
+  const [llmStyle, setLlmStyle] = useState<'professional' | 'conversational' | 'legal'>('professional');
   const [savingLlmSettings, setSavingLlmSettings] = useState(false);
+  const [apiKeys, setApiKeys] = useState<{ [key: string]: string }>({});
+  const [testingKey, setTestingKey] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<{ [key: string]: { success: boolean; message: string; error?: string; model?: string; tokens?: { input?: number; output?: number; total?: number; usage?: any } } }>({});
+  const [customModels, setCustomModels] = useState<{ [key: string]: string }>({});
+  const [activeModel, setActiveModel] = useState<{ provider: string; model: string } | null>(null);
 
   // Unified embeddings settings
   const [unifiedEmbeddings, setUnifiedEmbeddings] = useState<UnifiedEmbeddings>({
@@ -176,6 +182,33 @@ export default function PromptsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch LLM providers:', error);
+    }
+
+    // Fetch LLM style and model settings
+    try {
+      const settingsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/settings`);
+      if (settingsResponse.ok) {
+        const settingsData = await settingsResponse.json();
+        setLlmStyle(settingsData.llm?.style || 'professional');
+
+        // Fetch existing custom models
+        const models: { [key: string]: string } = {};
+        if (settingsData.llmSettings?.claudeModel) models.claude = settingsData.llmSettings.claudeModel;
+        if (settingsData.llmSettings?.geminiModel) models.gemini = settingsData.llmSettings.geminiModel;
+        if (settingsData.llmSettings?.openaiModel) models.openai = settingsData.llmSettings.openaiModel;
+        if (settingsData.llmSettings?.deepseekModel) models.deepseek = settingsData.llmSettings.deepseekModel;
+        setCustomModels(models);
+
+        // Set active model based on selected provider
+        if (settingsData.aiProvider && models[settingsData.aiProvider]) {
+          setActiveModel({
+            provider: settingsData.aiProvider,
+            model: models[settingsData.aiProvider]
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch LLM settings:', error);
     }
   };
 
@@ -302,7 +335,45 @@ export default function PromptsPage() {
     const originalFallback = fallbackEnabled;
 
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config', {
+      // First, save API keys and custom models if they have been entered
+      const settingsToSave: { [key: string]: string } = {};
+
+      // Save API keys for tested providers
+      Object.entries(apiKeys).forEach(([provider, key]) => {
+        if (key && key.trim() !== '' && testResults[provider]?.success) {
+          settingsToSave[provider + '.apiKey'] = key.trim();
+        }
+      });
+
+      // Save custom models
+      Object.entries(customModels).forEach(([provider, model]) => {
+        if (model && model.trim() !== '') {
+          // Map provider names to settings keys
+          const modelKey = provider === 'claude' ? 'llmSettings.claudeModel' :
+                           provider === 'gemini' ? 'llmSettings.geminiModel' :
+                           provider === 'openai' ? 'llmSettings.openaiModel' :
+                           provider === 'deepseek' ? 'llmSettings.deepseekModel' : provider + '.model';
+          settingsToSave[modelKey] = model.trim();
+        }
+      });
+
+      if (Object.keys(settingsToSave).length === 0) {
+        throw new Error('At least one valid API key must be saved');
+      }
+
+      const keysResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsToSave)
+      });
+
+      if (!keysResponse.ok) {
+        const errorData = await keysResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to save API keys and models');
+      }
+
+      // Save LLM provider settings
+      const ragResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -311,16 +382,41 @@ export default function PromptsPage() {
         })
       });
 
-      if (response.ok) {
-        setSuccess('LLM provider settings saved');
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || 'Failed to save LLM provider settings');
+      if (!ragResponse.ok) {
+        const errorData = await ragResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to save LLM provider settings');
       }
-    } catch (error) {
-      console.error('Failed to save LLM provider:', error);
-      setError('Network error while saving LLM provider settings');
+
+      // Save LLM style to settings
+      const settingsResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          llm: {
+            style: llmStyle
+          }
+        })
+      });
+
+      if (!settingsResponse.ok) {
+        const errorData = await settingsResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to save LLM style settings');
+      }
+
+      setSuccess('LLM settings saved successfully');
+      setTimeout(() => setSuccess(''), 3000);
+
+      // Update active model display
+      setActiveModel({
+        provider: selectedProvider,
+        model: customModels[selectedProvider]
+      });
+
+      // Refresh providers to update status
+      fetchLlmProviders();
+    } catch (error: any) {
+      console.error('Failed to save LLM settings:', error);
+      setError(error.message || 'Failed to save LLM settings');
     } finally {
       setSavingLlmSettings(false);
     }
@@ -378,12 +474,12 @@ export default function PromptsPage() {
     if (!confirm(t('prompts.confirmReset'))) {
       return;
     }
-    
+
     try {
       const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
         setSuccess(t('prompts.settingsReset'));
         fetchChatbotSettings();
@@ -391,6 +487,81 @@ export default function PromptsPage() {
     } catch (error) {
       console.error('Failed to reset settings:', error);
       setError(t('prompts.settingsResetFailed'));
+    }
+  };
+
+  const handleTestApiKey = async (provider: string) => {
+    const apiKey = apiKeys[provider];
+    const model = customModels[provider];
+
+    if (!apiKey || apiKey.trim() === '') {
+      setError('API key is required for testing');
+      return;
+    }
+
+    if (!model || model.trim() === '') {
+      setError('Model name is required for testing');
+      return;
+    }
+
+    setTestingKey(provider);
+    setError('');
+
+    try {
+      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + `/api/v2/settings/test/${provider}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          apiKey: apiKey.trim(),
+          model: model.trim()
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setTestResults(prev => ({
+          ...prev,
+          [provider]: {
+            success: true,
+            message: result.message || 'API key and model are valid',
+            model: model,
+            tokens: result.tokens || result.usage
+          }
+        }));
+        setSuccess(`${provider.charAt(0).toUpperCase() + provider.slice(1)} configuration is working!`);
+
+        // If this is the selected provider, automatically refresh the LLM status
+        if (selectedProvider === provider) {
+          fetchLlmProviders();
+        }
+      } else {
+        setTestResults(prev => ({
+          ...prev,
+          [provider]: {
+            success: false,
+            message: 'Configuration test failed',
+            error: result.error || result.message || 'Unknown error',
+            model: model
+          }
+        }));
+        setError(result.error || result.message || 'Configuration test failed');
+      }
+    } catch (error: any) {
+      setTestResults(prev => ({
+        ...prev,
+        [provider]: {
+          success: false,
+          message: 'Failed to test configuration',
+          error: error.message,
+          model: model
+        }
+      }));
+      setError(`Failed to test ${provider} configuration: ${error.message}`);
+    } finally {
+      setTestingKey(null);
     }
   };
 
@@ -867,7 +1038,20 @@ export default function PromptsPage() {
                     Select and configure the AI provider for chatbot responses
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                {activeModel && (
+                  <div className="mx-6 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Currently Active Model
+                    </p>
+                    <p className="text-lg font-bold text-blue-700 dark:text-blue-300 mt-1">
+                      {activeModel.model}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      Provider: {activeModel.provider.charAt(0).toUpperCase() + activeModel.provider.slice(1)}
+                    </p>
+                  </div>
+                )}
+                <CardContent className="space-y-6">
                   <div>
                     <Label htmlFor="provider">Primary AI Provider</Label>
                     <Select value={selectedProvider} onValueChange={setSelectedProvider}>
@@ -892,6 +1076,96 @@ export default function PromptsPage() {
                     </Select>
                   </div>
 
+                  {/* API Key & Model Management */}
+                  <div className="space-y-4">
+                    <Label className="text-base font-medium">API Keys & Models</Label>
+                    {llmProviders.map((provider) => (
+                      <div key={provider.id} className="space-y-3 p-4 border rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <Label className="font-medium">{provider.name} Configuration</Label>
+                          {testResults[provider.id] && (
+                            <div className={`text-xs px-2 py-1 rounded ${testResults[provider.id].success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {testResults[provider.id].success ? '✓ Valid' : '✗ Invalid'}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* API Key Input */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`api-key-${provider.id}`} className="text-sm">API Key</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id={`api-key-${provider.id}`}
+                              type="password"
+                              value={apiKeys[provider.id] || ''}
+                              onChange={(e) => setApiKeys(prev => ({ ...prev, [provider.id]: e.target.value }))}
+                              placeholder={`Enter ${provider.name} API key`}
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTestApiKey(provider.id)}
+                              disabled={testingKey === provider.id || !apiKeys[provider.id]}
+                            >
+                              {testingKey === provider.id ? (
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                              ) : (
+                                'Test'
+                              )}
+                            </Button>
+                          </div>
+                          {testResults[provider.id] && (
+                            <div className={`p-3 rounded-lg ${testResults[provider.id].success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                              <p className={`text-sm font-medium ${testResults[provider.id].success ? 'text-green-700' : 'text-red-700'}`}>
+                                {testResults[provider.id].message}
+                              </p>
+                              {testResults[provider.id].error && (
+                                <p className="text-xs text-red-600 mt-1">{testResults[provider.id].error}</p>
+                              )}
+                              {testResults[provider.id].success && testResults[provider.id].tokens && (
+                                <div className="mt-2 text-xs text-gray-600">
+                                  <p>Token Usage (Test):</p>
+                                  <div className="grid grid-cols-3 gap-2 mt-1">
+                                    <div>Input: {testResults[provider.id].tokens.input}</div>
+                                    <div>Output: {testResults[provider.id].tokens.output}</div>
+                                    <div className="font-medium">Total: {testResults[provider.id].tokens.total}</div>
+                                  </div>
+                                </div>
+                              )}
+                              {testResults[provider.id].model && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Model: <span className="font-mono">{testResults[provider.id].model}</span>
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Custom Model Input */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`model-${provider.id}`} className="text-sm font-medium">Model Name</Label>
+                          <Input
+                            id={`model-${provider.id}`}
+                            type="text"
+                            value={customModels[provider.id] || ''}
+                            onChange={(e) => setCustomModels(prev => ({ ...prev, [provider.id]: e.target.value }))}
+                            placeholder={
+                              provider.id === 'claude' ? 'claude-3-5-sonnet-20241022' :
+                              provider.id === 'gemini' ? 'gemini-1.5-pro-latest' :
+                              provider.id === 'openai' ? 'gpt-4o-mini' :
+                              provider.id === 'deepseek' ? 'deepseek-chat' : 'Enter model name'
+                            }
+                            className="w-full"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Enter the exact model name you want to use
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <Label>Enable Fallback Providers</Label>
@@ -903,6 +1177,38 @@ export default function PromptsPage() {
                       checked={fallbackEnabled}
                       onCheckedChange={setFallbackEnabled}
                     />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="llm-style">Response Style</Label>
+                    <Select value={llmStyle} onValueChange={(value: 'professional' | 'conversational' | 'legal') => setLlmStyle(value)}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="professional">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                            Professional
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="conversational">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-500" />
+                            Conversational
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="legal">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-purple-500" />
+                            Legal
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Choose how the AI should respond to queries
+                    </p>
                   </div>
 
                   <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg">
@@ -926,7 +1232,7 @@ export default function PromptsPage() {
                     ) : (
                       <Save className="w-4 h-4 mr-2" />
                     )}
-                    Save Provider Settings
+                    Save API Keys & Settings
                   </Button>
                 </CardContent>
               </Card>

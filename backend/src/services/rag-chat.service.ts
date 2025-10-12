@@ -249,9 +249,9 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       console.log(`Found ${searchResults.length} results with similarity >= ${minThreshold}%`);
 
-      // For initial display, use batch size instead of minResults
-      const initialDisplayCount = Math.min(batchSize, searchResults.length);
-      console.log(`📊 Displaying ${initialDisplayCount} initial results (batch size: ${batchSize})`);
+      // For initial display, use minResults instead of batch size
+      const initialDisplayCount = Math.min(minResults, searchResults.length);
+      console.log(`📊 Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
 
       // Ensure minimum results requirement (for backend processing, not display)
       if (searchResults.length < minResults && allResults.length > 0) {

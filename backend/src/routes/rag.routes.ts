@@ -101,4 +101,57 @@ router.post('/ai/settings', async (req: Request, res: Response) => {
   }
 });
 
+// RAG Config endpoint - GET and POST
+router.get('/config', async (req: Request, res: Response) => {
+  try {
+    // Import settings service
+    const { SettingsService } = await import('../services/settings.service');
+    const settingsService = SettingsService.getInstance();
+
+    // Get all settings
+    const settings = await settingsService.getAllSettings();
+
+    // Extract relevant RAG config
+    res.json({
+      aiProvider: settings.aiProvider || 'gemini',
+      fallbackEnabled: settings.fallbackEnabled === 'true' || settings.fallbackEnabled === true,
+      apiKeys: {
+        claude: settings.claudeApiKey || settings['claude.apiKey'] || '',
+        gemini: settings.geminiApiKey || settings['google.apiKey'] || settings['gemini.apiKey'] || '',
+        openai: settings.openaiApiKey || settings['openai.apiKey'] || '',
+        deepseek: settings.deepseekApiKey || settings['deepseek.apiKey'] || ''
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching RAG config:', error);
+    res.status(500).json({ error: 'Failed to fetch RAG config' });
+  }
+});
+
+router.post('/config', async (req: Request, res: Response) => {
+  try {
+    const { aiProvider, fallbackEnabled } = req.body;
+
+    // Import settings service
+    const { SettingsService } = await import('../services/settings.service');
+    const settingsService = SettingsService.getInstance();
+
+    // Save RAG settings
+    if (aiProvider) {
+      await settingsService.saveSetting('aiProvider', aiProvider);
+    }
+    if (fallbackEnabled !== undefined) {
+      await settingsService.saveSetting('fallbackEnabled', fallbackEnabled.toString());
+    }
+
+    // Clear cache
+    settingsService.clearCache('all_settings');
+
+    res.json({ success: true, message: 'RAG config saved successfully' });
+  } catch (error) {
+    console.error('Error saving RAG config:', error);
+    res.status(500).json({ error: 'Failed to save RAG config', details: error.message });
+  }
+});
+
 export default router;

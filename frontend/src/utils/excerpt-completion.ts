@@ -10,7 +10,7 @@ export interface ExcerptOptions {
 // Complete partial excerpts into natural language sentences
 export const completeExcerpt = (content: string, options: ExcerptOptions = {}): string => {
   const {
-    maxLength = 150,
+    maxLength = 600,
     preserveSentences = true,
     addEllipsis = true,
     preserveKeywords = true,
@@ -266,20 +266,20 @@ export const generateExcerptVariants = (content: string, count: number = 3): str
 
   // Standard excerpt
   variants.push(completeExcerpt(content, {
-    maxLength: 150,
+    maxLength: 300,
     preserveSentences: true
   }));
 
   // Short, keyword-focused excerpt
   variants.push(completeExcerpt(content, {
-    maxLength: 100,
+    maxLength: 200,
     preserveSentences: false,
     preserveKeywords: true
   }));
 
   // Question-oriented excerpt
   const questionVariant = completeExcerpt(content, {
-    maxLength: 120,
+    maxLength: 250,
     preserveSentences: false
   });
 

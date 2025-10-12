@@ -540,6 +540,7 @@ async function streamChatResponse(
 
     // Get search settings
     const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || '7');
+    const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || '5');
     const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || '0.014');
 
     // Perform semantic search
@@ -576,16 +577,19 @@ async function streamChatResponse(
         return scoreB - scoreA;
       });
 
+    // Limit initial sources to minResults for streaming
+    const initialResults = searchResults.slice(0, minResults);
+
     // Format sources
     // Access private method through type assertion
-    const formattedSources = await (ragChat as any).formatSources(searchResults);
+    const formattedSources = await (ragChat as any).formatSources(initialResults);
 
     // Send search results
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify({
         type: 'sources',
         sources: formattedSources,
-        hasMore: searchResults.length > maxResults
+        hasMore: searchResults.length > minResults
       }));
     }
 
