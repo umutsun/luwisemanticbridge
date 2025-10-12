@@ -950,18 +950,40 @@ Başlık: ${title}
 
         console.log('✅ Activity log table created successfully');
       } else {
-        // Check if user_id column exists in the table
+        // Check if user_id column exists and has correct type
         const userIdColumnCheck = await this.pool.query(`
-          SELECT column_name FROM information_schema.columns
+          SELECT column_name, data_type FROM information_schema.columns
           WHERE table_name = 'activity_log' AND column_name = 'user_id'
         `);
 
-        if (userIdColumnCheck.rows.length === 0) {
-          console.log('➕ Adding user_id column to activity_log table...');
-          await this.pool.query(`ALTER TABLE activity_log ADD COLUMN user_id VARCHAR(255) NOT NULL DEFAULT ''`);
-          console.log('✅ Added user_id column to activity_log table');
-        } else {
-          console.log('✅ Activity log table already exists with proper columns');
+        if (userIdColumnCheck.rows.length > 0) {
+          // Check if it's the wrong type (integer instead of varchar)
+          const columnType = userIdColumnCheck.rows[0].data_type;
+          if (columnType === 'integer' || columnType === 'int4') {
+            console.log('⚠️ activity_log table has wrong user_id type, dropping and recreating...');
+            await this.pool.query(`DROP TABLE activity_log`);
+            console.log('✅ Dropped old activity_log table');
+
+            // Recreate table with correct schema
+            await this.pool.query(`
+              CREATE TABLE activity_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id VARCHAR(255) NOT NULL,
+                activity_type VARCHAR(50) NOT NULL CHECK (activity_type IN ('model_change', 'chat_start', 'chat_message', 'settings_change')),
+                details JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+              )
+            `);
+
+            // Create indexes
+            await this.pool.query(`CREATE INDEX idx_activity_log_user_id ON activity_log(user_id)`);
+            await this.pool.query(`CREATE INDEX idx_activity_log_activity_type ON activity_log(activity_type)`);
+            await this.pool.query(`CREATE INDEX idx_activity_log_created_at ON activity_log(created_at DESC)`);
+
+            console.log('✅ Activity log table recreated with correct schema');
+          } else {
+            console.log('✅ Activity log table already exists with proper columns');
+          }
         }
       }
 

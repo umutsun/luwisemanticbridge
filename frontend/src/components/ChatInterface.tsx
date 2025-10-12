@@ -49,17 +49,15 @@ interface Message {
 }
 
 const getSourceTableName = (sourceTable?: string) => {
-  const tableNames: { [key: string]: string } = {
-    'OZELGELER': 'Özelgeler',
-    'DANISTAYKARARLARI': 'Danıştay Kararları',
-    'MAKALELER': 'Makaleler',
-    'SORUCEVAP': 'Soru Cevap',
-    'Konu': 'Genel Konu',
-    'embeddings': 'Dokümanlar',
-    'chunks': 'Metin Parçaları',
-    'sources': 'Konular'
-  };
-  return tableNames[sourceTable || ''] || sourceTable || 'Konu';
+  // Format source table name dynamically (same logic as backend)
+  if (!sourceTable) return 'Kaynak';
+
+  return sourceTable
+    .replace(/_/g, ' ')
+    .replace(/([A-Z])/g, ' $1')
+    .toLowerCase()
+    .replace(/\b\w/g, l => l.toUpperCase())
+    .trim();
 };
 
 const getKeywordColor = (keyword: string): string => {
@@ -209,11 +207,18 @@ export default function ChatInterface() {
           console.log('OpenAI API key NOT found, skipping OpenAI models');
         }
         if (settings.anthropic?.apiKey) {
+          // Add Claude 3.5 models only
           models.push({
             provider: 'anthropic',
             model: 'anthropic/claude-3-5-sonnet-20241022',
-            displayName: 'Claude',
-            description: 'Anthropic Claude'
+            displayName: 'Claude 3.5 Sonnet',
+            description: 'Anthropic Claude 3.5 Sonnet'
+          });
+          models.push({
+            provider: 'anthropic',
+            model: 'anthropic/claude-3-5-haiku-20241022',
+            displayName: 'Claude 3.5 Haiku',
+            description: 'Anthropic Claude 3.5 Haiku (Fast)'
           });
         }
         if (settings.google?.apiKey) {
@@ -346,14 +351,7 @@ export default function ChatInterface() {
 
     // Add source table as second tag, but avoid duplicates
     if (source.sourceTable) {
-      const tableMap: { [key: string]: string } = {
-        'OZELGELER': 'Özelge',
-        'DANISTAYKARARLARI': 'Danıştay',
-        'MAKALELER': 'Makale',
-        'SORUCEVAP': 'Soru-Cevap',
-        'sorucevap': 'Soru-Cevap'
-      };
-      const tableName = tableMap[source.sourceTable as string] || source.sourceTable as string;
+      const tableName = getSourceTableName(source.sourceTable as string);
 
       // Only add if it's not the same as the category (avoid duplicates)
       if (!keywords.includes(tableName)) {

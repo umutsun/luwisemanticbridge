@@ -403,6 +403,89 @@ export class SemanticSearchService {
       .slice(0, 5);  // Limit to 5 keywords
   }
 
+  /**
+   * Extract smart keywords from content, title, source table and query
+   */
+  private extractSmartKeywords(content: string, title: string, sourceTable: string, query: string): string[] {
+    const keywords: string[] = [];
+
+    // 1. Add source table as formatted keyword (remove Turkish hardcoded mappings)
+    const sourceKeyword = this.formatSourceTableName(sourceTable);
+    if (sourceKeyword && sourceKeyword !== 'Kaynak') {
+      keywords.push(sourceKeyword);
+    }
+
+    // 2. Extract keywords from title (title usually has the most important info)
+    if (title && title.length > 0) {
+      const titleWords = this.extractImportantWords(title);
+      keywords.push(...titleWords.slice(0, 2));
+    }
+
+    // 3. Extract keywords from content
+    if (content && content.length > 0) {
+      const contentWords = this.extractImportantWords(content);
+      keywords.push(...contentWords.slice(0, 3));
+    }
+
+    // 4. Add query terms if they're meaningful
+    const queryWords = this.extractImportantWords(query);
+    keywords.push(...queryWords.slice(0, 1));
+
+    // 5. Remove duplicates and filter
+    return [...new Set(keywords)]
+      .filter(keyword =>
+        keyword &&
+        keyword.length > 2 &&
+        keyword.length < 30 &&
+        !['ve', 'ile', 'için', 'göre', 'üzerine', 'kadar', 'olarak', 'sonra', 'önce', 'the', 'and', 'for', 'with'].includes(keyword.toLowerCase())
+      )
+      .slice(0, 5); // Limit to 5 keywords
+  }
+
+  /**
+   * Format source table name to readable format
+   */
+  private formatSourceTableName(sourceTable: string): string {
+    if (!sourceTable) return '';
+
+    // Convert common table names to readable format
+    const formatted = sourceTable
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .toLowerCase()
+      .replace(/\b\w/g, l => l.toUpperCase())
+      .trim();
+
+    return formatted;
+  }
+
+  /**
+   * Extract important words from text
+   */
+  private extractImportantWords(text: string): string[] {
+    // Common Turkish legal/tax terms that are important
+    const importantTerms = [
+      'vergi', 'kdv', 'kurumlar', 'gelir', 'stopaj', 'beyanname',
+      'mükellef', 'tarh', 'ceza', 'kanun', 'tebliğ', 'karar',
+      'mahkeme', 'dava', 'itiraz', 'faiz', 'matrah', 'sgk'
+    ];
+
+    const words = text.toLowerCase()
+      .replace(/[^\w\sçğıöşü]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 3);
+
+    // Find important terms first
+    const found = words.filter(word =>
+      importantTerms.some(term => word.includes(term) || term.includes(word))
+    );
+
+    // Add capitalized words (likely entities, names)
+    const capitalized = text.match(/\b[A-ZÇĞİÖŞÜ][a-zçğıöşü]+\b/g) || [];
+
+    return [...found.slice(0, 2), ...capitalized.slice(0, 2), ...words.slice(0, 2)];
+  }
+
   async keywordSearch(query: string, limit: number = 10) {
     const queryId = `keywordSearch_${query.substring(0, 10)}_${Date.now()}`;
     console.time(queryId);
@@ -525,8 +608,8 @@ export class SemanticSearchService {
       const searchQuery = `
         SELECT
           ue.id::text as id,
-          COALESCE(ue.metadata->>'title', ue.content::text) as title,
-          COALESCE(ue.content, ue.metadata->>'content', ue.metadata->>'text', '') as excerpt,
+          LEFT(COALESCE(ue.metadata->>'title', ue.content::text), 200) as title,
+          LEFT(COALESCE(ue.content, ue.metadata->>'content', ue.metadata->>'text', ''), 1500) as excerpt,
           COALESCE(ue.metadata->>'table', 'unknown') as source_table,
           ue.source_id,
           ue.metadata,
@@ -561,8 +644,8 @@ export class SemanticSearchService {
       console.timeEnd(queryId);
 
       return result.rows.map(row => {
-        // Extract keywords from content
-        const keywords = this.extractKeywords(row.excerpt || '', query);
+        // Extract keywords from content, title, and source table
+        const keywords = this.extractSmartKeywords(row.excerpt || '', row.title || '', row.source_table || '', query);
 
         return {
           ...row,
@@ -611,10 +694,10 @@ export class SemanticSearchService {
             searchQuery = `
               SELECT
                 id::text as id,
-                'SORUCEVAP - ' || LEFT(question, 100) as title,
+                LEFT(question, 150) as title,
                 'sorucevap' as source_table,
                 id::text as source_id,
-                LEFT(answer, 500) as excerpt
+                LEFT(answer, 1500) as excerpt
               FROM ${TABLE_NAMES.SORUCEVAP}
               WHERE question ILIKE $1 OR answer ILIKE $1
               ORDER BY id DESC
@@ -630,10 +713,10 @@ export class SemanticSearchService {
           searchQuery = `
             SELECT
               id::text as id,
-              '?ZELGE - ' || LEFT(subject, 100) as title,
+              LEFT(subject, 150) as title,
               'ozelgeler' as source_table,
               id::text as source_id,
-              LEFT(content, 500) as excerpt
+              LEFT(content, 1500) as excerpt
             FROM ${TABLE_NAMES.OZELGELER}
             WHERE subject ILIKE $1 OR content ILIKE $1
             ORDER BY id DESC
@@ -644,10 +727,10 @@ export class SemanticSearchService {
           searchQuery = `
             SELECT
               id::text as id,
-              'MAKALE - ' || LEFT(baslik, 100) as title,
+              LEFT(baslik, 150) as title,
               'makaleler' as source_table,
               id::text as source_id,
-              LEFT(icerik, 500) as excerpt
+              LEFT(icerik, 1500) as excerpt
             FROM ${TABLE_NAMES.MAKALELER}
             WHERE baslik ILIKE $1 OR icerik ILIKE $1
             ORDER BY id DESC
@@ -740,7 +823,7 @@ export class SemanticSearchService {
       const query = `
         SELECT
           id::text as id,
-          'SORUCEVAP - ' || LEFT(question, 100) as title,
+          LEFT(question, 150) as title,
           'sorucevap' as source_table,
           id::text as source_id,
           LEFT(answer, 200) as excerpt

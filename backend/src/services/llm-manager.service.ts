@@ -136,20 +136,31 @@ export class LLMManager {
         settings[row.key] = row.value;
       });
 
-      // Update default provider
-      const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'] || 'anthropic/claude-3-5-sonnet';
-      this.defaultProvider = this.extractProviderFromModel(activeModel);
+      // Update default provider - RESPECT DATABASE SETTINGS
+      const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'] || 'anthropic/claude-3-5-sonnet-20241022';
+      const extractedProvider = this.extractProviderFromModel(activeModel);
+
+      console.log(`🔧 Settings from DB - Active model: ${activeModel}, Extracted provider: ${extractedProvider}`);
+
+      // IMPORTANT: Only change provider if it's different from current
+      if (this.defaultProvider !== extractedProvider) {
+        console.log(`🔄 Switching default provider from ${this.defaultProvider} to ${extractedProvider} based on database settings`);
+        this.defaultProvider = extractedProvider;
+      } else {
+        console.log(`✅ Keeping current provider ${this.defaultProvider} as it matches database settings`);
+      }
 
       // Store the actual model name without provider prefix
       this.actualModel = activeModel.includes('/') ? activeModel.split('/')[1] : activeModel;
 
       // Map common model names to their actual API names
-      if (this.actualModel === 'claude-3-5-sonnet') {
-        this.actualModel = 'claude-3-5-sonnet-20241022';
+      if (this.actualModel === 'claude-3-5-sonnet' || this.actualModel === 'claude-3-5-sonnet-20241022') {
+        // Use latest Claude 3.5 Sonnet model
+        this.actualModel = 'claude-3-5-sonnet-latest';
       } else if (this.actualModel === 'claude-3-sonnet' || this.actualModel === 'claude-3-sonnet-20240229') {
-        // Map deprecated model to newer version
-        console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
-        this.actualModel = 'claude-3-5-sonnet-20241022';
+        // Map deprecated model to latest version
+        console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-latest');
+        this.actualModel = 'claude-3-5-sonnet-latest';
       } else if (this.actualModel === 'claude-3-opus') {
         this.actualModel = 'claude-3-opus-20240229';
       } else if (this.actualModel === 'deepseek-chat') {
@@ -291,29 +302,44 @@ export class LLMManager {
   private updateProviderSettings(provider: string, settings: { apiKey?: string; model?: string; embeddingModel?: string; supportsEmbeddings?: boolean }): void {
     const prov = this.providers.get(provider);
     if (prov) {
+      const apiKeyChanged = settings.apiKey !== undefined && settings.apiKey !== prov.apiKey;
+
       if (settings.apiKey !== undefined) prov.apiKey = settings.apiKey;
       if (settings.model !== undefined) prov.model = settings.model;
       if (settings.embeddingModel !== undefined) prov.embeddingModel = settings.embeddingModel;
       if (settings.supportsEmbeddings !== undefined) prov.supportsEmbeddings = settings.supportsEmbeddings;
-      prov.isInitialized = false;
+
+      // Only reset initialization if API key changed (requires new client)
+      if (apiKeyChanged) {
+        prov.isInitialized = false;
+        prov.client = undefined; // Clear the old client
+        console.log(`🔄 API key changed for ${provider}, client will be reinitialized`);
+      }
     }
   }
 
   /**
-   * Generate fallback order with default provider first
+   * Generate fallback order - Use active provider first, then proper fallbacks (excluding DeepSeek)
    */
   private generateFallbackOrder(): string[] {
-    const allProviders = ['claude', 'openai', 'gemini', 'deepseek'];
+    // Define fallback order without DeepSeek for production use
+    const productionFallbacks = ['claude', 'gemini', 'openai'];
     const order = [this.defaultProvider];
 
-    // Add other providers
-    for (const p of allProviders) {
-      if (p !== this.defaultProvider) {
+    // Add other providers in order, but skip DeepSeek unless it's the active one
+    for (const p of productionFallbacks) {
+      if (p !== this.defaultProvider && p !== 'deepseek') {
         order.push(p);
       }
     }
 
-    return Array.from(new Set(order));
+    // Only add DeepSeek if it's the active provider
+    if (this.defaultProvider === 'deepseek') {
+      console.log(`⚠️ DeepSeek is active (testing mode)`);
+    }
+
+    console.log(`🎯 Fallback order: ${order.join(' -> ')}`);
+    return Array.from(new Set(order)); // Remove duplicates
   }
 
   /**
@@ -346,10 +372,25 @@ export class LLMManager {
           prov.client = new GoogleGenerativeAI(prov.apiKey);
           break;
         case 'deepseek':
-          prov.client = new OpenAI({
-            apiKey: prov.apiKey,
-            baseURL: 'https://api.deepseek.com'
-          });
+          console.log('🔧 Initializing DeepSeek provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          try {
+            const deepseekClient = new OpenAI({
+              apiKey: prov.apiKey,
+              baseURL: 'https://api.deepseek.com'
+            });
+            prov.client = deepseekClient;
+            console.log('✅ DeepSeek OpenAI client created successfully');
+            console.log('🔍 Verification - Client after assignment:', {
+              hasClient: !!prov.client,
+              clientType: typeof prov.client,
+              hasChat: !!(prov.client && (prov.client as any).chat),
+              hasCompletions: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions),
+              hasCreate: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions && (prov.client as any).chat.completions.create)
+            });
+          } catch (error) {
+            console.error('❌ Failed to create DeepSeek client:', error);
+            return false;
+          }
           break;
       }
       prov.isInitialized = true;
@@ -530,9 +571,30 @@ export class LLMManager {
 
     // Check if preferred provider is available
     const prov = this.providers.get(provider);
+    console.log(`🔍 Provider ${provider} state:`, {
+      hasProvider: !!prov,
+      isInitialized: prov?.isInitialized,
+      hasApiKey: !!prov?.apiKey,
+      hasClient: !!prov?.client,
+      clientType: typeof prov?.client
+    });
+
+    // IMPORTANT: Don't try fallbacks if this is the active provider from settings
+    // Only try fallbacks if this is a user-specified preferred provider that fails
+    const isFromSettings = !options.preferredProvider; // If no preferred provider specified, this is from settings
+
     if (!prov || !prov.isInitialized || !prov.apiKey) {
-      console.log(`⚠️ Preferred provider ${provider} not available, trying fallback...`);
-      provider = await this.getAvailableProvider();
+      if (isFromSettings) {
+        // This is the active provider from settings - initialize it instead of falling back
+        console.log(`🔧 Initializing active provider from settings: ${provider}`);
+        if (!this.initializeProvider(provider)) {
+          throw new Error(`Active provider ${provider} failed to initialize. Please check configuration.`);
+        }
+      } else {
+        // User specified a different provider - try fallbacks
+        console.log(`⚠️ Preferred provider ${provider} not available, trying fallback...`);
+        provider = await this.getAvailableProvider();
+      }
     }
 
     if (!provider) {
@@ -612,15 +674,22 @@ export class LLMManager {
           };
 
         case 'deepseek':
-          if (!prov.isInitialized || !prov.client) {
-            if (!this.initializeProvider(provider)) {
-              throw new Error('DeepSeek client is not initialized');
-            }
+          // Force initialization every time for reliability
+          console.log('🔧 Force initializing DeepSeek provider...');
+          if (!this.initializeProvider(provider)) {
+            throw new Error('DeepSeek client is not initialized');
           }
-          // Check if client is properly initialized
-          if (!prov.client || typeof prov.client.chat !== 'object') {
-            throw new Error('DeepSeek client is not properly initialized');
+          // Triple-check after initialization
+          if (!prov.client) {
+            console.error('❌ DeepSeek client is null after initialization');
+            throw new Error('DeepSeek client creation failed');
           }
+          console.log('✅ DeepSeek client verified:', {
+            hasClient: !!prov.client,
+            isInitialized: prov.isInitialized,
+            hasChat: !!(prov.client && (prov.client as any).chat),
+            hasCompletions: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions)
+          });
           // Ensure we're using the correct model name
           const deepseekModel = this.actualModel || prov.model || 'deepseek-chat';
           console.log(`🤖 Using DeepSeek model: ${deepseekModel}`);
@@ -646,11 +715,14 @@ export class LLMManager {
     } catch (error) {
       console.error(`❌ Chat response failed with ${provider}:`, error);
 
-      // Only fallback if this was the preferred provider
-      if (provider === preferredProvider) {
-        console.log(`⚠️ Preferred provider ${provider} failed, trying fallback providers...`);
+      // IMPORTANT: Don't use fallbacks for the active provider from settings
+      // Only fallback if this was a user-specified preferred provider
+      const isFromSettings = !options.preferredProvider;
 
-        // Try fallback providers
+      if (!isFromSettings && provider === preferredProvider) {
+        console.log(`⚠️ User-specified provider ${provider} failed, trying fallback providers...`);
+
+        // Try fallback providers (only for user-specified providers)
         const currentIndex = this.fallbackOrder.indexOf(provider);
         const nextProviders = this.fallbackOrder.slice(currentIndex + 1);
 
@@ -682,6 +754,50 @@ export class LLMManager {
             console.warn(`⚠️ Fallback to ${nextProvider} also failed:`, e);
           }
         }
+      } else if (isFromSettings) {
+        // This is the active provider from settings - try fallbacks to production providers only
+        console.log(`⚠️ Active provider ${provider} from settings failed, trying fallback to production providers...`);
+
+        // Try fallback providers (only production providers: Claude, Gemini, OpenAI)
+        const currentIndex = this.fallbackOrder.indexOf(provider);
+        const nextProviders = this.fallbackOrder.slice(currentIndex + 1);
+
+        for (const nextProvider of nextProviders) {
+          // Skip DeepSeek in fallbacks for production
+          if (nextProvider === 'deepseek') {
+            console.log(`⏭️ Skipping DeepSeek in fallbacks (testing only)`);
+            continue;
+          }
+
+          try {
+            console.log(`🔄 Falling back to ${nextProvider}...`);
+            const nextProv = this.providers.get(nextProvider);
+            if (nextProv && nextProv.apiKey) {
+              if (!nextProv.isInitialized) {
+                if (!this.initializeProvider(nextProvider)) {
+                  console.warn(`⚠️ Failed to initialize fallback provider ${nextProvider}`);
+                  continue;
+                }
+              }
+
+              // Recursive call with fallback provider as preferred
+              const result = await this.generateChatResponse(message, {
+                ...options,
+                preferredProvider: nextProvider
+              });
+
+              // Mark that fallback was used
+              return {
+                ...result,
+                fallbackUsed: true
+              };
+            }
+          } catch (e) {
+            console.warn(`⚠️ Fallback to ${nextProvider} also failed:`, e);
+          }
+        }
+
+        console.error(`❌ All production providers failed for active model ${provider}`);
       }
 
       throw new Error(`LLM provider ${provider} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

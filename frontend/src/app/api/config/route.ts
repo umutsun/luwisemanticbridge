@@ -35,7 +35,7 @@ const defaultConfig = {
   },
   anthropic: {
     apiKey: process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || '',
-    model: 'claude-3-opus-20240229',
+    model: 'claude-3-5-sonnet-20241022',
     maxTokens: 4096,
   },
   deepseek: {

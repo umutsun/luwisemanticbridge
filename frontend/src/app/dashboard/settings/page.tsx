@@ -293,7 +293,7 @@ export default function SettingsPage() {
     },
     anthropic: {
       apiKey: typeof process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY === 'string' ? process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY : '',
-      model: 'claude-3-opus-20240229',
+      model: 'claude-3-5-sonnet-20241022',
       maxTokens: 4096,
     },
     deepseek: {
@@ -487,7 +487,7 @@ export default function SettingsPage() {
           },
           anthropic: data.anthropic || {
             apiKey: '',
-            model: 'claude-3-opus-20240229',
+            model: 'claude-3-5-sonnet-20241022',
             maxTokens: 4096,
           },
           deepseek: data.deepseek || {
@@ -972,7 +972,7 @@ export default function SettingsPage() {
         },
         anthropic: {
           apiKey: '',
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-5-sonnet-20241022',
           maxTokens: 4096,
         },
         deepseek: {
@@ -1925,8 +1925,8 @@ export default function SettingsPage() {
                         <SelectItem value="openai/gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</SelectItem>
                         <SelectItem value="google/gemini-1.5-pro">Google Gemini 1.5 Pro</SelectItem>
                         <SelectItem value="google/gemini-1.5-flash">Google Gemini 1.5 Flash</SelectItem>
-                        <SelectItem value="anthropic/claude-3-opus">Anthropic Claude 3 Opus</SelectItem>
-                        <SelectItem value="anthropic/claude-3-sonnet">Anthropic Claude 3 Sonnet</SelectItem>
+                        <SelectItem value="anthropic/claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</SelectItem>
+                        <SelectItem value="anthropic/claude-3-5-haiku-20241022">Claude 3.5 Haiku</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

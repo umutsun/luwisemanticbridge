@@ -161,7 +161,7 @@ const API_BASE_URL = 'http://localhost:8083';
         },
         anthropic: data.anthropic || {
           apiKey: '',
-          model: 'claude-3-opus-20240229',
+          model: 'claude-3-5-sonnet-20241022',
           maxTokens: 4096,
         },
         deepseek: data.deepseek || {

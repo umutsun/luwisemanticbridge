@@ -626,8 +626,7 @@ export function selectNaturalQuestionPattern(
   // Generate the natural question
   let question = selectedPattern(keywords, context, details);
 
-  // Add natural context enhancers based on source details
-  question = enhanceQuestionWithContext(question, context, details);
+  // Remove context enhancers to keep questions concise and balanced
 
   return question;
 }
