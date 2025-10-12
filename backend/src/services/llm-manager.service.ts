@@ -146,6 +146,10 @@ export class LLMManager {
       // Map common model names to their actual API names
       if (this.actualModel === 'claude-3-5-sonnet') {
         this.actualModel = 'claude-3-5-sonnet-20241022';
+      } else if (this.actualModel === 'claude-3-sonnet' || this.actualModel === 'claude-3-sonnet-20240229') {
+        // Map deprecated model to newer version
+        console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
+        this.actualModel = 'claude-3-5-sonnet-20241022';
       } else if (this.actualModel === 'claude-3-opus') {
         this.actualModel = 'claude-3-opus-20240229';
       } else if (this.actualModel === 'deepseek-chat') {
