@@ -606,6 +606,17 @@ export default function SettingsPage() {
         };
 
         setConfig(enrichedConfig);
+
+        // Set test provider and model from llmSettings if available
+        if (enrichedConfig.llmSettings?.activeChatModel) {
+          const modelParts = enrichedConfig.llmSettings.activeChatModel.split('/');
+          if (modelParts.length >= 2) {
+            const provider = modelParts[0];
+            const model = modelParts.slice(1).join('/');
+            setTestProvider(provider);
+            setTestModel(model);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to fetch config:', error);
@@ -770,6 +781,8 @@ export default function SettingsPage() {
         return;
       }
 
+      const testStartTime = Date.now();
+
       const response = await fetch(buildApiUrl('/api/v2/settings/test', testProvider), {
         method: 'POST',
         headers: {
@@ -782,6 +795,32 @@ export default function SettingsPage() {
       });
 
       const result = await response.json();
+
+      // Save test result to database
+      try {
+        await fetch(buildApiUrl('/api/v2/api-tests/save'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            provider: testProvider,
+            model: testModel,
+            apiKey: apiKey.trim(),
+            testResult: {
+              success: response.ok,
+              message: response.ok ?
+                `${testProvider} API test successful` :
+                (result.error || 'API key validation failed')
+            },
+            tokens: result.tokens || { input: 0, output: 0, total: 0 },
+            testDuration: Date.now() - testStartTime
+          })
+        });
+      } catch (saveError) {
+        console.error('Failed to save API test result:', saveError);
+        // Don't fail the test if saving fails
+      }
 
       if (response.ok) {
         // Build success message with token usage if available
@@ -994,7 +1033,12 @@ export default function SettingsPage() {
       llmKnowledgeWeight: config.llmSettings?.llmKnowledgeWeight,
       ragWeightTotal: (config.llmSettings?.ragWeight ?? 0) + (config.llmSettings?.llmKnowledgeWeight ?? 0),
       ragSettings: config.ragSettings,
-      promptsCount: prompts.length
+      promptsCount: prompts.length,
+      openaiApiKey: config.openai?.apiKey ? 'SET' : 'NOT SET',
+      googleApiKey: config.google?.apiKey ? 'SET' : 'NOT SET',
+      anthropicApiKey: config.anthropic?.apiKey ? 'SET' : 'NOT SET',
+      deepseekApiKey: config.deepseek?.apiKey ? 'SET' : 'NOT SET',
+      fullConfig: config
     });
 
     const errors = validateConfig();
@@ -1018,7 +1062,12 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      const response = await fetch(getApiUrl('settings'), {
+      const settingsUrl = getApiUrl('settings');
+      console.log('🔄 Saving to URL:', settingsUrl);
+      console.log('🔄 Token available:', !!token);
+      console.log('🔄 Config being sent:', JSON.stringify(config, null, 2));
+
+      const response = await fetch(settingsUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1026,6 +1075,20 @@ export default function SettingsPage() {
         },
         body: JSON.stringify(config),
       });
+
+      console.log('🔄 Response status:', response.status);
+      console.log('🔄 Response ok:', response.ok);
+
+      const responseText = await response.text();
+      console.log('🔄 Response text:', responseText);
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        console.error('Failed to parse response as JSON:', responseText);
+        responseData = { error: 'Invalid JSON response' };
+      }
 
       if (response.ok) {
         setHasUnsavedChanges(false);
@@ -1095,10 +1158,9 @@ export default function SettingsPage() {
           body: JSON.stringify(chatbotSettings),
         });
       } else {
-        const errorData = await response.json();
         toast({
           title: 'Error',
-          description: errorData.message || 'Failed to save configuration',
+          description: responseData.error || responseData.message || 'Failed to save configuration',
           variant: 'destructive',
         });
       }
@@ -1433,6 +1495,17 @@ export default function SettingsPage() {
             ...data.llmSettings
           }
         }));
+
+        // Set test provider and model from active chat model
+        if (data.llmSettings.activeChatModel) {
+          const modelParts = data.llmSettings.activeChatModel.split('/');
+          if (modelParts.length >= 2) {
+            const provider = modelParts[0];
+            const model = modelParts.slice(1).join('/');
+            setTestProvider(provider);
+            setTestModel(model);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to fetch AI settings:', error);
@@ -2100,7 +2173,7 @@ export default function SettingsPage() {
                         onValueChange={handleProviderChange}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select provider" />
+                          <SelectValue placeholder={testProvider || "Select provider"} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="openai">OpenAI</SelectItem>

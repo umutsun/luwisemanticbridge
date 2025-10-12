@@ -45,6 +45,8 @@ import adminRoutes from './routes/admin.routes';
 import llmStatusRoutes from './routes/llm-status.routes';
 import logsRoutes, { initializeLogWebSocket } from './routes/logs.routes';
 import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
+import databaseRoutes from './routes/database.routes';
+import apiTestsRoutes from './routes/api-tests.routes';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from './services/auth.service';
 import { SettingsService } from './services/settings.service';
@@ -275,6 +277,8 @@ app.use('/api/v2/llm', llmStatusRoutes);
 app.use('/api/v2/admin', adminRoutes);
 app.use('/api/v2/logs', logsRoutes);
 app.use('/api/v2/embeddings-tables', embeddingsTablesRoutes);
+app.use('/api/v2/database', databaseRoutes);
+app.use('/api/v2/api-tests', apiTestsRoutes);
 // app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
 
 // Base route

@@ -57,11 +57,13 @@ interface SystemStatus {
     size: string;
     documents: number;
     responseTime?: number;
+    databaseName?: string;
   };
   redis: {
     connected: boolean;
     used_memory: string;
     responseTime?: number;
+    keyCount?: number;
   };
   llmModel: {
     model: string;
@@ -132,14 +134,18 @@ export default function Header() {
         (headers as any)['Authorization'] = `Bearer ${token}`;
       }
 
-      const [dashboardResponse, healthResponse] = await Promise.all([
+      const [dashboardResponse, healthResponse, dbResponse, redisResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v2/dashboard`, { headers }),
-        fetch(`${API_BASE_URL}/api/v2/health/system`, { headers })
+        fetch(`${API_BASE_URL}/api/v2/health/system`, { headers }),
+        fetch(`${API_BASE_URL}/api/v2/database/stats`, { headers }),
+        fetch(`${API_BASE_URL}/api/v2/database/schema`, { headers })
       ]);
 
-      if (dashboardResponse.ok && healthResponse.ok) {
+      if (dashboardResponse.ok && healthResponse.ok && dbResponse.ok) {
         const dashboardData = await dashboardResponse.json();
         const healthData = await healthResponse.json();
+        const dbData = await dbResponse.json();
+        const redisData = redisResponse.ok ? await redisResponse.json() : null;
 
         setConnectionProgress(100);
 
@@ -147,6 +153,22 @@ export default function Header() {
           // Build comprehensive system status from both endpoints
           const dbService = healthData.services?.database || healthData.services?.asemb_database;
           const redisService = healthData.services?.redis;
+
+          // Extract database name from settings or database stats
+          let databaseName = 'asemb'; // default
+          if (settings && settings.database?.name) {
+            databaseName = settings.database.name;
+          } else if (dbData && dbData.database) {
+            databaseName = dbData.database;
+          } else if (dbData && dbData.databaseName) {
+            databaseName = dbData.databaseName;
+          }
+
+          // Calculate total records from database schema
+          let totalRecords = 0;
+          if (dbData && dbData.tables) {
+            totalRecords = dbData.tables.reduce((sum: number, table: any) => sum + (table.rowCount || 0), 0);
+          }
 
           // Get LLM model information
           let llmModelInfo = {
@@ -196,7 +218,8 @@ export default function Header() {
               connected: dbService?.status === 'connected' || dbService?.status === 'healthy',
               size: dashboardData.database?.size || '0 MB',
               documents: dashboardData.database?.documents || 0,
-              responseTime: dbService?.responseTime || 0
+              responseTime: dbService?.responseTime || 0,
+              databaseName: databaseName
             },
             redis: {
               connected: redisService?.status === 'connected' ||
@@ -204,7 +227,8 @@ export default function Header() {
                         healthData.serverStatus?.redis === 'connected' ||
                         (redisService && !redisService.status),
               used_memory: dashboardData.redis?.used_memory || '0 MB',
-              responseTime: redisService?.responseTime || 0
+              responseTime: redisService?.responseTime || 0,
+              keyCount: totalRecords
             },
             llmModel: llmModelInfo,
             embedder: {
@@ -329,19 +353,19 @@ export default function Header() {
                   <div className="text-center">
                     <span className="text-xs font-medium">DB</span>
                     <p className="text-xs text-muted-foreground">
-                      {systemStatus?.database.connected ? 'Online' : 'Offline'}
+                      {systemStatus?.database.databaseName || 'Unknown'}
                     </p>
                   </div>
                   <div className="text-center">
                     <span className="text-xs font-medium">Redis</span>
                     <p className="text-xs text-muted-foreground">
-                      {systemStatus?.redis.connected ? 'Online' : 'Offline'}
+                      {systemStatus?.redis.keyCount || 0} keys
                     </p>
                   </div>
                   <div className="text-center">
                     <span className="text-xs font-medium">LLM</span>
                     <p className="text-xs text-muted-foreground">
-                      {systemStatus?.llmModel.active ? 'Online' : 'Offline'}
+                      {systemStatus?.llmModel.provider || 'Unknown'}
                     </p>
                   </div>
                   <div className="text-center">
@@ -463,7 +487,7 @@ export default function Header() {
                       }`}>
                         <p className="text-xs font-medium">Database</p>
                         <p className="text-xs text-muted-foreground">
-                          {systemStatus?.database.connected ? 'Connected' : 'Offline'}
+                          {systemStatus?.database.databaseName || 'Unknown'}
                         </p>
                       </div>
 
@@ -475,7 +499,7 @@ export default function Header() {
                       }`}>
                         <p className="text-xs font-medium">Redis</p>
                         <p className="text-xs text-muted-foreground">
-                          {systemStatus?.redis.connected ? 'Connected' : 'Offline'}
+                          {systemStatus?.redis.keyCount || 0} keys
                         </p>
                       </div>
 
@@ -487,7 +511,7 @@ export default function Header() {
                       }`}>
                         <p className="text-xs font-medium">LLM</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          Active
+                          {systemStatus?.llmModel.provider || 'Unknown'}
                         </p>
                       </div>
 
