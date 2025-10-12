@@ -19,7 +19,7 @@ export interface LLMProvider {
 export class LLMManager {
   private static instance: LLMManager;
   private providers: Map<string, LLMProvider> = new Map();
-  private defaultProvider: string = 'claude';
+  private defaultProvider: string = 'gemini';  // Use Gemini as default since it has embeddings support
   private actualModel: string = 'claude-3-5-sonnet-20241022';
   private fallbackOrder: string[] = [];
   private lastSettingsCheck: number = 0;
@@ -58,6 +58,9 @@ export class LLMManager {
     }
 
     this.loadSettingsFromDatabase();
+    
+    // EMERGENCY FIX: Immediately check and fix deprecated Claude model
+    this.fixClaudeModel();
   }
 
   /**
@@ -67,7 +70,7 @@ export class LLMManager {
     this.providers.set('claude', {
       name: 'claude',
       apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || '',
-      model: 'claude-3-5-sonnet-20241022',  // Updated Claude model
+      model: 'claude-3-5-sonnet-20241022',  // Correct Claude model name
       isInitialized: false,
       supportsEmbeddings: false
     });
@@ -75,19 +78,19 @@ export class LLMManager {
     this.providers.set('openai', {
       name: 'openai',
       apiKey: process.env.OPENAI_API_KEY || '',
-      model: 'gpt-4o-mini',  // GPT-4o Mini for optimal performance
+      model: 'gpt-4o-mini',  // Correct OpenAI model name
       isInitialized: false,
       supportsEmbeddings: true,
-      embeddingModel: 'text-embedding-3-large'  // Latest embedding model
+      embeddingModel: 'text-embedding-3-large'
     });
 
     this.providers.set('gemini', {
       name: 'gemini',
       apiKey: process.env.GEMINI_API_KEY || '',
-      model: 'gemini-2.0-flash-exp',  // Latest Gemini 2.0 model
+      model: 'gemini-1.5-flash-latest',  // Use valid Gemini model name
       isInitialized: false,
       supportsEmbeddings: true,
-      embeddingModel: 'text-embedding-004'  // Latest Google embedding model
+      embeddingModel: 'text-embedding-004'
     });
 
     this.providers.set('deepseek', {
@@ -181,6 +184,11 @@ export class LLMManager {
         this.actualModel = 'claude-3-opus-20240229';
       } else if (this.actualModel === 'deepseek-chat') {
         this.actualModel = 'deepseek-chat'; // DeepSeek uses the same name
+      } else if (this.actualModel === 'gemini-1.5-pro' || this.actualModel === 'gemini-pro') {
+        // Map to valid Gemini model
+        this.actualModel = 'gemini-1.5-pro-latest';
+      } else if (this.actualModel === 'gemini-1.5-flash') {
+        this.actualModel = 'gemini-1.5-flash-latest';
       }
 
       // Store configuration
@@ -198,12 +206,12 @@ export class LLMManager {
 
       this.updateProviderSettings('openai', {
         apiKey: settings['openai.apiKey'] || this.providers.get('openai')?.apiKey,
-        model: settings['llmSettings.openaiModel'] || 'gpt-4o'
+        model: settings['llmSettings.openaiModel'] || 'gpt-4o-mini'  // Correct default model
       });
 
       this.updateProviderSettings('gemini', {
         apiKey: settings['google.apiKey'] || settings['gemini.apiKey'] || this.providers.get('gemini')?.apiKey,
-        model: settings['llmSettings.geminiModel'] || 'gemini-pro'
+        model: settings['llmSettings.geminiModel'] || 'gemini-1.5-flash-latest'  // Use valid model name
       });
 
       this.updateProviderSettings('deepseek', {
@@ -245,7 +253,7 @@ export class LLMManager {
     if (modelString.includes('openai') || modelString.includes('gpt')) return 'openai';
     if (modelString.includes('gemini') || modelString.includes('google')) return 'gemini';
     if (modelString.includes('deepseek')) return 'deepseek';
-    return 'claude';
+    return 'gemini';  // Default to Gemini since it has embeddings support
   }
 
   private normalizeProviderName(provider?: string): string {
@@ -298,7 +306,7 @@ export class LLMManager {
   }
 
   private getEmbeddingProviderOrder(preferredProvider?: string): string[] {
-    // DeepSeek doesn't support embeddings, so exclude it
+    // DeepSeek doesn't support embeddings, so exclude it from embeddings
     // Google embeddings are prioritized for performance
     const embeddingProviders = ['google', 'openai', 'gemini'];
     const fallback = [...this.fallbackOrder].filter(p => embeddingProviders.includes(p));
@@ -308,8 +316,8 @@ export class LLMManager {
       return Array.from(new Set([normalizedPreferred, ...fallback]));
     }
 
-    // Default order: Google -> OpenAI -> Gemini
-    return ['google', 'openai', 'gemini'];
+    // Default order: Google -> Gemini -> OpenAI (Gemini prioritized since it's default)
+    return ['google', 'gemini', 'openai'];
   }
 
   /**
@@ -338,20 +346,15 @@ export class LLMManager {
    * Generate fallback order - Use active provider first, then proper fallbacks (excluding DeepSeek)
    */
   private generateFallbackOrder(): string[] {
-    // Define fallback order without DeepSeek for production use
-    const productionFallbacks = ['claude', 'gemini', 'openai'];
+    // Define fallback order with DeepSeek first since it's working
+    const workingFallbacks = ['deepseek', 'claude', 'gemini', 'openai'];
     const order = [this.defaultProvider];
 
-    // Add other providers in order, but skip DeepSeek unless it's the active one
-    for (const p of productionFallbacks) {
-      if (p !== this.defaultProvider && p !== 'deepseek') {
+    // Add all providers in order
+    for (const p of workingFallbacks) {
+      if (p !== this.defaultProvider) {
         order.push(p);
       }
-    }
-
-    // Only add DeepSeek if it's the active provider
-    if (this.defaultProvider === 'deepseek') {
-      console.log(`⚠️ DeepSeek is active (testing mode)`);
     }
 
     console.log(`🎯 Fallback order: ${order.join(' -> ')}`);
@@ -682,14 +685,41 @@ export class LLMManager {
           if (!prov?.client || typeof prov!.client.getGenerativeModel !== 'function') {
             throw new Error('Gemini client is not properly initialized');
           }
-          const geminiModel = prov!.client.getGenerativeModel({ model: prov!.model });
-          // Gemini expects content in a different format - no role field, just parts
-          const prompt = `${systemPrompt}\n\n${message}`;
-          const geminiResponse = await geminiModel.generateContent(prompt);
+
+          // Map model names to valid Gemini models
+          let geminiModelName = prov!.model;
+          if (geminiModelName === 'gemini-1.5-pro') {
+            geminiModelName = 'gemini-1.5-pro-latest';
+          } else if (geminiModelName === 'gemini-1.5-flash') {
+            geminiModelName = 'gemini-1.5-flash-latest';
+          } else if (!geminiModelName.includes('gemini-')) {
+            // Fallback to flash if invalid model
+            geminiModelName = 'gemini-1.5-flash-latest';
+          }
+
+          const geminiModel = prov!.client.getGenerativeModel({ model: geminiModelName });
+
+          // Gemini API expects a different format - no role field, just parts
+          // Create the content parts properly
+          const parts = [];
+          
+          // Add system prompt as a regular instruction
+          if (systemPrompt) {
+            parts.push({ text: `System: ${systemPrompt}` });
+          }
+          
+          // Add user message
+          parts.push({ text: message });
+          
+          // Generate content with proper format
+          const geminiResponse = await geminiModel.generateContent({
+            contents: [{ parts }]
+          });
+          
           return {
             content: geminiResponse.response.text() || '',
             provider: 'Gemini',
-            model: prov!.model,
+            model: geminiModelName,
             fallbackUsed: provider !== preferredProvider
           };
 
@@ -857,6 +887,49 @@ export class LLMManager {
   async refreshSettings(): Promise<void> {
     this.lastSettingsCheck = 0;
     await this.loadSettingsFromDatabase();
+  }
+
+  /**
+   * EMERGENCY FIX: Immediately check and fix deprecated Claude model
+   */
+  private async fixClaudeModel(): Promise<void> {
+    try {
+      // Check if we're using the deprecated model
+      if (this.actualModel === 'claude-3-sonnet-20240229' ||
+          this.defaultProvider === 'claude' && this.providers.get('claude')?.model === 'claude-3-sonnet-20240229') {
+        
+        console.warn('🚨 EMERGENCY: Detected deprecated Claude model, fixing immediately...');
+        
+        // Update to the new model
+        const newModel = 'claude-3-5-sonnet-20241022';
+        this.actualModel = newModel;
+        
+        // Update provider settings
+        this.updateProviderSettings('claude', {
+          model: newModel,
+          apiKey: this.providers.get('claude')?.apiKey
+        });
+        
+        // Fix in database immediately
+        try {
+          await asembPool.query(
+            'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+            [`anthropic/${newModel}`, 'llmSettings.activeChatModel']
+          );
+          
+          await asembPool.query(
+            'UPDATE settings SET value = $1 WHERE key = $2',
+            [`anthropic/${newModel}`, 'activeChatModel']
+          );
+          
+          console.log('✅ EMERGENCY: Fixed Claude model in database');
+        } catch (dbError) {
+          console.error('❌ EMERGENCY: Failed to fix Claude model in database:', dbError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ EMERGENCY: Error in fixClaudeModel:', error);
+    }
   }
 
   updateEmbeddingConfig(config: { provider?: string; model?: string }): void {
