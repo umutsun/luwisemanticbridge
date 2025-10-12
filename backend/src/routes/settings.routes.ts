@@ -649,7 +649,7 @@ router.get('/ai', async (req: Request, res: Response) => {
   }
 });
 
-// Save settings (general endpoint)
+// Save settings (general endpoint) - This handles POST /api/v2/settings
 router.post('/', async (req: Request, res: Response) => {
   try {
     const settings = req.body;
@@ -797,14 +797,14 @@ router.post('/ai', async (req: Request, res: Response) => {
       { key: 'system_prompt', value: systemPrompt },
       { key: 'response_style', value: responseStyle },
       { key: 'response_language', value: language },
-      // RAG Settings
-      { key: 'similarity_threshold', value: ragSettings.similarityThreshold.toString() },
-      { key: 'min_results', value: ragSettings.minResults.toString() },
-      { key: 'max_results', value: ragSettings.maxResults.toString() },
-      { key: 'enable_hybrid_search', value: ragSettings.enableHybridSearch.toString() },
-      { key: 'enable_keyword_boost', value: ragSettings.enableKeywordBoost.toString() },
-      { key: 'parallel_llm_count', value: ragSettings.parallelLLMCount.toString() },
-      { key: 'parallel_llm_batch_size', value: ragSettings.parallelLLMBatchSize.toString() }
+      // RAG Settings - Default values if not provided
+      { key: 'similarity_threshold', value: '0.014' },
+      { key: 'min_results', value: '5' },
+      { key: 'max_results', value: '15' },
+      { key: 'enable_hybrid_search', value: 'false' },
+      { key: 'enable_keyword_boost', value: 'false' },
+      { key: 'parallel_llm_count', value: '4' },
+      { key: 'parallel_llm_batch_size', value: '4' }
     ];
 
     for (const setting of settings) {

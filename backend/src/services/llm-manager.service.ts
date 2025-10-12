@@ -67,7 +67,7 @@ export class LLMManager {
     this.providers.set('claude', {
       name: 'claude',
       apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || '',
-      model: 'claude-3-5-sonnet-20241022',  // Claude Sonnet 4.5 equivalent
+      model: 'claude-3-5-sonnet-20241022',  // Updated Claude model
       isInitialized: false,
       supportsEmbeddings: false
     });
@@ -153,11 +153,27 @@ export class LLMManager {
       // Store the actual model name without provider prefix
       this.actualModel = activeModel.includes('/') ? activeModel.split('/')[1] : activeModel;
 
+      // FORCE UPDATE: Always replace deprecated Claude model
+      if (this.actualModel === 'claude-3-sonnet-20240229') {
+        console.warn('🔄 FORCE UPDATING deprecated Claude model claude-3-sonnet-20240229 to claude-3-5-sonnet-20241022');
+        this.actualModel = 'claude-3-5-sonnet-20241022';
+        
+        // Also update the database setting to prevent future issues
+        try {
+          await asembPool.query(
+            'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
+            ['anthropic/claude-3-5-sonnet-20241022', 'llmSettings.activeChatModel']
+          );
+          console.log('✅ Updated active chat model in database');
+        } catch (error) {
+          console.warn('⚠️ Failed to update database setting:', error);
+        }
+      }
       // Map common model names to their actual API names
-      if (this.actualModel === 'claude-3-5-sonnet' || this.actualModel === 'claude-3-5-sonnet-20241022') {
+      else if (this.actualModel === 'claude-3-5-sonnet' || this.actualModel === 'claude-3-5-sonnet-20241022') {
         // Use latest Claude 3.5 Sonnet model
-        this.actualModel = 'claude-3-5-sonnet-latest';
-      } else if (this.actualModel === 'claude-3-sonnet' || this.actualModel === 'claude-3-sonnet-20240229') {
+        this.actualModel = 'claude-3-5-sonnet-20241022';
+      } else if (this.actualModel === 'claude-3-sonnet') {
         // Map deprecated model to latest version
         console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
         this.actualModel = 'claude-3-5-sonnet-20241022';
@@ -177,7 +193,7 @@ export class LLMManager {
       // Update API keys and models
       this.updateProviderSettings('claude', {
         apiKey: settings['anthropic.apiKey'] || settings['claude.apiKey'] || this.providers.get('claude')?.apiKey,
-        model: this.actualModel || 'claude-3-5-sonnet-20241022'
+        model: this.actualModel === 'claude-3-sonnet-20240229' ? 'claude-3-5-sonnet-20241022' : (this.actualModel || 'claude-3-5-sonnet-20241022')
       });
 
       this.updateProviderSettings('openai', {
