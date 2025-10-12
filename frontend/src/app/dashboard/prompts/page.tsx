@@ -361,7 +361,7 @@ export default function PromptsPage() {
         throw new Error('At least one valid API key must be saved');
       }
 
-      const keysResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/settings`, {
+      const keysResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settingsToSave)

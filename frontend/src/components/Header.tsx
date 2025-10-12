@@ -134,15 +134,13 @@ export default function Header() {
         (headers as any)['Authorization'] = `Bearer ${token}`;
       }
 
-      const [dashboardResponse, healthResponse, dbResponse, redisResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/v2/dashboard`, { headers }),
+      const [healthResponse, dbResponse, redisResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v2/health/system`, { headers }),
         fetch(`${API_BASE_URL}/api/v2/database/stats`, { headers }),
         fetch(`${API_BASE_URL}/api/v2/database/schema`, { headers })
       ]);
 
-      if (dashboardResponse.ok && healthResponse.ok && dbResponse.ok) {
-        const dashboardData = await dashboardResponse.json();
+      if (healthResponse.ok && dbResponse.ok) {
         const healthData = await healthResponse.json();
         const dbData = await dbResponse.json();
         const redisData = redisResponse.ok ? await redisResponse.json() : null;
@@ -216,8 +214,8 @@ export default function Header() {
           setSystemStatus({
             database: {
               connected: dbService?.status === 'connected' || dbService?.status === 'healthy',
-              size: dashboardData.database?.size || '0 MB',
-              documents: dashboardData.database?.documents || 0,
+              size: 'N/A',
+              documents: 0,
               responseTime: dbService?.responseTime || 0,
               databaseName: databaseName
             },
@@ -226,7 +224,7 @@ export default function Header() {
                         redisService?.status === 'healthy' ||
                         healthData.serverStatus?.redis === 'connected' ||
                         (redisService && !redisService.status),
-              used_memory: dashboardData.redis?.used_memory || '0 MB',
+              used_memory: 'N/A',
               responseTime: redisService?.responseTime || 0,
               keyCount: totalRecords
             },
