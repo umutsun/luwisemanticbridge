@@ -24,18 +24,18 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-    // Extended zen loading phases
+    // 3 second loading time
     const phase1 = setTimeout(() => {
       setSystemLoaded(true);
-    }, 3000);
+    }, 1500);
 
     const phase2 = setTimeout(() => {
       setShowTitle(true);
-    }, 5000);
+    }, 2500);
 
     const phase3 = setTimeout(() => {
       setInitialLoading(false);
-    }, 5500);
+    }, 3000);
 
     return () => {
       clearTimeout(phase1);
@@ -92,24 +92,9 @@ export default function LoginPage() {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-primary/5 via-transparent to-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s' }}></div>
       </div>
 
-      {/* Floating ambient elements */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {[...Array(8)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-2 h-2 bg-gradient-to-r from-blue-400/20 to-purple-400/20 rounded-full"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `float-${i % 3} ${10 + i * 2}s ease-in-out infinite`,
-              animationDelay: `${i * 0.5}s`
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="w-full max-w-md px-6 my-12 relative z-10">
-        <div className="mb-12">
+  
+      <div className="w-full max-w-md px-6 my-6 relative z-10">
+        <div className="mb-8">
           <div className="flex flex-col items-center text-center">
             {/* Phase 1: Text Metamorphosis Loading */}
             {initialLoading && !showTitle && (
@@ -147,32 +132,10 @@ export default function LoginPage() {
                   transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
                   className="relative"
                 >
-                  <p className="text-muted-foreground text-base md:text-lg max-w-md font-medium leading-relaxed">
+                  <p className="text-muted-foreground text-lg md:text-xl max-w-md font-medium leading-relaxed">
                     {config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
                   </p>
                 </motion.div>
-
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: "100%" }}
-                  transition={{ duration: 0.8, delay: 0.4, ease: "easeOut" }}
-                  className="relative"
-                >
-                  <div className="h-0.5 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
-                </motion.div>
-
-                {/* Loading indicator */}
-                {!initialLoading && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5, delay: 0.6 }}
-                    className="flex items-center justify-center gap-2 text-sm text-muted-foreground mt-4"
-                  >
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span>Sistem hazır</span>
-                  </motion.div>
-                )}
               </div>
             )}
           </div>

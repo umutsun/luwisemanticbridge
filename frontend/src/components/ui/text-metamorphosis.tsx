@@ -63,33 +63,31 @@ function TextMetamorphosis({
   const [titleIndex, setTitleIndex] = useState(0);
   const [descriptionIndex, setDescriptionIndex] = useState(0);
 
-  // Zen loading phrases
+  // Zen loading phrases - 2 lines each
   const ZEN_PHRASES = {
     titles: [
-      'Loading wisdom...',
-      'Harnessing data...',
-      'Finding patterns...',
-      'Analyzing insights...',
-      'Connecting knowledge...',
-      'Discovering truth...',
-      'Processing thoughts...',
-      'Building bridges...',
-      'Mining data gems...',
-      'Unlocking secrets...',
-      'Weaving narratives...',
-      'Illuminating paths...'
+      'Loading wisdom...\nSeeking truth',
+      'Harnessing data...\nFinding insights',
+      'Finding patterns...\nCreating meaning',
+      'Analyzing insights...\nBuilding knowledge',
+      'Connecting thoughts...\nWeaving wisdom',
+      'Processing data...\nMining gems',
+      'Discovering patterns...\nUnlocking secrets',
+      'Building bridges...\nBetween ideas',
+      'Illuminating paths...\nThrough data',
+      'Transforming chaos...\nInto order'
     ],
     descriptions: [
-      'Finding meaning in the data',
-      'Every byte tells a story',
-      'Knowledge awaits discovery',
-      'Patterns emerge from chaos',
-      'Insights bloom with patience',
-      'Truth reveals itself slowly',
-      'Wisdom flows through data',
-      'Understanding takes time',
-      'Clarity comes with focus',
-      'Answers lie within'
+      'Finding meaning in the data\nEvery byte tells a story',
+      'Knowledge awaits discovery\nPatience reveals truth',
+      'Patterns emerge from chaos\nInsights bloom with time',
+      'Wisdom flows through data\nUnderstanding takes shape',
+      'Clarity comes from focus\nAnswers lie within',
+      'Every search matters\nEach insight counts',
+      'Mining deep knowledge\nDiscovering hidden truths',
+      'Connecting the dots\nCreating new meanings',
+      'Journey through data\nFinding your way',
+      'Transforming information\nInto wisdom'
     ]
   };
 
@@ -156,45 +154,53 @@ function TextMetamorphosis({
         <div className="w-64 h-64 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-indigo-500/10 rounded-full blur-3xl animate-pulse"></div>
       </div>
 
-      {/* Title with letter-by-letter reveal */}
-      <h1 className="relative text-4xl md:text-5xl font-semibold mb-6 h-20 flex items-center justify-center">
-        <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
-          {displayedTitle.split('').map((char, i) => (
-            <span
-              key={i}
-              className="inline-block transition-all duration-300"
-              style={{
-                animation: `letterTravel 0.6s ease-out ${i * 0.05}s`,
-                opacity: i <= titleIndex ? 1 : 0,
-                transform: i <= titleIndex ? 'translateY(0)' : 'translateY(-10px)'
-              }}
-            >
-              {char === ' ' ? '\u00A0' : char}
-            </span>
+      {/* Title with letter-by-letter reveal - 2 lines */}
+      <div className="relative text-3xl md:text-4xl font-semibold mb-8 h-24 flex flex-col items-center justify-center">
+        <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent text-center leading-tight">
+          {displayedTitle.split('\n').map((line, lineIndex) => (
+            <div key={lineIndex}>
+              {line.split('').map((char, i) => (
+                <span
+                  key={`${lineIndex}-${i}`}
+                  className="inline-block transition-all duration-300"
+                  style={{
+                    animation: `letterTravel 0.4s ease-out ${(lineIndex * line.length + i) * 0.03}s`,
+                    opacity: lineIndex < 1 || i <= titleIndex ? 1 : 0,
+                    transform: lineIndex < 1 || i <= titleIndex ? 'translateY(0)' : 'translateY(-10px)'
+                  }}
+                >
+                  {char === ' ' ? '\u00A0' : char}
+                </span>
+              ))}
+            </div>
           ))}
           <span className="animate-pulse ml-1">|</span>
         </span>
-      </h1>
+      </div>
 
-      {/* Description with letter-by-letter reveal */}
-      <p className="relative text-lg text-muted-foreground/90 max-w-md mx-auto h-12 flex items-center justify-center font-medium tracking-wide">
-        {displayedDescription.split('').map((char, i) => (
-          <span
-            key={i}
-            className="inline-block transition-all duration-300"
-            style={{
-              animation: `letterTravel 0.6s ease-out ${i * 0.03}s`,
-              opacity: i <= descriptionIndex ? 1 : 0,
-              transform: i <= descriptionIndex ? 'translateY(0)' : 'translateY(-5px)'
-            }}
-          >
-            {char === ' ' ? '\u00A0' : char}
-          </span>
+      {/* Description with letter-by-letter reveal - 2 lines */}
+      <div className="relative text-xl text-muted-foreground/90 max-w-lg mx-auto h-20 flex flex-col items-center justify-center font-medium leading-tight">
+        {displayedDescription.split('\n').map((line, lineIndex) => (
+          <div key={lineIndex} className="text-center">
+            {line.split('').map((char, i) => (
+              <span
+                key={`${lineIndex}-${i}`}
+                className="inline-block transition-all duration-300"
+                style={{
+                  animation: `letterTravel 0.4s ease-out ${(lineIndex * line.length + i) * 0.02}s`,
+                  opacity: lineIndex < 1 || i <= descriptionIndex ? 1 : 0,
+                  transform: lineIndex < 1 || i <= descriptionIndex ? 'translateY(0)' : 'translateY(-5px)'
+                }}
+              >
+                {char === ' ' ? '\u00A0' : char}
+              </span>
+            ))}
+          </div>
         ))}
         {descriptionIndex < currentDescription.length && (
           <span className="animate-pulse ml-1">|</span>
         )}
-      </p>
+      </div>
 
       {/* Floating particles effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
