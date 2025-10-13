@@ -1,0 +1,476 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { API_BASE_URL } from '@/config/api.config';
+
+export default function SimpleSetupPage() {
+  const router = useRouter();
+  const [currentStep, setCurrentStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Configuration data
+  const [config, setConfig] = useState({
+    database: {
+      host: 'localhost',
+      port: '5432',
+      name: '',
+      user: '',
+      password: ''
+    },
+    admin: {
+      email: '',
+      password: '',
+      confirmPassword: '',
+      firstName: '',
+      lastName: ''
+    },
+    apiKeys: {
+      openai: '',
+      claude: '',
+      gemini: '',
+      deepseek: ''
+    },
+    site: {
+      title: 'Luwi Semantic Bridge',
+      description: 'AI-Powered Knowledge Management System',
+      logoUrl: ''
+    }
+  });
+
+  // Get project info from API
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/v2/setup/status`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.setupComplete) {
+          router.push('/login');
+        } else {
+          // Pre-fill database info from environment
+          setConfig(prev => ({
+            ...prev,
+            database: {
+              ...prev.database,
+              name: data.project?.dbName || '',
+              user: data.project?.dbUser || ''
+            },
+            site: {
+              title: data.project?.title || 'Luwi Semantic Bridge',
+              description: data.project?.description || 'AI-Powered Knowledge Management System'
+            }
+          }));
+        }
+      });
+  }, [router]);
+
+  const saveAndContinue = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v2/setup/configure`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Configuration saved successfully!');
+        setTimeout(() => {
+          if (currentStep < 4) {
+            setCurrentStep(currentStep + 1);
+          } else {
+            // Complete setup
+            await fetch(`${API_BASE_URL}/api/v2/setup/complete`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            router.push('/login');
+          }
+        }, 1000);
+      } else {
+        setError(data.error || 'Failed to save configuration');
+      }
+    } catch (err) {
+      setError('Failed to save configuration');
+    }
+
+    setLoading(false);
+  };
+
+  const testConnection = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v2/setup/test-db`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config.database)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Database connection successful!');
+        setTimeout(() => setCurrentStep(2), 1500);
+      } else {
+        setError(data.error || 'Database connection failed');
+      }
+    } catch (err) {
+      setError('Failed to connect to database');
+    }
+
+    setLoading(false);
+  };
+
+  const renderDatabaseStep = () => (
+    <div className="max-w-lg mx-auto bg-white p-8 rounded-lg shadow-lg">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Luwi Semantic Bridge</h1>
+        <p className="text-gray-600">Let's configure your database connection</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Database Host</label>
+          <input
+            type="text"
+            value={config.database.host}
+            onChange={(e) => setConfig({...config, database: {...config.database, host: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Database Port</label>
+          <input
+            type="text"
+            value={config.database.port}
+            onChange={(e) => setConfig({...config, database: {...config.database, port: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Database Name</label>
+          <input
+            type="text"
+            value={config.database.name}
+            onChange={(e) => setConfig({...config, database: {...config.database, name: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="lsemb_luwi_dev"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Database User</label>
+          <input
+            type="text"
+            value={config.database.user}
+            onChange={(e) => setConfig({...config, database: {...config.database, user: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Database Password</label>
+          <input
+            type="password"
+            value={config.database.password}
+            onChange={(e) => setConfig({...config, database: {...config.database, password: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter database password"
+          />
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="mt-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">
+          {success}
+        </div>
+      )}
+
+      <button
+        onClick={testConnection}
+        disabled={loading || !config.database.name || !config.database.password}
+        className="mt-6 w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+      >
+        {loading ? 'Testing...' : 'Test Connection & Continue'}
+      </button>
+    </div>
+  );
+
+  const renderSiteStep = () => (
+    <div className="max-w-lg mx-auto bg-white p-8 rounded-lg shadow-lg">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Site Configuration</h2>
+        <p className="text-gray-600">Customize your site settings</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Site Title</label>
+          <input
+            type="text"
+            value={config.site.title}
+            onChange={(e) => setConfig({...config, site: {...config.site, title: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Site Description</label>
+          <textarea
+            value={config.site.description}
+            onChange={(e) => setConfig({...config, site: {...config.site, description: e.target.value}})}
+            rows={3}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Logo URL (optional)</label>
+          <input
+            type="url"
+            value={config.site.logoUrl}
+            onChange={(e) => setConfig({...config, site: {...config.site, logoUrl: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="https://example.com/logo.png"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-4 mt-8">
+        <button
+          onClick={() => setCurrentStep(1)}
+          className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+        >
+          Back
+        </button>
+        <button
+          onClick={saveAndContinue}
+          disabled={loading}
+          className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+        >
+          {loading ? 'Saving...' : 'Continue'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderAdminStep = () => (
+    <div className="max-w-lg mx-auto bg-white p-8 rounded-lg shadow-lg">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Admin Account</h2>
+        <p className="text-gray-600">Set up your administrator account</p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+            <input
+              type="text"
+              value={config.admin.firstName}
+              onChange={(e) => setConfig({...config, admin: {...config.admin, firstName: e.target.value}})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+            <input
+              type="text"
+              value={config.admin.lastName}
+              onChange={(e) => setConfig({...config, admin: {...config.admin, lastName: e.target.value}})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <input
+            type="email"
+            value={config.admin.email}
+            onChange={(e) => setConfig({...config, admin: {...config.admin, email: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input
+            type="password"
+            value={config.admin.password}
+            onChange={(e) => setConfig({...config, admin: {...config.admin, password: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+          <input
+            type="password"
+            value={config.admin.confirmPassword}
+            onChange={(e) => setConfig({...config, admin: {...config.admin, confirmPassword: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-4 mt-8">
+        <button
+          onClick={() => setCurrentStep(2)}
+          className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+        >
+          Back
+        </button>
+        <button
+          onClick={saveAndContinue}
+          disabled={loading || !config.admin.email || !config.admin.password || config.admin.password !== config.admin.confirmPassword}
+          className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+        >
+          {loading ? 'Creating...' : 'Create Admin'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderAPIStep = () => (
+    <div className="max-w-lg mx-auto bg-white p-8 rounded-lg shadow-lg">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Configure AI Providers</h2>
+        <p className="text-gray-600">Add your API keys (optional - you can add them later)</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
+          <input
+            type="password"
+            value={config.apiKeys.openai}
+            onChange={(e) => setConfig({...config, apiKeys: {...config.apiKeys, openai: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="sk-..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Claude API Key</label>
+          <input
+            type="password"
+            value={config.apiKeys.claude}
+            onChange={(e) => setConfig({...config, apiKeys: {...config.apiKeys, claude: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="sk-ant-..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Google Gemini API Key</label>
+          <input
+            type="password"
+            value={config.apiKeys.gemini}
+            onChange={(e) => setConfig({...config, apiKeys: {...config.apiKeys, gemini: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="AIza..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">DeepSeek API Key</label>
+          <input
+            type="password"
+            value={config.apiKeys.deepseek}
+            onChange={(e) => setConfig({...config, apiKeys: {...config.apiKeys, deepseek: e.target.value}})}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="sk-..."
+          />
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+        <p className="text-sm text-blue-800">
+          <strong>Note:</strong> You can configure API keys later in the admin dashboard.
+        </p>
+      </div>
+
+      <div className="flex gap-4 mt-8">
+        <button
+          onClick={() => setCurrentStep(3)}
+          className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300"
+        >
+          Back
+        </button>
+        <button
+          onClick={saveAndContinue}
+          disabled={loading}
+          className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700"
+        >
+          {loading ? 'Launching...' : 'Launch Application'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderFinalStep = () => (
+    <div className="max-w-lg mx-auto bg-white p-8 rounded-lg shadow-lg text-center">
+      <div className="mb-8">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Setup Complete!</h2>
+        <p className="text-gray-600">Your Luwi Semantic Bridge is ready to use.</p>
+      </div>
+
+      <div className="bg-gray-50 rounded-lg p-4 mb-8 text-left">
+        <h3 className="font-semibold mb-2">Next Steps:</h3>
+        <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600">
+          <li>Log in with your admin account</li>
+          <li>Configure your AI providers in Settings</li>
+          <li>Upload documents to build your knowledge base</li>
+          <li>Start chatting with your AI assistant</li>
+        </ol>
+      </div>
+
+      <button
+        onClick={() => router.push('/login')}
+        className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700"
+      >
+        Go to Login
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="w-full max-w-2xl px-4">
+        {currentStep === 1 && renderDatabaseStep()}
+        {currentStep === 2 && renderSiteStep()}
+        {currentStep === 3 && renderAdminStep()}
+        {currentStep === 4 && renderAPIStep()}
+        {currentStep === 5 && renderFinalStep()}
+      </div>
+    </div>
+  );
+}

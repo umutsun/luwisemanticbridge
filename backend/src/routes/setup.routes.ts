@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { MultiProjectSetup } from '../scripts/multi-project-setup';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const router = Router();
 const setup = MultiProjectSetup.getInstance();
@@ -10,20 +12,96 @@ router.get('/status', async (req: Request, res: Response) => {
     const isSetupRequired = setup.isSetupRequired();
     const config = setup.loadProjectConfig();
 
+    // Check if .env.lsemb file exists and has required values
+    const envFile = path.join(process.cwd(), '.env.lsemb');
+    let envConfigured = false;
+
+    if (fs.existsSync(envFile)) {
+      const envContent = fs.readFileSync(envFile, 'utf8');
+      const requiredVars = ['POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD'];
+      envConfigured = requiredVars.every(var => envContent.includes(`${var}=`) && !envContent.includes(`${var}=your_`));
+    }
+
     res.json({
-      setupRequired: isSetupRequired,
-      setupComplete: !isSetupRequired,
+      setupRequired: isSetupRequired && !envConfigured,
+      setupComplete: !isSetupRequired || envConfigured,
       project: {
         name: config.projectName,
         domain: config.domain,
         dbName: config.dbName,
-        dbUser: config.dbUser
+        dbUser: config.dbUser,
+        title: 'Luwi Semantic Bridge',
+        description: 'AI-Powered Knowledge Management System'
       }
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Save configuration and update .env file
+router.post('/configure', async (req: Request, res: Response) => {
+  try {
+    const { database, admin, apiKeys, site } = req.body;
+
+    // Read existing .env.lsemb or create new
+    const envFile = path.join(process.cwd(), '.env.lsemb');
+    let envContent = '';
+
+    if (fs.existsSync(envFile)) {
+      envContent = fs.readFileSync(envFile, 'utf8');
+    }
+
+    // Update database configuration
+    envContent = updateEnvVar(envContent, 'POSTGRES_HOST', database.host);
+    envContent = updateEnvVar(envContent, 'POSTGRES_PORT', database.port);
+    envContent = updateEnvVar(envContent, 'POSTGRES_DB', database.name);
+    envContent = updateEnvVar(envContent, 'POSTGRES_USER', database.user);
+    envContent = updateEnvVar(envContent, 'POSTGRES_PASSWORD', database.password);
+
+    // Update site configuration
+    envContent = updateEnvVar(envContent, 'SITE_TITLE', site.title);
+    envContent = updateEnvVar(envContent, 'SITE_DESCRIPTION', site.description);
+    envContent = updateEnvVar(envContent, 'SITE_LOGO_URL', site.logoUrl);
+
+    // Write updated .env file
+    fs.writeFileSync(envFile, envContent);
+
+    // Save API keys to database (if database is configured)
+    if (database.name && database.password) {
+      const config = setup.loadProjectConfig();
+      config.dbName = database.name;
+      config.dbUser = database.user;
+      config.dbPassword = database.password;
+
+      try {
+        await setup.saveApiKeys(config, apiKeys);
+      } catch (error) {
+        // Database might not be ready yet, that's OK
+        console.log('Could not save API keys to database yet:', error);
+      }
+    }
+
+    // Save admin data to temp file for later
+    const tempAdminFile = path.join(process.cwd(), 'setup-admin.json');
+    fs.writeFileSync(tempAdminFile, JSON.stringify(admin, null, 2));
+
+    res.json({ success: true, message: 'Configuration saved' });
+  } catch (error: any) {
+    console.error('Configuration error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to update environment variable
+function updateEnvVar(content: string, key: string, value: string): string {
+  const regex = new RegExp(`^${key}=.*$`, 'm');
+  if (regex.test(content)) {
+    return content.replace(regex, `${key}=${value}`);
+  } else {
+    return content + `\n${key}=${value}\n`;
+  }
+}
 
 // Test database connection
 router.post('/test-db', async (req: Request, res: Response) => {

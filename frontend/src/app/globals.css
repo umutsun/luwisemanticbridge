@@ -443,3 +443,44 @@ select {
   background-size: 200% 200%;
   animation: gradient 3s ease infinite;
 }
+
+/* Letter traveling animation for text metamorphosis */
+@keyframes letterTravel {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) translateX(-10px);
+    filter: blur(2px);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(5px) translateX(5px);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) translateX(0);
+    filter: blur(0);
+  }
+}
+
+/* Floating animations for ambient elements */
+@keyframes float-0 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-20px) translateX(10px); }
+  50% { transform: translateY(10px) translateX(-10px); }
+  75% { transform: translateY(-10px) translateX(5px); }
+}
+
+@keyframes float-1 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(15px) translateX(-15px); }
+  50% { transform: translateY(-15px) translateX(10px); }
+  75% { transform: translateY(5px) translateX(-5px); }
+}
+
+@keyframes float-2 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-25px) translateX(-5px); }
+  50% { transform: translateY(20px) translateX(15px); }
+  75% { transform: translateY(-15px) translateX(-10px); }
+}
