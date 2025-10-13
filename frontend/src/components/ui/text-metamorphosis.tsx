@@ -55,77 +55,121 @@ function TextMetamorphosis({
   intensity = 'medium',
   className = ''
 }: TextMetamorphosisProps) {
-  const [currentText, setCurrentText] = useState({ title, description });
-  const [displayedText, setDisplayedText] = useState({ title: '', description: '' });
-  const [isTyping, setIsTyping] = useState(true);
+  const [displayText, setDisplayText] = useState({ title: '', description: '' });
+  const [targetText, setTargetText] = useState({ title, description });
+  const [isComplete, setIsComplete] = useState(false);
 
-  // Simple loading phrases
-  const LOADING_PHRASES = [
-    { title: 'Loading wisdom...', description: 'Knowledge awaits discovery' },
-    { title: 'Finding patterns...', description: 'Creating meaning from data' },
-    { title: 'Processing thoughts...', description: 'Weaving wisdom together' },
-    { title: 'Discovering truth...', description: 'Insights bloom with patience' },
-    { title: 'Building knowledge...', description: 'Every byte tells a story' },
-    { title: 'Mining data gems...', description: 'Finding hidden treasures' },
-    { title: 'Connecting ideas...', description: 'Building bridges of thought' },
-    { title: 'Illuminating paths...', description: 'Light shows the way forward' }
-  ];
+  // Lorem ipsum first paragraph for loading animation
+  const LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 
-  // Typing effect
-  useEffect(() => {
-    if (isTyping) {
-      let titleIndex = 0;
-      let descriptionIndex = 0;
+  // Split into chunks for morphing animation
+  const getLoremChunks = () => {
+    const words = LOREM_IPSUM.split(' ');
+    const chunks = [];
 
-      const typeInterval = setInterval(() => {
-        if (titleIndex < currentText.title.length) {
-          setDisplayedText(prev => ({
-            ...prev,
-            title: currentText.title.slice(0, titleIndex + 1)
-          }));
-          titleIndex++;
-        } else if (descriptionIndex < currentText.description.length) {
-          setDisplayedText(prev => ({
-            ...prev,
-            description: currentText.description.slice(0, descriptionIndex + 1)
-          }));
-          descriptionIndex++;
-        } else {
-          setIsTyping(false);
-        }
-      }, 50);
-
-      return () => clearInterval(typeInterval);
+    // Create 8 different chunks from the Lorem ipsum text
+    for (let i = 0; i < 8; i++) {
+      const startIdx = i * 6;
+      const title = words.slice(startIdx, startIdx + 3).join(' ');
+      const desc = words.slice(startIdx + 3, startIdx + 7).join(' ');
+      chunks.push({ title, description: desc });
     }
-  }, [currentText, isTyping]);
 
-  // Cycle through phrases
+    return chunks;
+  };
+
+  const LOADING_PHRASES = getLoremChunks();
+
+  // Smooth letter morphing
+  const morphText = (from: string, to: string, callback: (text: string) => void) => {
+    let step = 0;
+    const totalSteps = 20;
+
+    const morphInterval = setInterval(() => {
+      if (step >= totalSteps) {
+        callback(to);
+        clearInterval(morphInterval);
+        return;
+      }
+
+      const progress = step / totalSteps;
+      let morphed = '';
+
+      for (let i = 0; i < Math.max(from.length, to.length); i++) {
+        if (progress < 0.5) {
+          // First half: scramble
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789';
+          morphed += chars[Math.floor(Math.random() * chars.length)];
+        } else {
+          // Second half: settle into target
+          if (i < to.length) {
+            morphed += to[i];
+          }
+        }
+      }
+
+      callback(morphed);
+      step++;
+    }, 50);
+  };
+
   useEffect(() => {
     let phraseIndex = 0;
 
-    const interval = setInterval(() => {
-      phraseIndex = (phraseIndex + 1) % LOADING_PHRASES.length;
-      const nextPhrase = LOADING_PHRASES[phraseIndex];
-      setCurrentText(nextPhrase);
-      setDisplayedText({ title: '', description: '' });
-      setIsTyping(true);
-    }, speed);
+    const showNextPhrase = () => {
+      if (phraseIndex < LOADING_PHRASES.length) {
+        const phrase = LOADING_PHRASES[phraseIndex];
+        morphText(displayText.title, phrase.title, (newTitle) => {
+          setDisplayText(prev => ({ ...prev, title: newTitle }));
+        });
+        morphText(displayText.description, phrase.description, (newDesc) => {
+          setDisplayText(prev => ({ ...prev, description: newDesc }));
+        });
+        phraseIndex++;
+      } else {
+        // Final morph to actual title and description
+        morphText(displayText.title, title, (newTitle) => {
+          setDisplayText(prev => ({ ...prev, title: newTitle }));
+        });
+        morphText(displayText.description, description, (newDesc) => {
+          setDisplayText(prev => ({ ...prev, description: newDesc }));
+          setTimeout(() => setIsComplete(true), 500);
+        });
+      }
+    };
 
-    // Start with first phrase
-    setCurrentText(LOADING_PHRASES[0]);
-    setIsTyping(true);
+    // Start animation
+    showNextPhrase();
+
+    // Schedule next phrase
+    const interval = setInterval(() => {
+      if (phraseIndex <= LOADING_PHRASES.length) {
+        showNextPhrase();
+      } else {
+        clearInterval(interval);
+      }
+    }, speed / (LOADING_PHRASES.length + 1));
 
     return () => clearInterval(interval);
-  }, [speed]);
+  }, [title, description, speed]);
 
   return (
-    <div className={`text-center w-full ${className}`}>
-      <h2 className="text-2xl md:text-3xl font-light mb-3 h-8 text-gray-600 dark:text-gray-400">
-        {displayedText.title}
-        {isTyping && <span className="animate-pulse">|</span>}
-      </h2>
-      <p className="text-lg text-gray-500 dark:text-gray-500 h-6">
-        {displayedText.description}
+    <div className={`text-center w-full space-y-4 ${className}`}>
+      <h1 className={`text-5xl md:text-6xl min-h-[4rem] font-light tracking-tight transition-all duration-1000 ${
+        isComplete
+          ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent font-semibold'
+          : 'text-gray-400 dark:text-gray-500 font-light'
+      } leading-tight`}>
+        <span className="inline-block">
+          {displayText.title}
+        </span>
+      </h1>
+      <p className={`text-xl md:text-2xl max-w-lg mx-auto min-h-[3rem] transition-all duration-1000 ${
+        isComplete
+          ? 'text-gray-700 dark:text-gray-300 font-normal'
+          : 'text-gray-400 dark:text-gray-500 font-light'
+      } leading-relaxed`}>
+        {displayText.description}
       </p>
     </div>
   );

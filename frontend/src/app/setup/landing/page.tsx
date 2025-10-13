@@ -9,9 +9,15 @@ export default function SetupLandingPage() {
   const [isChecking, setIsChecking] = useState(true);
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
+  const [fromLogin, setFromLogin] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+
+    // Check if user came from login page
+    const urlParams = new URLSearchParams(window.location.search);
+    const from = urlParams.get('from');
+    setFromLogin(from === 'login');
 
     // Check setup status
     fetch(`${API_BASE_URL}/api/v2/setup/status`)
@@ -20,12 +26,14 @@ export default function SetupLandingPage() {
         setProjectInfo(data.project);
         setIsChecking(false);
 
-        // If already configured, redirect to login
-        if (data.setupComplete) {
+        // If already configured and came from login, redirect back to login
+        if (data.setupComplete && fromLogin) {
+          setTimeout(() => router.push('/login'), 1000);
+        } else if (data.setupComplete) {
           setTimeout(() => router.push('/login'), 2000);
         }
       });
-  }, [router]);
+  }, [router, fromLogin]);
 
   const handleStartSetup = () => {
     router.push('/setup/simple-setup');
@@ -65,20 +73,37 @@ export default function SetupLandingPage() {
       <main className="max-w-4xl mx-auto px-6 py-16">
         <div className={`${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'} transition-all duration-700`}>
           <div className="text-center mb-20">
-            <h1 className="text-5xl md:text-6xl font-thin text-gray-900 mb-6">
-              Luwi Semantic Bridge
-            </h1>
-
-            <p className="text-xl text-gray-500 mb-12 leading-relaxed max-w-2xl mx-auto">
-              Configure your AI-powered knowledge management system
-            </p>
-
-            {projectInfo && (
-              <div className="inline-block border border-gray-200 rounded-full px-6 py-3 mb-12">
-                <span className="text-sm text-gray-600">
-                  Project: <span className="text-gray-900 font-medium">{projectInfo.name}</span>
-                </span>
+            {fromLogin ? (
+              <div className="mb-8 p-6 border border-gray-200 rounded-lg bg-gray-50 max-w-lg mx-auto">
+                <svg className="w-12 h-12 text-amber-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <h2 className="text-2xl font-light text-gray-900 mb-2">Configuration Required</h2>
+                <p className="text-gray-600 mb-4">
+                  System configuration is incomplete or missing
+                </p>
+                <p className="text-sm text-gray-500">
+                  Please complete the setup process below to access the system
+                </p>
               </div>
+            ) : (
+              <>
+                <h1 className="text-5xl md:text-6xl font-thin text-gray-900 mb-6">
+                  Luwi Semantic Bridge
+                </h1>
+
+                <p className="text-xl text-gray-500 mb-12 leading-relaxed max-w-2xl mx-auto">
+                  Configure your AI-powered knowledge management system
+                </p>
+
+                {projectInfo && (
+                  <div className="inline-block border border-gray-200 rounded-full px-6 py-3 mb-12">
+                    <span className="text-sm text-gray-600">
+                      Project: <span className="text-gray-900 font-medium">{projectInfo.name}</span>
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

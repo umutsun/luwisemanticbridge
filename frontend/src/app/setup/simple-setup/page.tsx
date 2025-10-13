@@ -10,6 +10,7 @@ export default function SimpleSetupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [fromLogin, setFromLogin] = useState(false);
 
   // Configuration data
   const [config, setConfig] = useState({
@@ -40,13 +41,21 @@ export default function SimpleSetupPage() {
     }
   });
 
-  // Get project info from API
+  // Check if user came from login and get project info
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const from = urlParams.get('from');
+    setFromLogin(from === 'login');
+
     fetch(`${API_BASE_URL}/api/v2/setup/status`)
       .then(res => res.json())
       .then(data => {
         if (data.setupComplete) {
-          router.push('/login');
+          if (fromLogin) {
+            router.push('/login');
+          } else {
+            router.push('/login');
+          }
         } else {
           // Pre-fill database info from environment
           setConfig(prev => ({
@@ -454,10 +463,16 @@ export default function SimpleSetupPage() {
       </div>
 
       <button
-        onClick={() => router.push('/login')}
+        onClick={() => {
+          if (fromLogin) {
+            router.push('/login');
+          } else {
+            router.push('/login');
+          }
+        }}
         className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700"
       >
-        Go to Login
+        {fromLogin ? 'Return to Login' : 'Go to Login'}
       </button>
     </div>
   );

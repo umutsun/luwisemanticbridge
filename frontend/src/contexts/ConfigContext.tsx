@@ -97,6 +97,7 @@ interface ConfigContextType {
   error: string | null;
   refreshConfig: () => Promise<void>;
   updateConfig: (newConfig: Config) => Promise<void>;
+  isConfigurationComplete: (config: Config | null) => boolean;
 }
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
@@ -259,6 +260,21 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
     }
   };
 
+  // Function to check if configuration is complete
+  const isConfigurationComplete = (config: Config | null): boolean => {
+    if (!config) return false;
+
+    // Check essential configuration fields
+    const hasEssentialConfig =
+      config.app?.name &&
+      config.database?.host &&
+      config.database?.name &&
+      config.openai?.apiKey && // At least one LLM provider should be configured
+      config.anthropic?.apiKey; // Check for another provider as backup
+
+    return Boolean(hasEssentialConfig);
+  };
+
   useEffect(() => {
     // Only try to fetch config if there's a token (user is authenticated)
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -337,13 +353,14 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
   }, []);
 
   return (
-    <ConfigContext.Provider 
+    <ConfigContext.Provider
       value={{
         config,
         loading,
         error,
         refreshConfig: (authToken?: string) => fetchConfig(authToken),
-        updateConfig
+        updateConfig,
+        isConfigurationComplete
       }}
     >
       {children}

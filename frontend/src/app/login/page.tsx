@@ -49,6 +49,24 @@ export default function LoginPage() {
       document.title = `Giriş Yap - ${config.app.name}`;
     }
   }, [config]);
+
+  // Check configuration and redirect to setup if needed
+  useEffect(() => {
+    if (!configLoading && mounted) {
+      // Check if configuration is missing or incomplete
+      const needsSetup = !config ||
+        !config.app?.name ||
+        !config.database?.host ||
+        !config.llm?.provider ||
+        !config.llm?.apiKey;
+
+      if (needsSetup) {
+        // Redirect to setup landing page with from parameter
+        router.push('/setup/landing?from=login');
+        return;
+      }
+    }
+  }, [config, configLoading, mounted, router]);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
