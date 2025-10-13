@@ -8,9 +8,9 @@ This document lists and describes the environment variables required to run the 
 
 | Variable            | Description                                       | Required | Example Value                |
 | ------------------- | ------------------------------------------------- | -------- | ---------------------------- |
-| `POSTGRES_USER`     | The username for the PostgreSQL database.         | Yes      | `asemb_user`                 |
+| `POSTGRES_USER`     | The username for the PostgreSQL database.         | Yes      | `lsemb_user`                 |
 | `POSTGRES_PASSWORD` | The password for the PostgreSQL user.             | Yes      | `your_secure_password_here`  |
-| `POSTGRES_DB`       | The name of the database to be created.           | Yes      | `asemb`                      |
+| `POSTGRES_DB`       | The name of the database to be created.           | Yes      | `lsemb`                      |
 
 ### Redis (`redis`)
 
@@ -29,9 +29,9 @@ These variables are crucial for the backend service to connect to other services
 | `POSTGRES_HOST`     | The hostname of the PostgreSQL service.                    | Yes      | `postgres`                   |
 | `REDIS_HOST`        | The hostname of the Redis service.                         | Yes      | `redis`                      |
 | `REDIS_PASSWORD`    | The password for the Redis instance.                       | Yes      | `sprint_MVP_2025!`           |
-| `POSTGRES_USER`     | The username for the PostgreSQL database.                  | Yes      | `asemb_user`                 |
+| `POSTGRES_USER`     | The username for the PostgreSQL database.                  | Yes      | `lsemb_user`                 |
 | `POSTGRES_PASSWORD` | The password for the PostgreSQL user.                      | Yes      | `your_secure_password_here`  |
-| `POSTGRES_DB`       | The name of the database.                                  | Yes      | `asemb`                      |
+| `POSTGRES_DB`       | The name of the database.                                  | Yes      | `lsemb`                      |
 | `NEO4J_URI`         | The connection URI for the Neo4j graph database.           | No       | `bolt://neo4j:7687`          |
 | `OPENAI_API_KEY`    | **[IMPORTANT]** API key for OpenAI services (for embeddings). | Yes      | `sk-xxxxxxxxxxxxxxxxxxxx`    |
 
@@ -58,5 +58,5 @@ These variables are crucial for the backend service to connect to other services
 | `N8N_BASIC_AUTH_USER`   | The username for n8n basic auth.          | Yes      | `admin`              |
 | `N8N_BASIC_AUTH_PASSWORD` | The password for n8n basic auth.          | Yes      | `admin`              |
 | `DB_TYPE`               | The database type for n8n.                | Yes      | `redis`              |
-| `DB_REDIS_HOST`         | The hostname of the Redis service for n8n.| Yes      | `asemb-redis`        |
+| `DB_REDIS_HOST`         | The hostname of the Redis service for n8n.| Yes      | `lsemb-redis`        |
 | `DB_REDIS_PASSWORD`     | The password for the Redis instance.      | Yes      | `sprint_MVP_2025!`   |

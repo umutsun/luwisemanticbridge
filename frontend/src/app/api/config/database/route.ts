@@ -8,10 +8,10 @@ const CONFIG_FILE = path.join(process.cwd(), 'database-config.json');
 export async function GET() {
   try {
     // Connect to ASEMB database to get settings
-    const asembPool = new Pool({
+    const lsembPool = new Pool({
       host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
       port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
-      database: process.env.ASEMB_DB_NAME || 'asemb',
+      database: process.env.ASEMB_DB_NAME || 'lsemb',
       user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
       password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
       max: 1
@@ -23,7 +23,7 @@ export async function GET() {
 
     try {
       // Get source database settings from ASEMB settings table
-      const result = await asembPool.query(`
+      const result = await lsembPool.query(`
         SELECT value FROM settings WHERE key = 'source_database'
       `);
 
@@ -94,7 +94,7 @@ export async function GET() {
         source = 'environment';
       }
     } finally {
-      await asembPool.end();
+      await lsembPool.end();
     }
 
     return NextResponse.json({
@@ -131,10 +131,10 @@ export async function POST(request: NextRequest) {
     config.connectionString = `postgresql://${config.username}:${config.password}@${config.host}:${config.port}/${config.database}`;
 
     // Connect to ASEMB database to save settings
-    const asembPool = new Pool({
+    const lsembPool = new Pool({
       host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
       port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
-      database: process.env.ASEMB_DB_NAME || 'asemb',
+      database: process.env.ASEMB_DB_NAME || 'lsemb',
       user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
       password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD,
       max: 1
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Save to ASEMB settings table
-      await asembPool.query(`
+      await lsembPool.query(`
         INSERT INTO settings (key, value, category, description)
         VALUES ('source_database', $1, 'database', 'Source database connection settings')
         ON CONFLICT (key)
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         savedTo: 'file'
       });
     } finally {
-      await asembPool.end();
+      await lsembPool.end();
     }
   } catch (error) {
     console.error('Error saving database config:', error);

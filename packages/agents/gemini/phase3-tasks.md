@@ -90,7 +90,7 @@ export class CacheStrategy {
     const hash = crypto.createHash('md5')
       .update(JSON.stringify(normalized))
       .digest('hex');
-    return `asemb:${operation}:${hash}`;
+    return `lsemb:${operation}:${hash}`;
   }
   
   // Smart invalidation

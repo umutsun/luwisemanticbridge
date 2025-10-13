@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import I18nProvider from "@/components/I18nProvider";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ConfigProvider } from "@/contexts/ConfigContext";
+import FrontendLogger from "@/utils/frontend-logger";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alice Semantic Bridge - AI Legal Assistant",
+  title: "Luwi Semantic Bridge - AI Legal Assistant",
   description: "AI-powered Legal Consulting and Client Management System",
 };
 

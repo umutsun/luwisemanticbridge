@@ -1,4 +1,4 @@
-# Gemini Agent - ASEMB Project Instructions
+# Gemini Agent - LSEMB Project Instructions
 
 ## Your Role: n8n Node Development & Integration
 
@@ -51,7 +51,7 @@ src/
 
 ### Node Properties Structure
 ```typescript
-export const asembNodeProperties: INodeProperties[] = [
+export const lsembNodeProperties: INodeProperties[] = [
   {
     displayName: 'Operation',
     name: 'operation',
@@ -99,7 +99,7 @@ export const asembNodeProperties: INodeProperties[] = [
 
 ### Data Transformation
 ```typescript
-// Transform n8n items to ASEMB format
+// Transform n8n items to LSEMB format
 export function transformToAsembDocument(
   item: INodeExecutionData
 ): AsembDocument {
@@ -149,7 +149,7 @@ export function transformToAsembDocument(
    npm link
    
    # In n8n directory
-   npm link n8n-nodes-asemb
+   npm link n8n-nodes-lsemb
    n8n start
    ```
 

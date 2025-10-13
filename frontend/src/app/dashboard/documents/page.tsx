@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { CSVViewer } from '@/components/ui/csv-viewer';
 import {
   Upload,
   FileText,
@@ -94,6 +95,7 @@ export default function DocumentManagerPage() {
   const [embeddingProgress, setEmbeddingProgress] = useState<{[key: string]: boolean}>({});
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
   const [bulkEmbedding, setBulkEmbedding] = useState(false);
+  const [csvData, setCsvData] = useState<{data: any[], columns: string[]} | null>(null);
 
   useEffect(() => {
     initHistoryTables();
@@ -438,6 +440,51 @@ export default function DocumentManagerPage() {
     });
   };
 
+  const parseCSVContent = (content: string): {data: any[], columns: string[]} => {
+    const lines = content.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return {data: [], columns: []};
+
+    // Simple CSV parser
+    const parseCSVLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++; // Skip next quote
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+
+      result.push(current);
+      return result;
+    };
+
+    const columns = parseCSVLine(lines[0]);
+    const data = lines.slice(1).map(line => {
+      const values = parseCSVLine(line);
+      const row: any = {};
+      columns.forEach((col, index) => {
+        row[col] = values[index] || '';
+      });
+      return row;
+    });
+
+    return {data, columns};
+  };
+
   // Combine current documents and history documents
   const allDocuments = React.useMemo(() => {
     // Convert history entries to document format
@@ -472,7 +519,31 @@ export default function DocumentManagerPage() {
   const filteredDocuments = allDocuments.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (doc.content && doc.content.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesType = filterType === 'all' || doc.type === filterType;
+
+    let matchesType = true;
+    switch (filterType) {
+      case 'all':
+        matchesType = true;
+        break;
+      case 'pdf':
+        matchesType = doc.type === 'pdf';
+        break;
+      case 'text':
+        matchesType = ['txt', 'md'].includes(doc.type);
+        break;
+      case 'embedded':
+        matchesType = doc.metadata?.embeddings === true;
+        break;
+      case 'not-embedded':
+        matchesType = doc.metadata?.embeddings !== true;
+        break;
+      case 'ocr':
+        matchesType = doc.title.includes('[OCR]');
+        break;
+      default:
+        matchesType = doc.type === filterType;
+    }
+
     return matchesSearch && matchesType;
   });
 
@@ -539,50 +610,54 @@ export default function DocumentManagerPage() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-2 gap-3">
-              <Card>
+              <Card className="group hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50 border-0">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    Toplam Döküman
+                  <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Documents
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">{allDocuments.length}</div>
+                <CardContent className="group-hover:scale-105 transition-transform duration-300">
+                  <div className="text-2xl font-bold text-gray-800">{allDocuments.length}</div>
+                  <div className="text-xs text-gray-400 mt-1">files</div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="group hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50 border-0">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    Toplam Boyut
+                  <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Total Size
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">
+                <CardContent className="group-hover:scale-105 transition-transform duration-300">
+                  <div className="text-2xl font-bold text-gray-800">
                     {formatFileSize(allDocuments.reduce((sum, doc) => sum + doc.size, 0))}
                   </div>
+                  <div className="text-xs text-gray-400 mt-1">stored</div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="group hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50 border-0">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    Embedding'li
+                  <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Embedded
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">
+                <CardContent className="group-hover:scale-105 transition-transform duration-300">
+                  <div className="text-2xl font-bold text-emerald-600">
                     {allDocuments.filter(d => d.metadata?.embeddings).length}
                   </div>
+                  <div className="text-xs text-gray-400 mt-1">processed</div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="group hover:shadow-lg transition-all duration-300 bg-gradient-to-br from-white to-gray-50 border-0">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    Chunk Sayısı
+                  <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Chunks
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-xl font-bold">
+                <CardContent className="group-hover:scale-105 transition-transform duration-300">
+                  <div className="text-2xl font-bold text-blue-600">
                     {allDocuments.reduce((sum, doc) => sum + (doc.metadata?.chunks || 0), 0)}
                   </div>
+                  <div className="text-xs text-gray-400 mt-1">segments</div>
                 </CardContent>
               </Card>
             </div>
@@ -590,31 +665,142 @@ export default function DocumentManagerPage() {
         </Card>
 
         {/* Right Column: Documents Cards */}
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50/50">
+          <CardHeader className="pb-4 bg-gradient-to-r from-transparent to-transparent border-b border-gray-100">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Dökümanlar</CardTitle>
+              <CardTitle className="text-lg font-semibold text-gray-800">Documents</CardTitle>
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Ara..."
+                    placeholder="Search..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 w-[150px] h-8"
+                    className="pl-9 w-[180px] h-9 bg-white/80 backdrop-blur-sm border-gray-200 focus:border-emerald-500 focus:ring-emerald-200 transition-all duration-300"
                   />
                 </div>
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="px-3 py-1 border rounded-md text-sm h-8"
-                >
-                  <option value="all">Tümü</option>
-                  <option value="text">Text</option>
-                  <option value="pdf">PDF</option>
-                  <option value="json">JSON</option>
-                  <option value="code">Code</option>
-                </select>
+                <div className="flex gap-2 p-1.5 bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl shadow-inner border border-gray-100/50">
+                  <Button
+                    variant={filterType === 'all' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterType('all')}
+                    className={`h-8 px-4 text-xs font-medium transition-all duration-300 ${
+                      filterType === 'all'
+                        ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-200/50'
+                        : 'hover:bg-white hover:shadow-md hover:text-gray-700 text-gray-500'
+                    } rounded-lg`}
+                  >
+                    <Database className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Tümü</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      filterType === 'all'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {allDocuments.length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={filterType === 'pdf' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterType('pdf')}
+                    className={`h-8 px-4 text-xs font-medium transition-all duration-300 ${
+                      filterType === 'pdf'
+                        ? 'bg-gradient-to-r from-rose-500 to-pink-600 text-white shadow-lg shadow-rose-200/50'
+                        : 'hover:bg-white hover:shadow-md hover:text-gray-700 text-gray-500'
+                    } rounded-lg`}
+                  >
+                    <FileText className="w-3.5 h-3.5 mr-1.5" />
+                    <span>PDF</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      filterType === 'pdf'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {allDocuments.filter(d => d.type === 'pdf').length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={filterType === 'text' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterType('text')}
+                    className={`h-8 px-4 text-xs font-medium transition-all duration-300 ${
+                      filterType === 'text'
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-200/50'
+                        : 'hover:bg-white hover:shadow-md hover:text-gray-700 text-gray-500'
+                    } rounded-lg`}
+                  >
+                    <File className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Text</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      filterType === 'text'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {allDocuments.filter(d => ['txt', 'md'].includes(d.type)).length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={filterType === 'embedded' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterType('embedded')}
+                    className={`h-8 px-4 text-xs font-medium transition-all duration-300 ${
+                      filterType === 'embedded'
+                        ? 'bg-gradient-to-r from-purple-500 to-violet-600 text-white shadow-lg shadow-purple-200/50'
+                        : 'hover:bg-white hover:shadow-md hover:text-gray-700 text-gray-500'
+                    } rounded-lg`}
+                  >
+                    <Brain className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Embedded</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      filterType === 'embedded'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {allDocuments.filter(d => d.metadata?.embeddings).length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={filterType === 'not-embedded' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterType('not-embedded')}
+                    className={`h-8 px-4 text-xs font-medium transition-all duration-300 ${
+                      filterType === 'not-embedded'
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-200/50'
+                        : 'hover:bg-white hover:shadow-md hover:text-gray-700 text-gray-500'
+                    } rounded-lg`}
+                  >
+                    <Zap className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Ready</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      filterType === 'not-embedded'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {allDocuments.filter(d => !d.metadata?.embeddings).length}
+                    </span>
+                  </Button>
+                  <Button
+                    variant={filterType === 'ocr' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setFilterType('ocr')}
+                    className={`h-8 px-4 text-xs font-medium transition-all duration-300 ${
+                      filterType === 'ocr'
+                        ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white shadow-lg shadow-teal-200/50'
+                        : 'hover:bg-white hover:shadow-md hover:text-gray-700 text-gray-500'
+                    } rounded-lg`}
+                  >
+                    <Eye className="w-3.5 h-3.5 mr-1.5" />
+                    <span>OCR</span>
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      filterType === 'ocr'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {allDocuments.filter(d => d.title.includes('[OCR]')).length}
+                    </span>
+                  </Button>
+                </div>
                 <Button onClick={fetchDocuments} variant="outline" size="icon" className="h-8 w-8">
                   <RefreshCw className="h-4 w-4" />
                 </Button>
@@ -634,12 +820,12 @@ export default function DocumentManagerPage() {
             ) : (
               <ScrollArea className="h-[600px]">
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px] text-center"></TableHead>
-                      <TableHead>Doküman</TableHead>
-                      <TableHead className="w-[100px] text-right">Boyut</TableHead>
-                      <TableHead className="w-[50px] text-center"></TableHead>
+                  <TableHeader className="sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+                    <TableRow className="border-b border-gray-100">
+                      <TableHead className="w-[50px] text-center font-semibold text-gray-600 text-xs uppercase tracking-wider"></TableHead>
+                      <TableHead className="font-semibold text-gray-600 text-xs uppercase tracking-wider">Document</TableHead>
+                      <TableHead className="w-[100px] text-right font-semibold text-gray-600 text-xs uppercase tracking-wider">Size</TableHead>
+                      <TableHead className="w-[50px] text-center font-semibold text-gray-600 text-xs uppercase tracking-wider"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -649,29 +835,73 @@ export default function DocumentManagerPage() {
                       const canSelect = !isEmbedded;
 
                       return (
-                        <TableRow key={doc.id} className={isEmbedded ? 'bg-muted/30' : ''}>
-                          <TableCell className="text-center">
+                        <TableRow
+                          key={doc.id}
+                          className={`border-b border-gray-50 hover:bg-gradient-to-r hover:from-gray-50/50 hover:to-transparent transition-all duration-200 ${
+                            isEmbedded ? 'bg-gradient-to-r from-green-50/30 to-transparent' : ''
+                          }`}
+                        >
+                          <TableCell className="text-center py-4">
                             <Checkbox
                               checked={isSelected}
                               onCheckedChange={() => handleSelectDocument(doc.id, isEmbedded)}
                               disabled={!canSelect}
-                              className={isEmbedded ? 'opacity-50' : 'mx-auto'}
+                              className={`${isEmbedded ? 'opacity-50' : 'mx-auto'} data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500`}
                             />
                           </TableCell>
                           <TableCell>
                             <div className="max-w-[400px]">
-                              <p
-                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors mb-1"
-                                title={doc.title}
-                                onClick={() => setSelectedDoc(doc)}
-                              >
-                                {doc.title}
-                              </p>
+                              <div className="flex items-center gap-2 mb-1">
+                                <p
+                                  className="font-medium truncate hover:text-primary cursor-pointer transition-colors"
+                                  title={doc.title}
+                                  onClick={() => {
+                              setSelectedDoc(doc);
+                              // Parse CSV data if it's a CSV file
+                              if (doc.type === 'csv' && doc.content) {
+                                const parsed = parseCSVContent(doc.content);
+                                setCsvData(parsed);
+                              } else {
+                                setCsvData(null);
+                              }
+                            }}
+                                >
+                                  {doc.title}
+                                </p>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {doc.title.includes('[OCR]') && (
+                                    <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-orange-300 text-orange-600">
+                                      OCR
+                                    </Badge>
+                                  )}
+                                  {isEmbedded && (
+                                    <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-green-300 text-green-600">
+                                      <Brain className="w-2.5 h-2.5 mr-0.5" />
+                                      Embedded
+                                    </Badge>
+                                  )}
+                                  {doc.type === 'csv' && (
+                                    <Badge variant="outline" className="px-1.5 py-0 text-[10px] border-blue-300 text-blue-600">
+                                      <Database className="w-2.5 h-2.5 mr-0.5" />
+                                      CSV
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
                               {doc.content && (
                                 <p
                                   className="text-xs text-muted-foreground truncate hover:text-foreground transition-colors cursor-pointer"
                                   title="Click to preview"
-                                  onClick={() => setSelectedDoc(doc)}
+                                  onClick={() => {
+                              setSelectedDoc(doc);
+                              // Parse CSV data if it's a CSV file
+                              if (doc.type === 'csv' && doc.content) {
+                                const parsed = parseCSVContent(doc.content);
+                                setCsvData(parsed);
+                              } else {
+                                setCsvData(null);
+                              }
+                            }}
                                 >
                                   {doc.content.substring(0, 100)}...
                                 </p>
@@ -782,13 +1012,23 @@ export default function DocumentManagerPage() {
 
                     {/* ScrollArea with fixed height */}
                     <div className="flex-1 min-h-0">
-                      <ScrollArea className="h-full border rounded-lg bg-muted/30">
-                        <div className="p-4">
-                          <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
-                            {selectedDoc.content}
-                          </pre>
-                        </div>
-                      </ScrollArea>
+                      {selectedDoc.type === 'csv' && csvData ? (
+                        <CSVViewer
+                          data={csvData.data}
+                          columns={csvData.columns}
+                          title={selectedDoc.title}
+                          stats={selectedDoc.metadata?.csvStats}
+                          columnTypes={selectedDoc.metadata?.columnTypes}
+                        />
+                      ) : (
+                        <ScrollArea className="h-full border rounded-lg bg-muted/30">
+                          <div className="p-4">
+                            <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
+                              {selectedDoc.content}
+                            </pre>
+                          </div>
+                        </ScrollArea>
+                      )}
                     </div>
                   </div>
                 </div>

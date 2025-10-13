@@ -8,7 +8,7 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { Pool } from 'pg';
 import Redis from 'ioredis';
-import { getAiSettings as fetchAiSettings, asembPool } from '../config/database.config';
+import { getAiSettings as fetchAiSettings, lsembPool } from '../config/database.config';
 import { SettingsService } from './settings.service';
 
 export class LightRAGService {

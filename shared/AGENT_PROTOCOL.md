@@ -2,10 +2,10 @@
 
 ## Shared Memory Structure (Redis)
 ```
-asemb:{project-key}:state     - Current project state
-asemb:{project-key}:tasks     - Task queue
-asemb:{project-key}:messages  - Inter-agent messages
-asemb:{project-key}:locks     - Resource locks
+lsemb:{project-key}:state     - Current project state
+lsemb:{project-key}:tasks     - Task queue
+lsemb:{project-key}:messages  - Inter-agent messages
+lsemb:{project-key}:locks     - Resource locks
 ```
 
 ## Communication Format
@@ -32,9 +32,9 @@ asemb:{project-key}:locks     - Resource locks
 4. Update documentation
 
 ## Project Keys
-- **Claude (CTO)**: `asemb-claude-project`
-- **Gemini (Frontend)**: `asemb-gemini-project`
-- **Codex (Backend)**: `asemb-codex-project`
+- **Claude (CTO)**: `lsemb-claude-project`
+- **Gemini (Frontend)**: `lsemb-gemini-project`
+- **Codex (Backend)**: `lsemb-codex-project`
 
 ## Message Types
 
@@ -86,14 +86,14 @@ asemb:{project-key}:locks     - Resource locks
 Before modifying shared resources:
 ```bash
 # Acquire lock
-SET asemb:{project-key}:locks:{resource} {agent-name} NX EX 300
+SET lsemb:{project-key}:locks:{resource} {agent-name} NX EX 300
 
 # Release lock
-DEL asemb:{project-key}:locks:{resource}
+DEL lsemb:{project-key}:locks:{resource}
 ```
 
 ## Health Check Protocol
 Each agent should:
-1. Update heartbeat every 60 seconds: `asemb:{project-key}:health:{agent}`
+1. Update heartbeat every 60 seconds: `lsemb:{project-key}:health:{agent}`
 2. Check peer health before messaging
 3. Alert on missing heartbeats > 5 minutes

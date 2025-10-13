@@ -24,7 +24,7 @@ Add this to your `%APPDATA%\Claude\claude_desktop_config.json`:
         "REDIS_DB": "2",
         "POSTGRES_HOST": "localhost",
         "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "asemb",
+        "POSTGRES_DB": "lsemb",
         "POSTGRES_USER": "postgres",
         "NODE_ENV": "development"
       }

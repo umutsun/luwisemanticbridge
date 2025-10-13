@@ -449,7 +449,7 @@ next export
 3. **Check logs**: `pm2-logs.bat`
 4. **Run health check**: `pm2-health.bat`
 5. **Search PM2 docs**: https://pm2.keymetrics.io/
-6. **Contact DevOps team**: devops@asemb.ai
+6. **Contact DevOps team**: devops@lsemb.ai
 
 ### Reporting Issues
 

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 import documentProcessor from '../services/document-processor.service';
 
 const router = Router();
@@ -42,10 +42,10 @@ const upload = multer({
 router.post('/init', async (req: Request, res: Response) => {
   try {
     // First drop the table if it exists to ensure clean state
-    await asembPool.query('DROP TABLE IF EXISTS documents CASCADE');
+    await lsembPool.query('DROP TABLE IF EXISTS documents CASCADE');
     
     // Create fresh table with proper structure
-    await asembPool.query(`
+    await lsembPool.query(`
       CREATE TABLE documents (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -75,7 +75,7 @@ router.post('/init', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     // First ensure table exists
-    await asembPool.query(`
+    await lsembPool.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -90,7 +90,7 @@ router.get('/', async (req: Request, res: Response) => {
     `);
 
     // Also ensure document_embeddings table exists
-    await asembPool.query(`
+    await lsembPool.query(`
       CREATE TABLE IF NOT EXISTS document_embeddings (
         id SERIAL PRIMARY KEY,
         document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
@@ -101,13 +101,25 @@ router.get('/', async (req: Request, res: Response) => {
       )
     `);
 
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       `SELECT d.*,
+              COALESCE(emb_stats.model_name, 'None') as embedding_model,
+              COALESCE(emb_stats.total_tokens, 0) as total_tokens_used,
+              COALESCE(emb_stats.chunk_count, 0) as chunk_count,
               CASE
                 WHEN EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id) THEN true
                 ELSE false
               END as has_embeddings
        FROM documents d
+       LEFT JOIN (
+         SELECT
+           document_id,
+           model_name,
+           SUM(tokens_used) as total_tokens,
+           COUNT(*) as chunk_count
+         FROM document_embeddings
+         GROUP BY document_id, model_name
+       ) emb_stats ON d.id = emb_stats.document_id
        ORDER BY d.created_at DESC`
     );
 
@@ -122,8 +134,10 @@ router.get('/', async (req: Request, res: Response) => {
         source: doc.file_path,
         created_at: doc.created_at,
         updated_at: doc.updated_at,
-        chunks: doc.has_embeddings ? 1 : 0, // Simplified for now
-        embeddings: doc.has_embeddings ? 1 : 0,
+        chunks: doc.chunk_count || 0,
+        embeddings: doc.chunk_count || 0,
+        embedding_model: doc.embedding_model,
+        total_tokens_used: doc.total_tokens_used,
         ...doc.metadata
       }
     }));
@@ -146,7 +160,25 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     }
 
     const { originalname, size, mimetype, path: filePath } = req.file;
-    
+
+    // Check for duplicate by filename and size (skip if force flag is set)
+    if (!req.query.force) {
+      const duplicateCheck = await lsembPool.query(
+        'SELECT id, title FROM documents WHERE title = $1 AND size = $2',
+        [originalname, size]
+      );
+
+      if (duplicateCheck.rows.length > 0) {
+        // Clean up uploaded file
+        fs.unlinkSync(filePath);
+        return res.status(409).json({
+          error: 'Duplicate document',
+          message: 'A document with the same name and size already exists',
+          duplicateId: duplicateCheck.rows[0].id
+        });
+      }
+    }
+
     // Process file based on type
     let processedDoc;
     try {
@@ -162,12 +194,36 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
       };
     }
 
+    // Check for content-based duplicate using first 500 characters (skip if force flag is set)
+    if (!req.query.force) {
+      const contentPreview = processedDoc.content.substring(0, 500);
+      const contentDuplicateCheck = await lsembPool.query(
+        'SELECT id, title FROM documents WHERE LEFT(content, 500) = $1',
+        [contentPreview]
+      );
+
+      if (contentDuplicateCheck.rows.length > 0) {
+        // Clean up uploaded file
+        fs.unlinkSync(filePath);
+        return res.status(409).json({
+          error: 'Duplicate content detected',
+          message: 'A document with similar content already exists',
+          duplicateId: contentDuplicateCheck.rows[0].id,
+          duplicateTitle: contentDuplicateCheck.rows[0].title
+        });
+      }
+    }
+
     // Determine file type
     const ext = path.extname(originalname).toLowerCase().replace('.', '');
     const fileType = ext || 'text';
 
+    // Generate content hash for additional duplicate checking
+    const crypto = require('crypto');
+    const contentHash = crypto.createHash('md5').update(processedDoc.content).digest('hex');
+
     // Save to database
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       `INSERT INTO documents (title, content, type, size, file_path, metadata)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
@@ -182,7 +238,8 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
           originalName: originalname,
           mimeType: mimetype,
           uploadDate: new Date(),
-          chunks: processedDoc.chunks.length
+          chunks: processedDoc.chunks.length,
+          contentHash: contentHash
         })
       ]
     );
@@ -202,8 +259,16 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     });
   } catch (error: any) {
     console.error('Error uploading document:', error);
-    res.status(500).json({ 
-      error: error.message || 'Failed to upload document' 
+    // Clean up uploaded file on error
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.error('Error cleaning up file:', cleanupError);
+      }
+    }
+    res.status(500).json({
+      error: error.message || 'Failed to upload document'
     });
   }
 });
@@ -219,7 +284,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const size = Buffer.byteLength(content, 'utf8');
 
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       `INSERT INTO documents (title, content, type, size, metadata)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
@@ -262,7 +327,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.get('/stats', async (req: Request, res: Response) => {
   try {
     // Ensure table exists first
-    await asembPool.query(`
+    await lsembPool.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -276,7 +341,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       )
     `);
 
-    const stats = await asembPool.query(`
+    const stats = await lsembPool.query(`
       SELECT
         COUNT(*) as total,
         SUM(size) as total_size,
@@ -285,7 +350,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       FROM documents
     `);
 
-    const typeDistribution = await asembPool.query(`
+    const typeDistribution = await lsembPool.query(`
       SELECT type, COUNT(*) as count
       FROM documents
       GROUP BY type
@@ -309,7 +374,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       'SELECT * FROM documents WHERE id = $1',
       [id]
     );
@@ -370,7 +435,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
 
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       `UPDATE documents 
        SET ${updates.join(', ')}
        WHERE id = $${paramIndex}
@@ -400,7 +465,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // First get the document to delete the file if exists
-    const docResult = await asembPool.query(
+    const docResult = await lsembPool.query(
       'SELECT file_path FROM documents WHERE id = $1',
       [id]
     );
@@ -413,7 +478,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       }
     }
 
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       'DELETE FROM documents WHERE id = $1 RETURNING id',
       [id]
     );
@@ -438,9 +503,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
 router.post('/:id/embeddings', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     // Get document
-    const docResult = await asembPool.query(
+    const docResult = await lsembPool.query(
       'SELECT * FROM documents WHERE id = $1',
       [id]
     );
@@ -450,7 +515,22 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
     }
 
     const doc = docResult.rows[0];
-    
+
+    // Check if embeddings already exist
+    const existingEmbeddings = await lsembPool.query(
+      'SELECT COUNT(*) as count FROM document_embeddings WHERE document_id = $1',
+      [id]
+    );
+
+    if (parseInt(existingEmbeddings.rows[0].count) > 0) {
+      return res.status(409).json({
+        error: 'Embeddings already exist',
+        message: 'This document already has embeddings created',
+        documentId: id,
+        existingCount: parseInt(existingEmbeddings.rows[0].count)
+      });
+    }
+
     // Create embeddings
     await documentProcessor.processAndEmbedDocument(
       doc.id,
@@ -458,15 +538,22 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
       doc.title
     );
 
+    // Get the count of created embeddings
+    const newEmbeddings = await lsembPool.query(
+      'SELECT COUNT(*) as count FROM document_embeddings WHERE document_id = $1',
+      [id]
+    );
+
     res.json({
       success: true,
       message: 'Embeddings created successfully',
-      documentId: id
+      documentId: id,
+      embeddingCount: parseInt(newEmbeddings.rows[0].count)
     });
   } catch (error: any) {
     console.error('Error creating embeddings:', error);
-    res.status(500).json({ 
-      error: error.message || 'Failed to create embeddings' 
+    res.status(500).json({
+      error: error.message || 'Failed to create embeddings'
     });
   }
 });
@@ -515,7 +602,7 @@ router.post('/search', async (req: Request, res: Response) => {
 
 // Bulk create embeddings
 router.post('/bulk-embed', async (req: Request, res: Response) => {
-  const client = await asembPool.connect();
+  const client = await lsembPool.connect();
 
   try {
     const { documentIds } = req.body;

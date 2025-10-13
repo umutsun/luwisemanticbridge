@@ -55,7 +55,7 @@ describe('Redis Cache Integration', () => {
 
 #### Create PRODUCTION_SETUP.md:
 ```markdown
-# ASEMB Production Setup Guide
+# LSEMB Production Setup Guide
 
 ## Prerequisites
 - PostgreSQL 14+ with pgvector extension
@@ -68,19 +68,19 @@ describe('Redis Cache Integration', () => {
 ### 1. Database Setup
 ```bash
 # Create database and user
-createdb asemb
-psql -d asemb -c "CREATE EXTENSION IF NOT EXISTS vector;"
-psql -d asemb -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+createdb lsemb
+psql -d lsemb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql -d lsemb -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 
 # Run migrations
-psql -U asemb_user -d asemb -f migrations/001_initial.sql
-psql -U asemb_user -d asemb -f migrations/002_indexes.sql
+psql -U lsemb_user -d lsemb -f migrations/001_initial.sql
+psql -U lsemb_user -d lsemb -f migrations/002_indexes.sql
 ```
 
 ### 2. Environment Configuration
 ```bash
 # Copy and configure environment
-cp .env.asemb.example .env
+cp .env.lsemb.example .env
 # Edit with your settings
 ```
 

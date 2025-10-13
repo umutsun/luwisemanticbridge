@@ -1,11 +1,11 @@
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 
 async function checkChatbotSettings() {
   try {
     console.log('Checking chatbot_settings table...\n');
 
     // Check if table exists
-    const tableCheck = await asembPool.query(`
+    const tableCheck = await lsembPool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables
         WHERE table_schema = 'public'
@@ -18,7 +18,7 @@ async function checkChatbotSettings() {
 
     if (tableExists) {
       // Check table structure
-      const structure = await asembPool.query(`
+      const structure = await lsembPool.query(`
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'chatbot_settings'
@@ -32,7 +32,7 @@ async function checkChatbotSettings() {
       });
 
       // Check current settings
-      const currentSettings = await asembPool.query(`
+      const currentSettings = await lsembPool.query(`
         SELECT setting_key, setting_value
         FROM chatbot_settings
         ORDER BY setting_key
@@ -47,7 +47,7 @@ async function checkChatbotSettings() {
     // Test inserting a setting
     console.log('\nTesting chatbot_settings insertion...');
     try {
-      await asembPool.query(`
+      await lsembPool.query(`
         INSERT INTO chatbot_settings (setting_key, setting_value)
         VALUES ('test_prompt', 'This is a test prompt')
         ON CONFLICT (setting_key)
@@ -56,13 +56,13 @@ async function checkChatbotSettings() {
       console.log('✅ chatbot_settings insertion successful');
 
       // Verify the insertion
-      const verify = await asembPool.query(`
+      const verify = await lsembPool.query(`
         SELECT setting_value FROM chatbot_settings WHERE setting_key = 'test_prompt'
       `);
       console.log(`✅ Verification successful: ${verify.rows[0].setting_value}`);
 
       // Clean up test record
-      await asembPool.query(`
+      await lsembPool.query(`
         DELETE FROM chatbot_settings WHERE setting_key = 'test_prompt'
       `);
       console.log('✅ Test record cleaned up');
@@ -74,7 +74,7 @@ async function checkChatbotSettings() {
   } catch (error) {
     console.error('Error checking chatbot_settings:', error);
   } finally {
-    await asembPool.end();
+    await lsembPool.end();
   }
 }
 

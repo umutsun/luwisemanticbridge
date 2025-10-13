@@ -11,7 +11,7 @@ const sourcePool = new Pool({
 });
 
 const targetPool = new Pool({
-  connectionString: process.env.TARGET_DB || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb'
+  connectionString: process.env.TARGET_DB || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/lsemb'
 });
 
 // OpenAI client (lazy loading)
@@ -24,8 +24,8 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
 
   try {
     // Get API key from settings table
-    const { asembPool } = await import('../config/database');
-    const result = await asembPool.query(
+    const { lsembPool } = await import('../config/database');
+    const result = await lsembPool.query(
       'SELECT value FROM settings WHERE key = $1',
       ['openai.apiKey']
     );

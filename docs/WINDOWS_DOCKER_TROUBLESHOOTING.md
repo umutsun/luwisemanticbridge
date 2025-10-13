@@ -59,7 +59,7 @@ wsl -d docker-desktop ip addr
 
 ```yaml
 networks:
-  asemb-network:
+  lsemb-network:
     driver: bridge
     ipam:
       config:
@@ -87,7 +87,7 @@ extra_hosts:
 curl -v http://localhost:8083/api/v1/health
 
 # From container
-docker exec asemb-api wget -qO- http://localhost:8083/api/v1/health
+docker exec lsemb-api wget -qO- http://localhost:8083/api/v1/health
 ```
 
 ### Test Frontend Connectivity
@@ -96,16 +96,16 @@ docker exec asemb-api wget -qO- http://localhost:8083/api/v1/health
 curl -I http://localhost:3005
 
 # From container
-docker exec asemb-frontend wget -qO- http://localhost:3000
+docker exec lsemb-frontend wget -qO- http://localhost:3000
 ```
 
 ### Test Inter-Container Communication
 ```bash
 # Test API from Frontend container
-docker exec asemb-frontend wget -qO- http://asemb-api:8083/api/v1/health
+docker exec lsemb-frontend wget -qO- http://lsemb-api:8083/api/v1/health
 
 # Test Frontend from API container
-docker exec asemb-api wget -qO- http://asemb-frontend:3000
+docker exec lsemb-api wget -qO- http://lsemb-frontend:3000
 ```
 
 ### Network Inspection
@@ -114,10 +114,10 @@ docker exec asemb-api wget -qO- http://asemb-frontend:3000
 docker network ls
 
 # Inspect specific network
-docker network inspect asemb-network
+docker network inspect lsemb-network
 
 # Check container IP addresses
-docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' asemb-api
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' lsemb-api
 ```
 
 ## Windows-Specific Solutions
@@ -184,7 +184,7 @@ echo 4. Restarting WSL...
 wsl --shutdown
 
 echo 5. Starting optimized Docker setup...
-docker compose --env-file ./.env.asemb -f docker-compose.windows.yml up --build -d
+docker compose --env-file ./.env.lsemb -f docker-compose.windows.yml up --build -d
 
 echo 6. Testing connectivity...
 timeout /t 10 /nobreak > nul

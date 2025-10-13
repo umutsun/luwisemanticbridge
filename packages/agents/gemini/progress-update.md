@@ -56,7 +56,7 @@
 
 1. **Apply PostgreSQL indexes**:
    ```bash
-   psql -U asemb_user -d asemb -f .gemini/create-indexes.sql
+   psql -U lsemb_user -d lsemb -f .gemini/create-indexes.sql
    ```
 
 2. **Run tests for new components**:

@@ -157,11 +157,11 @@ export default function Header() {
           }
 
           // Build comprehensive system status from both endpoints
-          const dbService = healthData.services?.database || healthData.services?.asemb_database;
+          const dbService = healthData.services?.database || healthData.services?.lsemb_database;
           const redisService = healthData.services?.redis;
 
           // Extract database name from settings or database stats
-          let databaseName = 'asemb'; // default
+          let databaseName = 'lsemb'; // default
           if (settings && settings.database?.name) {
             databaseName = settings.database.name;
           } else if (dbData && dbData.database) {
@@ -405,7 +405,7 @@ export default function Header() {
             )}
             <div className="hidden sm:block">
               <h1 className="text-lg lg:text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-                {config?.app?.name || 'Alice Semantic Bridge'}
+                {config?.app?.name || 'Luwi Semantic Bridge'}
               </h1>
               <p className="text-xs text-muted-foreground hidden lg:block font-light">
                 {config?.app?.description || 'Intelligent RAG System'}

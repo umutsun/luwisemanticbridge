@@ -2,8 +2,8 @@
 
 ## 1. Dosyaları Sunucuya Yükle
 ```bash
-# asemb-node.zip dosyasını sunucuya yükle
-scp asemb-node.zip user@n8n.luwi.dev:/tmp/
+# lsemb-node.zip dosyasını sunucuya yükle
+scp lsemb-node.zip user@n8n.luwi.dev:/tmp/
 ```
 
 ## 2. SSH ile Sunucuya Bağlan
@@ -20,7 +20,7 @@ cd ~/.n8n/nodes
 mkdir n8n-nodes-alice-semantic-bridge
 
 # Zip'i extract et
-unzip /tmp/asemb-node.zip -d n8n-nodes-alice-semantic-bridge/
+unzip /tmp/lsemb-node.zip -d n8n-nodes-alice-semantic-bridge/
 
 # Gerekli bağımlılıkları yükle
 cd n8n-nodes-alice-semantic-bridge
@@ -42,7 +42,7 @@ docker restart n8n
 ## 5. Credentials Ekle (n8n UI'dan)
 
 ### PostgreSQL Credential:
-- Name: PostgreSQL ASEMB
+- Name: PostgreSQL LSEMB
 - Host: 91.99.229.96
 - Port: 5432
 - Database: postgres
@@ -50,7 +50,7 @@ docker restart n8n
 - Password: [config'den]
 
 ### Redis Credential:
-- Name: Redis ASEMB
+- Name: Redis LSEMB
 - Host: 127.0.0.1
 - Port: 6379
 - Database: 2

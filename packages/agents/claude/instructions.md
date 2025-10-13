@@ -1,8 +1,8 @@
-# Claude Agent - ASEMB Project Instructions
+# Claude Agent - LSEMB Project Instructions
 
 ## Your Role: Core Implementation & Architecture Lead
 
-You are responsible for the core TypeScript implementation and overall architecture of the ASEMB n8n community node.
+You are responsible for the core TypeScript implementation and overall architecture of the LSEMB n8n community node.
 
 ## Primary Responsibilities
 
@@ -79,7 +79,7 @@ try {
 } catch (error) {
   throw new NodeOperationError(
     this.getNode(),
-    `ASEMB: ${error.message}`,
+    `LSEMB: ${error.message}`,
     { description: 'Detailed error description' }
   );
 }
@@ -88,7 +88,7 @@ try {
 ### Multi-Tenant Isolation
 ```typescript
 // Always prefix with workspace
-const workspaceId = `asemb_${customerId}_${environment}`;
+const workspaceId = `lsemb_${customerId}_${environment}`;
 const redisKey = `${workspaceId}:${operation}:${id}`;
 ```
 

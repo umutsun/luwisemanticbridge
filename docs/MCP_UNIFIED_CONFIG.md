@@ -23,7 +23,7 @@ All three agents (Claude, Gemini, Codex) will use the same ASB-CLI MCP server wi
         "REDIS_DB": "2",
         "POSTGRES_HOST": "localhost",
         "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "asemb",
+        "POSTGRES_DB": "lsemb",
         "POSTGRES_USER": "postgres",
         "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}",
         "NODE_ENV": "development"
@@ -51,7 +51,7 @@ All three agents (Claude, Gemini, Codex) will use the same ASB-CLI MCP server wi
         "REDIS_DB": "2",
         "POSTGRES_HOST": "localhost",
         "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "asemb",
+        "POSTGRES_DB": "lsemb",
         "POSTGRES_USER": "postgres",
         "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}",
         "NODE_ENV": "development"
@@ -79,7 +79,7 @@ All three agents (Claude, Gemini, Codex) will use the same ASB-CLI MCP server wi
         "REDIS_DB": "2",
         "POSTGRES_HOST": "localhost",
         "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "asemb",
+        "POSTGRES_DB": "lsemb",
         "POSTGRES_USER": "postgres",
         "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}",
         "NODE_ENV": "development"

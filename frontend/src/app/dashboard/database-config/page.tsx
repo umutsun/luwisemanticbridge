@@ -48,7 +48,7 @@ export default function DatabaseConfigPage() {
   const [config, setConfig] = useState<DatabaseConfig>({
     host: 'localhost',
     port: 5432,
-    database: 'asemb',
+    database: 'lsemb',
     username: 'postgres',
     password: '',
     schema: 'rag_data',
@@ -112,7 +112,7 @@ export default function DatabaseConfigPage() {
       setBackups([
         {
           id: '1',
-          filename: 'asemb_backup_2024_01_20.sql',
+          filename: 'lsemb_backup_2024_01_20.sql',
           size: '2.4 GB',
           createdAt: new Date('2024-01-20'),
           type: 'full',
@@ -120,7 +120,7 @@ export default function DatabaseConfigPage() {
         },
         {
           id: '2',
-          filename: 'asemb_backup_2024_01_21.sql',
+          filename: 'lsemb_backup_2024_01_21.sql',
           size: '45 MB',
           createdAt: new Date('2024-01-21'),
           type: 'incremental',
@@ -261,7 +261,7 @@ export default function DatabaseConfigPage() {
     try {
       const newBackup: Backup = {
         id: Date.now().toString(),
-        filename: `asemb_backup_${new Date().toISOString().split('T')[0]}.sql`,
+        filename: `lsemb_backup_${new Date().toISOString().split('T')[0]}.sql`,
         size: 'Calculating...',
         createdAt: new Date(),
         type,
@@ -393,7 +393,7 @@ export default function DatabaseConfigPage() {
                 id="database"
                 value={config.database}
                 onChange={(e) => handleInputChange('database', e.target.value)}
-                placeholder="asemb veya müşteri veritabanı adı"
+                placeholder="lsemb veya müşteri veritabanı adı"
               />
             </div>
 

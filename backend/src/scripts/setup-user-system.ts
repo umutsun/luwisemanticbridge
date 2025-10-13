@@ -9,7 +9,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // ASEMB database connection
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb'
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/lsemb'
 });
 
 async function setupUserSystem() {
@@ -37,7 +37,7 @@ async function setupUserSystem() {
     console.log('   - user_activity_logs');
     console.log('');
     console.log('👤 Default admin user created:');
-    console.log('   Email: admin@asemb.com');
+    console.log('   Email: admin@lsemb.com');
     console.log('   Password: admin123 (PLEASE CHANGE THIS!)');
     console.log('');
     console.log('💎 Subscription plans created:');

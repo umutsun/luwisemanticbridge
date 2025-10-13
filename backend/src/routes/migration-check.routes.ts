@@ -9,7 +9,7 @@ router.get('/check-tables', async (req: Request, res: Response) => {
   
   // Databases to check
   const databases = [
-    { name: 'asemb', connection: 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/asemb' },
+    { name: 'lsemb', connection: 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/lsemb' },
     { name: 'postgres', connection: 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/postgres' },
     { name: 'semantic_db', connection: 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/semantic_db' }
   ];

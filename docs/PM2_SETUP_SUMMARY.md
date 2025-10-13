@@ -428,7 +428,7 @@ You now have a **production-ready** PM2 orchestration system for Alice Semantic 
 - **Documentation**: Check PM2_README.md
 - **Quick Help**: PM2_QUICK_REFERENCE.md
 - **Full Guide**: PM2_DEPLOYMENT_GUIDE.md
-- **Email**: devops@asemb.ai
+- **Email**: devops@lsemb.ai
 
 ---
 

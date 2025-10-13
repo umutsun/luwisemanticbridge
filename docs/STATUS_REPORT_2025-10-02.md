@@ -31,7 +31,7 @@
 ```
 
 ### Configuration Files Status
-- **Primary Config:** `.env.asemb` ✅ PRESENT
+- **Primary Config:** `.env.lsemb` ✅ PRESENT
 - **Alternative Config:** `.env` ✅ PRESENT  
 - **Backend Config:** `backend/.env` ✅ PRESENT
 - **Frontend Config:** `frontend/.env.local` ✅ PRESENT
@@ -57,7 +57,7 @@ pm2 start ecosystem.config.js
 ### Option 2: Docker Compose (Alternative)
 ```bash
 # Start with Docker (requires Docker Desktop)
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb up --build -d
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb up --build -d
 
 # Available Docker configurations:
 # - docker-compose.dev.yml (Development)

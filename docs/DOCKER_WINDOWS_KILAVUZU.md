@@ -128,7 +128,7 @@ docker-compose -f docker-compose.windows.yml down -v
 
 ## Notlar
 
-- PostgreSQL harici olarak çalışıyor (`asemb.luwi.dev`)
+- PostgreSQL harici olarak çalışıyor (`lsemb.luwi.dev`)
 - Redis Docker container içinde
 - WSL2 performans için kritik
 - Windows Firewall portları engellemesin

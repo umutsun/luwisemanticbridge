@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Backend Log Loader</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 2rem;
+            background: #f5f5f5;
+        }
+        .terminal {
+            background: #1a1a1a;
+            color: #fff;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            min-height: 300px;
+            max-width: 600px;
+            margin: 1rem 0;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 0.25rem 0;
+            opacity: 0;
+            animation: fadeIn 0.3s forwards;
+        }
+        .log-error { color: #ff6b6b; }
+        .log-info { color: #4dabf7; }
+        .log-system { color: #69db7c; }
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+        button {
+            background: #4dabf7;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #339af0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Backend Log Stream Test</h1>
+    <button onclick="connect()">Connect to Logs</button>
+    <button onclick="disconnect()">Disconnect</button>
+    <div id="status">Not connected</div>
+    <div id="terminal" class="terminal"></div>
+
+    <script>
+        let eventSource = null;
+
+        function connect() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            document.getElementById('status').textContent = 'Connecting...';
+            eventSource = new EventSource('http://localhost:8083/api/v2/system/stream');
+
+            eventSource.onopen = () => {
+                document.getElementById('status').textContent = 'Connected';
+                addLog('Connected to backend logs', 'info');
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type !== 'ping') {
+                        addLog(`[${data.type}] ${data.message}`, data.type);
+                    }
+                } catch (e) {
+                    addLog(event.data, 'info');
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                document.getElementById('status').textContent = 'Error';
+                addLog('Connection error', 'error');
+            };
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                document.getElementById('status').textContent = 'Disconnected';
+            }
+        }
+
+        function addLog(message, type = 'info') {
+            const terminal = document.getElementById('terminal');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            terminal.appendChild(entry);
+            terminal.scrollTop = terminal.scrollHeight;
+
+            // Keep only last 50 logs
+            while (terminal.children.length > 50) {
+                terminal.removeChild(terminal.firstChild);
+            }
+        }
+    </script>
+</body>
+</html>

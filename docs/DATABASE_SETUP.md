@@ -19,7 +19,7 @@ choco install postgresql --params '/Password:postgres'
 2. Connect to the local server (localhost:5432)
 3. Create databases:
    - `postgres` (usually created by default)
-   - `asemb`
+   - `lsemb`
    - `customer_db`
 
 ## Option 2: Use Docker
@@ -29,7 +29,7 @@ choco install postgresql --params '/Password:postgres'
 docker run --name postgres-asb -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres
 
 # Create databases
-docker exec -it postgres-asb createdb -U postgres asemb
+docker exec -it postgres-asb createdb -U postgres lsemb
 docker exec -it postgres-asb createdb -U postgres customer_db
 ```
 

@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 import { LLMManager } from './llm-manager.service';
 import dotenv from 'dotenv';
 
@@ -34,7 +34,7 @@ export class SemanticSearchService {
 
   constructor() {
     this.customerPool = new Pool({
-      connectionString: process.env.DATABASE_URL || `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || ''}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'asemb'}`
+      connectionString: process.env.DATABASE_URL || `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || ''}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'lsemb'}`
     });
 
     this.loadRAGSettings().catch(error => {
@@ -114,7 +114,13 @@ export class SemanticSearchService {
 
   private async loadRAGSettings(): Promise<void> {
     try {
-      const result = await asembPool.query(
+      // Check if database is available
+      if (!lsembPool) {
+        console.warn('[SemanticSearch] Database not initialized, using default RAG settings');
+        return;
+      }
+
+      const result = await lsembPool.query(
         'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
         [
           'ragSettings.similarityThreshold',
@@ -218,8 +224,23 @@ export class SemanticSearchService {
 
   private async loadEmbeddingSettings(): Promise<void> {
     try {
+      // Check if database is available
+      if (!lsembPool) {
+        console.warn('[SemanticSearch] Database not initialized, using default embedding settings');
+        // Default to Google embeddings for compatibility
+        const provider = 'google';
+        const model = this.getDefaultEmbeddingModel(provider);
+        this.embeddingSettings = {
+          provider,
+          model,
+          openaiApiKey: process.env.OPENAI_API_KEY,
+          googleApiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY
+        };
+        return;
+      }
+
       // Get embedding provider and model from settings, fall back to Google if not set
-      const result = await asembPool.query(
+      const result = await lsembPool.query(
         'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [
           'embedding_provider', 'embedding_model', 'openai_api_key', 'google_api_key',
@@ -536,12 +557,12 @@ export class SemanticSearchService {
       `;
 
       try {
-        if (asembPool) {
-          const result = await asembPool.query(searchQuery, [query, effectiveLimit]);
+        if (lsembPool) {
+          const result = await lsembPool.query(searchQuery, [query, effectiveLimit]);
           allResults = [...allResults, ...result.rows];
           console.log(`[SemanticSearch] Found ${result.rows.length} keyword results`);
         } else {
-          console.log('[SemanticSearch] asembPool not available, keyword search disabled');
+          console.log('[SemanticSearch] lsembPool not available, keyword search disabled');
         }
       } catch (error) {
         console.log('[SemanticSearch] unified_embeddings table not accessible for keyword search');
@@ -590,12 +611,12 @@ export class SemanticSearchService {
 
       const effectiveLimit = this.applyResultLimits(limit);
 
-      if (!asembPool) {
-        console.log('[SemanticSearch] asembPool not available, using keyword search fallback');
+      if (!lsembPool) {
+        console.log('[SemanticSearch] lsembPool not available, using keyword search fallback');
         return this.keywordSearch(query, effectiveLimit);
       }
 
-      const embeddingCheck = await asembPool.query(`
+      const embeddingCheck = await lsembPool.query(`
         SELECT COUNT(*) as count
         FROM unified_embeddings
         WHERE embedding IS NOT NULL
@@ -642,7 +663,7 @@ export class SemanticSearchService {
 
       console.time(queryId);
       queryTimerStarted = true;
-      const result = await asembPool.query(searchQuery, [
+      const result = await lsembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
         this.similarityThreshold,
         keywordPattern,

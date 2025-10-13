@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 import OpenAI from 'openai';
 import Redis from 'ioredis';
 import crypto from 'crypto';
-import { getDatabaseSettings, asembPool } from '../config/database.config';
+import { getDatabaseSettings, lsembPool } from '../config/database.config';
 import { TIMEOUTS } from '../config';
 
 // Helper function to log embedding operations - TEMPORARILY DISABLED
@@ -73,7 +73,7 @@ function estimateTokens(text: string, model: string): number {
 }
 
 // ASEMB database - where unified_embeddings table is stored
-// Using asembPool from database.config.ts
+// Using lsembPool from database.config.ts
 
 const router = Router();
 
@@ -102,16 +102,16 @@ const sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
   new Pool({
     host: process.env.POSTGRES_HOST || 'localhost',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DB || 'asemb',
+    database: process.env.POSTGRES_DB || 'lsemb',
     user: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || ''
   });
 
-// Target database (asemb) - where we write embeddings to
+// Target database (lsemb) - where we write embeddings to
 const targetPool = new Pool({
   host: process.env.POSTGRES_HOST || 'localhost',
   port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'asemb',
+  database: process.env.POSTGRES_DB || 'lsemb',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || ''
 });
@@ -123,7 +123,7 @@ const pgPool = targetPool;
 async function getApiKey(provider: string) {
   try {
     // Try to get from ASEMB settings table first
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       `SELECT setting_value as api_key FROM chatbot_settings WHERE setting_key = '${provider}_api_key'`
     );
 
@@ -356,7 +356,7 @@ async function checkDuplicatesInBatch(table: string, ids: any[]): Promise<Set<an
     console.log(`🔎 Checking duplicates for table "${table}" with ${ids.length} IDs:`, ids.slice(0, 5));
 
     // Check for duplicates using metadata->>'table'
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       `SELECT DISTINCT CAST(source_id AS INTEGER) as source_id
        FROM unified_embeddings
        WHERE source_type = 'database'
@@ -491,7 +491,7 @@ router.get('/tables-fixed', async (req: Request, res: Response) => {
     `);
 
     // Get actual embedded counts from unified_embeddings grouped by actual table name
-    const actualCountsResult = await asembPool.query(`
+    const actualCountsResult = await lsembPool.query(`
       SELECT
         metadata->>'table' as actual_table,
         COUNT(*) as embedded_count
@@ -530,7 +530,7 @@ router.get('/tables-fixed', async (req: Request, res: Response) => {
         // Note: embedding_progress table might not exist or have different structure
         let status = 'pending';
         try {
-          const progressResult = await asembPool.query(`
+          const progressResult = await lsembPool.query(`
             SELECT status
             FROM embedding_progress
             WHERE table_name = $1
@@ -600,8 +600,8 @@ router.get('/test-tables', async (req: Request, res: Response) => {
   console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
 
   // Check both databases
-  const asembResult = await asembPool.query('SELECT COUNT(*) FROM unified_embeddings');
-  const asembCount = parseInt(asembResult.rows[0].count);
+  const lsembResult = await lsembPool.query('SELECT COUNT(*) FROM unified_embeddings');
+  const lsembCount = parseInt(lsembResult.rows[0].count);
 
   let pgCount = 0;
   try {
@@ -613,10 +613,10 @@ router.get('/test-tables', async (req: Request, res: Response) => {
 
   res.json({
     message: 'Test endpoint',
-    asembDatabase: {
+    lsembDatabase: {
       host: process.env.ASEMB_DB_HOST,
       name: process.env.ASEMB_DB_NAME,
-      count: asembCount
+      count: lsembCount
     },
     pgDatabase: {
       connectionString: process.env.DATABASE_URL?.split('@')[1] || 'localhost',
@@ -630,7 +630,7 @@ router.get('/test-tables', async (req: Request, res: Response) => {
 router.get('/debug-source-tables', async (req: Request, res: Response) => {
   try {
     // Get all source_table values and their counts
-    const result = await asembPool.query(`
+    const result = await lsembPool.query(`
       SELECT source_table, COUNT(*) as count
       FROM unified_embeddings
       GROUP BY source_table
@@ -638,7 +638,7 @@ router.get('/debug-source-tables', async (req: Request, res: Response) => {
     `);
 
     // Get total count
-    const totalResult = await asembPool.query('SELECT COUNT(*) FROM unified_embeddings');
+    const totalResult = await lsembPool.query('SELECT COUNT(*) FROM unified_embeddings');
     const total = parseInt(totalResult.rows[0].count);
 
     res.json({
@@ -665,7 +665,7 @@ router.get('/progress', async (req: Request, res: Response) => {
     let actualEmbeddedCount = 0;
     for (const table of migrationProgress.tables) {
       console.log(`DEBUG: Processing table "${table}" (lowercase: "${table.toLowerCase()}")`);
-      const embeddedResult = await asembPool.query(
+      const embeddedResult = await lsembPool.query(
         `SELECT COUNT(DISTINCT source_id) as count
          FROM unified_embeddings
          WHERE metadata->>'table' = $1`,
@@ -953,7 +953,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       const totalInTable = parseInt(totalResult.rows[0].count);
 
       // Get embedded count using metadata->>'table'
-      const embeddedResult = await asembPool.query(
+      const embeddedResult = await lsembPool.query(
         `SELECT COUNT(DISTINCT source_id) as count
          FROM unified_embeddings
          WHERE metadata->>'table' = $1 AND source_type = 'database'`,
@@ -973,7 +973,7 @@ router.post('/generate', async (req: Request, res: Response) => {
           FROM unified_embeddings
           WHERE metadata->>'table' = $1 AND source_type = 'database'
         `;
-        const lastResult = await asembPool.query(lastEmbeddedQuery, [table]);
+        const lastResult = await lsembPool.query(lastEmbeddedQuery, [table]);
         startOffset = parseInt(lastResult.rows[0]?.last_id) || 0;
       }
 
@@ -1158,7 +1158,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
 
           // Check if this batch is already processed
           const batchEndId = batchStartOffset + batchSize;
-          const embeddedCount = await asembPool.query(`
+          const embeddedCount = await lsembPool.query(`
             SELECT COUNT(*) as count
             FROM unified_embeddings
             WHERE metadata->>'table' = $1
@@ -1241,7 +1241,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
       }
 
       // Filter out already embedded records
-      const embeddedIdsResult = await asembPool.query(`
+      const embeddedIdsResult = await lsembPool.query(`
         SELECT DISTINCT CAST(source_id AS INTEGER) as id
         FROM unified_embeddings
         WHERE metadata->>'table' = $1 AND source_type = 'database'
@@ -1423,7 +1423,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         const totalInTable = parseInt(totalResult.rows[0].count);
 
         // Get embedded count from metadata->>'table'
-        const embeddedResult = await asembPool.query(
+        const embeddedResult = await lsembPool.query(
           `SELECT COUNT(DISTINCT source_id) as count
            FROM unified_embeddings
            WHERE metadata->>'table' = $1 AND source_type = 'database'`,
@@ -1445,7 +1445,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
               FROM unified_embeddings
               WHERE metadata->>'table' = $1 AND source_type = 'database'
             `;
-            const lastResult = await asembPool.query(lastEmbeddedQuery, [table]);
+            const lastResult = await lsembPool.query(lastEmbeddedQuery, [table]);
             startOffset = parseInt(lastResult.rows[0]?.last_id) || 0;
           }
 
@@ -1520,7 +1520,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         console.log(`🔍 Finding next unprocessed record for table ${table}`);
 
         // Get embedded IDs first
-        const embeddedResult = await asembPool.query(`
+        const embeddedResult = await lsembPool.query(`
           SELECT DISTINCT CAST(source_id AS INTEGER) as id
           FROM unified_embeddings
           WHERE metadata->>'table' = $1 AND source_type = 'database'
@@ -1567,8 +1567,8 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         const sourceTableName = getDisplayName(table);
 
         // Get records from source table that are NOT embedded yet
-        // First, get the embedded IDs from asemb database
-        const embeddedIdsResult = await asembPool.query(`
+        // First, get the embedded IDs from lsemb database
+        const embeddedIdsResult = await lsembPool.query(`
           SELECT DISTINCT CAST(source_id AS INTEGER) as id
           FROM unified_embeddings
           WHERE metadata->>'table' = $1 AND source_type = 'database'
@@ -2669,7 +2669,7 @@ router.post('/refresh-tables', async (req: Request, res: Response) => {
 // Get embedding stats
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const result = await asembPool.query(`
+    const result = await lsembPool.query(`
       SELECT
         COUNT(*) as totalEmbeddings,
         COUNT(DISTINCT source_table) as tablesProcessed,
@@ -2678,7 +2678,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       FROM unified_embeddings
     `);
 
-    const byTable = await asembPool.query(`
+    const byTable = await lsembPool.query(`
       SELECT
         source_table,
         COUNT(*) as count,
@@ -2733,7 +2733,7 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
         const totalRecords = parseInt(countResult.rows[0].total);
 
         // Get embedded records count from unified_embeddings
-        const embeddedResult = await asembPool.query(`
+        const embeddedResult = await lsembPool.query(`
           SELECT COUNT(*) as embedded
           FROM unified_embeddings
           WHERE source_type = 'database'
@@ -2755,7 +2755,7 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
         }
 
         // Check if table is currently being processed
-        const progressResult = await asembPool.query(`
+        const progressResult = await lsembPool.query(`
           SELECT status
           FROM embedding_progress
           WHERE table_name = $1
@@ -2809,7 +2809,7 @@ router.get('/debug/embeddings', async (req: Request, res: Response) => {
     let totalCount = 0;
 
     for (const variation of variations) {
-      const result = await asembPool.query(`
+      const result = await lsembPool.query(`
         SELECT COUNT(*) as count
         FROM unified_embeddings
         WHERE source_table = $1
@@ -2822,7 +2822,7 @@ router.get('/debug/embeddings', async (req: Request, res: Response) => {
     }
 
     // Also get a sample of records
-    const sampleResult = await asembPool.query(`
+    const sampleResult = await lsembPool.query(`
       SELECT source_table, source_id, metadata
       FROM unified_embeddings
       WHERE source_type = 'database'
@@ -2878,7 +2878,7 @@ router.get('/table/:tableName/details', async (req: Request, res: Response) => {
       }).filter(id => !isNaN(id));
 
       if (ids.length > 0) {
-        const embeddedResult = await asembPool.query(`
+        const embeddedResult = await lsembPool.query(`
           SELECT source_id FROM unified_embeddings
           WHERE source_type = 'database'
           AND (
@@ -2928,7 +2928,7 @@ router.get('/table/:tableName/embedded-recent', async (req: Request, res: Respon
     // Get recently embedded records from unified_embeddings table
     let embeddedRecords = [];
     try {
-      const recentQuery = await asembPool.query(`
+      const recentQuery = await lsembPool.query(`
         SELECT
           ue.id,
           ue.source_id,
@@ -2963,7 +2963,7 @@ router.get('/table/:tableName/embedded-recent', async (req: Request, res: Respon
       console.log(`DEBUG: Found ${embeddedRecords.length} embedded records for ${tableName}`);
 
       // Check what tables actually exist in unified_embeddings
-      const tablesCheck = await asembPool.query(`
+      const tablesCheck = await lsembPool.query(`
         SELECT DISTINCT source_table, metadata->>'table' as metadata_table
         FROM unified_embeddings
         WHERE source_type = 'database'
@@ -3007,7 +3007,7 @@ router.post('/reset', async (req: Request, res: Response) => {
     await redis.del('embedding:lastUpdate');
 
     // Clear any stuck processes in database
-    await asembPool.query(`
+    await lsembPool.query(`
       UPDATE embedding_progress
       SET status = 'completed', completed_at = CURRENT_TIMESTAMP
       WHERE status IN ('processing', 'paused')
@@ -3099,7 +3099,7 @@ router.post('/recover', async (req: Request, res: Response) => {
       }
 
       // Check if there's actually an active process by looking for recent embeddings
-      const recentEmbeddings = await asembPool.query(`
+      const recentEmbeddings = await lsembPool.query(`
         SELECT COUNT(*) as count
         FROM unified_embeddings
         WHERE created_at > NOW() - INTERVAL '2 minutes'

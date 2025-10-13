@@ -56,7 +56,7 @@ export class GibScraperService {
         'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8'
       });
 
-      console.log(`[GIB-SCRAPER] Navigating to: ${url}`);
+      console.log(`[TURKISH-GOV-SCRAPER] Navigating to: ${url}`);
       
       // Navigate to the page
       const response = await page.goto(url, {
@@ -64,7 +64,7 @@ export class GibScraperService {
         timeout: 60000
       });
 
-      console.log(`[GIB-SCRAPER] Status: ${response?.status()}`);
+      console.log(`[TURKISH-GOV-SCRAPER] Status: ${response?.status()}`);
 
       // Wait for content to load
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -77,7 +77,7 @@ export class GibScraperService {
         await page.waitForSelector('.accordion, .panel-group, .tab-content, [id*="madde"], [class*="madde"]', { 
           timeout: 10000 
         }).catch(() => {
-          console.log('[GIB-SCRAPER] No article selectors found, trying alternative methods');
+          console.log('[TURKISH-GOV-SCRAPER] No article selectors found, trying alternative methods');
         });
 
         // Try to click on tabs or accordions to expand content
@@ -117,7 +117,7 @@ export class GibScraperService {
         for (const selector of maddeSelectors) {
           const elements = $(selector);
           if (elements.length > 0) {
-            console.log(`[GIB-SCRAPER] Found ${elements.length} articles using selector: ${selector}`);
+            console.log(`[TURKISH-GOV-SCRAPER] Found ${elements.length} articles using selector: ${selector}`);
             
             elements.each((_, el) => {
               const element = $(el);
@@ -168,7 +168,7 @@ export class GibScraperService {
         // Create content from articles
         if (maddeler.length > 0) {
           content = maddeler.map(m => `${m.maddeNo}\n${m.metin}`).join('\n\n');
-          console.log(`[GIB-SCRAPER] Extracted ${maddeler.length} law articles`);
+          console.log(`[TURKISH-GOV-SCRAPER] Extracted ${maddeler.length} law articles`);
         }
       }
 
@@ -200,7 +200,7 @@ export class GibScraperService {
       };
 
     } catch (error: any) {
-      console.error('[GIB-SCRAPER] Error:', error);
+      console.error('[TURKISH-GOV-SCRAPER] Error:', error);
       return {
         success: false,
         title: '',
@@ -229,15 +229,15 @@ export class GibScraperService {
         });
       });
 
-      console.log('[GIB-SCRAPER] Expanded collapsible content');
+      console.log('[TURKISH-GOV-SCRAPER] Expanded collapsible content');
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (e) {
-      console.log('[GIB-SCRAPER] No expandable content found');
+      console.log('[TURKISH-GOV-SCRAPER] No expandable content found');
     }
   }
 
   private async extractGeneralContent($: cheerio.CheerioAPI, page: Page): Promise<string> {
-    // Try various selectors for GİB and similar sites
+    // Try various selectors for Turkish Gov and similar sites
     const contentSelectors = [
       '.accordion-body',
       '.panel-body',
@@ -264,7 +264,7 @@ export class GibScraperService {
         const text = elements.text().replace(/\s+/g, ' ').trim();
         if (text.length > bestContent.length) {
           bestContent = text;
-          console.log(`[GIB-SCRAPER] Found content with selector: ${selector} (${text.length} chars)`);
+          console.log(`[TURKISH-GOV-SCRAPER] Found content with selector: ${selector} (${text.length} chars)`);
         }
       }
     }
@@ -290,7 +290,7 @@ export class GibScraperService {
       
       if (pageContent && pageContent.length > bestContent.length) {
         bestContent = pageContent;
-        console.log(`[GIB-SCRAPER] Extracted content via page.evaluate (${pageContent.length} chars)`);
+        console.log(`[TURKISH-GOV-SCRAPER] Extracted content via page.evaluate (${pageContent.length} chars)`);
       }
     }
 

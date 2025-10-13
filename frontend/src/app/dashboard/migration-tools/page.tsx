@@ -452,7 +452,7 @@ export default function MigrationToolsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="rag_chatbot">RAG Chatbot DB</SelectItem>
-                      <SelectItem value="asemb">ASEMB DB</SelectItem>
+                      <SelectItem value="lsemb">ASEMB DB</SelectItem>
                       <SelectItem value="custom">Özel Veritabanı</SelectItem>
                     </SelectContent>
                   </Select>

@@ -7,7 +7,7 @@
 ## Problem Identified
 The frontend was attempting to connect to `ws://localhost:3002` instead of the correct `ws://localhost:8083` due to:
 1. Cached environment variables in Next.js build
-2. Multiple conflicting .env files (.env.local and .env.asemb)
+2. Multiple conflicting .env files (.env.local and .env.lsemb)
 
 ## Solution Applied
 

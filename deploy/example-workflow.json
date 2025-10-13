@@ -1,5 +1,5 @@
 {
-  "name": "ASEMB Quick Start",
+  "name": "LSEMB Quick Start",
   "nodes": [
     {
       "parameters": {
@@ -10,7 +10,7 @@
         "chunkOverlap": 64
       },
       "name": "Ingest Web Content",
-      "type": "n8n-nodes-alice-semantic-bridge.asembWorkflow",
+      "type": "n8n-nodes-alice-semantic-bridge.lsembWorkflow",
       "position": [
         450,
         300
@@ -19,7 +19,7 @@
       "credentials": {
         "postgresDb": {
           "id": "1",
-          "name": "PostgreSQL ASEMB"
+          "name": "PostgreSQL LSEMB"
         },
         "openAiApi": {
           "id": "2",
@@ -35,7 +35,7 @@
         "minSimilarity": 0.7
       },
       "name": "Search Content",
-      "type": "n8n-nodes-alice-semantic-bridge.asembWorkflow",
+      "type": "n8n-nodes-alice-semantic-bridge.lsembWorkflow",
       "position": [
         650,
         300
@@ -44,7 +44,7 @@
       "credentials": {
         "postgresDb": {
           "id": "1",
-          "name": "PostgreSQL ASEMB"
+          "name": "PostgreSQL LSEMB"
         },
         "openAiApi": {
           "id": "2",

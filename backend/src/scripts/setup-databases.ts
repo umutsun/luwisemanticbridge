@@ -19,15 +19,15 @@ async function setupDatabases() {
     console.log('✅ Connected to PostgreSQL');
 
     // Create ASEMB database
-    const asembDbName = process.env.ASEMB_DB_NAME || 'asemb';
+    const lsembDbName = process.env.ASEMB_DB_NAME || 'lsemb';
     try {
-      await client.query(`CREATE DATABASE ${asembDbName}`);
-      console.log(`✅ Created database: ${asembDbName}`);
+      await client.query(`CREATE DATABASE ${lsembDbName}`);
+      console.log(`✅ Created database: ${lsembDbName}`);
     } catch (error: any) {
       if (error.code === '42P04') {
-        console.log(`ℹ️ Database ${asembDbName} already exists`);
+        console.log(`ℹ️ Database ${lsembDbName} already exists`);
       } else {
-        console.error(`❌ Error creating ${asembDbName}:`, error.message);
+        console.error(`❌ Error creating ${lsembDbName}:`, error.message);
       }
     }
 
@@ -48,27 +48,27 @@ async function setupDatabases() {
     await client.end();
 
     // Now connect to ASEMB database and create tables
-    const asembClient = new Client({
+    const lsembClient = new Client({
       host: process.env.ASEMB_DB_HOST || 'localhost',
       port: parseInt(process.env.ASEMB_DB_PORT || '5432'),
       user: process.env.ASEMB_DB_USER || 'postgres',
       password: process.env.ASEMB_DB_PASSWORD || 'postgres',
-      database: asembDbName
+      database: lsembDbName
     });
 
-    await asembClient.connect();
-    console.log(`✅ Connected to ${asembDbName} database`);
+    await lsembClient.connect();
+    console.log(`✅ Connected to ${lsembDbName} database`);
 
     // Create pgvector extension
     try {
-      await asembClient.query('CREATE EXTENSION IF NOT EXISTS vector');
+      await lsembClient.query('CREATE EXTENSION IF NOT EXISTS vector');
       console.log('✅ Created vector extension');
     } catch (error: any) {
       console.log('ℹ️ Vector extension might already exist:', error.message);
     }
 
     // Create tables for ASEMB system
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE TABLE IF NOT EXISTS scraped_pages (
         id SERIAL PRIMARY KEY,
         url TEXT UNIQUE NOT NULL,
@@ -87,7 +87,7 @@ async function setupDatabases() {
     `);
     console.log('✅ Created scraped_pages table');
 
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE TABLE IF NOT EXISTS embeddings (
         id SERIAL PRIMARY KEY,
         source_type VARCHAR(50) NOT NULL,
@@ -100,7 +100,7 @@ async function setupDatabases() {
     `);
     console.log('✅ Created embeddings table');
 
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         filename TEXT NOT NULL,
@@ -116,7 +116,7 @@ async function setupDatabases() {
     `);
     console.log('✅ Created documents table');
 
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE TABLE IF NOT EXISTS settings (
         id SERIAL PRIMARY KEY,
         key VARCHAR(255) UNIQUE NOT NULL,
@@ -129,7 +129,7 @@ async function setupDatabases() {
     `);
     console.log('✅ Created settings table');
 
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE TABLE IF NOT EXISTS activity_log (
         id SERIAL PRIMARY KEY,
         operation_type VARCHAR(50) NOT NULL,
@@ -144,7 +144,7 @@ async function setupDatabases() {
     `);
     console.log('✅ Created activity_log table');
 
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE TABLE IF NOT EXISTS activity_history (
         id SERIAL PRIMARY KEY,
         operation_type TEXT NOT NULL,
@@ -160,14 +160,14 @@ async function setupDatabases() {
     console.log('✅ Created activity_history table');
 
     // Create indexes
-    await asembClient.query(`
+    await lsembClient.query(`
       CREATE INDEX IF NOT EXISTS idx_activity_operation ON activity_history(operation_type);
       CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_history(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_activity_status ON activity_history(status);
     `);
     console.log('✅ Created indexes');
 
-    await asembClient.end();
+    await lsembClient.end();
 
     // Connect to customer database and create tables
     const customerClient = new Client({
@@ -216,7 +216,7 @@ async function setupDatabases() {
 
     console.log('\n🎉 Database setup completed successfully!');
     console.log('📊 Databases created:');
-    console.log(`   - ${asembDbName} (ASEMB system database)`);
+    console.log(`   - ${lsembDbName} (ASEMB system database)`);
     console.log(`   - ${customerDbName} (Customer database for RAG data)`);
 
   } catch (error: any) {

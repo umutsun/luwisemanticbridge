@@ -3,6 +3,39 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 16px; /* Default base font size */
+    transition: font-size 0.2s ease-in-out;
+  }
+
+  body {
+    font-size: 1rem; /* Will scale with html font size */
+    line-height: 1.6;
+  }
+
+  /* Ensure all text uses relative units */
+  * {
+    font-size: inherit;
+  }
+
+  /* Explicit font sizes for elements */
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.125rem; }
+  h4 { font-size: 1rem; }
+  h5 { font-size: 0.875rem; }
+  h6 { font-size: 0.75rem; }
+  p, span, div { font-size: 1rem; }
+  small { font-size: 0.875rem; }
+  .text-xs { font-size: 0.75rem; }
+  .text-sm { font-size: 0.875rem; }
+  .text-base { font-size: 1rem; }
+  .text-lg { font-size: 1.125rem; }
+  .text-xl { font-size: 1.25rem; }
+  .text-2xl { font-size: 1.5rem; }
+  .text-3xl { font-size: 1.875rem; }
+  .text-4xl { font-size: 2.25rem; }
+
   :root {
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;

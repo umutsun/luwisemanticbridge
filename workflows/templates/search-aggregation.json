@@ -97,9 +97,9 @@
         "searchMode": "semantic",
         "maxResults": "={{ $node['extract_params'].json.limit }}"
       },
-      "id": "asemb_search",
-      "name": "ASEMB Search",
-      "type": "asembSearch",
+      "id": "lsemb_search",
+      "name": "LSEMB Search",
+      "type": "lsembSearch",
       "typeVersion": 1,
       "position": [650, 450],
       "credentials": {
@@ -125,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Aggregate and rank results from multiple sources\nconst vectorResults = $input.item.json.vector || [];\nconst hybridResults = $input.item.json.hybrid || [];\nconst asembResults = $input.item.json.asemb || [];\n\n// Create a map to aggregate scores\nconst resultMap = new Map();\n\n// Process vector search results\nvectorResults.forEach(result => {\n  const key = result.id || result.document_id;\n  if (!resultMap.has(key)) {\n    resultMap.set(key, {\n      ...result,\n      sources: ['vector'],\n      scores: { vector: result.similarity || result.score || 0 },\n      aggregateScore: 0\n    });\n  } else {\n    const existing = resultMap.get(key);\n    existing.sources.push('vector');\n    existing.scores.vector = result.similarity || result.score || 0;\n  }\n});\n\n// Process hybrid search results\nhybridResults.forEach(result => {\n  const key = result.id || result.document_id;\n  if (!resultMap.has(key)) {\n    resultMap.set(key, {\n      ...result,\n      sources: ['hybrid'],\n      scores: { hybrid: result.score || 0 },\n      aggregateScore: 0\n    });\n  } else {\n    const existing = resultMap.get(key);\n    existing.sources.push('hybrid');\n    existing.scores.hybrid = result.score || 0;\n  }\n});\n\n// Process ASEMB search results\nasembResults.forEach(result => {\n  const key = result.id || result.document_id;\n  if (!resultMap.has(key)) {\n    resultMap.set(key, {\n      ...result,\n      sources: ['asemb'],\n      scores: { asemb: result.relevance || result.score || 0 },\n      aggregateScore: 0\n    });\n  } else {\n    const existing = resultMap.get(key);\n    existing.sources.push('asemb');\n    existing.scores.asemb = result.relevance || result.score || 0;\n  }\n});\n\n// Calculate aggregate scores with weighted averaging\nresultMap.forEach(result => {\n  const weights = {\n    vector: 0.4,\n    hybrid: 0.35,\n    asemb: 0.25\n  };\n  \n  let totalScore = 0;\n  let totalWeight = 0;\n  \n  Object.keys(result.scores).forEach(source => {\n    totalScore += result.scores[source] * weights[source];\n    totalWeight += weights[source];\n  });\n  \n  result.aggregateScore = totalWeight > 0 ? totalScore / totalWeight : 0;\n});\n\n// Sort by aggregate score and limit results\nconst aggregatedResults = Array.from(resultMap.values())\n  .sort((a, b) => b.aggregateScore - a.aggregateScore)\n  .slice(0, parseInt($node['extract_params'].json.topK));\n\nreturn aggregatedResults;"
+        "jsCode": "// Aggregate and rank results from multiple sources\nconst vectorResults = $input.item.json.vector || [];\nconst hybridResults = $input.item.json.hybrid || [];\nconst lsembResults = $input.item.json.lsemb || [];\n\n// Create a map to aggregate scores\nconst resultMap = new Map();\n\n// Process vector search results\nvectorResults.forEach(result => {\n  const key = result.id || result.document_id;\n  if (!resultMap.has(key)) {\n    resultMap.set(key, {\n      ...result,\n      sources: ['vector'],\n      scores: { vector: result.similarity || result.score || 0 },\n      aggregateScore: 0\n    });\n  } else {\n    const existing = resultMap.get(key);\n    existing.sources.push('vector');\n    existing.scores.vector = result.similarity || result.score || 0;\n  }\n});\n\n// Process hybrid search results\nhybridResults.forEach(result => {\n  const key = result.id || result.document_id;\n  if (!resultMap.has(key)) {\n    resultMap.set(key, {\n      ...result,\n      sources: ['hybrid'],\n      scores: { hybrid: result.score || 0 },\n      aggregateScore: 0\n    });\n  } else {\n    const existing = resultMap.get(key);\n    existing.sources.push('hybrid');\n    existing.scores.hybrid = result.score || 0;\n  }\n});\n\n// Process LSEMB search results\nlsembResults.forEach(result => {\n  const key = result.id || result.document_id;\n  if (!resultMap.has(key)) {\n    resultMap.set(key, {\n      ...result,\n      sources: ['lsemb'],\n      scores: { lsemb: result.relevance || result.score || 0 },\n      aggregateScore: 0\n    });\n  } else {\n    const existing = resultMap.get(key);\n    existing.sources.push('lsemb');\n    existing.scores.lsemb = result.relevance || result.score || 0;\n  }\n});\n\n// Calculate aggregate scores with weighted averaging\nresultMap.forEach(result => {\n  const weights = {\n    vector: 0.4,\n    hybrid: 0.35,\n    lsemb: 0.25\n  };\n  \n  let totalScore = 0;\n  let totalWeight = 0;\n  \n  Object.keys(result.scores).forEach(source => {\n    totalScore += result.scores[source] * weights[source];\n    totalWeight += weights[source];\n  });\n  \n  result.aggregateScore = totalWeight > 0 ? totalScore / totalWeight : 0;\n});\n\n// Sort by aggregate score and limit results\nconst aggregatedResults = Array.from(resultMap.values())\n  .sort((a, b) => b.aggregateScore - a.aggregateScore)\n  .slice(0, parseInt($node['extract_params'].json.topK));\n\nreturn aggregatedResults;"
       },
       "id": "aggregate_rankings",
       "name": "Aggregate Rankings",
@@ -324,7 +324,7 @@
             "index": 0
           },
           {
-            "node": "ASEMB Search",
+            "node": "LSEMB Search",
             "type": "main",
             "index": 0
           }
@@ -353,7 +353,7 @@
         ]
       ]
     },
-    "ASEMB Search": {
+    "LSEMB Search": {
       "main": [
         [
           {

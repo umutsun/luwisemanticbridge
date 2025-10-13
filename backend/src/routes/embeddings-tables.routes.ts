@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 import { getDatabaseSettings, getCustomerPool } from '../config/database.config';
 
 const router = Router();
@@ -38,7 +38,7 @@ router.get('/all', async (req, res) => {
       ORDER BY table_name
     `);
 
-    const asembClient = await asembPool.connect();
+    const lsembClient = await lsembPool.connect();
 
     try {
 
@@ -65,7 +65,7 @@ router.get('/all', async (req, res) => {
         // Check unified_embeddings table using exact table names from database
         try {
           // Get all unique source_table values and their counts
-          const allSourcesResult = await asembClient.query(`
+          const allSourcesResult = await lsembClient.query(`
             SELECT source_table, COUNT(DISTINCT source_id) as count
             FROM unified_embeddings
             GROUP BY source_table
@@ -178,7 +178,7 @@ router.get('/all', async (req, res) => {
         tables
       });
     } finally {
-      asembClient.release();
+      lsembClient.release();
     }
   } catch (error: any) {
     console.error('Failed to get tables:', error);
@@ -192,7 +192,7 @@ router.get('/all', async (req, res) => {
 // Get embedding sources from ASEMB database
 router.get('/sources', async (req, res) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
 
     try {
       const result = await client.query(`
@@ -226,10 +226,10 @@ router.get('/sources', async (req, res) => {
 // Get token usage statistics
 router.get('/token-stats', async (req, res) => {
   try {
-    const asembClient = await asembPool.connect();
+    const lsembClient = await lsembPool.connect();
 
     try {
-      const tokenResult = await asembClient.query(`
+      const tokenResult = await lsembClient.query(`
         SELECT
           SUM(tokens_used) as total_tokens_used,
           COUNT(*) as total_embedded_records,
@@ -267,7 +267,7 @@ router.get('/token-stats', async (req, res) => {
       });
 
     } finally {
-      asembClient.release();
+      lsembClient.release();
     }
   } catch (error) {
     console.error('Error fetching token stats:', error);

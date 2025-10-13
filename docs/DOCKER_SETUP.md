@@ -31,9 +31,9 @@ This setup runs PostgreSQL and Redis in Docker containers while the API and fron
 ## Database Details
 
 - **PostgreSQL:** `localhost:5433`
-  - User: `asemb_user`
-  - Password: `asemb_password_2025`
-  - Database: `asemb`
+  - User: `lsemb_user`
+  - Password: `lsemb_password_2025`
+  - Database: `lsemb`
   - Extensions: `pgvector`
 
 - **Redis:** `localhost:6380`

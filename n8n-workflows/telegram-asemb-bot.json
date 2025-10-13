@@ -54,8 +54,8 @@
         "threshold": 0.6
       },
       "id": "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
-      "name": "ASEMB Search",
-      "type": "n8n-nodes-asemb.PgvectorQuery",
+      "name": "LSEMB Search",
+      "type": "n8n-nodes-lsemb.PgvectorQuery",
       "typeVersion": 1,
       "position": [
         680,
@@ -69,8 +69,8 @@
         "metadata": "{{ { source: 'telegram', userId: $json.from.id, chatId: $json.chat.id } }}"
       },
       "id": "4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
-      "name": "ASEMB Process",
-      "type": "n8n-nodes-asemb.AliceSemanticBridge",
+      "name": "LSEMB Process",
+      "type": "n8n-nodes-lsemb.AliceSemanticBridge",
       "typeVersion": 1,
       "position": [
         680,
@@ -125,21 +125,21 @@
       "main": [
         [
           {
-            "node": "ASEMB Search",
+            "node": "LSEMB Search",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "ASEMB Process",
+            "node": "LSEMB Process",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "ASEMB Search": {
+    "LSEMB Search": {
       "main": [
         [
           {
@@ -150,7 +150,7 @@
         ]
       ]
     },
-    "ASEMB Process": {
+    "LSEMB Process": {
       "main": [
         [
           {

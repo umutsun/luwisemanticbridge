@@ -1,8 +1,9 @@
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 import { OpenAI } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
+import { loggingService } from './logging.service';
 
 dotenv.config();
 
@@ -107,7 +108,13 @@ export class LLMManager {
    */
   private async loadSettingsFromDatabase(): Promise<void> {
     try {
-      const result = await asembPool.query(`
+      // Check if database is available
+      if (!lsembPool) {
+        console.warn('⚠️ Database not initialized, using default settings');
+        return;
+      }
+
+      const result = await lsembPool.query(`
         SELECT key, value
         FROM settings
         WHERE key IN (
@@ -174,7 +181,7 @@ export class LLMManager {
 
         // Also update the database setting to prevent future issues
         try {
-          await asembPool.query(
+          await lsembPool.query(
             'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
             ['anthropic/claude-3-5-sonnet-20241022', 'llmSettings.activeChatModel']
           );
@@ -977,12 +984,12 @@ export class LLMManager {
         
         // Fix in database immediately
         try {
-          await asembPool.query(
+          await lsembPool.query(
             'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
             [`anthropic/${newModel}`, 'llmSettings.activeChatModel']
           );
           
-          await asembPool.query(
+          await lsembPool.query(
             'UPDATE settings SET value = $1 WHERE key = $2',
             [`anthropic/${newModel}`, 'activeChatModel']
           );

@@ -1,6 +1,6 @@
 import { LLMManager } from './llm-manager.service';
 import { tableConfigService } from '../config/table-config.service';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 
 export interface QuestionGenerationContext {
   title: string;

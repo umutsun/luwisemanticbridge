@@ -1,4 +1,4 @@
-# ASEMB Deployment Guide
+# LSEMB Deployment Guide
 
 ## Deployment Options
 
@@ -16,12 +16,12 @@ Best for: Managed infrastructure, auto-scaling
 ### Quick Start
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/asemb.git
-cd asemb
+git clone https://github.com/yourusername/lsemb.git
+cd lsemb
 
 # Configure environment
-cp .env.asemb.example .env.asemb
-# Edit .env.asemb with production values
+cp .env.lsemb.example .env.lsemb
+# Edit .env.lsemb with production values
 
 # Start all services
 docker-compose up -d
@@ -70,13 +70,13 @@ services:
           memory: 2G
 
   api:
-    image: asemb/api:latest
+    image: lsemb/api:latest
     restart: always
     environment:
       NODE_ENV: production
       LOG_LEVEL: info
     env_file:
-      - .env.asemb
+      - .env.lsemb
     deploy:
       replicas: 3
       resources:
@@ -123,13 +123,13 @@ upstream api_backend {
 
 server {
     listen 80;
-    server_name asemb.yourdomain.com;
+    server_name lsemb.yourdomain.com;
     return 301 https://$server_name$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name asemb.yourdomain.com;
+    server_name lsemb.yourdomain.com;
 
     ssl_certificate /etc/nginx/ssl/cert.pem;
     ssl_certificate_key /etc/nginx/ssl/key.pem;
@@ -165,7 +165,7 @@ kubectl version
 helm version
 
 # Create namespace
-kubectl create namespace asemb
+kubectl create namespace lsemb
 ```
 
 ### Helm Chart
@@ -175,7 +175,7 @@ kubectl create namespace asemb
 replicaCount: 3
 
 image:
-  repository: asemb/api
+  repository: lsemb/api
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -189,20 +189,20 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: asemb.yourdomain.com
+    - host: lsemb.yourdomain.com
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: asemb-tls
+    - secretName: lsemb-tls
       hosts:
-        - asemb.yourdomain.com
+        - lsemb.yourdomain.com
 
 postgresql:
   enabled: true
   auth:
-    database: asemb
-    username: asemb_user
+    database: lsemb
+    username: lsemb_user
   primary:
     persistence:
       enabled: true
@@ -251,11 +251,11 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 
 # Install
-helm install asemb ./helm -n asemb -f values.yaml
+helm install lsemb ./helm -n lsemb -f values.yaml
 
 # Check status
-kubectl get pods -n asemb
-kubectl get svc -n asemb
+kubectl get pods -n lsemb
+kubectl get svc -n lsemb
 ```
 
 ### Kubernetes Manifests
@@ -265,21 +265,21 @@ kubectl get svc -n asemb
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: asemb-api
-  namespace: asemb
+  name: lsemb-api
+  namespace: lsemb
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: asemb-api
+      app: lsemb-api
   template:
     metadata:
       labels:
-        app: asemb-api
+        app: lsemb-api
     spec:
       containers:
       - name: api
-        image: asemb/api:latest
+        image: lsemb/api:latest
         ports:
         - containerPort: 8000
         env:
@@ -288,7 +288,7 @@ spec:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: asemb-secrets
+              name: lsemb-secrets
               key: database-url
         resources:
           limits:
@@ -316,8 +316,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: asemb-api
-  namespace: asemb
+  name: lsemb-api
+  namespace: lsemb
 spec:
   type: LoadBalancer
   ports:
@@ -325,7 +325,7 @@ spec:
     targetPort: 8000
     protocol: TCP
   selector:
-    app: asemb-api
+    app: lsemb-api
 ```
 
 **hpa.yaml:**
@@ -333,13 +333,13 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: asemb-api
-  namespace: asemb
+  name: lsemb-api
+  namespace: lsemb
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: asemb-api
+    name: lsemb-api
   minReplicas: 3
   maxReplicas: 10
   metrics:
@@ -365,7 +365,7 @@ spec:
 ```yaml
 # task-definition.json
 {
-  "family": "asemb-api",
+  "family": "lsemb-api",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "2048",
@@ -373,7 +373,7 @@ spec:
   "containerDefinitions": [
     {
       "name": "api",
-      "image": "asemb/api:latest",
+      "image": "lsemb/api:latest",
       "portMappings": [
         {
           "containerPort": 8000,
@@ -386,7 +386,7 @@ spec:
       "secrets": [
         {
           "name": "DATABASE_URL",
-          "valueFrom": "arn:aws:secretsmanager:region:account:secret:asemb/db"
+          "valueFrom": "arn:aws:secretsmanager:region:account:secret:lsemb/db"
         }
       ],
       "healthCheck": {
@@ -404,17 +404,17 @@ spec:
 ```bash
 # Create RDS instance with pgvector
 aws rds create-db-instance \
-  --db-instance-identifier asemb-postgres \
+  --db-instance-identifier lsemb-postgres \
   --db-instance-class db.r6g.xlarge \
   --engine postgres \
   --engine-version 15.4 \
   --allocated-storage 100 \
   --storage-encrypted \
-  --master-username asemb_admin \
+  --master-username lsemb_admin \
   --master-user-password $DB_PASSWORD
 
 # Enable pgvector extension
-psql -h asemb-postgres.region.rds.amazonaws.com -U asemb_admin -d asemb
+psql -h lsemb-postgres.region.rds.amazonaws.com -U lsemb_admin -d lsemb
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
@@ -423,11 +423,11 @@ CREATE EXTENSION IF NOT EXISTS vector;
 #### Cloud Run
 ```bash
 # Build and push image
-gcloud builds submit --tag gcr.io/PROJECT_ID/asemb-api
+gcloud builds submit --tag gcr.io/PROJECT_ID/lsemb-api
 
 # Deploy to Cloud Run
-gcloud run deploy asemb-api \
-  --image gcr.io/PROJECT_ID/asemb-api \
+gcloud run deploy lsemb-api \
+  --image gcr.io/PROJECT_ID/lsemb-api \
   --platform managed \
   --region us-central1 \
   --memory 4Gi \
@@ -435,13 +435,13 @@ gcloud run deploy asemb-api \
   --min-instances 1 \
   --max-instances 10 \
   --set-env-vars NODE_ENV=production \
-  --set-secrets DATABASE_URL=asemb-db-url:latest
+  --set-secrets DATABASE_URL=lsemb-db-url:latest
 ```
 
 #### Cloud SQL PostgreSQL
 ```bash
 # Create instance with pgvector
-gcloud sql instances create asemb-postgres \
+gcloud sql instances create lsemb-postgres \
   --database-version=POSTGRES_15 \
   --tier=db-n1-standard-4 \
   --region=us-central1 \
@@ -455,9 +455,9 @@ gcloud sql instances create asemb-postgres \
 ```bash
 # Create container group
 az container create \
-  --resource-group asemb-rg \
-  --name asemb-api \
-  --image asemb/api:latest \
+  --resource-group lsemb-rg \
+  --name lsemb-api \
+  --image lsemb/api:latest \
   --cpu 2 \
   --memory 4 \
   --ports 8000 \
@@ -469,8 +469,8 @@ az container create \
 ```bash
 # Create PostgreSQL server with pgvector
 az postgres flexible-server create \
-  --resource-group asemb-rg \
-  --name asemb-postgres \
+  --resource-group lsemb-rg \
+  --name lsemb-postgres \
   --location eastus \
   --sku-name Standard_D4ds_v4 \
   --storage-size 128 \
@@ -478,15 +478,15 @@ az postgres flexible-server create \
 
 # Enable pgvector extension
 az postgres flexible-server parameter set \
-  --resource-group asemb-rg \
-  --server-name asemb-postgres \
+  --resource-group lsemb-rg \
+  --server-name lsemb-postgres \
   --name azure.extensions \
   --value vector
 ```
 
 ## n8n Deployment
 
-### Standalone n8n with ASEMB
+### Standalone n8n with LSEMB
 ```yaml
 # docker-compose.n8n.yml
 version: '3.8'
@@ -501,13 +501,13 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
-      - NODE_FUNCTION_ALLOW_EXTERNAL=n8n-nodes-asemb
+      - NODE_FUNCTION_ALLOW_EXTERNAL=n8n-nodes-lsemb
     volumes:
       - n8n_data:/home/node/.n8n
       - ./custom-nodes:/home/node/.n8n/custom
     command: >
       sh -c "
-        npm install -g n8n-nodes-asemb &&
+        npm install -g n8n-nodes-lsemb &&
         n8n start
       "
 ```
@@ -520,7 +520,7 @@ npm publish
 
 2. Install via n8n UI:
 - Settings → Community Nodes
-- Install: `n8n-nodes-asemb`
+- Install: `n8n-nodes-lsemb`
 - Configure credentials
 
 ## Monitoring & Observability
@@ -532,7 +532,7 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'asemb-api'
+  - job_name: 'lsemb-api'
     static_configs:
       - targets: ['api:9090']
     metrics_path: '/metrics'
@@ -542,13 +542,13 @@ scrape_configs:
 ```json
 {
   "dashboard": {
-    "title": "ASEMB Monitoring",
+    "title": "LSEMB Monitoring",
     "panels": [
       {
         "title": "Request Rate",
         "targets": [
           {
-            "expr": "rate(asemb_requests_total[5m])"
+            "expr": "rate(lsemb_requests_total[5m])"
           }
         ]
       },
@@ -556,7 +556,7 @@ scrape_configs:
         "title": "Response Time",
         "targets": [
           {
-            "expr": "histogram_quantile(0.95, asemb_request_duration_seconds)"
+            "expr": "histogram_quantile(0.95, lsemb_request_duration_seconds)"
           }
         ]
       },
@@ -564,7 +564,7 @@ scrape_configs:
         "title": "Active Workspaces",
         "targets": [
           {
-            "expr": "asemb_active_workspaces"
+            "expr": "lsemb_active_workspaces"
           }
         ]
       }
@@ -583,7 +583,7 @@ filebeat.inputs:
   processors:
     - add_docker_metadata: ~
   fields:
-    service: asemb
+    service: lsemb
 
 output.elasticsearch:
   hosts: ["elasticsearch:9200"]
@@ -597,14 +597,14 @@ output.elasticsearch:
 # backup.sh
 
 # PostgreSQL backup
-pg_dump -h $POSTGRES_HOST -U $POSTGRES_USER -d asemb | gzip > backup_$(date +%Y%m%d).sql.gz
+pg_dump -h $POSTGRES_HOST -U $POSTGRES_USER -d lsemb | gzip > backup_$(date +%Y%m%d).sql.gz
 
 # Redis backup
 redis-cli --rdb /backup/redis_$(date +%Y%m%d).rdb BGSAVE
 
 # Upload to S3
-aws s3 cp backup_$(date +%Y%m%d).sql.gz s3://asemb-backups/postgres/
-aws s3 cp /backup/redis_$(date +%Y%m%d).rdb s3://asemb-backups/redis/
+aws s3 cp backup_$(date +%Y%m%d).sql.gz s3://lsemb-backups/postgres/
+aws s3 cp /backup/redis_$(date +%Y%m%d).rdb s3://lsemb-backups/redis/
 ```
 
 ### Disaster Recovery
@@ -613,11 +613,11 @@ aws s3 cp /backup/redis_$(date +%Y%m%d).rdb s3://asemb-backups/redis/
 # restore.sh
 
 # Download latest backup
-aws s3 cp s3://asemb-backups/postgres/latest.sql.gz .
-aws s3 cp s3://asemb-backups/redis/latest.rdb .
+aws s3 cp s3://lsemb-backups/postgres/latest.sql.gz .
+aws s3 cp s3://lsemb-backups/redis/latest.rdb .
 
 # Restore PostgreSQL
-gunzip -c latest.sql.gz | psql -h $POSTGRES_HOST -U $POSTGRES_USER -d asemb
+gunzip -c latest.sql.gz | psql -h $POSTGRES_HOST -U $POSTGRES_USER -d lsemb
 
 # Restore Redis
 redis-cli --rdb latest.rdb RESTORE
@@ -631,11 +631,11 @@ redis-cli --rdb latest.rdb RESTORE
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: asemb-network-policy
+  name: lsemb-network-policy
 spec:
   podSelector:
     matchLabels:
-      app: asemb-api
+      app: lsemb-api
   ingress:
   - from:
     - podSelector:
@@ -649,14 +649,14 @@ spec:
 ### Secrets Management
 ```bash
 # Using Kubernetes secrets
-kubectl create secret generic asemb-secrets \
+kubectl create secret generic lsemb-secrets \
   --from-literal=database-url=$DATABASE_URL \
   --from-literal=redis-password=$REDIS_PASSWORD \
   --from-literal=api-key=$API_KEY
 
 # Using AWS Secrets Manager
 aws secretsmanager create-secret \
-  --name asemb/production \
+  --name lsemb/production \
   --secret-string file://secrets.json
 ```
 
@@ -674,7 +674,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: admin@asemb.ai
+    email: admin@lsemb.ai
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:
@@ -775,11 +775,11 @@ async def readiness():
 ### Rolling Updates
 ```bash
 # Kubernetes rolling update
-kubectl set image deployment/asemb-api api=asemb/api:v2.0.0 -n asemb
-kubectl rollout status deployment/asemb-api -n asemb
+kubectl set image deployment/lsemb-api api=lsemb/api:v2.0.0 -n lsemb
+kubectl rollout status deployment/lsemb-api -n lsemb
 
 # Rollback if needed
-kubectl rollout undo deployment/asemb-api -n asemb
+kubectl rollout undo deployment/lsemb-api -n lsemb
 ```
 
 ### Database Migrations
@@ -814,12 +814,12 @@ kubectl exec -it <pod-name> -- /bin/bash
 kubectl logs -f <pod-name> --tail=100
 
 # Docker debugging
-docker logs -f asemb-api
-docker exec -it asemb-api bash
+docker logs -f lsemb-api
+docker exec -it lsemb-api bash
 docker stats
 
 # Database debugging
-psql -h localhost -U asemb_user -d asemb -c "SELECT * FROM pg_stat_activity;"
+psql -h localhost -U lsemb_user -d lsemb -c "SELECT * FROM pg_stat_activity;"
 redis-cli INFO memory
 ```
 

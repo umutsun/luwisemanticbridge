@@ -1,4 +1,4 @@
-# ASEMB Architecture Documentation
+# LSEMB Architecture Documentation
 
 **Version:** Phase 3  
 **Author:** Claude - Architecture Lead  
@@ -17,13 +17,13 @@
 
 ## System Overview
 
-ASEMB (Alice Semantic Bridge) is a high-performance n8n community node system designed for semantic search and RAG capabilities at scale.
+LSEMB (Alice Semantic Bridge) is a high-performance n8n community node system designed for semantic search and RAG capabilities at scale.
 
 ```
 ┌────────────────────────────────────────────────────┐
 │                   n8n Workflows                    │
 ├────────────────────────────────────────────────────┤
-│                  ASEMB Node Layer                  │
+│                  LSEMB Node Layer                  │
 │  ┌─────────────────────────────────────────────┐  │
 │  │  WebScrape │ TextChunk │ PgVector │ Redis   │  │
 │  │  Sitemap   │ Hybrid    │ Manage   │ Cache   │  │
@@ -78,7 +78,7 @@ ASEMB (Alice Semantic Bridge) is a high-performance n8n community node system de
 **Context:** Need consistent error handling across all components.
 
 **Decision:** Implement custom `AsembError` class with:
-- Error codes following pattern ASEMB_XXXX
+- Error codes following pattern LSEMB_XXXX
 - Automatic retry detection
 - Context preservation
 - User-friendly messages
@@ -202,7 +202,7 @@ class CacheManager {
 
 ### Error Code Structure
 ```
-ASEMB_XXXX
+LSEMB_XXXX
 │     │
 │     └─── Specific error (001-999)
 └───────── Category (1-9)
@@ -250,9 +250,9 @@ graph TD
 {prefix}:{namespace}:{identifier}
 
 Examples:
-asemb:search:md5(query+params)
-asemb:document:doc_123456
-asemb:source:web_2024:stats
+lsemb:search:md5(query+params)
+lsemb:document:doc_123456
+lsemb:source:web_2024:stats
 ```
 
 ### Cache Invalidation Patterns
@@ -267,7 +267,7 @@ asemb:source:web_2024:stats
 - Invalidate: `*:search:*`
 
 #### Index Rebuild
-- Clear all: `asemb:*`
+- Clear all: `lsemb:*`
 
 ### Cache Warming Strategy
 ```typescript

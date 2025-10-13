@@ -1,7 +1,7 @@
 {
-  "name": "n8n-nodes-asemb",
+  "name": "n8n-nodes-lsemb",
   "version": "0.1.0",
-  "description": "n8n community nodes for Alice Semantic Bridge (ASEMB)",
+  "description": "n8n community nodes for Alice Semantic Bridge (LSEMB)",
   "keywords": ["n8n", "n8n-community-node"],
   "license": "MIT",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
       "dist/nodes/SitemapFetch.node.js",
       "dist/nodes/PgHybridQuery.node.js",
       "dist/nodes/AsembSearch.node.js",
-      "dist/nodes/ASEMBWorkflow.node.js"
+      "dist/nodes/LSEMBWorkflow.node.js"
     ]
   },
   "dependencies": {

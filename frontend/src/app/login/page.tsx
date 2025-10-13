@@ -10,15 +10,28 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Lock, Mail, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
+import { AppTitleMetamorphosis } from '@/components/ui/text-metamorphosis';
 import Link from 'next/link';
 
 export default function LoginPage() {
   const { config } = useConfig();
   const [email, setEmail] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [systemLoaded, setSystemLoaded] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
+    // Simulate system loading
+    const timer = setTimeout(() => {
+      setSystemLoaded(true);
+      // Wait a bit more before showing the actual title
+      setTimeout(() => {
+        setInitialLoading(false);
+      }, 1500);
+    }, 2000);
+
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -42,7 +55,17 @@ export default function LoginPage() {
     const result = await login(email, password);
 
     if (result.success) {
-      router.push('/dashboard');
+      // Check for from parameter in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const from = urlParams.get('from');
+
+      if (from && from.startsWith('/')) {
+        // Redirect to the requested page
+        router.push(from);
+      } else {
+        // Default redirect to chatbot (main page)
+        router.push('/chat');
+      }
     } else {
       setError(result.error || 'Login failed');
     }
@@ -53,32 +76,35 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="w-full max-w-md px-6 my-12">
-        <div className="mb-3">
-          <div className="flex flex-col items-center">
-            {!config?.app?.name ? (
-              // Loading skeleton animation
-              <div className="w-full max-w-sm space-y-2">
-                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-md animate-pulse w-3/4"></div>
+        <div className="mb-8">
+          <div className="flex flex-col items-center text-center">
+            {initialLoading ? (
+              <div className="w-full max-w-sm space-y-3">
+                {/* Text metamorphosis during loading */}
+                <AppTitleMetamorphosis
+                  title="Mali Müşavir Botu"
+                  description="Yapay zeka destekli mali danışmanlık platformu"
+                />
               </div>
             ) : (
-              <>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent mb-1">
-                  {config.app.name}
+              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-5 duration-1000">
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2 tracking-tight">
+                  {config?.app?.name || 'Mali Müşavir Botu'}
                 </h1>
-                <p className="text-muted-foreground text-sm text-left max-w-sm font-medium">
-                  {config.app.description}
+                <p className="text-muted-foreground text-sm max-w-sm font-medium leading-relaxed">
+                  {config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
                 </p>
-              </>
+                <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent mt-3"></div>
+              </div>
             )}
           </div>
         </div>
 
-        <Card className="shadow-lg border-0">
+        <Card className="shadow-lg border-0 backdrop-blur-sm bg-white/90 dark:bg-gray-900/90">
           <CardContent className="pt-6">
             <form onSubmit={handleLogin} className="space-y-4">
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="animate-in fade-in slide-in-from-top-2 duration-300">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
@@ -97,7 +123,7 @@ export default function LoginPage() {
                       setEmail(e.target.value);
                       if (error) setError(null);
                     }}
-                    className="pl-10"
+                    className="pl-10 transition-all duration-200 focus:scale-[1.01]"
                     required
                   />
                 </div>
@@ -116,37 +142,49 @@ export default function LoginPage() {
                       setPassword(e.target.value);
                       if (error) setError(null);
                     }}
-                    className="pl-10 pr-10"
+                    className="pl-10 pr-10 transition-all duration-200 focus:scale-[1.01]"
                     required
                   />
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-gray-400" />
+                      <EyeOff className="h-4 w-4" />
                     ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
+                      <Eye className="h-4 w-4" />
                     )}
                   </button>
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button
+                type="submit"
+                className="w-full transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-[1.02] active:scale-[0.98]"
+                disabled={loading || !email || !password || !systemLoaded}
+              >
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Giriş yapılıyor...
                   </>
+                ) : !systemLoaded ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sistem yükleniyor...
+                  </>
                 ) : (
-                  'Giriş Yap'
+                  <>
+                    <Lock className="h-4 w-4 mr-2" />
+                    Giriş Yap
+                  </>
                 )}
               </Button>
 
-              <div className="text-center text-sm text-muted-foreground">
+              <div className="text-center text-sm text-muted-foreground pt-2">
                 <p>Hesabınız yok mu? {' '}
-                  <Link href="/auth/register" className="text-primary hover:underline">
+                  <Link href="/auth/register" className="text-primary hover:underline transition-colors">
                     Kayıt olun
                   </Link>
                 </p>

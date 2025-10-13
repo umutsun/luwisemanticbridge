@@ -59,7 +59,7 @@ Sonuç: 0{"sid":"jWdwQc4TJSX0PlukAAAA","upgrades":["websocket"],"pingInterval":2
 
 ## Konfigürasyon Detayları
 
-### Backend (.env.asemb)
+### Backend (.env.lsemb)
 ```env
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3008,http://localhost:5678
 ```

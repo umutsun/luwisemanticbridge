@@ -19,7 +19,7 @@
 ### Core Functionality
 - **Chat API:** `/api/v2/chat` operational with semantic search
 - **Database Configuration:** Dynamic settings pulled from database
-- **Environment Configuration:** `.env.asemb` in use
+- **Environment Configuration:** `.env.lsemb` in use
 
 ## Recently Fixed Issues
 
@@ -69,7 +69,7 @@
 - AI Services (Gemini, OpenAI, DeepSeek)
 
 ### Configuration Flow
-1. `.env.asemb` provides port and base database settings
+1. `.env.lsemb` provides port and base database settings
 2. Database `settings` table stores API keys and configurations
 3. Frontend shows loading animation during initialization
 4. Dynamic configuration loads from database
@@ -86,7 +86,7 @@
 2. **Fix Embedding History API**
    - Debug `/api/v2/dashboard/embeddings/history`
    - Check database table structure
-   - Verify `asembPool` connection
+   - Verify `lsembPool` connection
 
 ### Priority 3 - Enhancement
 3. **Port Management**

@@ -1,5 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: '.env.asemb' });
+import path from 'path';
+
+// Load environment file from the root directory
+const envPath = path.resolve(__dirname, '../../.env.lsemb');
+dotenv.config({ path: envPath });
 
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
@@ -12,7 +16,7 @@ import { WebSocketServer as StandardWebSocketServer } from 'ws';
 import Redis from 'ioredis';
 import { SERVER, API } from './config';
 import { initializeRedis } from './config/redis';
-import { initializeConfigs, getAppConfig, asembPool, initializeAsembDatabase, syncAPIKeysToDatabase } from './config/database.config';
+import { initializeConfigs, getAppConfig, lsembPool, initializeLsembDatabase, syncAPIKeysToDatabase } from './config/database.config';
 
 // Chat WebSocket connection manager
 const chatConnections = new Map<string, any>();
@@ -44,9 +48,12 @@ import healthRoutes from './routes/health.routes';
 import adminRoutes from './routes/admin.routes';
 import llmStatusRoutes from './routes/llm-status.routes';
 import logsRoutes, { initializeLogWebSocket } from './routes/logs.routes';
+import systemLogsRoutes, { initializeLogWebSocket as initializeSystemLogs } from './routes/system.logs.routes';
+import frontendLogsRoutes from './routes/frontend.logs.routes';
 import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
 import databaseRoutes from './routes/database.routes';
 import apiTestsRoutes from './routes/api-tests.routes';
+import setupRoutes from './routes/setup.routes';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from './services/auth.service';
 import { SettingsService } from './services/settings.service';
@@ -56,7 +63,7 @@ import { SettingsService } from './services/settings.service';
 const app: Application = express();
 const httpServer = createServer(app);
 
-// Parse CORS origins from environment variable - use CORS_ORIGINS from .env.asemb
+// Parse CORS origins from environment variable - use CORS_ORIGINS from .env.lsemb
 const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`).split(',').map(origin => origin.trim());
 
 // Initialize Socket.io if WebSocket is enabled
@@ -164,6 +171,10 @@ const redis = new Redis({
   password: process.env.REDIS_PASSWORD || undefined
 });
 
+// Initialize Console Log Service
+import { initializeConsoleLogService } from './services/console-log.service';
+let consoleLogService: any = null;
+
 // Disable helmet for CORS issues during development
 app.use(helmet({
   contentSecurityPolicy: false, // For development
@@ -175,7 +186,8 @@ app.use(helmet({
 // CORS middleware - place AFTER helmet
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  console.log(`CORS Debug - Request received: ${req.method} ${req.url}, Origin: ${origin}`);
+  // Skip CORS debug for cleaner logs
+  // console.log(`CORS Debug - Request received: ${req.method} ${req.url}, Origin: ${origin}`);
 
   // Parse CORS origins from environment variable
   const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`).split(',').map(o => o.trim());
@@ -198,7 +210,7 @@ app.use((req, res, next) => {
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('CORS Debug - Handling OPTIONS preflight request');
+    // console.log('CORS Debug - Handling OPTIONS preflight request');
     res.status(200).end();
     return;
   }
@@ -223,7 +235,7 @@ app.use('/uploads', express.static('uploads'));
 app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
     // Check PostgreSQL
-    await asembPool.query('SELECT 1');
+    await lsembPool.query('SELECT 1');
 
     // Check Redis
     await redis.ping();
@@ -279,7 +291,10 @@ app.use('/api/v2/logs', logsRoutes);
 app.use('/api/v2/embeddings-tables', embeddingsTablesRoutes);
 app.use('/api/v2/database', databaseRoutes);
 app.use('/api/v2/api-tests', apiTestsRoutes);
+app.use('/api/v2/setup', setupRoutes);
 // app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
+app.use('/api/v2/system', systemLogsRoutes);
+app.use('/api/v2/frontend', frontendLogsRoutes);
 
 // Base route
 app.get('/api/v2', (req: Request, res: Response) => {
@@ -513,7 +528,7 @@ const PORT = SERVER.PORT;
 
 async function startServer() {
   console.log('\n🚀 ===============================================');
-  console.log(`   ALICE SEMANTIC BRIDGE BACKEND v2.0.0`);
+  console.log(`   LUWI SEMANTIC BRIDGE BACKEND v2.0.0`);
   console.log('==============================================');
   console.log(`📍 Port: ${PORT}`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -537,9 +552,9 @@ async function startServer() {
     try {
       console.log(`🔄 Connecting to PostgreSQL...`);
       console.log(`   Host: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}`);
-      console.log(`   Database: ${process.env.POSTGRES_DB || 'asemb'}`);
+      console.log(`   Database: ${process.env.POSTGRES_DB || 'lsemb'}`);
 
-      await asembPool.query('SELECT 1');
+      await lsembPool.query('SELECT 1');
       console.log('✅ PostgreSQL: Connected');
       break; // Success, exit retry loop
 
@@ -568,11 +583,11 @@ async function startServer() {
   // Only proceed with full initialization if database is connected
   if ((global as any).serverStatus?.database !== 'disconnected') {
     try {
-      // Initialize ASEMB database tables
+      // Initialize LSEMB database tables
       console.log('\n🗃️ [2/4] DATABASE SETUP');
       console.log('------------------------');
       console.log('🔄 Initializing tables...');
-      await initializeAsembDatabase();
+      await initializeLsembDatabase();
       console.log('✅ Tables: Ready');
 
       // Create default admin user if not exists
@@ -615,6 +630,9 @@ async function startServer() {
     console.log('🔄 Connecting to Redis...');
     await initializeRedis();
     console.log('✅ Redis: Connected');
+
+    // Initialize Console Log Service after Redis is connected
+    consoleLogService = initializeConsoleLogService(redis);
 
     // Check Redis database info
     if (redis) {
@@ -758,7 +776,7 @@ async function startServer() {
     // Clean up stale embedding progress records (only if database is connected)
     if ((global as any).serverStatus?.database === 'connected') {
       try {
-        await asembPool.query(`
+        await lsembPool.query(`
           UPDATE embedding_progress
           SET status = 'completed', completed_at = CURRENT_TIMESTAMP
           WHERE status IN ('processing', 'paused')
@@ -770,7 +788,7 @@ async function startServer() {
 
       // Check for existing embedding process on startup (only if database is connected)
       try {
-        const existingProcess = await asembPool.query(`
+        const existingProcess = await lsembPool.query(`
           SELECT * FROM embedding_progress
           WHERE status IN ('processing', 'paused')
           ORDER BY started_at DESC
@@ -783,7 +801,7 @@ async function startServer() {
           // If process was 'processing', mark it as 'paused' for safety
           if (process.status === 'processing') {
             // Found orphaned processing process, marking as paused
-            await asembPool.query(`
+            await lsembPool.query(`
               UPDATE embedding_progress
               SET status = 'paused'
               WHERE id = $1
@@ -867,7 +885,7 @@ const setupChatRoutes = () => {
       res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
       // Get chatbot settings from database
-      const settingsResult = await asembPool.query(`
+      const settingsResult = await lsembPool.query(`
         SELECT value FROM settings WHERE key = 'chatbot'
       `);
 
@@ -961,11 +979,15 @@ process.on('SIGTERM', async () => {
     // HTTP server closed
   });
 
-  await asembPool.end();
+  await lsembPool.end();
   await redis.quit();
 
   process.exit(0);
 });
 
-export { app, io, httpServer, asembPool as pgPool, redis, chatWss, chatConnections };
+export function getSocketIO() {
+  return io;
+}
+
+export { app, io, httpServer, lsembPool as pgPool, redis, chatWss, chatConnections };
 // Trigger restart

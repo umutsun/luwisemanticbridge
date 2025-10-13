@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 const pool = new Pool({
   host: process.env.ASEMB_DB_HOST || process.env.POSTGRES_HOST || 'postgres',
   port: parseInt(process.env.ASEMB_DB_PORT || process.env.POSTGRES_PORT || '5432'),
-  database: process.env.ASEMB_DB_NAME || 'asemb',
+  database: process.env.ASEMB_DB_NAME || 'lsemb',
   user: process.env.ASEMB_DB_USER || process.env.POSTGRES_USER || 'postgres',
   password: process.env.ASEMB_DB_PASSWORD || process.env.POSTGRES_PASSWORD
 });

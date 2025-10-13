@@ -1,20 +1,20 @@
-# Database Connection Fix for ASEMB
+# Database Connection Fix for LSEMB
 
 ## Problem
-ASEMB can't connect to its own database because it can't find the database configuration in `.env.asemb`.
+LSEMB can't connect to its own database because it can't find the database configuration in `.env.lsemb`.
 
 ## Solution Steps
 
 ### 1. Update Environment Configuration
 
-The `.env.asemb` file has been updated with the correct database connection:
+The `.env.lsemb` file has been updated with the correct database connection:
 
 ```env
 # === Database Configuration ===
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=Semsiye!22
-POSTGRES_DB=asemb
-DATABASE_URL=postgresql://postgres:Semsiye!22@localhost:5432/asemb
+POSTGRES_DB=lsemb
+DATABASE_URL=postgresql://postgres:Semsiye!22@localhost:5432/lsemb
 ```
 
 ### 2. Restart the Server
@@ -46,7 +46,7 @@ After restart, check if the database connection works:
 
 ```bash
 # Check API logs
-pm2 logs asemb-api
+pm2 logs lsemb-api
 
 # Test API endpoint
 curl http://localhost:8083/api/v1/health
@@ -67,36 +67,36 @@ For production deployment, use the updated deployment scripts:
 
 ```bash
 # Production deployment
-./deploy-asemb.sh prod
+./deploy-lsemb.sh prod
 
 # Or for Windows
-deploy-asemb.bat prod
+deploy-lsemb.bat prod
 ```
 
 ## Configuration Files Updated
 
 ### 1. `api/server.js`
-- Added dotenv configuration loading from `.env.asemb`
+- Added dotenv configuration loading from `.env.lsemb`
 - Now properly loads environment variables
 
-### 2. `.env.asemb`
+### 2. `.env.lsemb`
 - Updated database credentials to match server configuration
-- Now uses: `postgres:Semsiye!22@localhost:5432/asemb`
+- Now uses: `postgres:Semsiye!22@localhost:5432/lsemb`
 
 ### 3. `docker-compose.prod.yml`
-- Updated to use `.env.asemb.production` for production deployments
+- Updated to use `.env.lsemb.production` for production deployments
 
 ## Troubleshooting
 
 ### If API doesn't start:
-1. Check logs: `pm2 logs asemb-api`
-2. Verify `.env.asemb` file exists in the project root
+1. Check logs: `pm2 logs lsemb-api`
+2. Verify `.env.lsemb` file exists in the project root
 3. Check database is running on port 5432
 
 ### If database connection fails:
 1. Verify PostgreSQL is running: `pg_isready -U postgres -h localhost`
 2. Check database exists: `psql -U postgres -h localhost -l`
-3. Create database if needed: `createdb -U postgres -h localhost asemb`
+3. Create database if needed: `createdb -U postgres -h localhost lsemb`
 
 ### If settings still don't save:
 1. Check browser console for errors
@@ -105,8 +105,8 @@ deploy-asemb.bat prod
 
 ## Service URLs After Fix
 
-- **Frontend:** http://localhost:3002 (local) or https://asemb.luwi.dev (production)
-- **API:** http://localhost:8083 (local) or https://asemb.luwi.dev/api (production)
+- **Frontend:** http://localhost:3002 (local) or https://lsemb.luwi.dev (production)
+- **API:** http://localhost:8083 (local) or https://lsemb.luwi.dev/api (production)
 - **Health Check:** http://localhost:8083/api/v1/health
 
 ## Verification Commands
@@ -116,7 +116,7 @@ deploy-asemb.bat prod
 pm2 status
 
 # Check database connection
-psql -U postgres -h localhost -d asemb -c "SELECT version();"
+psql -U postgres -h localhost -d lsemb -c "SELECT version();"
 
 # Test API
 curl http://localhost:8083/api/v1/health

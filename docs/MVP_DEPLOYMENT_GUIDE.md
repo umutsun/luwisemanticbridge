@@ -15,7 +15,7 @@ npm run build
 ```
 
 ### 2. Configuration Check
-- [ ] `.env.asemb` configured with production values
+- [ ] `.env.lsemb` configured with production values
 - [ ] PostgreSQL with pgvector extension ready
 - [ ] Redis server accessible
 - [ ] n8n instance configured
@@ -47,12 +47,12 @@ docker-compose ps
 ### 1. Database Setup
 ```sql
 -- Create database and enable pgvector
-CREATE DATABASE asemb;
-\c asemb;
+CREATE DATABASE lsemb;
+\c lsemb;
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Run migrations
-psql -U asemb_user -d asemb -f scripts/init-db.sql
+psql -U lsemb_user -d lsemb -f scripts/init-db.sql
 ```
 
 ### 2. Redis Setup
@@ -146,7 +146,7 @@ fetch('http://localhost:3000/api/v1/agents/memory', {
    # Check PostgreSQL status
    pg_isready -h localhost -p 5432
    # Verify credentials
-   psql -U asemb_user -d asemb -c "SELECT 1;"
+   psql -U lsemb_user -d lsemb -c "SELECT 1;"
    ```
 
 2. **Redis Connection Failed**
@@ -154,7 +154,7 @@ fetch('http://localhost:3000/api/v1/agents/memory', {
    # Test Redis
    redis-cli -a your_password ping
    # Check Redis logs
-   docker logs asemb-redis
+   docker logs lsemb-redis
    ```
 
 3. **n8n Node Not Appearing**
@@ -224,7 +224,7 @@ const poolConfig = {
 2. **Backup Configuration**
    ```bash
    # Backup database
-   pg_dump -U asemb_user asemb > backup_$(date +%Y%m%d).sql
+   pg_dump -U lsemb_user lsemb > backup_$(date +%Y%m%d).sql
    
    # Backup Redis
    redis-cli -a your_password BGSAVE

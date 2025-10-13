@@ -1,4 +1,4 @@
-# 🚀 ASEMB Multi-Agent Coordination Guide
+# 🚀 LSEMB Multi-Agent Coordination Guide
 
 ## Quick Start for Completing Phase 3
 
@@ -16,7 +16,7 @@ start dashboard/agent-monitor.html
 #### 🌟 Gemini (Performance)
 ```bash
 # Create indexes
-psql -U asemb_user -d asemb -f .gemini/create-indexes.sql
+psql -U lsemb_user -d lsemb -f .gemini/create-indexes.sql
 
 # Run benchmarks
 npm run benchmark:hybrid-search
@@ -79,9 +79,9 @@ DeepSeek:
 ```bash
 # Check Redis for current status
 redis-cli -n 2
-> KEYS asemb:phase3:*
-> HGETALL asemb:phase3:tasks:gemini:hybrid-indexes
-> GET asemb:phase3:progress
+> KEYS lsemb:phase3:*
+> HGETALL lsemb:phase3:tasks:gemini:hybrid-indexes
+> GET lsemb:phase3:progress
 
 # Check test coverage
 npm test -- --coverage --silent

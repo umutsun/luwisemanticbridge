@@ -1,868 +1,1274 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useToast } from '@/hooks/use-toast';
-import { getApiUrl, buildApiUrl } from '@/lib/config';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Globe,
-  Loader2,
-  Trash2,
-  RefreshCw,
-  Brain,
-  Zap,
-  Filter,
-  X,
-  Copy,
-  ExternalLink,
-  Search
-} from 'lucide-react';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import React, { useState, useEffect, useCallback } from 'react';
+import io, { Socket } from 'socket.io-client';
+import { Search, Plus, Globe, FileText, Layers, Clock, CheckCircle, XCircle, Loader2, RefreshCw, Sparkles, Brain, Target, Zap, Database, Link, Activity, ChevronRight, X, Play, Settings, Download, Eye, EyeOff, Tag, Package, ShoppingCart, Book, Image, Calendar, User, Mail, Phone, Building, MapPin, Hash, MoreVertical, Edit2, Trash2, Copy, ExternalLink, Filter, Grid, List, TrendingUp, Users, BarChart3 } from 'lucide-react';
 
-interface ScrapedPage {
+// Types
+interface WorkflowJob {
   id: string;
-  title: string;
-  url: string;
-  content: string;
-  description: string;
-  keywords: string;
-  content_length: number;
-  chunk_count: number;
-  token_count: number;
-  scraping_mode: string;
-  metadata: any;
-  created_at: string;
-  updated_at: string;
+  type: 'concept_workflow' | 'category_scrape';
+  concept?: string;
+  categoryUrl?: string;
+  projectId: string;
+  status: 'processing' | 'completed' | 'failed';
+  progress: number;
+  currentStep: string;
+  results?: any;
+  error?: string;
+  createdAt: string;
+  completedAt?: string;
 }
 
+interface ScrapeProject {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  siteIds: string[];
+  createdAt: string;
+}
 
-export default function WebScraperPage() {
-  const { t } = useTranslation();
-  const { toast } = useToast();
-  
-  const [url, setUrl] = useState('');
-  const [scrapedPages, setScrapedPages] = useState<ScrapedPage[]>([]);
+interface SiteConfiguration {
+  id: string;
+  name: string;
+  baseUrl: string;
+  category: string;
+  type: 'website' | 'ecommerce' | 'blog' | 'news' | 'api';
+  isActive: boolean;
+  scrapingConfig?: ScrapingConfig;
+  structure?: SiteStructure;
+  entityTypes?: EntityTypeConfig[];
+  addedAt: string;
+}
+
+interface ScrapingConfig {
+  version: string;
+  detectedAt: string;
+  routes: RouteInfo[];
+  searchPatterns: string[];
+  contentPatterns: string[];
+  categoryPatterns: string[];
+  contentSelectors: {
+    title: string;
+    content: string;
+    date: string;
+    author: string;
+    navigation: string;
+    price?: string;
+    availability?: string;
+    images?: string;
+    description?: string;
+  };
+  pagination: {
+    enabled: boolean;
+    nextSelector: string;
+    maxPages: number;
+  };
+  rateLimit: number;
+  headers: Record<string, string>;
+  ecommerce?: {
+    productGrid: string;
+    productCard: string;
+    productName: string;
+    productPrice: string;
+    productImage: string;
+    productLink: string;
+    addToCart: string;
+    inStock: string;
+  };
+}
+
+interface SiteStructure {
+  url: string;
+  title: string;
+  type: 'static' | 'dynamic' | 'hybrid';
+  routes: RouteInfo[];
+  contentSelectors: Record<string, string>;
+  pagination: {
+    hasNext: boolean;
+    nextSelector?: string;
+    pageCount?: number;
+  };
+  ecommerce: boolean;
+  features: EcommerceFeatures;
+}
+
+interface RouteInfo {
+  url: string;
+  type: 'search' | 'category' | 'article' | 'content' | 'product' | 'api';
+  pattern: string;
+}
+
+interface EcommerceFeatures {
+  hasCart: boolean;
+  hasCheckout: boolean;
+  hasUserAccounts: boolean;
+  hasReviews: boolean;
+  hasWishlist: boolean;
+  hasFilters: boolean;
+  currency: string;
+}
+
+interface EntityTypeConfig {
+  type: string;
+  label: string;
+  selector?: string;
+  pattern?: string;
+  enabled: boolean;
+  category: 'product' | 'content' | 'user' | 'location' | 'contact';
+}
+
+interface SearchResults {
+  url: string;
+  title: string;
+  relevanceScore: number;
+  siteName: string;
+  type: 'exact_match' | 'semantic_match';
+  entities?: Record<string, any>[];
+}
+
+interface CategoryScrapingOptions {
+  categoryUrl: string;
+  maxProducts?: number;
+  extractEntities?: boolean;
+  followPagination?: boolean;
+  downloadImages?: boolean;
+}
+
+// Circular Progress Component
+const CircularProgress = ({
+  value,
+  size = 120,
+  strokeWidth = 8,
+  children,
+  className = ''
+}: {
+  value: number;
+  size?: number;
+  strokeWidth?: number;
+  children?: React.ReactNode;
+  className?: string;
+}) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (value / 100) * circumference;
+
+  return (
+    <div className={`relative inline-flex items-center justify-center ${className}`}>
+      <svg
+        width={size}
+        height={size}
+        className="transform -rotate-90"
+      >
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          fill="none"
+          className="text-gray-200 dark:text-gray-700"
+        />
+        {/* Progress circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500 ease-out text-amber-500 dark:text-cyan-400"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// Main Component
+export default function ScraperPage() {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [activeView, setActiveView] = useState<'workflow' | 'sites' | 'search' | 'entities'>('workflow');
+
+  // States
+  const [projects, setProjects] = useState<ScrapeProject[]>([]);
+  const [sites, setSites] = useState<SiteConfiguration[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowJob[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Workflow states
+  const [concept, setConcept] = useState('');
+  const [selectedProject, setSelectedProject] = useState('');
+  const [maxSearchResults, setMaxSearchResults] = useState(20);
+  const [maxContentItems, setMaxContentItems] = useState(30);
+  const [rewritePrompt, setRewritePrompt] = useState('');
+  const [currentWorkflow, setCurrentWorkflow] = useState<WorkflowJob | null>(null);
+
+  // Site management states
+  const [newSite, setNewSite] = useState({ name: '', baseUrl: '', category: '', type: 'website' as const });
+  const [showAddSite, setShowAddSite] = useState(false);
+  const [selectedSite, setSelectedSite] = useState<SiteConfiguration | null>(null);
+  const [showSiteConfig, setShowSiteConfig] = useState(false);
+  const [siteView, setSiteView] = useState<'grid' | 'list'>('grid');
+
+  // Category scraping states
+  const [categoryOptions, setCategoryOptions] = useState<CategoryScrapingOptions>({
+    categoryUrl: '',
+    maxProducts: 100,
+    extractEntities: true,
+    followPagination: true,
+    downloadImages: false
+  });
+
+  // Entity management states
+  const [entityTypes, setEntityTypes] = useState<EntityTypeConfig[]>([
+    { type: 'ISBN', label: 'ISBN Number', pattern: 'ISBN[:\\s]*978[-\\d\\s]{10,17}', enabled: true, category: 'product' },
+    { type: 'PRODUCT_ID', label: 'Product ID', pattern: '\\b(?:SKU|ID)[\\s:]*([A-Z0-9-_]+)', enabled: true, category: 'product' },
+    { type: 'PRICE', label: 'Price', pattern: '\\$\\d+(?:\\.\\d{2})?', enabled: true, category: 'product' },
+    { type: 'EMAIL', label: 'Email', pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}', enabled: true, category: 'contact' },
+    { type: 'PHONE', label: 'Phone', pattern: '\\(?\\d{3}\\)?[ -]?\\d{3}[ -]?\\d{4}', enabled: true, category: 'contact' },
+    { type: 'IMAGE_URL', label: 'Image URL', pattern: 'https?://[^\\s]+\\.(jpg|jpeg|png|gif|webp|svg)', enabled: true, category: 'content' },
+    { type: 'SOURCE_URL', label: 'Source URL', pattern: 'https?://[^\\s]+', enabled: true, category: 'content' },
+  ]);
+
+  // Search states
   const [searchQuery, setSearchQuery] = useState('');
-  const [scrapeOptions, setScrapeOptions] = useState({
-    saveToDb: true,
-    generateEmbeddings: false,
-    mode: 'auto',
-    customSelectors: '',
-    prioritySelectors: '',
-    extractMode: 'best'
-  });
-  const [scraping, setScraping] = useState(false);
-  const [selectedPage, setSelectedPage] = useState<ScrapedPage | null>(null);
-  const [pageDetails, setPageDetails] = useState<any>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-
-  // New states for enhanced functionality
-  const [selectedPages, setSelectedPages] = useState<string[]>([]);
-  const [embedStatusFilter, setEmbedStatusFilter] = useState<'all' | 'embedded' | 'not_embedded' | 'error'>('all');
-  const [scrapeProgress, setScrapeProgress] = useState<{
-    status: 'idle' | 'scraping' | 'success' | 'error';
-    progress: number;
-    chunks: number;
-    size: number;
-    message: string;
-  }>({
-    status: 'idle',
-    progress: 0,
-    chunks: 0,
-    size: 0,
-    message: ''
+  const [searchResults, setSearchResults] = useState<SearchResults[]>([]);
+  const [searchFilters, setSearchFilters] = useState({
+    siteType: 'all',
+    dateRange: 'all',
+    hasEntities: false
   });
 
+  // Initialize Socket.IO
   useEffect(() => {
-    initTables();
-    fetchScrapedPages();
+    const newSocket = io('http://localhost:8083');
+    setSocket(newSocket);
+
+    newSocket.on('concept-workflow-complete', (data: any) => {
+      if (data.jobId === currentWorkflow?.id) {
+        setCurrentWorkflow(prev => prev ? { ...prev, ...data.results, status: 'completed' as const, progress: 100 } : null);
+        fetchWorkflows();
+      }
+    });
+
+    newSocket.on('category-scraping-progress', (data: any) => {
+      if (data.jobId === currentWorkflow?.id) {
+        setCurrentWorkflow(prev => prev ? { ...prev, progress: data.progress, currentStep: data.step } : null);
+      }
+    });
+
+    newSocket.on('category-scraping-complete', (data: any) => {
+      if (data.jobId === currentWorkflow?.id) {
+        setCurrentWorkflow(prev => prev ? { ...prev, ...data.results, status: 'completed' as const, progress: 100 } : null);
+        fetchWorkflows();
+      }
+    });
+
+    newSocket.on('workflow-progress', (data: any) => {
+      if (data.jobId === currentWorkflow?.id) {
+        setCurrentWorkflow(prev => prev ? { ...prev, progress: data.progress, currentStep: data.step } : null);
+      }
+    });
+
+    newSocket.on('concept-workflow-error', (data: any) => {
+      if (data.jobId === currentWorkflow?.id) {
+        setCurrentWorkflow(prev => prev ? { ...prev, status: 'failed' as const, error: data.error } : null);
+      }
+    });
+
+    return () => newSocket.close();
+  }, [currentWorkflow?.id]);
+
+  // Fetch data
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:8083/api/v2/scraper/projects');
+      const data = await res.json();
+      if (data.success) setProjects(data.projects);
+    } catch (error) {
+      console.error('Failed to fetch projects:', error);
+    }
   }, []);
 
-  const initTables = async () => {
+  const fetchSites = useCallback(async (projectId?: string) => {
     try {
-      await fetch(`${getApiUrl('scraper')}/init-table`, { method: 'POST' });
-      await fetch(`${getApiUrl('scraper')}/activity/init-table`, { method: 'POST' });
+      const url = projectId
+        ? `http://localhost:8083/api/v2/scraper/projects/${projectId}/sites`
+        : 'http://localhost:8083/api/v2/scraper/sites';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) setSites(data.sites || data);
     } catch (error) {
-      console.error('Failed to initialize tables:', error);
+      console.error('Failed to fetch sites:', error);
     }
-  };
+  }, []);
 
-  const fetchScrapedPages = async () => {
+  const fetchWorkflows = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:8083/api/v2/scraper/workflows');
+      const data = await res.json();
+      if (data.success) setWorkflows(data.workflows || []);
+    } catch (error) {
+      console.error('Failed to fetch workflows:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+    fetchSites();
+    fetchWorkflows();
+  }, [fetchProjects, fetchSites, fetchWorkflows]);
+
+  // Start concept workflow
+  const startWorkflow = async () => {
+    if (!concept || !selectedProject) return;
+
     setLoading(true);
     try {
-      const response = await fetch(`${getApiUrl('scraper')}/pages`);
-      if (response.ok) {
-        const data = await response.json();
-        setScrapedPages(data.pages || []);
+      const res = await fetch('http://localhost:8083/api/v2/scraper/concept-workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concept,
+          projectId: selectedProject,
+          maxSearchResults,
+          maxContentItems,
+          rewritePrompt: rewritePrompt || undefined
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCurrentWorkflow({
+          id: data.jobId,
+          type: 'concept_workflow',
+          concept,
+          projectId: selectedProject,
+          status: 'processing',
+          progress: 0,
+          currentStep: 'initializing',
+          createdAt: new Date().toISOString()
+        });
       }
     } catch (error) {
-      console.error('Failed to fetch pages:', error);
-      toast({ variant: "destructive", title: t('scraper.toasts.pageLoadFailed') });
+      console.error('Failed to start workflow:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  
-  const fetchPageDetails = async (pageId: string) => {
+  // Start category scraping
+  const startCategoryScraping = async () => {
+    if (!categoryOptions.categoryUrl || !selectedProject) return;
+
+    setLoading(true);
     try {
-      const response = await fetch(`${getApiUrl('scraper')}/pages/${pageId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setPageDetails(data.page);
-        setSelectedPage(data.page);
-      }
-    } catch (error) {
-      console.error('Failed to fetch page details:', error);
-      toast({ variant: "destructive", title: t('scraper.toasts.pageLoadFailed') });
-    }
-  };
-
-  const handlePageClick = async (page: ScrapedPage) => {
-    setSelectedPage(page);
-    setLoadingDetails(true);
-    await fetchPageDetails(page.id);
-    setLoadingDetails(false);
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: t('scraper.toasts.copied') });
-  };
-
-  // New helper functions for enhanced functionality
-  const getEmbeddingStatus = (page: ScrapedPage) => {
-    // This would need to be implemented based on your backend API
-    // For now, using mock logic
-    if (page.token_count > 0) return 'embedded';
-    if (page.content_length > 0) return 'not_embedded';
-    return 'error';
-  };
-
-  
-  const getFilteredPages = () => {
-    return filteredPages.filter(page => {
-      const status = getEmbeddingStatus(page);
-      switch (embedStatusFilter) {
-        case 'embedded':
-          return status === 'embedded';
-        case 'not_embedded':
-          return status === 'not_embedded';
-        case 'error':
-          return status === 'error';
-        default:
-          return true;
-      }
-    });
-  };
-
-  const handleScrape = async () => {
-    if (!url) {
-      toast({ variant: "destructive", title: t('scraper.toasts.enterUrl') });
-      return;
-    }
-    try {
-      new URL(url);
-    } catch {
-      toast({ variant: "destructive", title: t('scraper.toasts.validUrl') });
-      return;
-    }
-    setScraping(true);
-    setScrapeProgress({
-      status: 'scraping',
-      progress: 5,
-      chunks: 0,
-      size: 0,
-      message: 'Initializing scraper...'
-    });
-
-    try {
-      const customSelectorsArray = scrapeOptions.customSelectors.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-      const prioritySelectorsArray = scrapeOptions.prioritySelectors.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-
-      const response = await fetch(getApiUrl('scraper'), {
+      const res = await fetch('http://localhost:8083/api/v2/scraper/category-scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url,
-          ...scrapeOptions,
-          customSelectors: customSelectorsArray,
-          prioritySelectors: prioritySelectorsArray,
-          realTimeProgress: true // Enable real-time progress tracking
+          ...categoryOptions,
+          projectId: selectedProject
         })
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.jobId) {
-        // Real-time progress tracking with SSE
-        const eventSource = new EventSource(`${getApiUrl('scraper')}/job/${data.jobId}/events`);
-
-        eventSource.onmessage = (event) => {
-          const parsedData = JSON.parse(event.data);
-
-          if (parsedData.type === 'status') {
-            const jobData = parsedData.data;
-            setScrapeProgress({
-              status: jobData.status === 'completed' ? 'success' :
-                      jobData.status === 'failed' ? 'error' : 'scraping',
-              progress: jobData.progress || 0,
-              chunks: jobData.chunksCreated || 0,
-              size: jobData.contentLength || 0,
-              message: jobData.message || 'Processing...'
-            });
-
-            // If completed, show success message and cleanup
-            if (jobData.status === 'completed') {
-              toast({ title: t('scraper.toasts.scrapeSuccess', { title: jobData.title || 'Page' }) });
-              fetchScrapedPages();
-              setUrl('');
-              eventSource.close();
-
-              // Reset progress after delay
-              setTimeout(() => {
-                setScrapeProgress({
-                  status: 'idle',
-                  progress: 0,
-                  chunks: 0,
-                  size: 0,
-                  message: ''
-                });
-              }, 3000);
-            } else if (jobData.status === 'failed') {
-              toast({ variant: "destructive", title: 'Scraping failed', description: jobData.message });
-              eventSource.close();
-            }
-          } else if (parsedData.type === 'error') {
-            setScrapeProgress({
-              status: 'error',
-              progress: 0,
-              chunks: 0,
-              size: 0,
-              message: parsedData.message || 'An error occurred'
-            });
-            toast({ variant: "destructive", title: 'Error', description: parsedData.message });
-            eventSource.close();
-          } else if (parsedData.type === 'done') {
-            eventSource.close();
-          }
-        };
-
-        eventSource.onerror = (error) => {
-          console.error('SSE Error:', error);
-          eventSource.close();
-          setScrapeProgress({
-            status: 'error',
-            progress: 0,
-            chunks: 0,
-            size: 0,
-            message: 'Connection error'
-          });
-          toast({ variant: "destructive", title: 'Connection Error', description: 'Could not connect to progress updates' });
-        };
-
-        // Set timeout to close connection if it hangs
-        setTimeout(() => {
-          if (eventSource.readyState !== EventSource.CLOSED) {
-            eventSource.close();
-            if (scrapeProgress.status === 'scraping') {
-              setScrapeProgress({
-                status: 'error',
-                progress: 0,
-                chunks: 0,
-                size: 0,
-                message: 'Timeout error'
-              });
-              toast({ variant: "destructive", title: 'Timeout', description: 'Scraping took too long' });
-            }
-          }
-        }, 120000); // 2 minutes timeout
-
-      } else {
-        // Fallback to basic response if real-time tracking not available
-        if (response.ok) {
-          setScrapeProgress({
-            status: 'success',
-            progress: 100,
-            chunks: data.metrics?.chunksCreated || 0,
-            size: data.metrics?.contentLength || 0,
-            message: 'Scrape completed successfully!'
-          });
-          toast({ title: t('scraper.toasts.scrapeSuccess', { title: data.title }) });
-          fetchScrapedPages();
-          setUrl('');
-
-          // Reset progress after delay
-          setTimeout(() => {
-            setScrapeProgress({
-              status: 'idle',
-              progress: 0,
-              chunks: 0,
-              size: 0,
-              message: ''
-            });
-          }, 3000);
-        } else {
-          setScrapeProgress({
-            status: 'error',
-            progress: 0,
-            chunks: 0,
-            size: 0,
-            message: data.error || 'Scrape failed'
-          });
-          toast({ variant: "destructive", title: data.error || t('scraper.toasts.scrapeFailed') });
-        }
+      const data = await res.json();
+      if (data.success) {
+        setCurrentWorkflow({
+          id: data.jobId,
+          type: 'category_scrape',
+          categoryUrl: categoryOptions.categoryUrl,
+          projectId: selectedProject,
+          status: 'processing',
+          progress: 0,
+          currentStep: 'analyzing category',
+          createdAt: new Date().toISOString()
+        });
       }
-    } catch (error: any) {
-      console.error('Scraping error:', error);
-      setScrapeProgress({
-        status: 'error',
-        progress: 0,
-        chunks: 0,
-        size: 0,
-        message: 'Network error occurred'
-      });
-      toast({ variant: "destructive", title: t('scraper.toasts.networkError') });
+    } catch (error) {
+      console.error('Failed to start category scraping:', error);
     } finally {
-      setScraping(false);
+      setLoading(false);
     }
   };
 
-  
-  const handleDeletePage = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this scraped page?')) return;
+  // Add site to project with auto-analysis
+  const addSite = async () => {
+    if (!newSite.name || !newSite.baseUrl || !selectedProject) return;
 
+    setLoading(true);
     try {
-      const response = await fetch(`${getApiUrl('scraper')}/pages/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        toast({ title: 'Page deleted successfully' });
-        fetchScrapedPages();
-        // Clear selected pages if deleted page was selected
-        setSelectedPages(prev => prev.filter(pageId => pageId !== id));
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        toast({
-          variant: "destructive",
-          title: 'Failed to delete page',
-          description: errorData.error || 'Unknown error'
-        });
-      }
-    } catch (error) {
-      console.error('Delete error:', error);
-      toast({
-        variant: "destructive",
-        title: 'Network error',
-        description: 'Could not connect to server'
-      });
-    }
-  };
-
-  const handleBulkEmbed = async () => {
-    if (selectedPages.length === 0) return;
-
-    try {
-      const response = await fetch(`${getApiUrl('scraper')}/bulk-embed`, {
+      const res = await fetch(`http://localhost:8083/api/v2/scraper/projects/${selectedProject}/sites`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ pageIds: selectedPages })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newSite,
+          autoDetect: true
+        })
       });
 
-      if (response.ok) {
-        toast({
-          title: 'Success',
-          description: `Generating embeddings for ${selectedPages.length} page${selectedPages.length > 1 ? 's' : ''}`
-        });
-        setSelectedPages([]);
-        fetchScrapedPages();
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        toast({
-          variant: "destructive",
-          title: 'Failed to generate embeddings',
-          description: errorData.error || 'Unknown error'
-        });
+      const data = await res.json();
+      if (data.success) {
+        setNewSite({ name: '', baseUrl: '', category: '', type: 'website' });
+        setShowAddSite(false);
+        fetchSites(selectedProject);
       }
     } catch (error) {
-      console.error('Bulk embed error:', error);
-      toast({
-        variant: "destructive",
-        title: 'Network error',
-        description: 'Could not connect to server'
-      });
+      console.error('Failed to add site:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  // Analyze site structure
+  const analyzeSite = async (siteId: string) => {
+    try {
+      const res = await fetch(`http://localhost:8083/api/v2/scraper/sites/${siteId}/analyze`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchSites(selectedProject);
+        setSelectedSite(data.site);
+      }
+    } catch (error) {
+      console.error('Failed to analyze site:', error);
+    }
   };
 
-  const filteredPages = scrapedPages.filter(page => {
-    const matchesSearch = searchQuery === '' ||
-      page.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      page.url?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      page.description?.toLowerCase().includes(searchQuery.toLowerCase());
+  // Update entity types for site
+  const updateEntityTypes = async (siteId: string, entityTypes: EntityTypeConfig[]) => {
+    try {
+      const res = await fetch(`http://localhost:8083/api/v2/scraper/sites/${siteId}/entity-types`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityTypes })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchSites(selectedProject);
+      }
+    } catch (error) {
+      console.error('Failed to update entity types:', error);
+    }
+  };
 
-    const matchesEmbedStatus = embedStatusFilter === 'all' ||
-      (embedStatusFilter === 'embedded' && page.chunk_count > 0) ||
-      (embedStatusFilter === 'not_embedded' && page.chunk_count === 0) ||
-      (embedStatusFilter === 'error' && false); // Hata durumu için backend'den bilgi gerekir
+  // Semantic search
+  const performSearch = async () => {
+    if (!searchQuery || !selectedProject) return;
 
-    return matchesSearch && matchesEmbedStatus;
-  });
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8083/api/v2/scraper/semantic-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: searchQuery,
+          projectIds: [selectedProject],
+          maxResultsPerSite: 5,
+          filters: searchFilters
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setSearchResults(data.results || []);
+      }
+    } catch (error) {
+      console.error('Failed to perform search:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="container mx-auto p-4 md:p-6 space-y-6 max-w-7xl">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t('scraper.title')}</h1>
-          <p className="text-muted-foreground">{t('scraper.description')}</p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6">
+      {/* Header */}
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-light text-gray-900 dark:text-gray-100 mb-2">
+              Intelligent Scraper
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Semantic content discovery and extraction
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.location.reload()}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              <RefreshCw className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Top Section: Scraper Tool and History Tabs */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        {/* Left Column: Scraper Tool */}
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle className="text-lg">{t('scraper.scraperTitle')}</CardTitle>
-            <CardDescription className="text-sm">{t('scraper.scraperDescription')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Input
-                type="url"
-                placeholder={t('scraper.urlPlaceholder')}
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                  className="mb-2"
-                disabled={scraping}
-              />
-              <div className="space-y-3 border-t pt-3">
-                <Label className="text-sm font-medium">Advanced Options</Label>
-                <div className="grid gap-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="mode" className="text-xs">Scraping Mode</Label>
-                      <Select value={scrapeOptions.mode} onValueChange={(value) => setScrapeOptions({...scrapeOptions, mode: value})}>
-                        <SelectTrigger id="mode" className="h-10 w-full py-2"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="auto">
-                            <div className="flex flex-col">
-                              <span>Auto (Recommended)</span>
-                              <span className="text-xs text-muted-foreground font-normal">Smart selection • 4-20s</span>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="static">
-                            <div className="flex flex-col">
-                              <span>Static (Fastest)</span>
-                              <span className="text-xs text-muted-foreground font-normal">Basic HTML • ~4s</span>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="dynamic">
-                            <div className="flex flex-col">
-                              <span>Dynamic (JavaScript)</span>
-                              <span className="text-xs text-muted-foreground font-normal">Modern sites • ~20s</span>
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {scrapeOptions.mode === 'auto' && 'Automatically selects the best method based on website type'}
-                        {scrapeOptions.mode === 'static' && 'Perfect for simple HTML sites, blogs, documentation'}
-                        {scrapeOptions.mode === 'dynamic' && 'Best for modern sites with JavaScript, React, Vue'}
-                      </p>
-                    </div>
-                    <div>
-                      <Label htmlFor="extractMode" className="text-xs">Extract Mode</Label>
-                      <Select value={scrapeOptions.extractMode} onValueChange={(value) => setScrapeOptions({...scrapeOptions, extractMode: value})}>
-                        <SelectTrigger id="extractMode" className="h-10 w-full py-2"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="best">Best</SelectItem>
-                          <SelectItem value="all">All</SelectItem>
-                          <SelectItem value="first">First</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="customSelectors" className="text-xs">Custom CSS Selectors</Label>
-                    <Textarea id="customSelectors" placeholder="h1\n.content\n#main\narticle p" value={scrapeOptions.customSelectors} onChange={(e) => setScrapeOptions({...scrapeOptions, customSelectors: e.target.value})} className="h-20 text-xs font-mono" />
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: "h1"})}>
-                        h1
-                      </Button>
-                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: ".content"})}>
-                        .content
-                      </Button>
-                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: "#main"})}>
-                        #main
-                      </Button>
-                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: "article"})}>
-                        article
-                      </Button>
-                      <Button variant="outline" size="sm" className="text-xs h-6 px-2" onClick={() => setScrapeOptions({...scrapeOptions, customSelectors: ".product-title, .product-price"})}>
-                        Products
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">Enter CSS selectors (one per line) to extract specific content</p>
-                  </div>
-                  <div>
-                    <Label htmlFor="prioritySelectors" className="text-xs">Priority Selectors</Label>
-                    <Textarea id="prioritySelectors" placeholder="article\n.post-body" value={scrapeOptions.prioritySelectors} onChange={(e) => setScrapeOptions({...scrapeOptions, prioritySelectors: e.target.value})} className="h-16 text-xs font-mono" />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex items-center space-x-2">
-                      <Switch id="saveToDb" checked={scrapeOptions.saveToDb} onCheckedChange={(checked) => setScrapeOptions({...scrapeOptions, saveToDb: checked})} />
-                      <Label htmlFor="saveToDb" className="text-xs cursor-pointer">Save to DB</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch id="generateEmbeddings" checked={scrapeOptions.generateEmbeddings} onCheckedChange={(checked) => setScrapeOptions({...scrapeOptions, generateEmbeddings: checked})} />
-                      <Label htmlFor="generateEmbeddings" className="text-xs cursor-pointer">Create Embeddings</Label>
-                    </div>
-                  </div>
-                  <div className="mt-2 p-2 bg-muted/50 rounded-lg">
-                    <div className="flex items-center justify-between text-xs">
-                      <span>Performance Preview:</span>
-                      <div className="flex items-center gap-2">
-                        {scrapeOptions.mode === 'auto' && <Badge variant="outline">🤖 Smart</Badge>}
-                        {scrapeOptions.mode === 'static' && <Badge variant="outline">⚡ Fast</Badge>}
-                        {scrapeOptions.mode === 'dynamic' && <Badge variant="outline">🌐 Full</Badge>}
-                        {scrapeOptions.customSelectors && <Badge variant="outline">🎯 Custom</Badge>}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {scrapeOptions.mode === 'auto' && 'Estimated: 4-20 seconds • Best compatibility'}
-                      {scrapeOptions.mode === 'static' && 'Estimated: ~4 seconds • HTML only'}
-                      {scrapeOptions.mode === 'dynamic' && 'Estimated: ~20 seconds • JavaScript support'}
-                      {scrapeOptions.customSelectors && ' • Custom selectors active'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Animated Progress Bar */}
-              {scrapeProgress.status !== 'idle' && (
-                <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium">
-                      {scrapeProgress.status === 'scraping' && '🔄 Scraping...'}
-                      {scrapeProgress.status === 'success' && '✅ Completed!'}
-                      {scrapeProgress.status === 'error' && '❌ Error occurred'}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{scrapeProgress.progress}%</span>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-500 ${
-                        scrapeProgress.status === 'success' ? 'bg-green-500' :
-                        scrapeProgress.status === 'error' ? 'bg-red-500' :
-                        'bg-blue-500'
-                      }`}
-                      style={{ width: `${scrapeProgress.progress}%` }}
-                    />
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-white dark:bg-gray-800 rounded p-2">
-                      <div className="text-lg font-bold text-blue-600">{scrapeProgress.chunks}</div>
-                      <div className="text-xs text-muted-foreground">Chunks</div>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 rounded p-2">
-                      <div className="text-lg font-bold text-green-600">
-                        {(scrapeProgress.size / 1024).toFixed(1)}KB
-                      </div>
-                      <div className="text-xs text-muted-foreground">Size</div>
-                    </div>
-                    <div className="bg-white dark:bg-gray-800 rounded p-2">
-                      <div className="text-lg font-bold text-purple-600">{scrapeProgress.progress}</div>
-                      <div className="text-xs text-muted-foreground">Progress</div>
-                    </div>
-                  </div>
-
-                  {scrapeProgress.message && (
-                    <p className="text-xs text-center mt-2 text-muted-foreground">
-                      {scrapeProgress.message}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <Button onClick={handleScrape} disabled={scraping || !url} className="w-full mt-4">
-                {scraping ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />{t('scraper.scrapingButton')}</>) : (<><Zap className="mr-2 h-4 w-4" />{t('scraper.scrapeButton')}</>)}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Right Column: Scraped Pages Management */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Web Scrapers</CardTitle>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Ara..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-8 w-[150px] h-8"
-                  />
-                </div>
-                <select
-                  value={embedStatusFilter}
-                  onChange={(e) => setEmbedStatusFilter(e.target.value as any)}
-                  className="px-3 py-1 border rounded-md text-sm h-8"
-                >
-                  <option value="all">Tümü</option>
-                  <option value="embedded">Embedding'li</option>
-                  <option value="not_embedded">Embedding'siz</option>
-                  <option value="error">Hata</option>
-                </select>
-                <Button onClick={fetchScrapedPages} variant="outline" size="icon" className="h-8 w-8">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : filteredPages.length === 0 ? (
-              <div className="text-center py-12">
-                <Globe className="mx-auto h-12 w-12 text-muted-foreground" />
-                <p className="mt-2 text-muted-foreground">No scraped pages found</p>
-              </div>
-            ) : (
-              <ScrollArea className="h-[500px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px] text-center"></TableHead>
-                      <TableHead>Page</TableHead>
-                      <TableHead className="w-[100px] text-right">Size</TableHead>
-                      <TableHead className="w-[50px] text-center"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredPages.map((page) => {
-                      const embedStatus = getEmbeddingStatus(page);
-
-                      return (
-                        <TableRow key={page.id} className={embedStatus === 'embedded' ? 'bg-muted/30' : ''}>
-                          <TableCell className="text-center">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-gray-300 mx-auto"
-                              checked={embedStatus === 'embedded'}
-                              disabled={embedStatus === 'embedded'}
-                              onChange={() => {
-                                if (embedStatus !== 'embedded') {
-                                  if (selectedPages.includes(page.id)) {
-                                    setSelectedPages(prev => prev.filter(id => id !== page.id));
-                                  } else {
-                                    setSelectedPages(prev => [...prev, page.id]);
-                                  }
-                                }
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="max-w-[400px]">
-                              <p
-                                className="font-medium truncate hover:text-primary cursor-pointer transition-colors mb-1"
-                                title={page.title}
-                                onClick={() => handlePageClick(page)}
-                              >
-                                {page.title || 'Untitled'}
-                              </p>
-                              <p className="text-xs text-muted-foreground truncate" title={page.url}>
-                                {page.url}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="text-sm text-muted-foreground">
-                              {(page.content_length / 1024).toFixed(1)}KB
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeletePage(page.id)}
-                              className="h-8 w-8 p-0 mx-auto"
-                              title="Delete Page"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600 transition-colors" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
+      {/* View Switcher */}
+      <div className="max-w-7xl mx-auto mb-8">
+        <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-900 rounded-lg w-fit">
+          <button
+            onClick={() => setActiveView('workflow')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeView === 'workflow'
+                ? 'bg-white dark:bg-gray-800 text-amber-600 dark:text-cyan-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Brain className="w-4 h-4 inline mr-2" />
+            Workflow
+          </button>
+          <button
+            onClick={() => setActiveView('sites')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeView === 'sites'
+                ? 'bg-white dark:bg-gray-800 text-amber-600 dark:text-cyan-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Globe className="w-4 h-4 inline mr-2" />
+            Sites
+          </button>
+          <button
+            onClick={() => setActiveView('search')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeView === 'search'
+                ? 'bg-white dark:bg-gray-800 text-amber-600 dark:text-cyan-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Search className="w-4 h-4 inline mr-2" />
+            Search
+          </button>
+          <button
+            onClick={() => setActiveView('entities')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeView === 'entities'
+                ? 'bg-white dark:bg-gray-800 text-amber-600 dark:text-cyan-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Tag className="w-4 h-4 inline mr-2" />
+            Entities
+          </button>
+        </div>
       </div>
 
-      {/* Bottom Action Bar for Bulk Operations */}
-      {selectedPages.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t p-4 z-40">
-          <div className="container mx-auto max-w-7xl flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              {selectedPages.length} page{selectedPages.length > 1 ? 's' : ''} selected
-            </span>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedPages([])}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleBulkEmbed}
-                disabled={selectedPages.length === 0}
-              >
-                <Brain className="h-4 w-4 mr-2" />
-                Generate Embeddings
-              </Button>
+      {/* Workflow View */}
+      {activeView === 'workflow' && (
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* Concept Analysis */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-sm">
+              <h2 className="text-xl font-light text-gray-900 dark:text-gray-100 mb-6">
+                Concept Analysis
+              </h2>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Concept
+                  </label>
+                  <input
+                    type="text"
+                    value={concept}
+                    onChange={(e) => setConcept(e.target.value)}
+                    placeholder="e.g., Pinokyo, artificial intelligence, climate change"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-amber-500 dark:focus:ring-cyan-400 focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Project
+                  </label>
+                  <select
+                    value={selectedProject}
+                    onChange={(e) => setSelectedProject(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-amber-500 dark:focus:ring-cyan-400 focus:border-transparent transition-all"
+                  >
+                    <option value="">Select a project</option>
+                    {projects.map(project => (
+                      <option key={project.id} value={project.id}>{project.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={startWorkflow}
+                  disabled={!concept || !selectedProject || loading || currentWorkflow?.status === 'processing'}
+                  className="w-full py-3 px-4 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg font-medium hover:bg-amber-600 dark:hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-5 h-5" />
+                  )}
+                  Start Concept Analysis
+                </button>
+              </div>
+            </div>
+
+            {/* Category Scraping */}
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-sm">
+              <h2 className="text-xl font-light text-gray-900 dark:text-gray-100 mb-6">
+                Category Scraping
+              </h2>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Category URL
+                  </label>
+                  <input
+                    type="url"
+                    value={categoryOptions.categoryUrl}
+                    onChange={(e) => setCategoryOptions({ ...categoryOptions, categoryUrl: e.target.value })}
+                    placeholder="https://example.com/category/products"
+                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-amber-500 dark:focus:ring-cyan-400 focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Max Products
+                    </label>
+                    <input
+                      type="number"
+                      value={categoryOptions.maxProducts}
+                      onChange={(e) => setCategoryOptions({ ...categoryOptions, maxProducts: Number(e.target.value) })}
+                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={categoryOptions.extractEntities}
+                        onChange={(e) => setCategoryOptions({ ...categoryOptions, extractEntities: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Extract Entities</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={categoryOptions.followPagination}
+                        onChange={(e) => setCategoryOptions({ ...categoryOptions, followPagination: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Follow Pages</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  onClick={startCategoryScraping}
+                  disabled={!categoryOptions.categoryUrl || !selectedProject || loading || currentWorkflow?.status === 'processing'}
+                  className="w-full py-3 px-4 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg font-medium hover:bg-amber-600 dark:hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Package className="w-5 h-5" />
+                  )}
+                  Start Category Scraping
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Section */}
+          {currentWorkflow && (
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-sm">
+              <h2 className="text-xl font-light text-gray-900 dark:text-gray-100 mb-6">
+                Workflow Progress
+              </h2>
+
+              <div className="flex flex-col items-center justify-center py-8">
+                <CircularProgress value={currentWorkflow.progress} size={200}>
+                  <div className="text-center">
+                    <div className="text-3xl font-light text-gray-900 dark:text-gray-100">
+                      {currentWorkflow.progress}%
+                    </div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      {currentWorkflow.currentStep}
+                    </div>
+                  </div>
+                </CircularProgress>
+
+                <div className="mt-8 w-full max-w-2xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {currentWorkflow.concept || currentWorkflow.categoryUrl}
+                    </span>
+                    {currentWorkflow.status === 'processing' && (
+                      <Loader2 className="w-4 h-4 text-amber-500 dark:text-cyan-400 animate-spin" />
+                    )}
+                    {currentWorkflow.status === 'completed' && (
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    )}
+                    {currentWorkflow.status === 'failed' && (
+                      <XCircle className="w-4 h-4 text-red-500" />
+                    )}
+                  </div>
+
+                  {currentWorkflow.error && (
+                    <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-sm text-red-600 dark:text-red-400">{currentWorkflow.error}</p>
+                    </div>
+                  )}
+
+                  {currentWorkflow.results && (
+                    <div className="mt-6 grid grid-cols-4 gap-3">
+                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-lg font-light text-amber-600 dark:text-cyan-400">
+                          {currentWorkflow.results.searchResults || 0}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Search Results</div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-lg font-light text-amber-600 dark:text-cyan-400">
+                          {currentWorkflow.results.scrapedContent || 0}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Scraped</div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-lg font-light text-amber-600 dark:text-cyan-400">
+                          {currentWorkflow.results.entitiesExtracted || 0}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Entities</div>
+                      </div>
+                      <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="text-lg font-light text-amber-600 dark:text-cyan-400">
+                          {currentWorkflow.results.processedContent?.sources?.length || 0}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">Sources</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Sites View */}
+      {activeView === 'sites' && (
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-light text-gray-900 dark:text-gray-100">
+                Site Management
+              </h2>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                  <button
+                    onClick={() => setSiteView('grid')}
+                    className={`p-2 rounded ${siteView === 'grid' ? 'bg-white dark:bg-gray-700' : ''}`}
+                  >
+                    <Grid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSiteView('list')}
+                    className={`p-2 rounded ${siteView === 'list' ? 'bg-white dark:bg-gray-700' : ''}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowAddSite(true)}
+                  className="px-4 py-2 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 dark:hover:bg-cyan-600 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Site
+                </button>
+              </div>
+            </div>
+
+            {/* Sites Grid/List */}
+            <div className={siteView === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-4"}>
+              {sites.map(site => (
+                <div
+                  key={site.id}
+                  className={`bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-amber-500 dark:hover:border-cyan-400 transition-all ${
+                    siteView === 'list' ? 'p-4' : 'p-6'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${
+                        site.type === 'ecommerce'
+                          ? 'bg-green-100 dark:bg-green-900/30'
+                          : 'bg-amber-100 dark:bg-cyan-900/30'
+                      }`}>
+                        {site.type === 'ecommerce' ? (
+                          <ShoppingCart className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <Globe className="w-5 h-5 text-amber-600 dark:text-cyan-400" />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                          {site.name}
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {site.category} • {site.type}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${site.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      <button
+                        onClick={() => setSelectedSite(site)}
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                      >
+                        <MoreVertical className="w-4 h-4 text-gray-500" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 truncate">
+                    {site.baseUrl}
+                  </p>
+
+                  {site.structure && (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        <Activity className="w-3 h-3" />
+                        <span>Detected: {site.structure.routes.length} routes</span>
+                        {site.structure.ecommerce && (
+                          <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full">
+                            E-commerce
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs ${
+                      site.scrapingConfig ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {site.scrapingConfig ? 'Configured' : 'Not configured'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => analyzeSite(site.id)}
+                        className="text-xs text-amber-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Analyze
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedSite(site);
+                          setShowSiteConfig(true);
+                        }}
+                        className="text-xs text-amber-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+                      >
+                        <Settings className="w-3 h-3" />
+                        Configure
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {selectedPage && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="max-w-5xl w-full h-[85vh] flex flex-col">
-            <Card className="flex-1 flex flex-col overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between bg-background border-b flex-shrink-0">
-                <div className="min-w-0 flex-1">
-                  <CardTitle className="truncate text-lg">{selectedPage.title || 'Untitled'}</CardTitle>
-                  <CardDescription className="truncate flex items-center gap-2 mt-1">
-                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                    <a
-                      href={selectedPage.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {selectedPage.url}
-                    </a>
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(pageDetails?.content || selectedPage.content || '')}
-                    className="h-8"
+      {/* Search View */}
+      {activeView === 'search' && (
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-sm">
+            <h2 className="text-xl font-light text-gray-900 dark:text-gray-100 mb-6">
+              Semantic Search
+            </h2>
+
+            <div className="flex gap-4 mb-6">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search across your sites..."
+                className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-amber-500 dark:focus:ring-cyan-400 focus:border-transparent"
+              />
+              <button
+                onClick={performSearch}
+                disabled={!searchQuery || !selectedProject || loading}
+                className="px-6 py-3 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg font-medium hover:bg-amber-600 dark:hover:bg-cyan-600 disabled:opacity-50 transition-colors flex items-center gap-2"
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                Search
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div className="flex gap-3 mb-8">
+              <select
+                value={searchFilters.siteType}
+                onChange={(e) => setSearchFilters({ ...searchFilters, siteType: e.target.value })}
+                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+              >
+                <option value="all">All Sites</option>
+                <option value="ecommerce">E-commerce</option>
+                <option value="blog">Blogs</option>
+                <option value="news">News</option>
+              </select>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={searchFilters.hasEntities}
+                  onChange={(e) => setSearchFilters({ ...searchFilters, hasEntities: e.target.checked })}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Has Entities</span>
+              </label>
+            </div>
+
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Found {searchResults.length} results
+                </h3>
+                {searchResults.map((result, index) => (
+                  <div
+                    key={index}
+                    className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-amber-500 dark:hover:border-cyan-400 transition-colors"
                   >
-                    <Copy className="h-4 w-4 mr-1" />
-                    Copy
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => {
-                    setSelectedPage(null);
-                    setPageDetails(null);
-                  }}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-
-              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                {/* Content Section */}
-                <div className="flex-1 p-6 min-h-0">
-                  {loadingDetails ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
-                        <p className="text-muted-foreground">Loading scraped content...</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col min-h-0">
-                      <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                        <Label className="text-base font-semibold">Scraped Content</Label>
-                        <Badge variant="outline" className="text-xs">
-                          {pageDetails?.content_length || selectedPage.content_length || 0} characters
-                        </Badge>
-                      </div>
-
-                      {/* ScrollArea with fixed height */}
-                      <div className="flex-1 min-h-0">
-                        <ScrollArea className="h-full border rounded-lg bg-muted/30">
-                          <div className="p-4">
-                            <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
-                              {pageDetails?.content || selectedPage.content || 'No content available'}
-                            </pre>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                          {result.title}
+                        </h4>
+                        <a
+                          href={result.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-amber-600 dark:text-cyan-400 hover:underline flex items-center gap-1 mb-2"
+                        >
+                          <Link className="w-3 h-3" />
+                          {result.url}
+                        </a>
+                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                          <span>{result.siteName}</span>
+                          <span>Relevance: {Math.round(result.relevanceScore * 100)}%</span>
+                          <span className={`px-2 py-1 rounded-full ${
+                            result.type === 'exact_match'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                              : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
+                          }`}>
+                            {result.type}
+                          </span>
+                        </div>
+                        {result.entities && result.entities.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {result.entities.map((entity, idx) => (
+                              <span key={idx} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs">
+                                {entity.type}: {entity.value}
+                              </span>
+                            ))}
                           </div>
-                        </ScrollArea>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-                {/* Metadata Section */}
-                <div className="border-t bg-muted/20 p-4 flex-shrink-0">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground text-xs">Size</span>
-                      <p className="font-medium">
-                        {((pageDetails?.content_length || selectedPage.content_length || 0) / 1024).toFixed(1)} KB
-                      </p>
+      {/* Entities View */}
+      {activeView === 'entities' && (
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 shadow-sm">
+            <h2 className="text-xl font-light text-gray-900 dark:text-gray-100 mb-6">
+              Entity Configuration
+            </h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Entity Types */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                  Available Entity Types
+                </h3>
+                <div className="space-y-3">
+                  {entityTypes.map(entity => (
+                    <div key={entity.type} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={entity.enabled}
+                          onChange={(e) => {
+                            const updated = entityTypes.map(e =>
+                              e.type === entity.type ? { ...e, enabled: e.target.checked } : e
+                            );
+                            setEntityTypes(updated);
+                          }}
+                          className="w-4 h-4 text-amber-500 dark:text-cyan-400"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
+                            {entity.label}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                              {entity.category}
+                            </span>
+                            {entity.pattern && (
+                              <code className="ml-2 text-xs">{entity.pattern}</code>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded">
+                        <Edit2 className="w-4 h-4 text-gray-500" />
+                      </button>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground text-xs">Chunks</span>
-                      <p className="font-medium">{pageDetails?.chunk_count || selectedPage.chunk_count || 0}</p>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Entity */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                  Add Custom Entity
+                </h3>
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    placeholder="Entity Name"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Regex Pattern"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                  />
+                  <select className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <option>Select Category</option>
+                    <option value="product">Product</option>
+                    <option value="content">Content</option>
+                    <option value="contact">Contact</option>
+                    <option value="location">Location</option>
+                  </select>
+                  <button className="w-full py-2 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg font-medium hover:bg-amber-600 dark:hover:bg-cyan-600">
+                    Add Entity Type
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Site Modal */}
+      {showAddSite && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-light text-gray-900 dark:text-gray-100">
+                Add New Site
+              </h3>
+              <button
+                onClick={() => setShowAddSite(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Site Name
+                </label>
+                <input
+                  type="text"
+                  value={newSite.name}
+                  onChange={(e) => setNewSite({ ...newSite, name: e.target.value })}
+                  placeholder="e.g., Kitapyurdu"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Base URL
+                </label>
+                <input
+                  type="url"
+                  value={newSite.baseUrl}
+                  onChange={(e) => setNewSite({ ...newSite, baseUrl: e.target.value })}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Category
+                </label>
+                <input
+                  type="text"
+                  value={newSite.category}
+                  onChange={(e) => setNewSite({ ...newSite, category: e.target.value })}
+                  placeholder="e.g., bookstore, news, blog"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Site Type
+                </label>
+                <select
+                  value={newSite.type}
+                  onChange={(e) => setNewSite({ ...newSite, type: e.target.value as any })}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+                >
+                  <option value="website">Website</option>
+                  <option value="ecommerce">E-commerce</option>
+                  <option value="blog">Blog</option>
+                  <option value="news">News</option>
+                  <option value="api">API</option>
+                </select>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="autoAnalyze"
+                  defaultChecked={true}
+                  className="mr-2"
+                />
+                <label htmlFor="autoAnalyze" className="text-sm text-gray-700 dark:text-gray-300">
+                  Auto-analyze site structure
+                </label>
+              </div>
+              <button
+                onClick={addSite}
+                disabled={!newSite.name || !newSite.baseUrl || !selectedProject}
+                className="w-full py-2 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg font-medium hover:bg-amber-600 dark:hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+              >
+                Add Site
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Site Configuration Modal */}
+      {showSiteConfig && selectedSite && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-light text-gray-900 dark:text-gray-100">
+                Configure: {selectedSite.name}
+              </h3>
+              <button
+                onClick={() => setShowSiteConfig(false)}
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {selectedSite.scrapingConfig && (
+              <div className="space-y-6">
+                {/* Content Selectors */}
+                <div>
+                  <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
+                    Content Selectors
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Title Selector
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={selectedSite.scrapingConfig.contentSelectors.title}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+                      />
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground text-xs">Scraping Mode</span>
-                      <p className="font-medium capitalize">{pageDetails?.scraping_mode || selectedPage.scraping_mode || 'N/A'}</p>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Content Selector
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={selectedSite.scrapingConfig.contentSelectors.content}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+                      />
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-muted-foreground text-xs">Created</span>
-                      <p className="font-medium">{formatDate(pageDetails?.created_at || selectedPage.created_at)}</p>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Price Selector
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={selectedSite.scrapingConfig.ecommerce?.productPrice}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Image Selector
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={selectedSite.scrapingConfig.ecommerce?.productImage}
+                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm"
+                      />
                     </div>
                   </div>
                 </div>
+
+                {/* Detected Patterns */}
+                {selectedSite.scrapingConfig.contentPatterns && (
+                  <div>
+                    <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
+                      Detected URL Patterns
+                    </h4>
+                    <div className="space-y-2">
+                      {selectedSite.scrapingConfig.contentPatterns.map((pattern: string, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <code className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+                            {pattern}
+                          </code>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Save Button */}
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowSiteConfig(false)}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    Cancel
+                  </button>
+                  <button className="px-4 py-2 bg-amber-500 dark:bg-cyan-500 text-white rounded-lg hover:bg-amber-600 dark:hover:bg-cyan-600">
+                    Save Configuration
+                  </button>
+                </div>
               </div>
-            </Card>
+            )}
           </div>
         </div>
       )}

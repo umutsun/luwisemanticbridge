@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ragChat } from '../services/rag-chat.service';
 import { authenticateToken, checkQueryLimits, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { SubscriptionService } from '../services/subscription.service';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 import dbConfig from '../config/database';
 import { chatWss, chatConnections } from '../server';
 
@@ -225,7 +225,7 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
     console.log(`Getting chat stats for user: ${userId}`);
 
     // Use existing database connection pool
-    const pool = asembPool;
+    const pool = lsembPool;
 
     // Get basic chat statistics
     const [
@@ -233,14 +233,14 @@ router.get('/api/v2/chat/stats', authenticateToken, async (req: AuthenticatedReq
       messagesResult,
       recentActivityResult
     ] = await Promise.all([
-      asembPool.query('SELECT COUNT(*) as total_conversations FROM conversations WHERE user_id = $1', [userId]),
-      asembPool.query(`
+      lsembPool.query('SELECT COUNT(*) as total_conversations FROM conversations WHERE user_id = $1', [userId]),
+      lsembPool.query(`
         SELECT COUNT(*) as total_messages
         FROM messages m
         JOIN conversations c ON m.conversation_id = c.id
         WHERE c.user_id = $1
       `, [userId]),
-      asembPool.query(`
+      lsembPool.query(`
         SELECT COUNT(*) as recent_messages
         FROM messages m
         JOIN conversations c ON m.conversation_id = c.id
@@ -293,8 +293,8 @@ router.get('/api/v2/chat/dashboard-stats', authenticateToken, async (req: Authen
 
     console.log('Getting dashboard stats for admin user');
 
-    // Import pool if asembPool is undefined
-    const pool = asembPool;
+    // Import pool if lsembPool is undefined
+    const pool = lsembPool;
 
     // Get global chat statistics
     const [
@@ -401,7 +401,7 @@ router.post('/api/v2/chat/more-sources', authenticateToken, async (req: Authenti
 
     // Get conversation messages from database
     const pool = await import('pg').then(pg => new pg.Pool({
-      connectionString: process.env.ASEMB_DATABASE_URL || 'postgresql://asemb:asemb_password@91.99.229.96:5432/asemb'
+      connectionString: process.env.ASEMB_DATABASE_URL || 'postgresql://lsemb:lsemb_password@91.99.229.96:5432/lsemb'
     }));
 
     const conversationResult = await pool.query(

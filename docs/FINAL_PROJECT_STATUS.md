@@ -401,7 +401,7 @@ git push origin main
 1. Check documentation (120+ pages)
 2. Review error logs: `pm2 logs --err`
 3. Run health check: `pm2-health.bat`
-4. Contact DevOps: devops@asemb.ai
+4. Contact DevOps: devops@lsemb.ai
 
 ---
 

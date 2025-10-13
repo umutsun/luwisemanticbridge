@@ -1,4 +1,4 @@
-# Codex Agent - ASEMB Project Instructions
+# Codex Agent - LSEMB Project Instructions
 
 ## Your Role: API Server & LightRAG Integration
 
@@ -137,8 +137,8 @@ class WorkspaceIsolation:
     def isolate_storage_keys(workspace_id: str) -> dict:
         """Generate isolated storage keys"""
         return {
-            "redis": f"asemb:{workspace_id}",
-            "postgres": f"asemb_{workspace_id}",
+            "redis": f"lsemb:{workspace_id}",
+            "postgres": f"lsemb_{workspace_id}",
             "neo4j": f"Workspace_{workspace_id}"
         }
 ```
@@ -228,7 +228,7 @@ class DocumentModel(BaseModel):
             "example": {
                 "content": "Sample document content",
                 "metadata": {"source": "api", "type": "text"},
-                "workspace_id": "asemb_customer1_prod"
+                "workspace_id": "lsemb_customer1_prod"
             }
         }
 ```
@@ -276,7 +276,7 @@ async def store_document(
     
     # Store in Redis for fast retrieval
     await redis_client.set(
-        f"asemb:{workspace_id}:doc:{document.id}",
+        f"lsemb:{workspace_id}:doc:{document.id}",
         document.json()
     )
     

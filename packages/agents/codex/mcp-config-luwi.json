@@ -11,8 +11,8 @@
         "OPENAI_API_KEY": "${env:OPENAI_API_KEY}",
         "POSTGRES_HOST": "91.99.229.96",
         "POSTGRES_PORT": "5432",
-        "POSTGRES_DB": "asemb",
-        "POSTGRES_USER": "asemb_user",
+        "POSTGRES_DB": "lsemb",
+        "POSTGRES_USER": "lsemb_user",
         "POSTGRES_PASSWORD": "${env:POSTGRES_PASSWORD}",
         "REDIS_HOST": "91.99.229.96",
         "REDIS_PORT": "6379",
@@ -158,7 +158,7 @@
       "command": "npx",
       "args": ["@modelcontextprotocol/server-postgres"],
       "env": {
-        "POSTGRES_CONNECTION_URL": "postgresql://asemb_user:${env:POSTGRES_PASSWORD}@91.99.229.96:5432/asemb?sslmode=require"
+        "POSTGRES_CONNECTION_URL": "postgresql://lsemb_user:${env:POSTGRES_PASSWORD}@91.99.229.96:5432/lsemb?sslmode=require"
       },
       "metadata": {
         "name": "PostgreSQL MCP",

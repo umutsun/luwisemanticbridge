@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asembPool, initializeConfigs } from '../config/database.config';
+import { lsembPool, initializeConfigs } from '../config/database.config';
 import { initializeRedis } from '../config/redis';
 import { SettingsService } from '../services/settings.service';
 
@@ -36,7 +36,7 @@ router.get('/system', async (req: Request, res: Response) => {
           message: serverStatus.redis === 'connected' ? 'Connected' : serverStatus.redisError || 'Checking...',
           responseTime: null
         },
-        asemb_database: {
+        lsemb_database: {
           status: serverStatus.database || 'unknown',
           message: serverStatus.database === 'connected' ? 'Connected' : serverStatus.error || 'Checking...',
           responseTime: null
@@ -60,24 +60,24 @@ router.get('/system', async (req: Request, res: Response) => {
     };
 
     // Check ASEM Database connection
-    const asembStart = Date.now();
+    const lsembStart = Date.now();
     try {
-      const client = await asembPool.connect();
+      const client = await lsembPool.connect();
       const result = await client.query('SELECT 1 as test');
       client.release();
-      healthStatus.services.asemb_database.status = 'connected';
-      healthStatus.services.database = { ...healthStatus.services.asemb_database };
-      healthStatus.services.asemb_database.message = 'Connected';
+      healthStatus.services.lsemb_database.status = 'connected';
+      healthStatus.services.database = { ...healthStatus.services.lsemb_database };
+      healthStatus.services.lsemb_database.message = 'Connected';
       healthStatus.services.database.message = 'Connected';
-      healthStatus.services.asemb_database.responseTime = Date.now() - asembStart;
-      healthStatus.services.database.responseTime = healthStatus.services.asemb_database.responseTime;
+      healthStatus.services.lsemb_database.responseTime = Date.now() - lsembStart;
+      healthStatus.services.database.responseTime = healthStatus.services.lsemb_database.responseTime;
     } catch (error) {
-      healthStatus.services.asemb_database.status = 'disconnected';
-      healthStatus.services.database = { ...healthStatus.services.asemb_database };
-      healthStatus.services.asemb_database.message = error.message;
+      healthStatus.services.lsemb_database.status = 'disconnected';
+      healthStatus.services.database = { ...healthStatus.services.lsemb_database };
+      healthStatus.services.lsemb_database.message = error.message;
       healthStatus.services.database.message = error.message;
-      healthStatus.services.asemb_database.responseTime = Date.now() - asembStart;
-      healthStatus.services.database.responseTime = healthStatus.services.asemb_database.responseTime;
+      healthStatus.services.lsemb_database.responseTime = Date.now() - lsembStart;
+      healthStatus.services.database.responseTime = healthStatus.services.lsemb_database.responseTime;
       healthStatus.status = 'degraded';
     }
 
@@ -136,9 +136,9 @@ router.get('/services', async (req: Request, res: Response) => {
         database: {
           status: 'healthy',
           connectionPool: {
-            total: asembPool.totalCount,
-            idle: asembPool.idleCount,
-            waiting: asembPool.waitingCount
+            total: lsembPool.totalCount,
+            idle: lsembPool.idleCount,
+            waiting: lsembPool.waitingCount
           }
         },
         redis: {
@@ -179,10 +179,10 @@ router.get('/config', async (req: Request, res: Response) => {
   try {
     const configStatus = {
       timestamp: new Date().toISOString(),
-      asemb_database: {
-        host: process.env.POSTGRES_HOST || 'asemb.luwi.dev',
+      lsemb_database: {
+        host: process.env.POSTGRES_HOST || 'lsemb.luwi.dev',
         port: process.env.POSTGRES_PORT || '5432',
-        database: process.env.POSTGRES_DB || 'asemb',
+        database: process.env.POSTGRES_DB || 'lsemb',
         connected: false
       },
       source_database: {
@@ -206,12 +206,12 @@ router.get('/config', async (req: Request, res: Response) => {
 
     // Test connections
     try {
-      const client = await asembPool.connect();
+      const client = await lsembPool.connect();
       await client.query('SELECT 1');
       client.release();
-      configStatus.asemb_database.connected = true;
+      configStatus.lsemb_database.connected = true;
     } catch (error) {
-      configStatus.asemb_database.connected = false;
+      configStatus.lsemb_database.connected = false;
     }
 
     try {

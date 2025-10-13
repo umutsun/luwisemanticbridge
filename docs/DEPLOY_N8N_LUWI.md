@@ -1,4 +1,4 @@
-# 🚀 ASEMB n8n.luwi.dev Deployment Guide
+# 🚀 LSEMB n8n.luwi.dev Deployment Guide
 
 ## 📋 Deployment Öncesi Checklist
 
@@ -63,27 +63,27 @@ docker restart n8n-container
 npm run build
 
 # Deployment package oluştur
-mkdir asemb-deploy
-cp -r dist asemb-deploy/
-cp package.json asemb-deploy/
-cp -r credentials asemb-deploy/  # Eğer varsa
+mkdir lsemb-deploy
+cp -r dist lsemb-deploy/
+cp package.json lsemb-deploy/
+cp -r credentials lsemb-deploy/  # Eğer varsa
 
 # Zip'le
-tar -czf asemb-node.tar.gz asemb-deploy/
+tar -czf lsemb-node.tar.gz lsemb-deploy/
 ```
 
 #### B. Sunucuya Upload Et
 ```bash
 # SCP ile upload
-scp asemb-node.tar.gz user@n8n.luwi.dev:/tmp/
+scp lsemb-node.tar.gz user@n8n.luwi.dev:/tmp/
 
 # SSH ile bağlan
 ssh user@n8n.luwi.dev
 
 # Extract et
 cd /home/node/.n8n/nodes
-tar -xzf /tmp/asemb-node.tar.gz
-cd asemb-deploy
+tar -xzf /tmp/lsemb-node.tar.gz
+cd lsemb-deploy
 npm install --production
 
 # n8n'i restart et
@@ -95,7 +95,7 @@ npm install --production
 ```bash
 # GitHub repo'ya push et
 git add .
-git commit -m "Production ready ASEMB node"
+git commit -m "Production ready LSEMB node"
 git push origin main
 ```
 
@@ -122,8 +122,8 @@ npm run build
 # PostgreSQL
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=asemb
-POSTGRES_USER=asemb_user
+POSTGRES_DB=lsemb
+POSTGRES_USER=lsemb_user
 POSTGRES_PASSWORD=your_password
 
 # Redis
@@ -137,7 +137,7 @@ OPENAI_API_KEY=sk-...
 
 ## 🗄️ Database Setup
 
-### PostgreSQL'de ASEMB Database'i Kur
+### PostgreSQL'de LSEMB Database'i Kur
 ```bash
 # SSH ile sunucuya bağlan
 ssh user@n8n.luwi.dev
@@ -146,12 +146,12 @@ ssh user@n8n.luwi.dev
 sudo -u postgres psql
 
 # Database oluştur
-CREATE DATABASE asemb;
-CREATE USER asemb_user WITH ENCRYPTED PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE asemb TO asemb_user;
+CREATE DATABASE lsemb;
+CREATE USER lsemb_user WITH ENCRYPTED PASSWORD 'your_password';
+GRANT ALL PRIVILEGES ON DATABASE lsemb TO lsemb_user;
 
 # pgvector extension'ı aktifle
-\c asemb
+\c lsemb
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -166,7 +166,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 - Browser'da: https://n8n.luwi.dev
 - Credentials ile giriş yap
 
-### 2. ASEMB Node'larını Kontrol Et
+### 2. LSEMB Node'larını Kontrol Et
 - Sol menüden "Nodes" sekmesine git
 - Arama kutusuna "Alice" yaz
 - Şu node'lar görünmeli:
@@ -190,8 +190,8 @@ Settings > Credentials > Add Credential:
 ```json
 {
   "host": "localhost",
-  "database": "asemb",
-  "user": "asemb_user",
+  "database": "lsemb",
+  "user": "lsemb_user",
   "password": "your_password",
   "port": 5432
 }
@@ -202,7 +202,7 @@ Settings > Credentials > Add Credential:
 ### Import Et ve Test Et:
 ```json
 {
-  "name": "ASEMB Test Workflow",
+  "name": "LSEMB Test Workflow",
   "nodes": [
     {
       "parameters": {
@@ -275,7 +275,7 @@ journalctl -u n8n -f
 
 ### PostgreSQL Performance
 ```sql
--- Check ASEMB tables
+-- Check LSEMB tables
 SELECT 
   schemaname,
   tablename,

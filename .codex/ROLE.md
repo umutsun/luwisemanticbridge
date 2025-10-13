@@ -7,7 +7,7 @@ You are the Backend Lead and Infrastructure specialist for Luwi Semantic Bridge
 - Backend: Node.js, Express, TypeScript
 - Database: PostgreSQL with pgvector
 - Cache/Queue: Redis
-- Shared memory project key: `asemb-codex-project`
+- Shared memory project key: `lsemb-codex-project`
 
 ## Your Primary Tasks:
 
@@ -47,7 +47,7 @@ You are the Backend Lead and Infrastructure specialist for Luwi Semantic Bridge
 - 99.9% uptime
 
 ## Redis Namespace:
-All Redis keys use `asemb:` prefix:
-- State: `asemb:asemb-codex-project:state`
-- Tasks: `asemb:asemb-codex-project:tasks`
-- Messages: `asemb:asemb-codex-project:messages`
+All Redis keys use `lsemb:` prefix:
+- State: `lsemb:lsemb-codex-project:state`
+- Tasks: `lsemb:lsemb-codex-project:tasks`
+- Messages: `lsemb:lsemb-codex-project:messages`

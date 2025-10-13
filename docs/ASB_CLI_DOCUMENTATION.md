@@ -17,7 +17,7 @@ alice-semantic-bridge/          # Main project (main branch)
 ├── frontend/
 └── ...
 
-alice-semantic-bridge-asemb/    # Worktree (asemb branch)
+alice-semantic-bridge-lsemb/    # Worktree (lsemb branch)
 ├── .git (symlink)
 ├── config/asb-config.json      # Worktree-specific ASB config
 ├── scripts/worktree-manager.sh # Worktree management tool
@@ -28,7 +28,7 @@ alice-semantic-bridge-asemb/    # Worktree (asemb branch)
 
 1. **Create Worktree**:
 ```bash
-./scripts/worktree-manager.sh create asemb
+./scripts/worktree-manager.sh create lsemb
 ```
 
 2. **Setup ASB in Worktree**:
@@ -39,10 +39,10 @@ alice-semantic-bridge-asemb/    # Worktree (asemb branch)
 3. **Switch Between Worktrees**:
 ```bash
 # Navigate to worktree
-cd ../alice-semantic-bridge-asemb
+cd ../alice-semantic-bridge-lsemb
 
 # Or use the manager
-./scripts/worktree-manager.sh switch asemb
+./scripts/worktree-manager.sh switch lsemb
 ```
 
 ### Context Sharing Between Worktrees
@@ -57,7 +57,7 @@ await asb.contextPush('feature-progress', {
   timestamp: Date.now()
 });
 
-// In asemb worktree
+// In lsemb worktree
 const progress = await asb.contextGet('feature-progress');
 console.log(progress); // Shared context from main
 ```

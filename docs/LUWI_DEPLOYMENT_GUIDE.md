@@ -67,9 +67,9 @@ tar -xzf /tmp/asb-deploy.tar.gz
 npm install --production
 
 # 6. Setup database
-PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -c "CREATE DATABASE IF NOT EXISTS asemb;"
-PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d asemb -c "CREATE EXTENSION IF NOT EXISTS vector;"
-PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d asemb < scripts/init-db.sql
+PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -c "CREATE DATABASE IF NOT EXISTS lsemb;"
+PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d lsemb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d lsemb < scripts/init-db.sql
 
 # 7. Start services
 # Using PM2 (recommended)
@@ -209,7 +209,7 @@ http://91.99.229.96:3000/api/v1
    mkdir -p $BACKUP_DIR
    
    # Backup database
-   PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U postgres asemb > $BACKUP_DIR/asemb_$DATE.sql
+   PGPASSWORD=$POSTGRES_PASSWORD pg_dump -U postgres lsemb > $BACKUP_DIR/lsemb_$DATE.sql
    
    # Backup Redis
    redis-cli -a $REDIS_PASSWORD BGSAVE
@@ -275,7 +275,7 @@ ps aux | grep node
 tail -100 /opt/alice-semantic-bridge/logs/api-error.log
 
 # Test database connection
-PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U postgres -d asemb -c "SELECT 1;"
+PGPASSWORD=$POSTGRES_PASSWORD psql -h localhost -U postgres -d lsemb -c "SELECT 1;"
 ```
 
 ### n8n Node Not Appearing

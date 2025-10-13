@@ -237,7 +237,7 @@ git clone https://github.com/your-org/alice-semantic-bridge.git
 cd alice-semantic-bridge
 
 # 4. Configure environment
-cp .env.asemb backend/.env
+cp .env.lsemb backend/.env
 cp frontend/.env.local.example frontend/.env.local
 # Edit with your production values
 
@@ -253,12 +253,12 @@ pm2 startup
 pm2 save
 
 # 8. Configure Nginx
-sudo cp nginx.conf /etc/nginx/sites-available/asemb
-sudo ln -s /etc/nginx/sites-available/asemb /etc/nginx/sites-enabled/
+sudo cp nginx.conf /etc/nginx/sites-available/lsemb
+sudo ln -s /etc/nginx/sites-available/lsemb /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
 # 9. Setup SSL (Let's Encrypt)
-sudo certbot --nginx -d asemb.ai -d www.asemb.ai
+sudo certbot --nginx -d lsemb.ai -d www.lsemb.ai
 ```
 
 ---
@@ -388,7 +388,7 @@ pm2 restart all
 **Database connection fails:**
 ```bash
 # Test connection
-psql -h localhost -U postgres -d asemb
+psql -h localhost -U postgres -d lsemb
 
 # Check PostgreSQL status
 systemctl status postgresql
@@ -442,7 +442,7 @@ docker-compose restart
 2. Review error logs: `pm2 logs --err`
 3. Run health check: `pm2-health.bat`
 4. Search issues on GitHub
-5. Contact DevOps team: devops@asemb.ai
+5. Contact DevOps team: devops@lsemb.ai
 
 ---
 

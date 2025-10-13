@@ -457,7 +457,7 @@ curl https://api.deepseek.com/v1/models \
 **Issue 2: "Fallback not working"**
 ```bash
 # Check database priority
-psql -d asemb -c "SELECT * FROM chatbot_settings WHERE setting_key='ai_provider_priority';"
+psql -d lsemb -c "SELECT * FROM chatbot_settings WHERE setting_key='ai_provider_priority';"
 
 # Verify service initialization
 pm2 logs asb-backend | grep "provider"

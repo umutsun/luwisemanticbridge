@@ -1,4 +1,4 @@
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 
 async function updateDatabaseSettings() {
   try {
@@ -7,7 +7,7 @@ async function updateDatabaseSettings() {
     const dbSettings = [
       { key: 'database.host', value: '91.99.229.96' },
       { key: 'database.port', value: '5432' },
-      { key: 'database.name', value: 'asemb' },
+      { key: 'database.name', value: 'lsemb' },
       { key: 'database.user', value: 'postgres' },
       { key: 'database.password', value: 'BilmemneNe123!' },
       { key: 'database.ssl', value: 'false' },
@@ -16,7 +16,7 @@ async function updateDatabaseSettings() {
     ];
 
     for (const setting of dbSettings) {
-      await asembPool.query(`
+      await lsembPool.query(`
         INSERT INTO settings (key, value, description, updated_at)
         VALUES ($1, $2, 'Database configuration', CURRENT_TIMESTAMP)
         ON CONFLICT (key)
@@ -31,7 +31,7 @@ async function updateDatabaseSettings() {
     console.log('🎉 Database settings updated successfully!');
 
     // Verify the settings
-    const result = await asembPool.query(`
+    const result = await lsembPool.query(`
       SELECT key, value
       FROM settings
       WHERE key LIKE 'database.%'
@@ -44,7 +44,7 @@ async function updateDatabaseSettings() {
       console.log(`  ${row.key}: ${value}`);
     });
 
-    await asembPool.end();
+    await lsembPool.end();
   } catch (error) {
     console.error('❌ Error updating database settings:', error);
     process.exit(1);

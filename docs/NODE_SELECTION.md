@@ -1,8 +1,8 @@
-# 🎯 ASEMB n8n Node Selection Strategy
+# 🎯 LSEMB n8n Node Selection Strategy
 
 ## Core Nodes to Deploy (Priority 1)
 
-### 1. **ASEMBWorkflow** (NEW - All-in-one)
+### 1. **LSEMBWorkflow** (NEW - All-in-one)
 - Combines all operations in single node
 - Easy to use for beginners
 - Supports all workflows
@@ -51,8 +51,8 @@
 ```json
 {
   "host": "localhost",
-  "database": "asemb",
-  "user": "asemb_user",
+  "database": "lsemb",
+  "user": "lsemb_user",
   "password": "your_password",
   "port": 5432,
   "ssl": "disable"
@@ -81,31 +81,31 @@
 
 ### 1. Simple Web to Search
 ```
-[Web Scrape Enhanced] → [Text Chunk] → [ASEMB Workflow (webToVector)]
+[Web Scrape Enhanced] → [Text Chunk] → [LSEMB Workflow (webToVector)]
                                           ↓
-                                    [ASEMB Workflow (semanticSearch)]
+                                    [LSEMB Workflow (semanticSearch)]
 ```
 
 ### 2. Document Processing
 ```
-[HTTP Request (PDF)] → [Document Processor] → [ASEMB Workflow (documentToVector)]
+[HTTP Request (PDF)] → [Document Processor] → [LSEMB Workflow (documentToVector)]
 ```
 
 ### 3. Hybrid Search API
 ```
-[Webhook] → [ASEMB Workflow (hybridSearch)] → [HTTP Response]
+[Webhook] → [LSEMB Workflow (hybridSearch)] → [HTTP Response]
 ```
 
 ### 4. Workspace Management
 ```
-[Schedule Trigger] → [ASEMB Workflow (getStats)] → [Email Report]
+[Schedule Trigger] → [LSEMB Workflow (getStats)] → [Email Report]
 ```
 
 ## Deployment Package Structure
 ```
 dist/
 ├── nodes/
-│   ├── ASEMBWorkflow.node.js         ✅
+│   ├── LSEMBWorkflow.node.js         ✅
 │   ├── AliceSemanticBridgeV2.node.js ✅
 │   ├── PgHybridQuery.node.js         ✅
 │   ├── WebScrapeEnhanced.node.js     ✅

@@ -1,11 +1,11 @@
 {
-  "name": "alice-semantic-bridge",
+  "name": "luwi-semantic-bridge",
   "version": "1.0.0",
-  "description": "Alice Semantic Bridge - AI-powered semantic search and knowledge management system",
+  "description": "Luwi Semantic Bridge - AI-powered semantic search and knowledge management system",
   "main": "dist/server.js",
   "scripts": {
     "start": "npx ts-node src/server.ts",
-    "dev": "nodemon -r dotenv/config src/server.ts dotenv_config_path=../.env.asemb",
+    "dev": "nodemon -r dotenv/config src/server.ts dotenv_config_path=../.env.lsemb",
     "test": "npx jest",
     "test:watch": "npx jest --watch",
     "test:coverage": "npx jest --coverage --runInBand",
@@ -32,7 +32,7 @@
     "ai",
     "knowledge-management"
   ],
-  "author": "ASB Team",
+  "author": "Luwi Team",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.61.0",

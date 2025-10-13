@@ -1,11 +1,11 @@
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 
 async function checkSettingsTable() {
   try {
     console.log('Checking settings table in ASEMB database...\n');
 
     // Check if settings table exists
-    const tableCheck = await asembPool.query(`
+    const tableCheck = await lsembPool.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables
         WHERE table_schema = 'public'
@@ -18,7 +18,7 @@ async function checkSettingsTable() {
 
     if (tableExists) {
       // Check table structure
-      const structure = await asembPool.query(`
+      const structure = await lsembPool.query(`
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'settings'
@@ -32,7 +32,7 @@ async function checkSettingsTable() {
       });
 
       // Check current settings
-      const currentSettings = await asembPool.query(`
+      const currentSettings = await lsembPool.query(`
         SELECT setting_key as key, setting_value as value, description, created_at as updated_at
         FROM chatbot_settings
         ORDER BY description, setting_key
@@ -47,7 +47,7 @@ async function checkSettingsTable() {
     // Test inserting a setting
     console.log('\nTesting settings insertion...');
     try {
-      await asembPool.query(`
+      await lsembPool.query(`
         INSERT INTO settings (key, value, category, description)
         VALUES ('test_connection', 'test_value', 'test', 'Test connection')
         ON CONFLICT (key)
@@ -58,13 +58,13 @@ async function checkSettingsTable() {
       console.log('✅ Settings insertion successful');
 
       // Verify the insertion
-      const verify = await asembPool.query(`
+      const verify = await lsembPool.query(`
         SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'test_connection'
       `);
       console.log(`✅ Verification successful: ${verify.rows[0].value}`);
 
       // Clean up test record
-      await asembPool.query(`
+      await lsembPool.query(`
         DELETE FROM chatbot_settings WHERE setting_key = 'test_connection'
       `);
       console.log('✅ Test record cleaned up');
@@ -76,7 +76,7 @@ async function checkSettingsTable() {
   } catch (error) {
     console.error('Error checking settings table:', error);
   } finally {
-    await asembPool.end();
+    await lsembPool.end();
   }
 }
 

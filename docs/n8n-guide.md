@@ -1,10 +1,10 @@
-# ASEMB n8n Node User Guide
+# LSEMB n8n Node User Guide
 
 ## Installation
 
 ### Method 1: npm Link (Development)
 ```bash
-# In ASEMB directory
+# In LSEMB directory
 npm run build
 npm link
 
@@ -29,11 +29,11 @@ docker-compose --profile with-n8n up
 ### 1. Add Credentials
 
 1. Go to Credentials → New
-2. Select "ASEMB API"
+2. Select "LSEMB API"
 3. Enter your configuration:
    - **API URL**: `http://localhost:8000/api/v1`
-   - **API Key**: Your ASEMB API key
-   - **Workspace ID**: Default workspace (e.g., `asemb_default_prod`)
+   - **API Key**: Your LSEMB API key
+   - **Workspace ID**: Default workspace (e.g., `lsemb_default_prod`)
 
 ## Basic Operations
 
@@ -42,7 +42,7 @@ docker-compose --profile with-n8n up
 #### Insert a Document
 ```mermaid
 graph LR
-    A[Trigger] --> B[ASEMB Node]
+    A[Trigger] --> B[LSEMB Node]
     B --> C[Output]
 ```
 
@@ -111,7 +111,7 @@ Perfect for importing multiple documents:
 {
   "operation": "workspace",
   "action": "create",
-  "workspaceId": "asemb_{{ $json.customerId }}_{{ $json.environment }}",
+  "workspaceId": "lsemb_{{ $json.customerId }}_{{ $json.environment }}",
   "config": {
     "llmProvider": "openai",
     "maxDocuments": 10000
@@ -135,7 +135,7 @@ Perfect for importing multiple documents:
 ```mermaid
 graph TD
     A[Google Drive Trigger] --> B[Read File]
-    B --> C[ASEMB: Insert Document]
+    B --> C[LSEMB: Insert Document]
     C --> D[Send Notification]
 ```
 
@@ -151,8 +151,8 @@ graph TD
       }
     },
     {
-      "type": "n8n-nodes-alice-semantic-bridge.asemb",
-      "name": "Store in ASEMB",
+      "type": "n8n-nodes-alice-semantic-bridge.lsemb",
+      "name": "Store in LSEMB",
       "parameters": {
         "operation": "document",
         "action": "insert",
@@ -171,7 +171,7 @@ graph TD
 
 ```mermaid
 graph TD
-    A[Webhook] --> B[ASEMB: Search]
+    A[Webhook] --> B[LSEMB: Search]
     B --> C{Found?}
     C -->|Yes| D[Send Answer]
     C -->|No| E[Create Ticket]
@@ -179,11 +179,11 @@ graph TD
 
 **Implementation:**
 ```javascript
-// ASEMB Search Node
+// LSEMB Search Node
 {
   "operation": "query",
   "action": "search",
-  "workspaceId": "asemb_support_prod",
+  "workspaceId": "lsemb_support_prod",
   "query": "={{ $json.body.question }}",
   "limit": 3
 }
@@ -220,7 +220,7 @@ graph TD
 {
   "operation": "workspace",
   "action": "create",
-  "workspaceId": "asemb_{{ $item.customerId }}_prod",
+  "workspaceId": "lsemb_{{ $item.customerId }}_prod",
   "config": {
     "llmProvider": "{{ $item.llmPreference }}",
     "retention": "{{ $item.retentionDays }}"
@@ -233,13 +233,13 @@ graph TD
 ```mermaid
 graph TD
     A[Chat Message] --> B[Extract Intent]
-    B --> C[ASEMB: Hybrid Search]
+    B --> C[LSEMB: Hybrid Search]
     C --> D[Format Context]
     D --> E[LLM Generate Response]
     E --> F[Send Reply]
 ```
 
-**ASEMB Configuration:**
+**LSEMB Configuration:**
 ```javascript
 {
   "operation": "query",
@@ -258,18 +258,18 @@ graph TD
 
 ### Expression Functions
 
-ASEMB adds custom expression functions:
+LSEMB adds custom expression functions:
 
 ```javascript
 // Generate workspace ID
-{{ $asemb.workspaceId('customer123', 'prod') }}
-// Returns: asemb_customer123_prod
+{{ $lsemb.workspaceId('customer123', 'prod') }}
+// Returns: lsemb_customer123_prod
 
 // Extract metadata
-{{ $asemb.extractMetadata($json.document) }}
+{{ $lsemb.extractMetadata($json.document) }}
 
 // Format for search
-{{ $asemb.prepareQuery($json.userInput) }}
+{{ $lsemb.prepareQuery($json.userInput) }}
 ```
 
 ### Error Handling
@@ -279,8 +279,8 @@ ASEMB adds custom expression functions:
 {
   "nodes": [
     {
-      "type": "n8n-nodes-asemb.asemb",
-      "name": "ASEMB Operation",
+      "type": "n8n-nodes-lsemb.lsemb",
+      "name": "LSEMB Operation",
       "continueOnFail": true
     },
     {
@@ -332,12 +332,12 @@ ASEMB adds custom expression functions:
 
 ### 1. Workspace Organization
 ```
-asemb_{customer}_{environment}_{purpose}
+lsemb_{customer}_{environment}_{purpose}
 
 Examples:
-- asemb_acme_prod_support
-- asemb_acme_dev_testing
-- asemb_internal_prod_kb
+- lsemb_acme_prod_support
+- lsemb_acme_dev_testing
+- lsemb_internal_prod_kb
 ```
 
 ### 2. Metadata Standards
@@ -421,7 +421,7 @@ Enable detailed logging:
 
 ### With OpenAI
 ```javascript
-// Use ASEMB results as context
+// Use LSEMB results as context
 {
   "type": "n8n-nodes-base.openAi",
   "parameters": {
@@ -462,5 +462,5 @@ Enable detailed logging:
 
 - [API Documentation](./api.md)
 - [Example Workflows](../examples/)
-- [Video Tutorials](https://youtube.com/asemb)
-- [Community Forum](https://community.n8n.io/c/nodes/asemb)
+- [Video Tutorials](https://youtube.com/lsemb)
+- [Community Forum](https://community.n8n.io/c/nodes/lsemb)

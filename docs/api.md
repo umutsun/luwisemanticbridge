@@ -1,4 +1,4 @@
-# ASEMB API Reference
+# LSEMB API Reference
 
 ## Base URL
 ```
@@ -8,7 +8,7 @@ http://localhost:8000/api/v1
 ## Authentication
 All API requests require authentication using an API key in the header:
 ```
-X-ASEMB-API-Key: your-api-key
+X-LSEMB-API-Key: your-api-key
 ```
 
 ## Endpoints
@@ -23,7 +23,7 @@ POST /workspaces
 **Request Body:**
 ```json
 {
-  "id": "asemb_customer1_prod",
+  "id": "lsemb_customer1_prod",
   "name": "Customer 1 Production",
   "config": {
     "llm_provider": "openai",
@@ -37,7 +37,7 @@ POST /workspaces
 **Response (201):**
 ```json
 {
-  "id": "asemb_customer1_prod",
+  "id": "lsemb_customer1_prod",
   "name": "Customer 1 Production",
   "created_at": "2024-01-01T00:00:00Z",
   "status": "active",
@@ -63,7 +63,7 @@ GET /workspaces
 {
   "workspaces": [
     {
-      "id": "asemb_customer1_prod",
+      "id": "lsemb_customer1_prod",
       "name": "Customer 1 Production",
       "created_at": "2024-01-01T00:00:00Z",
       "status": "active"
@@ -83,7 +83,7 @@ GET /workspaces/{workspace_id}
 **Response (200):**
 ```json
 {
-  "id": "asemb_customer1_prod",
+  "id": "lsemb_customer1_prod",
   "name": "Customer 1 Production",
   "created_at": "2024-01-01T00:00:00Z",
   "updated_at": "2024-01-02T00:00:00Z",
@@ -134,7 +134,7 @@ POST /workspaces/{workspace_id}/documents
 ```json
 {
   "id": "doc_abc123",
-  "workspace_id": "asemb_customer1_prod",
+  "workspace_id": "lsemb_customer1_prod",
   "content": "Document content here",
   "metadata": {
     "title": "Document Title",
@@ -315,7 +315,7 @@ GET /workspaces/{workspace_id}/analytics
 **Response (200):**
 ```json
 {
-  "workspace_id": "asemb_customer1_prod",
+  "workspace_id": "lsemb_customer1_prod",
   "period": {
     "start": "2024-01-01T00:00:00Z",
     "end": "2024-01-31T23:59:59Z"
@@ -391,7 +391,7 @@ All errors follow this format:
   "error_code": "WORKSPACE_NOT_FOUND",
   "message": "The specified workspace does not exist",
   "details": {
-    "workspace_id": "asemb_invalid",
+    "workspace_id": "lsemb_invalid",
     "suggestion": "Check workspace ID or create a new workspace"
   },
   "timestamp": "2024-01-01T00:00:00Z"
@@ -443,23 +443,23 @@ Configure webhooks for async operations:
 
 ### Python
 ```python
-from asemb import AsembClient
+from lsemb import AsembClient
 
 client = AsembClient(api_key="your-key")
-workspace = client.workspaces.create(id="asemb_test")
+workspace = client.workspaces.create(id="lsemb_test")
 doc = workspace.documents.insert(content="Hello")
 results = workspace.search(query="Hello")
 ```
 
 ### JavaScript/TypeScript
 ```typescript
-import { AsembClient } from '@asemb/client';
+import { AsembClient } from '@lsemb/client';
 
 const client = new AsembClient({ apiKey: 'your-key' });
-const workspace = await client.workspaces.create({ id: 'asemb_test' });
+const workspace = await client.workspaces.create({ id: 'lsemb_test' });
 const doc = await workspace.documents.insert({ content: 'Hello' });
 const results = await workspace.search({ query: 'Hello' });
 ```
 
 ## Postman Collection
-Download: [ASEMB.postman_collection.json](../examples/ASEMB.postman_collection.json)
+Download: [LSEMB.postman_collection.json](../examples/LSEMB.postman_collection.json)

@@ -1,4 +1,4 @@
-# 🚀 Luwi Semantic Bridge (ASEMB)
+# 🚀 Luwi Semantic Bridge (LSEMB)
 ## AI-Powered Context Engine & Knowledge Management System
 
 ---
@@ -289,17 +289,17 @@ Kurumsal ölçekte kullanım için tasarlanmış çok-kiracılı mimari:
 
 ```bash
 # Repository'yi klonlayın
-git clone https://github.com/umutsun/asemb.git
-cd asemb
+git clone https://github.com/umutsun/lsemb.git
+cd lsemb
 
 # Environment dosyasını oluşturun
-cp .env.example .env.asemb
+cp .env.example .env.lsemb
 
 # API anahtarlarınızı ekleyin
-nano .env.asemb
+nano .env.lsemb
 
 # Tüm servisleri başlatın
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb up -d
 ```
 
 #### Erişim Noktaları:
@@ -397,8 +397,8 @@ Luwi Semantic Bridge kuruluşunuzun bilgi kaynaklarını **akıllı bir hafızay
 ### Hemen Başlayın!
 
 ```bash
-git clone https://github.com/umutsun/asemb.git
-cd asemb
+git clone https://github.com/umutsun/lsemb.git
+cd lsemb
 docker-compose up -d
 ```
 

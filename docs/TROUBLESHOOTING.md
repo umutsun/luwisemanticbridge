@@ -1,21 +1,21 @@
-# ASEMB Deployment Troubleshooting
+# LSEMB Deployment Troubleshooting
 
 ## Common Issues and Solutions
 
-### 1. asemb.luwi.dev Not Working
+### 1. lsemb.luwi.dev Not Working
 
-**Problem:** `asemb.luwi.dev` domain doesn't work but `luwi.dev` works
+**Problem:** `lsemb.luwi.dev` domain doesn't work but `luwi.dev` works
 
 **Solution:**
 1. **DNS Configuration:** Ensure DNS records are properly configured
-   - A record: `asemb.luwi.dev` → Your server IP
-   - CNAME: `www.asemb.luwi.dev` → `asemb.luwi.dev`
+   - A record: `lsemb.luwi.dev` → Your server IP
+   - CNAME: `www.lsemb.luwi.dev` → `lsemb.luwi.dev`
 
 2. **Nginx Configuration:** The nginx config has been updated to properly route:
    - API requests (`/api/*`) → Backend (port 8083)
    - Frontend requests (`/*`) → Next.js (port 3000)
 
-3. **SSL Certificate:** Ensure SSL certificate covers `asemb.luwi.dev`
+3. **SSL Certificate:** Ensure SSL certificate covers `lsemb.luwi.dev`
 
 ### 2. Port Conflicts
 
@@ -38,13 +38,13 @@ taskkill /PID <process_id> /F
 **Solution:**
 ```bash
 # Check container status
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb.production ps
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb.production ps
 
 # View logs
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb.production logs <service_name>
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb.production logs <service_name>
 
 # Restart specific service
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb.production restart <service_name>
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb.production restart <service_name>
 ```
 
 ### 4. Database Connection Issues
@@ -53,7 +53,7 @@ docker-compose -f docker-compose.prod.yml --env-file .env.asemb.production resta
 
 **Solution:**
 1. Check database container is running
-2. Verify connection string in `.env.asemb.production`
+2. Verify connection string in `.env.lsemb.production`
 3. Check network connectivity between containers
 
 ### 5. PM2 Issues (Local Development)
@@ -73,26 +73,26 @@ pm2 save
 ### Production Deployment
 ```bash
 # Using the deployment script
-./deploy-asemb.sh prod
+./deploy-lsemb.sh prod
 
 # Or manually
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb.production up --build -d
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb.production up --build -d
 ```
 
 ### Development Deployment
 ```bash
 # Using the deployment script
-./deploy-asemb.sh dev
+./deploy-lsemb.sh dev
 
 # Or manually
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb up --build -d
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb up --build -d
 ```
 
 ## Service URLs
 
-- **Frontend:** https://asemb.luwi.dev
-- **API:** https://asemb.luwi.dev/api
-- **Health Check:** https://asemb.luwi.dev/health
+- **Frontend:** https://lsemb.luwi.dev
+- **API:** https://lsemb.luwi.dev/api
+- **Health Check:** https://lsemb.luwi.dev/health
 - **N8N:** https://n8n.luwi.dev
 
 ## Local Development
@@ -125,9 +125,9 @@ stop-local.bat
 
 Key environment variables that need to be configured:
 
-- `DOMAIN=asemb.luwi.dev`
-- `NEXT_PUBLIC_API_URL=https://asemb.luwi.dev/api`
-- `NEXT_PUBLIC_APP_URL=https://asemb.luwi.dev`
+- `DOMAIN=lsemb.luwi.dev`
+- `NEXT_PUBLIC_API_URL=https://lsemb.luwi.dev/api`
+- `NEXT_PUBLIC_APP_URL=https://lsemb.luwi.dev`
 - `DATABASE_URL` (PostgreSQL connection)
 - `REDIS_*` (Redis configuration)
 - `OPENAI_API_KEY` (AI provider)

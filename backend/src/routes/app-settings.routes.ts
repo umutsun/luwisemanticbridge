@@ -149,7 +149,7 @@ router.get('/all', async (req, res) => {
         chatbot: chatbotSettings,
         dashboard: dashboardSettings,
         databases: {
-          asemb: settings.asemb_database,
+          lsemb: settings.lsemb_database,
           source: settings.source_database || settings.customer_database
         },
         redis: settings.redis_config

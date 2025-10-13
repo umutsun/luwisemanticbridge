@@ -94,8 +94,8 @@ pm2 logs
 ## Server Commands
 
 ```bash
-# On production server (asemb.luwi.dev)
-ssh root@asemb.luwi.dev
+# On production server (lsemb.luwi.dev)
+ssh root@lsemb.luwi.dev
 cd /path/to/alice-semantic-bridge
 git pull origin main
 pm2 restart ecosystem.config.js

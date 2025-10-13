@@ -8,7 +8,7 @@
   "database": {
     "host": "postgres",
     "port": 5432,
-    "name": "asemb",
+    "name": "lsemb",
     "user": "postgres",
     "password": "Semsiye!22",
     "ssl": false,

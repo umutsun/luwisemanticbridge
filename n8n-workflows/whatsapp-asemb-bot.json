@@ -20,8 +20,8 @@
         "metadata": "{{ { source: 'whatsapp', userId: $json.body.from } }}"
       },
       "id": "2e4d9f6a-7c8b-4e5d-9f1a-2b3c4d5e6f7a8",
-      "name": "ASEMB Process",
-      "type": "n8n-nodes-asemb.AliceSemanticBridge",
+      "name": "LSEMB Process",
+      "type": "n8n-nodes-lsemb.AliceSemanticBridge",
       "typeVersion": 1,
       "position": [
         460,
@@ -36,8 +36,8 @@
         "threshold": 0.7
       },
       "id": "3b5e0a7f-8d9c-4e6f-a1b2-3c4d5e6f7a8b9",
-      "name": "ASEMB Search",
-      "type": "n8n-nodes-asemb.PgvectorQuery",
+      "name": "LSEMB Search",
+      "type": "n8n-nodes-lsemb.PgvectorQuery",
       "typeVersion": 1,
       "position": [
         680,
@@ -68,25 +68,25 @@
       "main": [
         [
           {
-            "node": "ASEMB Process",
+            "node": "LSEMB Process",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "ASEMB Process": {
+    "LSEMB Process": {
       "main": [
         [
           {
-            "node": "ASEMB Search",
+            "node": "LSEMB Search",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "ASEMB Search": {
+    "LSEMB Search": {
       "main": [
         [
           {

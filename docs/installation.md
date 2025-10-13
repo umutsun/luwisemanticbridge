@@ -21,25 +21,25 @@ Ensure the following are installed and configured on your server:
 
 ### Step 2.1: Clone the Repository
 ```bash
-git clone https://github.com/umutsun/asemb.git
-cd asemb
+git clone https://github.com/umutsun/lsemb.git
+cd lsemb
 ```
 
 ### Step 2.2: Create Environment File
-Create a `.env.asemb` file and populate it with your credentials.
+Create a `.env.lsemb` file and populate it with your credentials.
 
 ```bash
-nano .env.asemb
+nano .env.lsemb
 ```
 
 Copy the template below, replacing placeholder values with secure credentials.
 
 ```ini
-# .env.asemb
+# .env.lsemb
 # PostgreSQL Settings
-POSTGRES_USER=asemb_user
+POSTGRES_USER=lsemb_user
 POSTGRES_PASSWORD=your_secure_password_here
-POSTGRES_DB=asemb
+POSTGRES_DB=lsemb
 
 # Redis Settings
 REDIS_PASSWORD=your_secure_redis_password
@@ -51,10 +51,10 @@ BACKEND_PORT=8083
 # n8n Credentials
 N8N_USER=admin
 N8N_PASSWORD=your_secure_n8n_password
-N8N_WEBHOOK_URL=https://asemb.luwi.dev/
+N8N_WEBHOOK_URL=https://lsemb.luwi.dev/
 
 # CORS Origin
-CORS_ORIGIN=https://asemb.luwi.dev
+CORS_ORIGIN=https://lsemb.luwi.dev
 
 # Grafana Credentials
 GRAFANA_USER=admin
@@ -71,7 +71,7 @@ Edit the production Docker Compose file:
 nano docker-compose.prod.yml
 ```
 
-Find the `asemb-nginx` service and change its ports from `80:80` and `443:443` to `8088:80` and `8443:443`.
+Find the `lsemb-nginx` service and change its ports from `80:80` and `443:443` to `8088:80` and `8443:443`.
 
 **Change this:**
 ```yaml
@@ -88,11 +88,11 @@ Find the `asemb-nginx` service and change its ports from `80:80` and `443:443` t
 ```
 
 ### Step 3.2: Create Host Nginx Configuration
-Now, we'll tell the main Nginx on the server to forward requests for `asemb.luwi.dev` to the Docker container.
+Now, we'll tell the main Nginx on the server to forward requests for `lsemb.luwi.dev` to the Docker container.
 
 Create a new Nginx configuration file:
 ```bash
-nano /etc/nginx/conf.d/asemb.luwi.dev.conf
+nano /etc/nginx/conf.d/lsemb.luwi.dev.conf
 ```
 
 Paste the following configuration. This handles SSL and proxies requests to the Docker container.
@@ -101,7 +101,7 @@ Paste the following configuration. This handles SSL and proxies requests to the 
 # Redirect HTTP to HTTPS
 server {
     listen 80;
-    server_name asemb.luwi.dev;
+    server_name lsemb.luwi.dev;
     location / {
         return 301 https://$host$request_uri;
     }
@@ -110,11 +110,11 @@ server {
 # HTTPS reverse proxy to Docker
 server {
     listen 443 ssl http2;
-    server_name asemb.luwi.dev;
+    server_name lsemb.luwi.dev;
 
     # SSL Certificate paths (obtained via Certbot)
-    ssl_certificate /etc/letsencrypt/live/asemb.luwi.dev/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/asemb.luwi.dev/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/lsemb.luwi.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/lsemb.luwi.dev/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:8088; # Forward to the Docker container's port
@@ -132,7 +132,7 @@ server {
 ### Step 3.3: Obtain SSL Certificate
 Run Certbot to get a certificate for your domain. Certbot will automatically detect your new configuration file.
 ```bash
-sudo certbot --nginx -d asemb.luwi.dev
+sudo certbot --nginx -d lsemb.luwi.dev
 ```
 
 ## 4. Launch the Application
@@ -150,8 +150,8 @@ sudo systemctl restart nginx
 Now, start the Docker containers.
 ```bash
 # Ensure you are in the project directory
-cd /path/to/asemb
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d
+cd /path/to/lsemb
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb up -d
 ```
 
 ## 5. Local Development Setup
@@ -200,7 +200,7 @@ Access Points:
 The application now supports configurable ports through environment variables:
 
 ### Frontend and Backend Ports
-- Edit `.env.asemb` to set custom ports:
+- Edit `.env.lsemb` to set custom ports:
   ```ini
   FRONTEND_PORT=3000  # Default: 3000
   BACKEND_PORT=8083  # Default: 8083
@@ -226,7 +226,7 @@ To update the application after pushing changes to Git:
 3.  Pull the latest code: `git pull`
 4.  Rebuild and restart the containers:
     ```bash
-    docker-compose -f docker-compose.prod.yml --env-file .env.asemb up -d --build
+    docker-compose -f docker-compose.prod.yml --env-file .env.lsemb up -d --build
     ```
 
 ### For Frontend Updates Only
@@ -240,7 +240,7 @@ docker-compose -f docker-compose.prod.yml up -d frontend
 
 - **502 Bad Gateway:** This means the host Nginx can't reach the Docker container.
   - Check if the Docker containers are running: `docker ps`.
-  - Check the logs of the `asemb-frontend` container for errors: `docker logs asemb-frontend`.
+  - Check the logs of the `lsemb-frontend` container for errors: `docker logs lsemb-frontend`.
   - **On CentOS/RHEL, this is often an SELinux issue.** Test by temporarily disabling it: `sudo setenforce 0`. If this works, you need to create a permanent rule: `sudo setsebool -P httpd_can_network_connect 1`.
 
 - **Disk Space Issues During Build:**
@@ -254,7 +254,7 @@ docker-compose -f docker-compose.prod.yml up -d frontend
   - Ensure you're using the updated Dockerfile.minimal
   - Rebuild with: `docker-compose -f docker-compose.prod.yml build --no-cache frontend`
 
-- **Host Nginx Fails to Start or `asemb-nginx` container fails with `Address already in use`:**
+- **Host Nginx Fails to Start or `lsemb-nginx` container fails with `Address already in use`:**
   - This means another process is using port 80/443. This is often the host's own Nginx service.
   - **IMPORTANT:** After a `git pull`, your changes to `docker-compose.prod.yml` (like changing the ports to `8088:80`) may be overwritten. If you see this error, **re-edit the `docker-compose.prod.yml` file** as described in Step 3.1 to ensure the ports are set to `8088:80` and `8443:443`.
   - To fix, stop all services (`docker-compose down` and `systemctl stop nginx`) and start them in the correct order (host Nginx first, then Docker).

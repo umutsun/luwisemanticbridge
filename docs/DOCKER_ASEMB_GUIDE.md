@@ -1,6 +1,6 @@
-# Luwi Semantic Bridge (ASEMB) Docker Kurulum Rehberi
+# Luwi Semantic Bridge (LSEMB) Docker Kurulum Rehberi
 
-Bu dokümantasyon Luwi Semantic Bridge(ASEMB) projesini hem yerel Windows hem de sunucu ortamında Docker ile nasıl çalıştıracağınızı açıklar.
+Bu dokümantasyon Luwi Semantic Bridge(LSEMB) projesini hem yerel Windows hem de sunucu ortamında Docker ile nasıl çalıştıracağınızı açıklar.
 
 ## Özellikler
 
@@ -27,8 +27,8 @@ git clone <repository-url>
 cd alice-semantic-bridge
 
 # 2. Environment dosyasını kopyala ve düzenle
-copy .env.asemb.example .env.asemb
-# .env.asemb dosyasını düzenle (API keys, database settings)
+copy .env.lsemb.example .env.lsemb
+# .env.lsemb dosyasını düzenle (API keys, database settings)
 
 # 3. Başlatma script'ini çalıştır
 start-docker.bat
@@ -54,27 +54,27 @@ start-pm2.bat
 
 ### Servisleri Başlat
 ```bash
-docker-compose -f docker-compose.asemb.yml up -d
+docker-compose -f docker-compose.lsemb.yml up -d
 ```
 
 ### Logları İzle
 ```bash
-docker-compose -f docker-compose.asemb.yml logs -f
+docker-compose -f docker-compose.lsemb.yml logs -f
 ```
 
 ### Servisleri Durdur
 ```bash
-docker-compose -f docker-compose.asemb.yml down
+docker-compose -f docker-compose.lsemb.yml down
 ```
 
 ### Rebuild (kod değişikliklerinden sonra)
 ```bash
-docker-compose -f docker-compose.asemb.yml up -d --build
+docker-compose -f docker-compose.lsemb.yml up -d --build
 ```
 
 ### Volume'ları Temizle
 ```bash
-docker-compose -f docker-compose.asemb.yml down -v
+docker-compose -f docker-compose.lsemb.yml down -v
 ```
 
 ## Development Mode
@@ -88,7 +88,7 @@ NODE_ENV=development
 
 2. Docker Compose'u başlatın:
 ```bash
-docker-compose -f docker-compose.asemb.yml up
+docker-compose -f docker-compose.lsemb.yml up
 ```
 
 Bu modda:
@@ -111,19 +111,19 @@ Production için öneriler:
 ### Container başlamıyor
 ```bash
 # Logları kontrol edin
-docker-compose -f docker-compose.asemb.yml logs alice-bridge
+docker-compose -f docker-compose.lsemb.yml logs alice-bridge
 
 # Container'a bağlanın
-docker exec -it asemb-app sh
+docker exec -it lsemb-app sh
 ```
 
 ### Database bağlantı hatası
 ```bash
 # PostgreSQL logları
-docker logs asemb-postgres
+docker logs lsemb-postgres
 
 # Bağlantıyı test edin
-docker exec -it asemb-postgres psql -U postgres -d asemb
+docker exec -it lsemb-postgres psql -U postgres -d lsemb
 ```
 
 ### Port çakışması
@@ -155,13 +155,13 @@ nano .env.docker
 
 3. **Docker Compose ile başlatın**
 ```bash
-docker-compose -f docker-compose.asemb.yml --env-file .env.docker up -d
+docker-compose -f docker-compose.lsemb.yml --env-file .env.docker up -d
 ```
 
 4. **Nginx reverse proxy** (opsiyonel)
 ```bash
 # Production profile'ı aktif edin
-docker-compose -f docker-compose.asemb.yml --profile production up -d
+docker-compose -f docker-compose.lsemb.yml --profile production up -d
 ```
 
 ## Mimari
@@ -193,6 +193,6 @@ Agent'lar arası paylaşılan dosyalar volume olarak mount edilir:
 - `.codex/`
 
 Bu klasörler Redis üzerinden Project Key ile senkronize edilir:
-- **Claude**: `asemb-claude-project`
-- **Gemini**: `asemb-gemini-project`
-- **Codex**: `asemb-codex-project`
+- **Claude**: `lsemb-claude-project`
+- **Gemini**: `lsemb-gemini-project`
+- **Codex**: `lsemb-codex-project`

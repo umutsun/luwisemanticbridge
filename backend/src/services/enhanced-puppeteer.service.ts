@@ -279,7 +279,7 @@ export class EnhancedPuppeteerService {
     const allSelectors = [
       ...(options.prioritySelectors || []),
       ...(options.customSelectors || []),
-      // Turkish government sites (GİB, e-devlet, etc.)
+      // Turkish government sites (Turkish Gov, e-devlet, etc.)
       '.accordion-body',
       '.panel-body',
       '.tab-content',

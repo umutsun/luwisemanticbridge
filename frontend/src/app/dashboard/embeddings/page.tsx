@@ -662,7 +662,7 @@ export default function EmbeddingsPage() {
         <AlertDescription>
           <strong>Migration Bilgileri:</strong> Embedding oluşturma işlemi OpenAI text-embedding-ada-002 modeli kullanır. 
           Her 1000 token için yaklaşık $0.0001 maliyet oluşur. Ortalama bir kayıt 2000-3000 token kullanır.
-          Tüm embeddings asemb veritabanındaki unified_embeddings tablosuna kaydedilir.
+          Tüm embeddings lsemb veritabanındaki unified_embeddings tablosuna kaydedilir.
         </AlertDescription>
       </Alert>
     </div>

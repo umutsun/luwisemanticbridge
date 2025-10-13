@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import { getDatabaseSettings, getSettingsBasedPool, resetSettingsBasedPool } from '../config/database.config';
 
 // ASEMB database - where unified_embeddings table is stored
-const asembPool = new Pool({
+const lsembPool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/postgres'
 });
 
@@ -156,7 +156,7 @@ async function guessContentColumn(tableName: string): Promise<string> {
   }
 }
 
-// Target database (asemb) - where we write embeddings to
+// Target database (lsemb) - where we write embeddings to
 const targetPool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
@@ -1829,10 +1829,10 @@ async function getSourceDatabaseName(): Promise<string> {
            dbSettings.sourceDatabase ||
            dbSettings.dbName ||
            process.env.POSTGRES_DB ||
-           'asemb'; // Default fallback
+           'lsemb'; // Default fallback
   } catch (error) {
     console.error('Error getting source database name:', error);
-    return process.env.POSTGRES_DB || 'asemb'; // fallback
+    return process.env.POSTGRES_DB || 'lsemb'; // fallback
   }
 }
 
@@ -2435,7 +2435,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
             // Track token usage (divided by batch size for per-record tracking)
             const tokensPerRecord = cached ? 0 : Math.round(500); // Estimate 500 tokens per uncached record
             
-            // Save embedding to unified_embeddings table in TARGET database (asemb)
+            // Save embedding to unified_embeddings table in TARGET database (lsemb)
             if (primaryKey !== 'ROW_NUMBER') {
               try {
                 // Get display name for the table

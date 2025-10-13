@@ -1,4 +1,4 @@
-# ASEMB Development Guide
+# LSEMB Development Guide
 
 ## Architecture Overview
 
@@ -31,8 +31,8 @@
 
 1. **Clone and Initialize**
 ```bash
-git clone https://github.com/yourusername/asemb.git
-cd asemb
+git clone https://github.com/yourusername/lsemb.git
+cd lsemb
 git submodule update --init --recursive
 ```
 
@@ -51,8 +51,8 @@ pip install -r requirements-dev.txt
 
 3. **Configure Environment**
 ```bash
-cp .env.asemb.example .env.asemb
-# Edit .env.asemb with your configuration
+cp .env.lsemb.example .env.lsemb
+# Edit .env.lsemb with your configuration
 ```
 
 4. **Start Services**
@@ -73,7 +73,7 @@ python scripts/init_db.py
 ## Project Structure
 
 ```
-asemb/
+lsemb/
 ├── src/                    # n8n node source (TypeScript)
 │   ├── nodes/             # Node implementations
 │   │   ├── AsembNode.node.ts        # Main node (Claude)
@@ -140,7 +140,7 @@ try {
 } catch (error) {
   throw new NodeOperationError(
     this.getNode(),
-    `ASEMB Error: ${error.message}`,
+    `LSEMB Error: ${error.message}`,
     { description: 'Detailed error info' }
   );
 }
@@ -179,7 +179,7 @@ class DocumentModel(BaseModel):
     id: Optional[str] = Field(None, description="Document ID")
     content: str = Field(..., min_length=1, max_length=100000)
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    workspace_id: str = Field(..., pattern="^asemb_[a-z0-9_]+$")
+    workspace_id: str = Field(..., pattern="^lsemb_[a-z0-9_]+$")
 
 # Async endpoints
 @router.post("/documents")
@@ -207,7 +207,7 @@ async def create_document(
 // tests/unit/nodes/AsembNode.test.ts
 describe('AsembNode', () => {
   it('should validate workspace ID format', () => {
-    const validId = 'asemb_customer1_prod';
+    const validId = 'lsemb_customer1_prod';
     expect(validateWorkspaceId(validId)).toBe(true);
     
     const invalidId = 'invalid-format';
@@ -350,7 +350,7 @@ class LightRAGManager:
 # Workspace isolation pattern
 def get_workspace_key(workspace_id: str, key: str) -> str:
     """Generate isolated key for workspace"""
-    return f"asemb:{workspace_id}:{key}"
+    return f"lsemb:{workspace_id}:{key}"
 
 # Storage isolation
 async def store_document(
@@ -450,7 +450,7 @@ class DocumentModel(BaseModel):
 from fastapi import Security, HTTPException
 from fastapi.security import APIKeyHeader
 
-api_key_header = APIKeyHeader(name="X-ASEMB-API-Key")
+api_key_header = APIKeyHeader(name="X-LSEMB-API-Key")
 
 async def verify_api_key(
     api_key: str = Security(api_key_header)
@@ -482,7 +482,7 @@ async def create_document(...):
 ```typescript
 // Enable debug logging in n8n node
 if (process.env.NODE_ENV === 'development') {
-  console.log('ASEMB Debug:', {
+  console.log('LSEMB Debug:', {
     operation,
     workspace,
     input: JSON.stringify(items)
@@ -540,7 +540,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### CI/CD Pipeline
 ```yaml
 # .github/workflows/deploy.yml
-name: Deploy ASEMB
+name: Deploy LSEMB
 
 on:
   push:
@@ -559,8 +559,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: docker build -t asemb:latest .
-      - run: docker push registry/asemb:latest
+      - run: docker build -t lsemb:latest .
+      - run: docker push registry/lsemb:latest
 ```
 
 ## Monitoring
@@ -583,8 +583,8 @@ async def health_check():
 ```python
 from prometheus_client import Counter, Histogram
 
-request_count = Counter('asemb_requests_total', 'Total requests')
-request_duration = Histogram('asemb_request_duration_seconds', 'Request duration')
+request_count = Counter('lsemb_requests_total', 'Total requests')
+request_duration = Histogram('lsemb_request_duration_seconds', 'Request duration')
 
 @app.middleware("http")
 async def track_metrics(request, call_next):
@@ -612,15 +612,15 @@ async def track_metrics(request, call_next):
 docker-compose logs -f api
 
 # Enter container
-docker exec -it asemb-api bash
+docker exec -it lsemb-api bash
 
 # Test API endpoint
 curl -X POST http://localhost:8000/api/v1/workspaces \
-  -H "X-ASEMB-API-Key: your-key" \
+  -H "X-LSEMB-API-Key: your-key" \
   -d '{"id": "test_workspace"}'
 
 # Check database
-docker exec -it asemb-postgres psql -U asemb_user -d asemb
+docker exec -it lsemb-postgres psql -U lsemb_user -d lsemb
 ```
 
 ## Resources

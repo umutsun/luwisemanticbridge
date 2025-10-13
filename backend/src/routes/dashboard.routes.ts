@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import OpenAI from 'openai';
 import { getDatabaseSettings, getCustomerPool, getAiSettings } from '../config/database.config';
-import { pgPool as asembPool } from '../server'; // Import the centralized pool
+import { pgPool as lsembPool } from '../server'; // Import the centralized pool
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -37,8 +37,8 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
     // Get real stats if possible
     try {
       const [convResult, msgResult] = await Promise.all([
-        asembPool.query('SELECT COUNT(*) as count FROM conversations'),
-        asembPool.query('SELECT COUNT(*) as count FROM messages')
+        lsembPool.query('SELECT COUNT(*) as count FROM conversations'),
+        lsembPool.query('SELECT COUNT(*) as count FROM messages')
       ]);
 
       dashboardData.stats.totalConversations = parseInt(convResult.rows[0].count);
@@ -106,7 +106,7 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
       });
     }
     
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
     let tableInfo = [];
     try {
         const tablesResult = await ragChatbotPool.query(
@@ -385,7 +385,7 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
 //        let totalActualEmbedded = 0;
 //
 //        try {
-//          const client = await asembPool.connect();
+//          const client = await lsembPool.connect();
 //          try {
 //            for (const tableName of tables) {
 //              const sourceName = tableName === 'sorucevap' ? 'Soru-Cevap' :
@@ -443,7 +443,7 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
 //      // Get initial embedded counts for each table
 //      const tableEmbeddedCounts: Record<string, number> = {};
 //      try {
-//        const client = await asembPool.connect();
+//        const client = await lsembPool.connect();
 //        try {
 //          for (const tableName of tables) {
 //            const sourceName = tableName === 'sorucevap' ? 'Soru-Cevap' :
@@ -517,7 +517,7 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
 //    // Create embedding history record
 //    const operationId = `embedding_${Date.now()}`;
 //    try {
-//      const client = await asembPool.connect();
+//      const client = await lsembPool.connect();
 //      try {
 //        await client.query(`
 //          INSERT INTO embedding_history (
@@ -721,7 +721,7 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
             
             let client;
             try {
-                client = await asembPool.connect();
+                client = await lsembPool.connect();
             } catch (dbError) {
                 console.error(`Failed to connect to database for table ${tableName}:`, dbError);
                 throw new Error(`Database connection failed: ${(dbError as Error).message}`);
@@ -1130,7 +1130,7 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
         // Update embedding history record
         if (operationId) {
           try {
-            const client = await asembPool.connect();
+            const client = await lsembPool.connect();
             try {
               await client.query(`
                 UPDATE embedding_history
@@ -1533,7 +1533,7 @@ async function generateBGEEmbedding(text: string): Promise<number[]> {
 // Get last 10 embeddings with details
 router.get('/api/v2/embeddings/last-records', async (req: Request, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
     try {
       const result = await client.query(`
         SELECT
@@ -1573,7 +1573,7 @@ router.get('/api/v2/embeddings/last-records', async (req: Request, res: Response
 // Get embedding history for dashboard
 router.get('/api/v2/dashboard/embeddings/history', async (req: Request, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
     try {
       const result = await client.query(`
         SELECT
@@ -1607,7 +1607,7 @@ router.get('/api/v2/dashboard/embeddings/history', async (req: Request, res: Res
 // Get embedding statistics by model and source
 router.get('/api/v2/embeddings/stats-by-model', async (req: Request, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
     try {
       // Get stats by embedding model
       const modelStats = await client.query(`
@@ -1664,7 +1664,7 @@ router.get('/api/v2/embeddings/stats-by-model', async (req: Request, res: Respon
  */
 router.get('/api/v2/chat/stats', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
 
     try {
       // Get total chat statistics
@@ -1747,7 +1747,7 @@ router.get('/api/v2/chat/stats', authenticateToken, requireAdmin, async (req: Au
  */
 router.get('/api/v2/chat/semantic-insights', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
 
     try {
       // Get semantic insights from usage tracking
@@ -1825,7 +1825,7 @@ router.get('/api/v2/chat/semantic-insights', authenticateToken, requireAdmin, as
  */
 router.get('/api/v2/chat/user-engagement', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
 
     try {
       // User retention metrics

@@ -475,7 +475,7 @@ const pool = new Pool({
 2. **Run health check**: `pm2-health.bat`
 3. **Review this guide**: Search for your issue
 4. **Check PM2 docs**: https://pm2.keymetrics.io/
-5. **Contact team**: support@asemb.ai
+5. **Contact team**: support@lsemb.ai
 
 ### Reporting Issues
 

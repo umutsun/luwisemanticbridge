@@ -1,4 +1,4 @@
-# n8n.luwi.dev Server Setup for ASEMB
+# n8n.luwi.dev Server Setup for LSEMB
 
 ## 1. PostgreSQL Setup
 ```sql
@@ -6,12 +6,12 @@
 sudo -u postgres psql
 
 -- Create database and user
-CREATE DATABASE asemb;
-CREATE USER asemb_user WITH ENCRYPTED PASSWORD 'secure_password_here';
-GRANT ALL PRIVILEGES ON DATABASE asemb TO asemb_user;
+CREATE DATABASE lsemb;
+CREATE USER lsemb_user WITH ENCRYPTED PASSWORD 'secure_password_here';
+GRANT ALL PRIVILEGES ON DATABASE lsemb TO lsemb_user;
 
--- Connect to asemb database
-\c asemb
+-- Connect to lsemb database
+\c lsemb
 
 -- Enable extensions
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -86,7 +86,7 @@ mkdir -p n8n-nodes-alice-semantic-bridge
 cd n8n-nodes-alice-semantic-bridge
 
 # Upload and extract the tar.gz file here
-tar -xzf asemb-node-v0.1.0.tar.gz
+tar -xzf lsemb-node-v0.1.0.tar.gz
 npm install --production
 
 # Exit container and restart
@@ -97,7 +97,7 @@ docker restart n8n-container
 cd ~/.n8n/nodes
 mkdir -p n8n-nodes-alice-semantic-bridge
 cd n8n-nodes-alice-semantic-bridge
-tar -xzf /path/to/asemb-node-v0.1.0.tar.gz
+tar -xzf /path/to/lsemb-node-v0.1.0.tar.gz
 npm install --production
 pm2 restart n8n
 ```
@@ -144,8 +144,8 @@ pm2 restart n8n
 - Select "Postgres"
 - Configure:
   - Host: localhost
-  - Database: asemb
-  - User: asemb_user
+  - Database: lsemb
+  - User: lsemb_user
   - Password: your_password
   - Port: 5432
   - SSL: Disable (if local)
@@ -155,7 +155,7 @@ Import this test workflow JSON to verify everything works:
 
 ```json
 {
-  "name": "ASEMB Test - Web to Vector",
+  "name": "LSEMB Test - Web to Vector",
   "nodes": [
     {
       "parameters": {
@@ -189,7 +189,7 @@ Import this test workflow JSON to verify everything works:
       "credentials": {
         "postgresDb": {
           "id": "1",
-          "name": "Postgres ASEMB"
+          "name": "Postgres LSEMB"
         },
         "openAiApi": {
           "id": "2", 
@@ -224,12 +224,12 @@ Import this test workflow JSON to verify everything works:
 ## 8. Monitor Performance
 ```bash
 # Check PostgreSQL
-psql -U asemb_user -d asemb -c "SELECT count(*) FROM documents;"
+psql -U lsemb_user -d lsemb -c "SELECT count(*) FROM documents;"
 
 # Check Redis
 redis-cli
 > INFO stats
-> KEYS asemb:*
+> KEYS lsemb:*
 
 # Check n8n logs
 docker logs n8n-container -f --tail 100
@@ -250,7 +250,7 @@ curl http://n8n.luwi.dev:3000/api/v1/cache/stats
 ### Database connection issues:
 - Verify PostgreSQL is running
 - Check credentials
-- Test connection manually: `psql -h localhost -U asemb_user -d asemb`
+- Test connection manually: `psql -h localhost -U lsemb_user -d lsemb`
 
 ### Performance issues:
 - Run VACUUM ANALYZE on tables

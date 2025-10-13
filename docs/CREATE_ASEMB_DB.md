@@ -1,4 +1,4 @@
-# 🗺️ ASEMB Database Creation Guide
+# 🗺️ LSEMB Database Creation Guide
 
 ## 🎯 Quick Setup
 
@@ -9,10 +9,10 @@
 export PGPASSWORD='Semsiye!22'
 
 # Create database
-psql -h 91.99.229.96 -U postgres -c "CREATE DATABASE asemb;"
+psql -h 91.99.229.96 -U postgres -c "CREATE DATABASE lsemb;"
 
 # Connect and enable pgvector
-psql -h 91.99.229.96 -U postgres -d asemb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql -h 91.99.229.96 -U postgres -d lsemb -c "CREATE EXTENSION IF NOT EXISTS vector;"
 ```
 
 ### Option 2: Using pgAdmin or DBeaver
@@ -20,10 +20,10 @@ psql -h 91.99.229.96 -U postgres -d asemb -c "CREATE EXTENSION IF NOT EXISTS vec
 1. Connect to: `91.99.229.96:5432` with user `postgres`
 2. Run:
 ```sql
-CREATE DATABASE asemb;
+CREATE DATABASE lsemb;
 ```
 
-3. Connect to `asemb` database
+3. Connect to `lsemb` database
 4. Run:
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -33,7 +33,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ```bash
 cd C:\xampp\htdocs\alice-semantic-bridge\scripts
-setup-asemb-db.bat
+setup-lsemb-db.bat
 ```
 
 ## 📊 Database Schema
@@ -41,7 +41,7 @@ setup-asemb-db.bat
 After creating the database, run this to create tables:
 
 ```sql
--- Connect to asemb first!
+-- Connect to lsemb first!
 
 -- Documents table
 CREATE TABLE IF NOT EXISTS documents (
@@ -79,7 +79,7 @@ Check if everything is set up:
 -- List databases
 \l
 
--- Check if connected to asemb
+-- Check if connected to lsemb
 SELECT current_database();
 
 -- Check pgvector
@@ -94,7 +94,7 @@ SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 Once database is created, terminal agents should be able to connect with:
 - Host: `91.99.229.96`
 - Port: `5432`
-- Database: `asemb`
+- Database: `lsemb`
 - User: `postgres`
 - Password: `Semsiye!22`
 

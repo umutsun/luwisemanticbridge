@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 
 const router = Router();
 
 // Get database schema information
 router.get('/schema', async (req: Request, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
 
     // Get all tables
     const tablesQuery = `
@@ -65,11 +65,11 @@ router.get('/schema', async (req: Request, res: Response) => {
 // Get table statistics
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
 
     // Get database size
     const sizeQuery = `
-      SELECT pg_size_pretty(pg_database_size('asemb')) as database_size
+      SELECT pg_size_pretty(pg_database_size('lsemb')) as database_size
     `;
     const sizeResult = await client.query(sizeQuery);
 

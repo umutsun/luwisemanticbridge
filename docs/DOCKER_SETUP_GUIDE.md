@@ -11,25 +11,25 @@ ASEM (Alice Semantic Bridge) projesi hem yerel geliştirme hem de sunucu üretim
 
 ## Environment Dosyaları
 
-### Yerel Geliştirme (`.env.asemb`)
+### Yerel Geliştirme (`.env.lsemb`)
 ```bash
 # Yerel geliştirme için environment ayarları
-COMPOSE_PROJECT_NAME=asemb
+COMPOSE_PROJECT_NAME=lsemb
 NODE_ENV=development
-POSTGRES_USER=asemb_user
-POSTGRES_PASSWORD=asemb_password_2025
-POSTGRES_DB=asemb
+POSTGRES_USER=lsemb_user
+POSTGRES_PASSWORD=lsemb_password_2025
+POSTGRES_DB=lsemb
 REDIS_DB=2
 ```
 
-### Sunucu Üretim (`.env.asemb`)
+### Sunucu Üretim (`.env.lsemb`)
 ```bash
 # Sunucu üretim için environment ayarları
-COMPOSE_PROJECT_NAME=asemb
+COMPOSE_PROJECT_NAME=lsemb
 NODE_ENV=production
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=Semsiye!22
-POSTGRES_DB=asemb
+POSTGRES_DB=lsemb
 REDIS_DB=2
 ```
 
@@ -44,16 +44,16 @@ cd alice-semantic-bridge
 ### 2. Environment Dosyalarını Oluşturma
 ```bash
 # Yerel geliştirme için
-cp .env.asemb.example .env.asemb
+cp .env.lsemb.example .env.lsemb
 
 # Sunucu için (mevcut)
-# .env.asemb dosyası zaten sunucuda mevcut
+# .env.lsemb dosyası zaten sunucuda mevcut
 ```
 
 ### 3. Environment Dosyalarını Düzenleme
 ```bash
-# .env.asemb dosyasını düzenle
-nano .env.asemb
+# .env.lsemb dosyasını düzenle
+nano .env.lsemb
 
 # Gerekli değişkenleri güncelle:
 # - API anahtarları
@@ -80,13 +80,13 @@ start-docker-local.bat
 #### Manuel Komutlar
 ```bash
 # Mevcut container'ları durdur
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb down
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb down
 
 # Servisleri build et ve başlat
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb up --build -d
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb up --build -d
 
 # Logları görüntüle
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs -f
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs -f
 ```
 
 ### Sunucu Üretim
@@ -106,16 +106,16 @@ start-docker-server.bat
 #### Manuel Komutlar
 ```bash
 # Mevcut container'ları durdur
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb down
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb down
 
 # Sistemi temizle
 docker system prune -f
 
 # Servisleri build et ve başlat
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb up --build -d
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb up --build -d
 
 # Logları görüntüle
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb logs -f
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb logs -f
 ```
 
 ## Servis URL'leri
@@ -131,8 +131,8 @@ docker-compose -f docker-compose.prod.yml --env-file .env.asemb logs -f
 - **n8n**: http://localhost:5678
 
 ### Sunucu Üretim
-- **Frontend**: https://asemb.luwi.dev
-- **API**: https://asemb.luwi.dev/api
+- **Frontend**: https://lsemb.luwi.dev
+- **API**: https://lsemb.luwi.dev/api
 - **n8n**: https://n8n.luwi.dev
 - **Monitoring**: http://localhost:3030 (Grafana)
 
@@ -141,47 +141,47 @@ docker-compose -f docker-compose.prod.yml --env-file .env.asemb logs -f
 ### Genel Bakış
 ```bash
 # Tüm servislerin durumunu görüntüle
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb ps
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb ps
 
 # Belirli bir servisin loglarını görüntüle
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs -f [service-name]
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs -f [service-name]
 
 # Tüm servisleri durdur
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb down
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb down
 
 # Belirli bir servisi yeniden başlat
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb restart [service-name]
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb restart [service-name]
 
 # Servis güncelleme
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb pull
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb up --build -d
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb pull
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb up --build -d
 ```
 
 ### Veritabanı İşlemleri
 ```bash
 # PostgreSQL'e bağlan
-docker exec -it asemb-postgres psql -U postgres -d asemb
+docker exec -it lsemb-postgres psql -U postgres -d lsemb
 
 # Redis'e bağlan
-docker exec -it asemb-redis redis-cli
+docker exec -it lsemb-redis redis-cli
 
 # Veritabanı yedeği al
-docker exec asemb-postgres pg_dump -U postgres asemb > backup.sql
+docker exec lsemb-postgres pg_dump -U postgres lsemb > backup.sql
 
 # Yedeği geri yükle
-docker exec -i asemb-postgres psql -U postgres asemb < backup.sql
+docker exec -i lsemb-postgres psql -U postgres lsemb < backup.sql
 ```
 
 ### Log Yönetimi
 ```bash
 # Tüm logları görüntüle
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs -f
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs -f
 
 # Son 100 satır log
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs --tail=100
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs --tail=100
 
 # Belirli bir servisin loglarını temizle
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs -f [service-name] > service.log
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs -f [service-name] > service.log
 ```
 
 ## Sorun Giderme
@@ -207,7 +207,7 @@ netstat -ano | findstr :8083
 #### 3. Environment Değişkenleri
 ```bash
 # Environment değişkenlerini kontrol et
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb config
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb config
 ```
 
 #### 4. Container Sağlık Kontrolü
@@ -216,23 +216,23 @@ docker-compose -f docker-compose.dev.yml --env-file .env.asemb config
 docker ps -a
 
 # Sağlık kontrollerini görüntüle
-docker inspect --format='{{.State.Health.Status}}' asemb-postgres
-docker inspect --format='{{.State.Health.Status}}' asemb-redis
+docker inspect --format='{{.State.Health.Status}}' lsemb-postgres
+docker inspect --format='{{.State.Health.Status}}' lsemb-redis
 ```
 
 ### Log Analizi
 ```bash
 # Hata loglarını filtrele
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs | grep -i error
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs | grep -i error
 
 # Uyarı loglarını filtrele
-docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs | grep -i warn
+docker-compose -f docker-compose.dev.yml --env-file .env.lsemb logs | grep -i warn
 ```
 
 ## Güvenlik
 
 ### Production Ortamı İçin
-- `.env.asemb` dosyasını asla commit etmeyin
+- `.env.lsemb` dosyasını asla commit etmeyin
 - Güçlü şifreler kullanın
 - SSL/TLS sertifikaları kullanın
 - Firewall kurallarını yapılandırın
@@ -241,10 +241,10 @@ docker-compose -f docker-compose.dev.yml --env-file .env.asemb logs | grep -i wa
 ### Environment Değişkenleri
 ```bash
 # Hassas değişkenleri kontrol et
-grep -r "PASSWORD\|KEY\|SECRET" .env.asemb
+grep -r "PASSWORD\|KEY\|SECRET" .env.lsemb
 
 # Environment dosyasının izinlerini kontrol et
-ls -la .env.asemb
+ls -la .env.lsemb
 ```
 
 ## Bakım
@@ -258,17 +258,17 @@ docker image prune -f
 docker system prune -f
 
 # Logları temizle
-docker-compose -f docker-compose.prod.yml --env-file .env.asemb logs --tail=0 > /dev/null
+docker-compose -f docker-compose.prod.yml --env-file .env.lsemb logs --tail=0 > /dev/null
 ```
 
 ### Yedekleme
 ```bash
 # Veritabanı yedeği
-docker exec asemb-postgres pg_dump -U postgres asemb > backup-$(date +%Y%m%d).sql
+docker exec lsemb-postgres pg_dump -U postgres lsemb > backup-$(date +%Y%m%d).sql
 
 # Redis yedeği
-docker exec asemb-redis redis-cli SAVE
-docker cp asemb-redis:/data/dump.rdb redis-backup-$(date +%Y%m%d).rdb
+docker exec lsemb-redis redis-cli SAVE
+docker cp lsemb-redis:/data/dump.rdb redis-backup-$(date +%Y%m%d).rdb
 ```
 
 ## Destek

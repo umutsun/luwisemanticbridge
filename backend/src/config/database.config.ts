@@ -4,18 +4,18 @@ import { SettingsService, DatabaseConfig, RedisConfig } from '../services/settin
 
 dotenv.config();
 
-// ASEM System Database - Get from .env file
-export const asembDbConfig = {
+// LSEMB System Database - Get from .env file
+export const lsembDbConfig = {
   host: process.env.POSTGRES_HOST || 'localhost',
   port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'asemb',
+  database: process.env.POSTGRES_DB || 'lsemb',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || '',
   ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
 };
 
 
-// Dynamic configurations from ASEMB database
+// Dynamic configurations from LSEMB database
 let customerDbConfig: DatabaseConfig;
 let redisConfig: RedisConfig;
 let llmProviders: any;
@@ -29,7 +29,7 @@ export async function initializeConfigs(): Promise<void> {
   customerDbConfig = {
     host: process.env.POSTGRES_HOST || 'localhost',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
-    database: process.env.POSTGRES_DB || 'asemb',
+    database: process.env.POSTGRES_DB || 'lsemb',
     user: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || '',
     ssl: process.env.POSTGRES_SSL === 'true'
@@ -93,21 +93,21 @@ export async function syncAPIKeysToDatabase(): Promise<void> {
     for (const apiKey of apiKeys) {
       if (apiKey.value) {
         // Check if key already exists
-        const existing = await asembPool.query(
+        const existing = await lsembPool.query(
           'SELECT key FROM settings WHERE key = $1',
           [apiKey.key]
         );
 
         if (existing.rows.length === 0) {
           // Insert new key
-          await asembPool.query(
+          await lsembPool.query(
             'INSERT INTO settings (key, value, category, description) VALUES ($1, $2, $3, $4)',
             [apiKey.key, apiKey.value, 'api_keys', `API key for ${apiKey.key.replace('.apiKey', '').replace('.', ' ').toUpperCase()}`]
           );
           console.log(`✅ Added ${apiKey.key} to database`);
         } else {
           // Update existing key
-          await asembPool.query(
+          await lsembPool.query(
             'UPDATE settings SET value = $1 WHERE key = $2',
             [apiKey.value, apiKey.key]
           );
@@ -140,13 +140,16 @@ export function getAppConfig(): any {
   return appConfig;
 }
 
-// ASEMB System Database Pool
-export const asembPool = new Pool({
-  ...asembDbConfig,
+// LSEMB System Database Pool
+export const lsembPool = new Pool({
+  ...lsembDbConfig,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 30000,
 });
+
+// Alias for backward compatibility - some services still use lsembPool
+export const lsembPool = lsembPool;
 
 // Customer Database Pool (created dynamically)
 let customerPool: Pool | null = null;
@@ -194,7 +197,7 @@ export async function getSettingsBasedPool(): Promise<Pool> {
 
   try {
     // Read database configuration from settings
-    const client = await asembPool.connect();
+    const client = await lsembPool.connect();
     try {
       const result = await client.query(`
         SELECT value FROM settings
@@ -270,9 +273,9 @@ export async function testDatabaseConnection(config: any): Promise<{ success: bo
   }
 }
 
-// Initialize ASEMB database tables
-export async function initializeAsembDatabase() {
-  const client = await asembPool.connect();
+// Initialize LSEMB database tables
+export async function initializeLsembDatabase() {
+  const client = await lsembPool.connect();
   
   try {
     // Create tables for ASEMB system
@@ -336,7 +339,7 @@ export async function initializeAsembDatabase() {
     // Insert default settings if they don't exist
     await client.query(`
       INSERT INTO settings (key, value, category, description) VALUES
-      ('asemb_database', $1, 'database', 'ASEMB system database configuration'),
+      ('lsemb_database', $1, 'database', 'LSEMB system database configuration'),
       ('customer_database', $2, 'database', 'Customer database configuration'),
       ('redis_config', $3, 'database', 'Redis configuration'),
       ('llm_providers', $4, 'ai', 'LLM provider configurations'),
@@ -346,7 +349,7 @@ export async function initializeAsembDatabase() {
       JSON.stringify({
         host: process.env.POSTGRES_HOST || 'localhost',
         port: parseInt(process.env.POSTGRES_PORT || '5432'),
-        database: process.env.POSTGRES_DB || 'asemb',
+        database: process.env.POSTGRES_DB || 'lsemb',
         user: process.env.POSTGRES_USER || 'postgres',
         password: process.env.POSTGRES_PASSWORD || '',
         ssl: process.env.POSTGRES_SSL === 'true'
@@ -354,7 +357,7 @@ export async function initializeAsembDatabase() {
       JSON.stringify({
         host: process.env.POSTGRES_HOST || 'localhost',
         port: parseInt(process.env.POSTGRES_PORT || '5432'),
-        database: process.env.POSTGRES_DB || 'asemb',
+        database: process.env.POSTGRES_DB || 'lsemb',
         user: process.env.POSTGRES_USER || 'postgres',
         password: process.env.POSTGRES_PASSWORD || '',
         ssl: process.env.POSTGRES_SSL === 'true'
@@ -474,9 +477,9 @@ export async function initializeAsembDatabase() {
       )
     `);
 
-    console.log('✅ ASEMB database tables initialized');
+    console.log('✅ LSEMB database tables initialized');
   } catch (error) {
-    console.error('❌ Failed to initialize ASEMB database:', error);
+    console.error('❌ Failed to initialize LSEMB database:', error);
     throw error;
   } finally {
     client.release();
@@ -485,7 +488,7 @@ export async function initializeAsembDatabase() {
 
 // Save database settings
 export async function saveDatabaseSettings(settings: any) {
-  const client = await asembPool.connect();
+  const client = await lsembPool.connect();
 
   try {
     await client.query(`
@@ -510,7 +513,7 @@ export async function saveDatabaseSettings(settings: any) {
 export async function getDatabaseSettings() {
   let client;
   try {
-    client = await asembPool.connect();
+    client = await lsembPool.connect();
     // First try to get database configuration from frontend settings (newest method)
     console.log('DEBUG: Checking for frontend database settings...');
 
@@ -592,7 +595,7 @@ export async function getDatabaseSettings() {
 export async function getAiSettings() {
   let client;
   try {
-    client = await asembPool.connect();
+    client = await lsembPool.connect();
     const result = await client.query(`
       SELECT setting_value as value FROM chatbot_settings WHERE setting_key = 'ai_settings'
     `);
@@ -613,10 +616,10 @@ export async function getAiSettings() {
 }
 
 export default {
-  asembPool,
+  lsembPool,
   getCustomerPool,
   testDatabaseConnection,
-  initializeAsembDatabase,
+  initializeLsembDatabase,
   saveDatabaseSettings,
   getDatabaseSettings,
   syncAPIKeysToDatabase

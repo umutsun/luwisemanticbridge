@@ -1,4 +1,4 @@
-# DeepSeek Agent - ASEMB Project Instructions
+# DeepSeek Agent - LSEMB Project Instructions
 
 ## Your Role: Testing, Documentation & Quality Assurance
 
@@ -97,7 +97,7 @@ describe('AsembNode', () => {
       // Assert
       expect(result).toHaveLength(1);
       expect(result[0].json).toHaveProperty('id');
-      expect(result[0].json.workspace).toBe('asemb_test_dev');
+      expect(result[0].json.workspace).toBe('lsemb_test_dev');
     });
 
     it('should handle missing required fields', async () => {
@@ -121,7 +121,7 @@ class TestDocumentAPI:
     
     @pytest.fixture
     def workspace_id(self):
-        return "asemb_test_integration"
+        return "lsemb_test_integration"
     
     async def test_document_lifecycle(self, client, workspace_id):
         """Test complete document lifecycle"""
@@ -164,7 +164,7 @@ test.describe('Multi-Tenant Workflow', () => {
     await page.goto('/n8n');
     await createWorkflow(page, 'Customer A Workflow');
     await addAsembNode(page, {
-      workspace: 'asemb_customerA_prod',
+      workspace: 'lsemb_customerA_prod',
       operation: 'insert'
     });
     
@@ -174,7 +174,7 @@ test.describe('Multi-Tenant Workflow', () => {
     // Create workspace for Customer B
     await createWorkflow(page, 'Customer B Workflow');
     await addAsembNode(page, {
-      workspace: 'asemb_customerB_prod',
+      workspace: 'lsemb_customerB_prod',
       operation: 'search'
     });
     
@@ -218,7 +218,7 @@ Insert a document into the specified workspace.
 ```json
 {
   "id": "doc_123456",
-  "workspace_id": "asemb_customer1_prod",
+  "workspace_id": "lsemb_customer1_prod",
   "created_at": "2024-01-01T00:00:00Z",
   "status": "processed"
 }
@@ -233,7 +233,7 @@ Insert a document into the specified workspace.
 
 ### User Guide Structure
 ```markdown
-# ASEMB User Guide
+# LSEMB User Guide
 
 ## Quick Start
 1. Install the node

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { getApiUrl, buildApiUrl, API_CONFIG } from '../../../lib/config';
 import { useToast } from '../../../hooks/use-toast';
 import { useAuth } from '../../../contexts/AuthProvider';
@@ -261,6 +262,29 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const { token } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Get tab from URL parameters
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
+
+  // Update URL when tab changes
+  useEffect(() => {
+    const currentTab = searchParams.get('tab');
+    if (currentTab !== activeTab) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', activeTab);
+      router.push(`/dashboard/settings?${params.toString()}`, { scroll: false });
+    }
+  }, [activeTab, router, searchParams]);
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams, activeTab]);
 
   // API Test states
   const [testProvider, setTestProvider] = useState<string>('');
@@ -1684,7 +1708,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="general" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-9 gap-1">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>

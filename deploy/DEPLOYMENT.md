@@ -1,10 +1,10 @@
-# ASEMB Node Deployment Information
+# LSEMB Node Deployment Information
 
 ## Version: 1.0.0
 ## Build Date: 2025-08-29T10:54:18.223Z
 
 ## Included Nodes:
-1. ASEMBWorkflow - All-in-one workflow operations
+1. LSEMBWorkflow - All-in-one workflow operations
 2. AliceSemanticBridgeV2 - Advanced semantic operations with error handling
 3. PgHybridQuery - Hybrid search (vector + keyword)
 4. WebScrapeEnhanced - Advanced web scraping
@@ -19,7 +19,7 @@
 
 ## Database Setup:
 ```sql
-CREATE DATABASE asemb;
+CREATE DATABASE lsemb;
 CREATE EXTENSION vector;
 CREATE EXTENSION pg_trgm;
 ```

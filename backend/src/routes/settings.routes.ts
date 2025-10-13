@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asembPool } from '../config/database.config';
+import { lsembPool } from '../config/database.config';
 import { authenticateToken } from '../middleware/auth.middleware';
 const axios = require('axios');
 
@@ -11,7 +11,7 @@ const router = Router();
 // Get all settings
 router.get('/all', async (req: Request, res: Response) => {
   try {
-    const result = await asembPool.query('SELECT key, value FROM settings');
+    const result = await lsembPool.query('SELECT key, value FROM settings');
 
     const settings: { [key: string]: any } = {};
     result.rows.forEach(row => {
@@ -31,7 +31,7 @@ router.get('/', async (req: Request, res: Response) => {
     console.log('🔧 [SETTINGS] Loading configuration from database...');
 
     // Get all settings from database
-    const result = await asembPool.query('SELECT key, value FROM settings');
+    const result = await lsembPool.query('SELECT key, value FROM settings');
     console.log(`🔧 [SETTINGS] Found ${result.rows.length} settings in database`);
 
     // Initialize default configuration
@@ -323,7 +323,7 @@ router.put('/', async (req: Request, res: Response) => {
 
     // Save all settings
     for (const update of updates) {
-      await asembPool.query(
+      await lsembPool.query(
         `INSERT INTO settings (key, value)
          VALUES ($1, $2)
          ON CONFLICT (key)
@@ -344,7 +344,7 @@ router.put('/', async (req: Request, res: Response) => {
 router.get('/:key', async (req: Request, res: Response) => {
   try {
     const { key } = req.params;
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       'SELECT value FROM settings WHERE key = $1',
       [key]
     );
@@ -387,21 +387,21 @@ router.put('/:key', async (req: Request, res: Response) => {
     }
 
     // Check if setting exists
-    const checkResult = await asembPool.query(
+    const checkResult = await lsembPool.query(
       'SELECT key FROM settings WHERE key = $1',
       [key]
     );
 
     if (checkResult.rows.length === 0) {
       // Insert new setting
-      await asembPool.query(
+      await lsembPool.query(
         'INSERT INTO settings (key, value) VALUES ($1, $2)',
         [key, value]
       );
       console.log(`✅ [SETTINGS] Inserted new setting: ${key}`);
     } else {
       // Update existing setting
-      await asembPool.query(
+      await lsembPool.query(
         'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
         [value, key]
       );
@@ -425,7 +425,7 @@ router.post('/openai-api-key', async (req: Request, res: Response) => {
     }
 
     // Save to database
-    await asembPool.query(
+    await lsembPool.query(
       `INSERT INTO settings (key, value, description)
        VALUES ('openai.apiKey', $1, 'OpenAI API Key')
        ON CONFLICT (key)
@@ -444,7 +444,7 @@ router.post('/openai-api-key', async (req: Request, res: Response) => {
 // Get OpenAI API key
 router.get('/openai-api-key', async (req: Request, res: Response) => {
   try {
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       'SELECT value FROM settings WHERE key = $1',
       ['openai.apiKey']
     );
@@ -503,7 +503,7 @@ router.post('/gemini-api-key', async (req: Request, res: Response) => {
     }
 
     // Save to database
-    await asembPool.query(
+    await lsembPool.query(
       `INSERT INTO settings (key, value, description)
        VALUES ('google.apiKey', $1, 'Google Gemini API Key')
        ON CONFLICT (key)
@@ -522,7 +522,7 @@ router.post('/gemini-api-key', async (req: Request, res: Response) => {
 // Get Gemini API key
 router.get('/gemini-api-key', async (req: Request, res: Response) => {
   try {
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       'SELECT value FROM settings WHERE key = $1',
       ['google.apiKey']
     );
@@ -561,7 +561,7 @@ router.get('/ai', async (req: Request, res: Response) => {
       'deepseek.apiKey'
     ];
 
-    const result = await asembPool.query(
+    const result = await lsembPool.query(
       'SELECT key, value FROM settings WHERE key = ANY($1)',
       [keys]
     );
@@ -742,7 +742,7 @@ router.post('/', async (req: Request, res: Response) => {
     // Save each setting
     for (const setting of settingsToSave) {
       if (setting.key && setting.value !== undefined) {
-        await asembPool.query(
+        await lsembPool.query(
           `INSERT INTO settings (key, value, updated_at)
            VALUES ($1, $2, CURRENT_TIMESTAMP)
            ON CONFLICT (key)
@@ -812,20 +812,20 @@ router.post('/ai', async (req: Request, res: Response) => {
 
     for (const setting of settings) {
       // Check if setting exists
-      const checkResult = await asembPool.query(
+      const checkResult = await lsembPool.query(
         'SELECT key FROM settings WHERE key = $1',
         [setting.key]
       );
 
       if (checkResult.rows.length === 0) {
         // Insert new setting
-        await asembPool.query(
+        await lsembPool.query(
           'INSERT INTO settings (key, value) VALUES ($1, $2)',
           [setting.key, setting.value]
         );
       } else {
         // Update existing setting
-        await asembPool.query(
+        await lsembPool.query(
           'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
           [setting.value, setting.key]
         );
@@ -979,13 +979,13 @@ router.post('/initialize-defaults', async (req: Request, res: Response) => {
 
     // Insert defaults if they don't exist
     for (const setting of defaultEmbeddingSettings) {
-      const checkResult = await asembPool.query(
+      const checkResult = await lsembPool.query(
         'SELECT key FROM settings WHERE key = $1',
         [setting.key]
       );
 
       if (checkResult.rows.length === 0) {
-        await asembPool.query(
+        await lsembPool.query(
           `INSERT INTO settings (key, value, description)
            VALUES ($1, $2, $3)`,
           [setting.key, setting.value, setting.description]
@@ -1019,7 +1019,7 @@ router.post('/config/prompts', async (req: Request, res: Response) => {
     }
 
     // Save prompt to database
-    await asembPool.query(
+    await lsembPool.query(
       `INSERT INTO settings (key, value, category, description)
        VALUES ('llmSettings.systemPrompt', $1, 'llm', 'System prompt for AI assistant')
        ON CONFLICT (key)
@@ -1029,7 +1029,7 @@ router.post('/config/prompts', async (req: Request, res: Response) => {
 
     // Save temperature if provided
     if (temperature !== undefined) {
-      await asembPool.query(
+      await lsembPool.query(
         `INSERT INTO settings (key, value, category, description)
          VALUES ('llmSettings.temperature', $1, 'llm', 'Temperature for AI responses')
          ON CONFLICT (key)
@@ -1040,7 +1040,7 @@ router.post('/config/prompts', async (req: Request, res: Response) => {
 
     // Save maxTokens if provided
     if (maxTokens !== undefined) {
-      await asembPool.query(
+      await lsembPool.query(
         `INSERT INTO settings (key, value, category, description)
          VALUES ('llmSettings.maxTokens', $1, 'llm', 'Maximum tokens for AI responses')
          ON CONFLICT (key)
@@ -1077,7 +1077,7 @@ router.get('/config/prompts', async (req: Request, res: Response) => {
     };
 
     try {
-      const result = await asembPool.query(
+      const result = await lsembPool.query(
         `SELECT value FROM settings WHERE key = 'system.prompt' OR key = 'systemPrompt' OR key = 'llmSettings.systemPrompt'`
       );
 
@@ -1097,7 +1097,7 @@ router.get('/config/prompts', async (req: Request, res: Response) => {
 
     // Try to get temperature and maxTokens from database
     try {
-      const tempResult = await asembPool.query(
+      const tempResult = await lsembPool.query(
         `SELECT value FROM settings WHERE key = 'llmSettings.temperature' OR key = 'temperature'`
       );
       if (tempResult.rows.length > 0) {
@@ -1108,7 +1108,7 @@ router.get('/config/prompts', async (req: Request, res: Response) => {
     }
 
     try {
-      const tokensResult = await asembPool.query(
+      const tokensResult = await lsembPool.query(
         `SELECT value FROM settings WHERE key = 'llmSettings.maxTokens' OR key = 'max_tokens'`
       );
       if (tokensResult.rows.length > 0) {

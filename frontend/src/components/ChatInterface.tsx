@@ -24,7 +24,9 @@ import {
   LogOut,
   UserCircle,
   Cpu,
-  Plus
+  Plus,
+  Settings,
+  LayoutDashboard
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -558,6 +560,7 @@ export default function ChatInterface() {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* New Session Button */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -568,94 +571,103 @@ export default function ChatInterface() {
                 <Plus className="w-4 h-4" />
               </Button>
 
-              {/* User Dropdown */}
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                  className="flex items-center gap-2"
-                >
-                  <UserCircle className="w-4 h-4" />
-                    <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
-                </Button>
+              {/* Admin/Manager View */}
+              {user && (user.role === 'admin' || user.role === 'manager') ? (
+                <>
+                  {/* Active Model Display - Only for Admins */}
+                  {availableModels.length > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md">
+                      <Cpu className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">{currentModel}</span>
+                    </div>
+                  )}
 
-                {isUserDropdownOpen && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
-                    <div className="p-2">
-                      <div className="px-2 py-1.5 text-sm font-medium border-b">
-                        <div>{user?.name || 'Kullanıcı'}</div>
-                        <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
-                      </div>
-                      <Link href="/profile">
-                        <Button variant="ghost" className="w-full justify-start text-sm h-8 px-2">
-                          <UserCircle className="w-4 h-4 mr-2" />
-                          Profil
-                        </Button>
-                      </Link>
+                  {/* Admin-only Controls */}
+                  <div className="flex items-center gap-1">
+                    {/* Settings Chip */}
+                    <Link href="/dashboard/settings">
                       <Button
                         variant="ghost"
-                        className="w-full justify-start text-sm h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
-                        onClick={() => {
-                          logout();
-                          setIsUserDropdownOpen(false);
-                        }}
+                        size="sm"
+                        className="gap-2 px-2"
+                        title="Ayarlar"
                       >
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Çıkış Yap
+                        <Settings className="w-4 h-4" />
                       </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+                    </Link>
 
-              {/* Model Selector */}
-              {availableModels.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 px-3">
-                      <Cpu className="h-4 w-4" />
-                      <ChevronDown className="h-3 w-3" />
+                    {/* Dashboard Link */}
+                    <Link href="/dashboard">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-2 px-2"
+                        title="Dashboard"
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {/* User Dropdown */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                      className="flex items-center gap-2"
+                    >
+                      <UserCircle className="w-4 h-4" />
+                        <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    {availableModels
-                      .sort((a, b) => {
-                        // Active model comes first
-                        const aActive = a.model === chatbotSettings.activeChatModel;
-                        const bActive = b.model === chatbotSettings.activeChatModel;
-                        if (aActive && !bActive) return -1;
-                        if (!aActive && bActive) return 1;
-                        return 0;
-                      })
-                      .map((model) => {
-                        const isActive = model.model === chatbotSettings.activeChatModel;
-                        return (
-                          <DropdownMenuItem
-                            key={model.model}
-                            onClick={() => switchModel(model.model)}
-                            className={`cursor-pointer ${isActive ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : ''}`}
+
+                    {isUserDropdownOpen && (
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
+                        <div className="p-2">
+                          <div className="px-2 py-1.5 text-sm font-medium border-b">
+                            <div>{user?.name || 'Kullanıcı'}</div>
+                            <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
+                          </div>
+                          <Link href="/profile">
+                            <Button variant="ghost" className="w-full justify-start text-sm h-8 px-2">
+                              <UserCircle className="w-4 h-4 mr-2" />
+                              Profil
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-start text-sm h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                            onClick={() => {
+                              logout();
+                              setIsUserDropdownOpen(false);
+                            }}
                           >
-                            <div className="flex items-center gap-2 w-full">
-                              <div className={`h-2 w-2 rounded-full ${
-                                isActive
-                                  ? 'bg-green-500'
-                                  : 'bg-gray-400'
-                              }`} />
-                              <div className="flex-1">
-                                <p className={`text-sm font-medium ${isActive ? 'text-green-700 dark:text-green-300' : ''}`}>
-                                  {model.displayName} {isActive && '(Aktif)'}
-                                </p>
-                                <p className="text-xs text-muted-foreground">{model.description}</p>
-                              </div>
-                            </div>
-                          </DropdownMenuItem>
-                        );
-                      })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Çıkış Yap
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Standard User View - Simple */}
+                  {/* User Icon without Dropdown */}
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="p-2"
+                      title={user?.name || 'Kullanıcı'}
+                    >
+                      <UserCircle className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </>
               )}
 
+              {/* Theme Toggle - Always Visible */}
               <ThemeToggle />
             </div>
           </div>

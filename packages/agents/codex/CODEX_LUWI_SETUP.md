@@ -96,8 +96,8 @@ codex bl
 ### Database Connection
 - **Host**: 91.99.229.96
 - **Port**: 5432
-- **Database**: asemb
-- **User**: asemb_user
+- **Database**: lsemb
+- **User**: lsemb_user
 - **SSL**: Required
 
 ### Redis Connection
@@ -162,7 +162,7 @@ node C:\mcp-servers\asb-cli\index.js
 ### Connection Issues
 ```bash
 # Test PostgreSQL connection
-PGPASSWORD=$POSTGRES_PASSWORD psql -h 91.99.229.96 -U asemb_user -d asemb -c "SELECT 1;"
+PGPASSWORD=$POSTGRES_PASSWORD psql -h 91.99.229.96 -U lsemb_user -d lsemb -c "SELECT 1;"
 
 # Test Redis connection
 redis-cli -h 91.99.229.96 -a $REDIS_PASSWORD ping

@@ -7,14 +7,14 @@ Docker container yönetimi ve network optimizasyonu çalışması başarıyla ta
 ## Current Status ✅
 
 ### Services Running
-- **API Server**: `asemb-api` - Port 8083 ✅
-- **Frontend**: `asemb-frontend` - Port 3005 ✅  
-- **PostgreSQL**: `asemb-postgres` - Port 5432 ✅
-- **Redis**: `asemb-redis` - Port 6379 ✅
-- **RAG Service**: `asemb-rag-anything` - Port 8002 ✅
+- **API Server**: `lsemb-api` - Port 8083 ✅
+- **Frontend**: `lsemb-frontend` - Port 3005 ✅  
+- **PostgreSQL**: `lsemb-postgres` - Port 5432 ✅
+- **Redis**: `lsemb-redis` - Port 6379 ✅
+- **RAG Service**: `lsemb-rag-anything` - Port 8002 ✅
 
 ### Network Configuration
-- **Network Name**: `asemb_asemb-network`
+- **Network Name**: `lsemb_lsemb-network`
 - **Subnet**: `172.20.0.0/16`
 - **Gateway**: `172.20.0.1`
 - **MTU**: `1450` (Windows optimized)
@@ -36,7 +36,7 @@ curl -I http://localhost:3005
 #### Inter-Container Communication
 ```bash
 # Frontend → API
-docker exec asemb-frontend wget -qO- http://asemb-api:8083/api/v1/health
+docker exec lsemb-frontend wget -qO- http://lsemb-api:8083/api/v1/health
 # Result: {"status":"ok"} ✅
 
 # API → Database (via connection string)
@@ -50,7 +50,7 @@ docker exec asemb-frontend wget -qO- http://asemb-api:8083/api/v1/health
 driver_opts:
   com.docker.network.driver.mtu: 1450
   com.docker.network.windowsshim.dnsservers: 8.8.8.8
-  com.docker.network.windowsshim.networkname: asemb-network
+  com.docker.network.windowsshim.networkname: lsemb-network
 ```
 
 ### 2. Port Binding Configuration
@@ -125,11 +125,11 @@ curl http://localhost:8083/api/v1/health
 curl -I http://localhost:3005
 
 # Check inter-container communication
-docker exec asemb-frontend wget -qO- http://asemb-api:8083/api/v1/health
+docker exec lsemb-frontend wget -qO- http://lsemb-api:8083/api/v1/health
 
 # View container logs
-docker logs asemb-api
-docker logs asemb-frontend
+docker logs lsemb-api
+docker logs lsemb-frontend
 ```
 
 ### Port Configuration

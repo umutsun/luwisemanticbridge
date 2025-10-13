@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 
 // Mock dependencies
 jest.mock('../config/database.config', () => ({
-  asembPool: {
+  lsembPool: {
     query: jest.fn(),
   },
 }));
@@ -31,7 +31,7 @@ describe('SemanticSearchService', () => {
 
   beforeEach(() => {
     service = new SemanticSearchService();
-    mockPool = require('../config/database.config').asembPool;
+    mockPool = require('../config/database.config').lsembPool;
     jest.clearAllMocks();
   });
 

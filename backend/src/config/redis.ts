@@ -20,7 +20,7 @@ async function createRedisConnection() {
 
   const config: any = {
     host: (redisConfig as any).host || process.env.REDIS_HOST || 'localhost',
-    port: (redisConfig as any).port || parseInt(process.env.REDIS_PORT || '6379'),
+    port: parseInt(process.env.REDIS_PORT || '6379'), // Force use of env port 6379
     db: (redisConfig as any).db || parseInt(process.env.REDIS_DB || '2'),
     // Enable authentication with password from environment
     password: (redisConfig as any).password || process.env.REDIS_PASSWORD || undefined,
@@ -130,7 +130,7 @@ function fallbackToNoAuth() {
   try {
     const noAuthConfig = {
       host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+      port: parseInt(process.env.REDIS_PORT || '6379'), // Force use of env port 6379
       db: parseInt(process.env.REDIS_DB || '2'),
       // No password for fallback
       retryStrategy(times: number) {
