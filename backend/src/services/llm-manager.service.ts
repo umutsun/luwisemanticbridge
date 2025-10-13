@@ -160,7 +160,18 @@ export class LLMManager {
       if (this.actualModel === 'claude-3-sonnet-20240229') {
         console.warn('🔄 FORCE UPDATING deprecated Claude model claude-3-sonnet-20240229 to claude-3-5-sonnet-20241022');
         this.actualModel = 'claude-3-5-sonnet-20241022';
-        
+
+        // Update the provider configuration
+        if (this.providers.has('claude')) {
+          const claudeProvider = this.providers.get('claude')!;
+          claudeProvider.model = 'claude-3-5-sonnet-20241022';
+          // Re-initialize if already initialized
+          if (claudeProvider.isInitialized) {
+            claudeProvider.isInitialized = false;
+            this.initializeProvider('claude');
+          }
+        }
+
         // Also update the database setting to prevent future issues
         try {
           await asembPool.query(
@@ -574,6 +585,7 @@ export class LLMManager {
       maxTokens?: number;
       systemPrompt?: string;
       preferredProvider?: string; // Add preferred provider option
+      _isFallback?: boolean; // Internal flag to prevent infinite recursion
     } = {}
   ): Promise<{ content: string; provider: string; model: string; fallbackUsed?: boolean }> {
     await this.refreshSettingsIfNeeded();
@@ -791,10 +803,10 @@ export class LLMManager {
       });
 
       // IMPORTANT: Don't use fallbacks for the active provider from settings
-      // Only fallback if this was a user-specified preferred provider
+      // Only fallback if this was a user-specified preferred provider AND we haven't already fallback
       const isFromSettings = !options.preferredProvider;
 
-      if (!isFromSettings && provider === preferredProvider) {
+      if (!isFromSettings && provider === preferredProvider && !options._isFallback) {
         console.log(`⚠️ User-specified provider ${provider} failed, trying fallback providers...`);
 
         // Try fallback providers (only for user-specified providers)
@@ -816,7 +828,8 @@ export class LLMManager {
               // Recursive call with fallback provider as preferred
               const result = await this.generateChatResponse(message, {
                 ...options,
-                preferredProvider: nextProvider
+                preferredProvider: nextProvider,
+                _isFallback: true
               });
 
               // Mark that fallback was used
@@ -858,7 +871,8 @@ export class LLMManager {
               // Recursive call with fallback provider as preferred
               const result = await this.generateChatResponse(message, {
                 ...options,
-                preferredProvider: nextProvider
+                preferredProvider: nextProvider,
+                _isFallback: true
               });
 
               // Mark that fallback was used

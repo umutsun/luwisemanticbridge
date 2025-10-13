@@ -148,6 +148,14 @@ export default function Header() {
         setConnectionProgress(100);
 
         setTimeout(async () => {
+          // Get settings first
+          let settings = null;
+          try {
+            settings = await getAppSettings();
+          } catch (error) {
+            console.warn('Could not fetch app settings');
+          }
+
           // Build comprehensive system status from both endpoints
           const dbService = healthData.services?.database || healthData.services?.asemb_database;
           const redisService = healthData.services?.redis;
@@ -176,9 +184,7 @@ export default function Header() {
             displayName: 'Claude 3 Sonnet'
           };
 
-          let settings = null;
           try {
-            settings = await getAppSettings();
             if (settings && settings.llmSettings?.activeChatModel) {
               const modelParts = settings.llmSettings.activeChatModel.split('/');
               if (modelParts.length >= 2) {
@@ -303,10 +309,10 @@ export default function Header() {
             <SheetContent side="left" className="w-[280px] sm:w-[350px]">
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
-                  {config?.app?.logoUrl ? (
-                    <img 
-                      src={config.app.logoUrl} 
-                      alt={config.app.name || 'Logo'} 
+                  {(config as any)?.app?.logoUrl ? (
+                    <img
+                      src={(config as any).app.logoUrl}
+                      alt={config?.app?.name || 'Logo'}
                       className="h-6 w-auto object-contain"
                     />
                   ) : (
@@ -385,10 +391,10 @@ export default function Header() {
 
           {/* Logo - Responsive */}
           <Link href="/" className="flex items-center gap-2 lg:gap-3 hover:opacity-80 transition-opacity">
-            {config?.app?.logoUrl ? (
-              <img 
-                src={config.app.logoUrl} 
-                alt={config.app.name || 'Logo'} 
+            {(config as any)?.app?.logoUrl ? (
+              <img
+                src={(config as any).app.logoUrl}
+                alt={config?.app?.name || 'Logo'}
                 className="h-8 w-auto lg:h-10 object-contain"
               />
             ) : (

@@ -1,12 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { pool } from '../config/database';
+import { asembPool } from '../config/database.config';
 
 const router = Router();
 
 // Get database schema information
 router.get('/schema', async (req: Request, res: Response) => {
   try {
-    const client = await pool.connect();
+    const client = await asembPool.connect();
 
     // Get all tables
     const tablesQuery = `
@@ -65,7 +65,7 @@ router.get('/schema', async (req: Request, res: Response) => {
 // Get table statistics
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const client = await pool.connect();
+    const client = await asembPool.connect();
 
     // Get database size
     const sizeQuery = `
@@ -77,7 +77,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     const recordsQuery = `
       SELECT
         schemaname,
-        tablename,
+        relname as tablename,
         n_tup_ins as inserts,
         n_tup_upd as updates,
         n_tup_del as deletes,
@@ -92,8 +92,8 @@ router.get('/stats', async (req: Request, res: Response) => {
     const indexQuery = `
       SELECT
         schemaname,
-        tablename,
-        indexname,
+        relname as tablename,
+        indexrelname as indexname,
         idx_scan as scans,
         idx_tup_read as tuples_read,
         idx_tup_fetch as tuples_fetched

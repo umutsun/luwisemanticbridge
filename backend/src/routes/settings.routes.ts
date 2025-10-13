@@ -165,6 +165,9 @@ router.get('/', async (req: Request, res: Response) => {
         apiKeysFound.openai = true;
         console.log('✅ [SETTINGS] Loaded OpenAI API key from database (key:', key, ')');
       }
+    } else if (key === 'openai.model') {
+      config.openai.model = value;
+      console.log('✅ [SETTINGS] Loaded OpenAI model from database:', value);
     } else if (key === 'google.apiKey' || key === 'google_apiKey' || key === 'google.api_key') {
       if (value && value.trim() !== '') {
         config.google.apiKey = value;

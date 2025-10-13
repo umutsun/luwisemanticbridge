@@ -272,8 +272,15 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         console.log('No results above threshold, showing top matches');
       }
 
-      // 3. Get conversation history
-      const history = await this.getConversationHistory(convId, 5);
+      // 3. Get conversation history with retry
+      let history = [];
+      try {
+        history = await this.getConversationHistory(convId, 5);
+      } catch (dbError) {
+        console.error('Failed to get conversation history:', dbError);
+        // Continue without history if DB fails
+        history = [];
+      }
 
       // 4. Generate response using LLM Manager
       const llmManager = LLMManager.getInstance();
@@ -303,9 +310,14 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         }
       );
 
-      // 5. Save messages to database
-      await this.saveMessage(convId, 'user', message);
-      await this.saveMessage(convId, 'assistant', response.content, searchResults, response.model);
+      // 5. Save messages to database with error handling
+      try {
+        await this.saveMessage(convId, 'user', message);
+        await this.saveMessage(convId, 'assistant', response.content, searchResults, response.model);
+      } catch (saveError) {
+        console.error('Failed to save messages to database:', saveError);
+        // Continue even if save fails
+      }
 
       // Log if fallback was used
       if (response.fallbackUsed) {
@@ -858,14 +870,34 @@ Başlık: ${title}
       VALUES ($1, $2, $3, $4, $5, $6, NOW())
     `;
 
-    await this.pool.query(query, [
-      uuidv4(),
-      conversationId,
-      role,
-      content,
-      sources ? JSON.stringify(sources) : null,
-      model || null
-    ]);
+    let lastError: Error | null = null;
+    const maxRetries = 3;
+    const retryDelay = 1000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.pool.query(query, [
+          uuidv4(),
+          conversationId,
+          role,
+          content,
+          sources ? JSON.stringify(sources) : null,
+          model || null
+        ]);
+        return; // Success, exit the function
+      } catch (error) {
+        lastError = error as Error;
+        console.error(`saveMessage attempt ${attempt} failed:`, lastError.message);
+
+        if (attempt < maxRetries) {
+          console.log(`Retrying saveMessage in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    // All retries failed, throw the last error
+    throw lastError || new Error('Failed to save message after retries');
   }
 
   /**
@@ -994,7 +1026,7 @@ Başlık: ${title}
   }
 
   /**
-   * Get conversation history
+   * Get conversation history with retry logic
    */
   private async getConversationHistory(
     conversationId: string,
@@ -1008,8 +1040,27 @@ Başlık: ${title}
       LIMIT $2
     `;
 
-    const result = await this.pool.query(query, [conversationId, limit]);
-    return result.rows.reverse();
+    let lastError: Error | null = null;
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await this.pool.query(query, [conversationId, limit]);
+        return result.rows.reverse();
+      } catch (error) {
+        lastError = error as Error;
+        console.error(`getConversationHistory attempt ${attempt} failed:`, lastError.message);
+
+        if (attempt < maxRetries) {
+          console.log(`Retrying getConversationHistory in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    // All retries failed, throw the last error
+    throw lastError || new Error('Failed to get conversation history after retries');
   }
 
   /**

@@ -143,7 +143,7 @@ export default function PromptsPage() {
 
   const fetchChatbotSettings = async () => {
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings`);
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings`);
       const data = await response.json();
       
       setChatbotSettings({
@@ -169,7 +169,7 @@ export default function PromptsPage() {
 
   const fetchLlmProviders = async () => {
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config`);
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config`);
       if (response.ok) {
         const data = await response.json();
         setLlmProviders([
@@ -216,13 +216,13 @@ export default function PromptsPage() {
     setLoadingEmbeddings(true);
     try {
       // Check if unified embeddings setting exists
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings`);
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings`);
       if (response.ok) {
         const data = await response.json();
 
         // Try to get unified embeddings stats from a specific endpoint
         try {
-          const embedResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/embeddings/stats`);
+          const embedResponse = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/embeddings/stats`);
           if (embedResponse.ok) {
             const embedData = await embedResponse.json();
             setUnifiedEmbeddings({
@@ -233,7 +233,7 @@ export default function PromptsPage() {
             });
           } else {
             // Fallback to RAG config
-            const ragResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config`);
+            const ragResponse = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config`);
             if (ragResponse.ok) {
               const ragData = await ragResponse.json();
               const tableStats = ragData.tables || [];
@@ -304,7 +304,7 @@ export default function PromptsPage() {
     setSuccess('');
     
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -361,7 +361,7 @@ export default function PromptsPage() {
         throw new Error('At least one valid API key must be saved');
       }
 
-      const keysResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/settings`, {
+      const keysResponse = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settingsToSave)
@@ -373,7 +373,7 @@ export default function PromptsPage() {
       }
 
       // Save LLM provider settings
-      const ragResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config', {
+      const ragResponse = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/rag/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -388,7 +388,7 @@ export default function PromptsPage() {
       }
 
       // Save LLM style to settings
-      const settingsResponse = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/settings`, {
+      const settingsResponse = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -431,7 +431,7 @@ export default function PromptsPage() {
     setUnifiedEmbeddings({ ...unifiedEmbeddings, enabled: newEnabled });
 
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -476,7 +476,7 @@ export default function PromptsPage() {
     }
 
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + '/api/v2/chatbot/settings', {
         method: 'DELETE'
       });
 
@@ -508,7 +508,7 @@ export default function PromptsPage() {
     setError('');
 
     try {
-      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + `/api/v2/settings/test/${provider}`, {
+      const response = await fetch(`(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083') + `/api/v2/settings/test/${provider}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

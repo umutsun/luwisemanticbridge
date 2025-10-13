@@ -5,16 +5,19 @@ dotenv.config();
 
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
-  max: parseInt(process.env.DB_POOL_SIZE || '20'),
-  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000'),
-  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '60000'),
+  max: parseInt(process.env.DB_POOL_SIZE || '30'),
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '60000'),
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '120000'),
   allowExitOnIdle: false,
   // Reuse connections
-  statement_timeout: 60000,
-  query_timeout: 60000,
+  statement_timeout: 120000,
+  query_timeout: 120000,
   // Add retry logic
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
+  // Add retry on connection errors
+  reconnectAttempts: 3,
+  reconnectIntervalMillis: 2000,
 };
 
 export const pool = new Pool(poolConfig);

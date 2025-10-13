@@ -478,54 +478,65 @@ export default function SettingsPage() {
 
         // Ensure required properties have default values if missing from API
         const enrichedConfig = {
+          // Start with data from server
           ...data,
-          // Add fallback for app configuration
-          app: data.app || {
+          // Only add fallbacks for missing top-level properties
+          app: {
             name: 'Luwi Semantic Bridge',
             description: 'AI-Powered Knowledge Management System',
             logoUrl: '',
-            locale: 'tr'
+            locale: 'tr',
+            ...data.app  // Server data takes precedence
           },
-          // Add fallback for all API provider configurations
-          openai: data.openai || {
+          // Merge with server data for each provider
+          openai: {
             apiKey: typeof process.env.NEXT_PUBLIC_OPENAI_API_KEY === 'string' ? process.env.NEXT_PUBLIC_OPENAI_API_KEY : '',
             model: 'gpt-4-turbo-preview',
             embeddingModel: 'text-embedding-3-small',
             maxTokens: 4096,
             temperature: 0.7,
+            ...data.openai  // Server data overwrites defaults
           },
-          anthropic: data.anthropic || {
+          anthropic: {
             apiKey: '',
             model: 'claude-3-5-sonnet-20241022',
             maxTokens: 4096,
+            ...data.anthropic
           },
-          deepseek: data.deepseek || {
+          deepseek: {
             apiKey: '',
             baseUrl: 'https://api.deepseek.com',
             model: 'deepseek-coder',
+            ...data.deepseek
           },
-          ollama: data.ollama || {
+          ollama: {
             baseUrl: 'http://localhost:11434',
             model: 'llama2',
             embeddingModel: 'nomic-embed-text',
+            ...data.ollama
           },
-          huggingface: data.huggingface || {
+          huggingface: {
             apiKey: typeof process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_HUGGINGFACE_API_KEY : '',
             model: 'sentence-transformers/all-MiniLM-L6-v2',
             endpoint: 'https://api-inference.huggingface.co/models/',
+            ...data.huggingface
           },
-          cohere: data.cohere || {
+          cohere: {
             apiKey: typeof process.env.NEXT_PUBLIC_COHERE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_COHERE_API_KEY : '',
+            ...data.cohere
           },
-          voyage: data.voyage || {
+          voyage: {
             apiKey: typeof process.env.NEXT_PUBLIC_VOYAGE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_VOYAGE_API_KEY : '',
+            ...data.voyage
           },
-          google: data.google || {
+          google: {
             apiKey: typeof process.env.NEXT_PUBLIC_GOOGLE_API_KEY === 'string' ? process.env.NEXT_PUBLIC_GOOGLE_API_KEY : '',
             projectId: typeof process.env.NEXT_PUBLIC_GOOGLE_PROJECT_ID === 'string' ? process.env.NEXT_PUBLIC_GOOGLE_PROJECT_ID : '',
+            ...data.google
           },
-          jina: data.jina || {
+          jina: {
             apiKey: typeof process.env.NEXT_PUBLIC_JINA_API_KEY === 'string' ? process.env.NEXT_PUBLIC_JINA_API_KEY : '',
+            ...data.jina
           },
           dataSource: {
             useLocalDb: data.dataSource?.useLocalDb ?? true,
@@ -839,10 +850,7 @@ export default function SettingsPage() {
         setShowActiveOption(true);
         setCanActivate(true);
 
-        toast({
-          title: 'Success',
-          description: `${testProvider} API key validated successfully - Model: ${testModel}`,
-        });
+        // Toast removed - info card is sufficient
       } else {
         setTestResult({
           success: false,
@@ -850,11 +858,7 @@ export default function SettingsPage() {
         });
         setShowActiveOption(false);
         setCanActivate(false);
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to validate API key',
-          variant: 'destructive',
-        });
+        // Toast removed - info card is sufficient
       }
     } catch (error: any) {
       console.error('API key test error:', error);
@@ -862,11 +866,7 @@ export default function SettingsPage() {
         success: false,
         message: error.message || 'Failed to test API key'
       });
-      toast({
-        title: 'Error',
-        description: 'Failed to test API key',
-        variant: 'destructive',
-      });
+      // Toast removed - info card is sufficient
     } finally {
       setTestingApi(false);
     }
@@ -1096,6 +1096,9 @@ export default function SettingsPage() {
           title: 'Success',
           description: 'Configuration saved successfully',
         });
+
+        // Reload config from server to get latest values
+        await fetchConfig();
 
         // Save active prompt to system settings
         const activePromptData = prompts.find(p => p.isActive);
