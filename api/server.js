@@ -477,6 +477,53 @@ app.post('/api/v2/settings/ai', async (req, res) => {
     }
 });
 
+// --- Test AI Model ---
+app.post('/api/v2/models/test', async (req, res) => {
+    const { provider, apiKey, model } = req.body;
+
+    if (!provider || !apiKey || !model) {
+        return res.status(400).json({ success: false, error: 'Provider, API key, and model are required.' });
+    }
+
+    try {
+        let client;
+        let response;
+
+        switch (provider) {
+            case 'google':
+                const { GoogleGenerativeAI } = require('@google/generative-ai');
+                client = new GoogleGenerativeAI(apiKey);
+                const generativeModel = client.getGenerativeModel({ model });
+                response = await generativeModel.generateContent('Test');
+                break;
+            
+            case 'openai':
+                const OpenAI = require('openai');
+                client = new OpenAI({ apiKey });
+                response = await client.chat.completions.create({
+                    model,
+                    messages: [{ role: 'user', content: 'Test' }],
+                });
+                break;
+
+            // Add other providers as needed
+
+            default:
+                return res.status(400).json({ success: false, error: `Unsupported provider: ${provider}` });
+        }
+
+        if (response) {
+            res.json({ success: true, message: 'Model tested successfully.' });
+        } else {
+            res.status(500).json({ success: false, error: 'Test failed, no response from model.' });
+        }
+    } catch (error) {
+        console.error(`Error testing ${provider} model:`, error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+
 // --- Chat Suggestions Endpoint ---
 app.get('/api/v2/chat/suggestions', (req, res) => {
   const suggestions = [

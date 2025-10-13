@@ -262,6 +262,14 @@ export class SemanticSearchService {
       this.lastEmbeddingSettingsRefresh = Date.now();
       this.syncEmbeddingConfigWithLLM();
 
+      // FORCE GOOGLE EMBEDDINGS for vector compatibility (768 dimensions)
+      if (this.embeddingSettings.provider !== 'google') {
+        console.log('🔄 FORCING Google embeddings for vector compatibility (768 dims)');
+        this.embeddingSettings.provider = 'google';
+        this.embeddingSettings.model = 'text-embedding-004';
+        this.syncEmbeddingConfigWithLLM();
+      }
+
       console.log('[SemanticSearch] Embedding settings loaded', {
         provider: this.embeddingSettings.provider,
         model: this.embeddingSettings.model,
