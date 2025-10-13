@@ -73,14 +73,14 @@ const SettingsDashboard = ({ configStatus, systemHealth }) => {
     }
   };
 
-  const testAPIKey = async (provider, apiKey) => {
+  const testAPIKey = async (provider, apiKey, model) => {
     try {
-      const response = await fetch(`http://localhost:8083/api/v2/settings/test/${provider}`, {
+      const response = await fetch(`http://localhost:8083/api/v2/models/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ apiKey })
+        body: JSON.stringify({ provider, apiKey, model })
       });
 
       const result = await response.json();
@@ -559,10 +559,23 @@ const SettingsDashboard = ({ configStatus, systemHealth }) => {
         </div>
       </div>
 
-      {/* Google Settings */}
-      <div className="border rounded-lg p-6">
-        <h4 className="text-md font-semibold mb-4">Google (Gemini)</h4>
-        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Model
+            </label>
+            <select
+              value={config.google?.model || 'gemini-pro'}
+              onChange={(e) => setConfig(prev => ({
+                ...prev,
+                google: { ...prev.google, model: e.target.value }
+              }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="gemini-pro">Gemini Pro</option>
+              <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               API Key
@@ -579,28 +592,13 @@ const SettingsDashboard = ({ configStatus, systemHealth }) => {
                 placeholder="AIza..."
               />
               <button
-                onClick={() => testAPIKey('google', config.google?.apiKey)}
+                onClick={() => testAPIKey('google', config.google?.apiKey, config.google?.model || 'gemini-pro')}
                 disabled={!config.google?.apiKey}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
               >
                 Test
               </button>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project ID
-            </label>
-            <input
-              type="text"
-              value={config.google?.projectId || ''}
-              onChange={(e) => setConfig(prev => ({
-                ...prev,
-                google: { ...prev.google, projectId: e.target.value }
-              }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
           </div>
         </div>
       </div>

@@ -716,7 +716,7 @@ app.get('/api/v2/settings', async (req, res) => {
           }
         },
         app_config: {
-          name: 'Luwi Semantic Bridge,
+          name: 'Luwi Semantic Bridge',
           version: '1.0.0',
           environment: process.env.NODE_ENV || 'development'
         }
@@ -749,7 +749,7 @@ app.get('/api/v2/config', async (req, res) => {
 
     res.json({
       app: {
-        name: dbSettings['app.name'] || 'Luwi Semantic Bridge,
+        name: 'Luwi Semantic Bridge',
         description: dbSettings['app.description'] || 'AI-Powered Knowledge Management System',
         logoUrl: dbSettings['app.logoUrl'] || '',
         locale: dbSettings['app.locale'] || 'tr'
