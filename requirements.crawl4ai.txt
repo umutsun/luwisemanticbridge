@@ -1,0 +1,12 @@
+# Crawl4AI ve bağımlılıkları
+crawl4ai[async]==0.3.0
+playwright==1.40.0
+
+# Flask API için
+flask==3.0.0
+flask-cors==4.0.0
+
+# Diğer bağımlılıklar
+requests==2.31.0
+beautifulsoup4==4.12.2
+lxml==4.9.3

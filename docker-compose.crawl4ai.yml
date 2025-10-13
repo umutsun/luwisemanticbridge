@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  crawl4ai-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.crawl4ai
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - PORT=5000
+      - HOST=0.0.0.0
+      - DEBUG=false
+    volumes:
+      - ./temp:/app/temp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

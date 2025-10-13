@@ -10,6 +10,7 @@ import advancedScraper from '../services/advanced-scraper.service';
 import puppeteerScraper from '../services/puppeteer-scraper.service';
 import { gibScraper } from '../services/gib-scraper.service';
 import { enhancedPuppeteer } from '../services/enhanced-puppeteer.service';
+import crawl4aiHybrid from '../services/crawl4ai-hybrid.service';
 
 const router = Router();
 
@@ -1841,5 +1842,435 @@ router.get('/dashboard/status', async (req: Request, res: Response) => {
     });
   }
 });
+
+// Crawl4AI ile scraping endpoint'i
+router.post('/crawl4ai', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  let activityMetrics: any = {};
+  let activityDetails: any = {};
+
+  try {
+    const {
+      url,
+      options = {},
+      category = 'general',
+      processContent = false,
+      saveToDb = false,
+      generateEmbeddings = false
+    } = req.body;
+    
+    if (!url) {
+      await logActivity('scrape', null, null, 'error', {}, {}, 'URL is required');
+      return res.status(400).json({ error: 'URL is required' });
+    }
+    
+    console.log(`[CRAWL4AI] Starting scrape for: ${url}`);
+    
+    // Crawl4AI ile scrape et
+    const scrapeResult = await crawl4aiHybrid.scrape(url, options);
+    
+    if (!scrapeResult.success) {
+      await logActivity(
+        'scrape',
+        url,
+        null,
+        'error',
+        { url, method: 'crawl4ai' },
+        { extraction_time_ms: Date.now() - startTime },
+        scrapeResult.error
+      );
+      
+      return res.status(500).json({
+        success: false,
+        error: scrapeResult.error,
+        url
+      });
+    }
+    
+    let finalResult = scrapeResult;
+    
+    // İçerik işleme isteniyorsa
+    if (processContent && scrapeResult.success && scrapeResult.content) {
+      try {
+        // Metni chunk'lara ayır
+        const textSplitter = new RecursiveCharacterTextSplitter({
+          chunkSize: 1000,
+          chunkOverlap: 200,
+          separators: ['\n\n', '\n', '.', '!', '?', ';', ':', ' ', '']
+        });
+        
+        const chunks = await textSplitter.splitText(scrapeResult.content);
+        
+        // Embedding'leri oluştur
+        const embeddings: number[][] = [];
+        let totalTokens = 0;
+        
+        if (generateEmbeddings && chunks.length > 0) {
+          for (const chunk of chunks) {
+            const embedding = generateLocalEmbedding(chunk);
+            embeddings.push(embedding);
+            totalTokens += countTokens(chunk);
+          }
+        }
+        
+        // Veritabanına kaydet
+        let savedId = null;
+        if (saveToDb) {
+          try {
+            const insertResult = await asembPool.query(`
+              INSERT INTO scraped_data (
+                url, title, content, description, keywords, metadata,
+                content_chunks, chunk_count, content_length,
+                token_count, scraping_mode
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              ON CONFLICT (url)
+              DO UPDATE SET
+                title = EXCLUDED.title,
+                content = EXCLUDED.content,
+                description = EXCLUDED.description,
+                keywords = EXCLUDED.keywords,
+                metadata = EXCLUDED.metadata,
+                content_chunks = EXCLUDED.content_chunks,
+                chunk_count = EXCLUDED.chunk_count,
+                content_length = EXCLUDED.content_length,
+                token_count = EXCLUDED.token_count,
+                scraping_mode = EXCLUDED.scraping_mode,
+                updated_at = CURRENT_TIMESTAMP
+              RETURNING id
+            `, [
+              url,
+              scrapeResult.title,
+              scrapeResult.content,
+              scrapeResult.description,
+              scrapeResult.keywords.join(', '),
+              JSON.stringify(scrapeResult.metadata),
+              chunks,
+              chunks.length,
+              scrapeResult.content.length,
+              totalTokens,
+              'crawl4ai-hybrid'
+            ]);
+            
+            savedId = insertResult.rows[0].id;
+            
+            // Embedding'leri ayrı tabloya kaydet
+            if (embeddings.length > 0) {
+              for (let i = 0; i < embeddings.length; i++) {
+                await asembPool.query(`
+                  INSERT INTO document_embeddings (
+                    document_id,
+                    chunk_text,
+                    embedding,
+                    metadata
+                  )
+                  VALUES ($1, $2, $3::vector, $4)
+                `, [
+                  savedId,
+                  chunks[i],
+                  `[${embeddings[i].join(',')}]`,
+                  JSON.stringify({
+                    chunk_index: i,
+                    total_chunks: chunks.length,
+                    url: url,
+                    scraping_method: 'crawl4ai-hybrid'
+                  })
+                ]);
+              }
+            }
+          } catch (dbError) {
+            console.error('[CRAWL4AI] Database save error:', dbError);
+          }
+        }
+        
+        // Aktiviteyi logla
+        await logActivity(
+          'scrape',
+          url,
+          scrapeResult.title,
+          'success',
+          {
+            url,
+            title: scrapeResult.title,
+            description: scrapeResult.description,
+            scrapeMethod: 'crawl4ai-hybrid',
+            keywordCount: scrapeResult.keywords.length,
+            linkCount: scrapeResult.links.length
+          },
+          {
+            content_length: scrapeResult.content.length,
+            chunk_count: chunks.length,
+            embedding_count: embeddings.length,
+            token_count: totalTokens,
+            scraping_mode: 'crawl4ai-hybrid',
+            extraction_time_ms: Date.now() - startTime
+          },
+          undefined
+        );
+        
+        finalResult = {
+          ...scrapeResult,
+          chunks,
+          embeddingsGenerated: embeddings.length,
+          totalTokens,
+          savedToDb: !!savedId,
+          dbId: savedId
+        } as any;
+        
+      } catch (processingError) {
+        console.error('Content processing error:', processingError);
+        // İşleme hatası olsa bile scraping sonucunu döndür
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: finalResult,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Crawl4AI scraping error:', error);
+    
+    await logActivity(
+      'scrape',
+      req.body.url,
+      null,
+      'error',
+      { url: req.body.url, method: 'crawl4ai' },
+      { extraction_time_ms: Date.now() - startTime },
+      error.message
+    );
+    
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      url: req.body.url
+    });
+  }
+});
+
+// Toplu Crawl4AI scraping endpoint'i
+router.post('/crawl4ai/batch', async (req: Request, res: Response) => {
+  try {
+    const {
+      urls,
+      options = {},
+      category = 'general',
+      processContent = false,
+      saveToDb = false,
+      generateEmbeddings = false
+    } = req.body;
+    
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ error: 'URLs array is required' });
+    }
+    
+    // İş için ID oluştur
+    const jobId = `crawl4ai_batch_${Date.now()}`;
+    
+    // Redis'de iş durumunu kaydet
+    await redis.set(`job:${jobId}`, JSON.stringify({
+      status: 'processing',
+      progress: 0,
+      total: urls.length,
+      processed: 0,
+      startTime: new Date().toISOString()
+    }), 'EX', 3600);
+    
+    // Toplu scraping'i arka planda başlat
+    processBatchScraping(jobId, urls, options, category, processContent, saveToDb, generateEmbeddings)
+      .then(async (results) => {
+        // İş durumunu güncelle
+        await redis.set(`job:${jobId}`, JSON.stringify({
+          status: 'completed',
+          progress: 100,
+          total: urls.length,
+          processed: results.length,
+          results,
+          completedTime: new Date().toISOString()
+        }), 'EX', 3600);
+      })
+      .catch(async (error) => {
+        // Hata durumunu güncelle
+        await redis.set(`job:${jobId}`, JSON.stringify({
+          status: 'failed',
+          error: error.message,
+          failedTime: new Date().toISOString()
+        }), 'EX', 3600);
+      });
+    
+    res.json({
+      success: true,
+      jobId,
+      message: 'Batch scraping started',
+      totalUrls: urls.length,
+      statusUrl: `/api/v2/scraper/crawl4ai/job/${jobId}`
+    });
+    
+  } catch (error: any) {
+    console.error('Crawl4AI batch scraping error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Crawl4AI iş durumu endpoint'i
+router.get('/crawl4ai/job/:jobId', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    const jobData = await redis.get(`job:${jobId}`);
+    
+    if (!jobData) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    
+    const job = JSON.parse(jobData);
+    res.json({
+      success: true,
+      job
+    });
+  } catch (error: any) {
+    console.error('Error fetching job:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Crawl4AI durum kontrolü endpoint'i
+router.get('/crawl4ai/status', async (req: Request, res: Response) => {
+  try {
+    const status = crawl4aiHybrid.getStatus();
+    res.json({
+      success: true,
+      status
+    });
+  } catch (error: any) {
+    console.error('Error fetching Crawl4AI status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Arka planda toplu scraping işleyen fonksiyon
+async function processBatchScraping(
+  jobId: string,
+  urls: string[],
+  options: any,
+  category: string,
+  processContent: boolean,
+  saveToDb: boolean,
+  generateEmbeddings: boolean
+): Promise<any[]> {
+  const results: any[] = [];
+  
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    
+    try {
+      // URL'yi scrape et
+      const scrapeResult = await crawl4aiHybrid.scrape(url, options);
+      
+      let finalResult = scrapeResult;
+      
+      // İçerik işleme
+      if (processContent && scrapeResult.success && scrapeResult.content) {
+        try {
+          const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 1000,
+            chunkOverlap: 200,
+            separators: ['\n\n', '\n', '.', '!', '?', ';', ':', ' ', '']
+          });
+          
+          const chunks = await textSplitter.splitText(scrapeResult.content);
+          
+          finalResult = {
+            ...scrapeResult,
+            chunks,
+            chunksCount: chunks.length
+          } as any;
+          
+          // Veritabanına kaydet
+          if (saveToDb) {
+            try {
+              const insertResult = await asembPool.query(`
+                INSERT INTO scraped_data (
+                  url, title, content, description, keywords, metadata,
+                  content_chunks, chunk_count, content_length, scraping_mode
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (url)
+                DO UPDATE SET
+                  title = EXCLUDED.title,
+                  content = EXCLUDED.content,
+                  description = EXCLUDED.description,
+                  keywords = EXCLUDED.keywords,
+                  metadata = EXCLUDED.metadata,
+                  content_chunks = EXCLUDED.content_chunks,
+                  chunk_count = EXCLUDED.chunk_count,
+                  content_length = EXCLUDED.content_length,
+                  scraping_mode = EXCLUDED.scraping_mode,
+                  updated_at = CURRENT_TIMESTAMP
+                RETURNING id
+              `, [
+                url,
+                scrapeResult.title,
+                scrapeResult.content,
+                scrapeResult.description,
+                scrapeResult.keywords.join(', '),
+                JSON.stringify(scrapeResult.metadata),
+                chunks,
+                chunks.length,
+                scrapeResult.content.length,
+                'crawl4ai-batch'
+              ]);
+              
+              (finalResult as any).dbId = insertResult.rows[0].id;
+            } catch (dbError) {
+              console.error(`Database save error for ${url}:`, dbError);
+            }
+          }
+        } catch (processingError) {
+          console.error(`Content processing error for ${url}:`, processingError);
+        }
+      }
+      
+      results.push(finalResult);
+      
+      // İş durumunu güncelle
+      await redis.set(`job:${jobId}`, JSON.stringify({
+        status: 'processing',
+        progress: Math.round((i + 1) / urls.length * 100),
+        total: urls.length,
+        processed: i + 1,
+        lastProcessedUrl: url,
+        lastProcessedTime: new Date().toISOString()
+      }), 'EX', 3600);
+      
+    } catch (error: any) {
+      console.error(`Error scraping ${url}:`, error);
+      results.push({
+        url,
+        success: false,
+        error: error.message,
+        title: '',
+        content: '',
+        description: '',
+        keywords: [],
+        links: [],
+        images: [],
+        metadata: { scrapingMethod: 'crawl4ai-batch', error }
+      });
+    }
+  }
+  
+  return results;
+}
 
 export default router;
