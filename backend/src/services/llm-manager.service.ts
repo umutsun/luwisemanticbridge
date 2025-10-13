@@ -398,7 +398,22 @@ export class LLMManager {
           console.log('✅ Claude client created successfully');
           break;
         case 'openai':
-          prov.client = new OpenAI({ apiKey: prov.apiKey });
+          console.log('🔧 Initializing OpenAI provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          try {
+            const openaiClient = new OpenAI({ apiKey: prov.apiKey });
+            prov.client = openaiClient;
+            console.log('✅ OpenAI client created successfully');
+            console.log('🔍 Verification - Client after assignment:', {
+              hasClient: !!prov.client,
+              clientType: typeof prov.client,
+              hasChat: !!(prov.client && (prov.client as any).chat),
+              hasCompletions: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions),
+              hasCreate: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions && (prov.client as any).chat.completions.create)
+            });
+          } catch (error) {
+            console.error('❌ Failed to create OpenAI client:', error);
+            return false;
+          }
           break;
         case 'gemini':
           prov.client = new GoogleGenerativeAI(prov.apiKey);
@@ -688,6 +703,17 @@ export class LLMManager {
               throw new Error('OpenAI client is not initialized');
             }
           }
+          // Triple-check after initialization
+          if (!prov?.client) {
+            console.error('❌ OpenAI client is null after initialization');
+            throw new Error('OpenAI client creation failed');
+          }
+          console.log('✅ OpenAI client verified:', {
+            hasClient: !!prov!.client,
+            isInitialized: prov!.isInitialized,
+            hasChat: !!(prov!.client && (prov!.client as any).chat),
+            hasCompletions: !!(prov!.client && (prov!.client as any).chat && (prov!.client as any).chat.completions)
+          });
           const openaiResponse = await prov!.client.chat.completions.create({
             model: prov!.model,
             max_tokens: maxTokens,
