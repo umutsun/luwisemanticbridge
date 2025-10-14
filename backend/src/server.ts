@@ -54,6 +54,7 @@ import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
 import databaseRoutes from './routes/database.routes';
 import apiTestsRoutes from './routes/api-tests.routes';
 import setupRoutes from './routes/setup.routes';
+import deploymentRoutes from './routes/deployment.routes';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from './services/auth.service';
 import { SettingsService } from './services/settings.service';
@@ -292,6 +293,7 @@ app.use('/api/v2/embeddings-tables', embeddingsTablesRoutes);
 app.use('/api/v2/database', databaseRoutes);
 app.use('/api/v2/api-tests', apiTestsRoutes);
 app.use('/api/v2/setup', setupRoutes);
+app.use('/api/v2/deployment', deploymentRoutes);
 // app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
 app.use('/api/v2/system', systemLogsRoutes);
 app.use('/api/v2/frontend', frontendLogsRoutes);

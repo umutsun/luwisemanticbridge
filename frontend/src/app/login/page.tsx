@@ -56,27 +56,27 @@ export default function LoginPage() {
     }
   }, [config]);
 
-  // Check if setup is required by calling the setup status API
+  // Check if admin user exists and redirect to deployment setup if needed
   useEffect(() => {
-    const checkSetupStatus = async () => {
+    const checkDeploymentStatus = async () => {
       if (!configLoading && mounted) {
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/setup/status`);
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/deployment/check-admin`);
           const data = await response.json();
 
-          // Only redirect to setup if setup is actually required
-          if (data.setupRequired) {
-            router.push('/setup/landing?from=login');
+          // If no admin user exists, redirect to deployment setup
+          if (!data.adminExists) {
+            router.push('/setup/deployment');
             return;
           }
         } catch (error) {
-          console.error('Failed to check setup status:', error);
-          // If we can't check setup status, proceed with normal login
+          console.error('Failed to check deployment status:', error);
+          // If we can't check status, proceed with normal login
         }
       }
     };
 
-    checkSetupStatus();
+    checkDeploymentStatus();
   }, [configLoading, mounted, router]);
 
   const { login } = useAuth();
