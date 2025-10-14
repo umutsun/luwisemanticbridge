@@ -210,7 +210,7 @@ export default function SetupLandingPage() {
       <footer className={`${mounted ? 'opacity-100' : 'opacity-0'} transition-opacity duration-700 delay-800`}>
         <div className="max-w-6xl mx-auto px-6 py-8 border-t border-gray-200">
           <p className="text-center text-sm text-gray-500">
-            © 2024 Luwi Semantic Bridge
+            Luwi Semantic Bridge
           </p>
         </div>
       </footer>
