@@ -147,7 +147,13 @@ async function writeConfig(data: any) {
 export async function GET() {
   try {
     const config = await readConfig();
-    return NextResponse.json(config);
+    // Add loading text from environment variables
+    const loadingText = process.env.LOADING_TEXT || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
+
+    return NextResponse.json({
+      ...config,
+      loadingText
+    });
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to read configuration' },

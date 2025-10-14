@@ -15,16 +15,50 @@ router.get('/status', async (req: Request, res: Response) => {
     // Check if .env.lsemb file exists and has required values
     const envFile = path.join(process.cwd(), '.env.lsemb');
     let envConfigured = false;
+    let databaseConnected = false;
+    let adminUserExists = false;
 
     if (fs.existsSync(envFile)) {
       const envContent = fs.readFileSync(envFile, 'utf8');
       const requiredVars = ['POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD'];
-      envConfigured = requiredVars.every(var => envContent.includes(`${var}=`) && !envContent.includes(`${var}=your_`));
+      envConfigured = requiredVars.every(function(variable) {
+        return envContent.includes(variable + '=') && !envContent.includes(variable + '=your_');
+      });
+
+      // If environment is configured, check database connection and admin user
+      if (envConfigured) {
+        try {
+          // Import database pool dynamically to avoid issues when not configured
+          const { asembPool } = await import('../config/database.config');
+
+          // Test database connection
+          const dbTest = await asembPool.query('SELECT 1');
+          databaseConnected = true;
+
+          // Check if admin user exists
+          const adminCheck = await asembPool.query(
+            'SELECT id FROM users WHERE email = $1 AND role = $2',
+            [process.env.ADMIN_EMAIL || 'admin@luwi.dev', 'admin']
+          );
+          adminUserExists = adminCheck.rows.length > 0;
+
+        } catch (dbError) {
+          console.log('Database not ready or admin user not found:', dbError);
+          databaseConnected = false;
+          adminUserExists = false;
+        }
+      }
     }
 
+    // Setup is complete only if: env configured AND database connected AND admin user exists
+    const setupComplete = envConfigured && databaseConnected && adminUserExists;
+
     res.json({
-      setupRequired: isSetupRequired && !envConfigured,
-      setupComplete: !isSetupRequired || envConfigured,
+      setupRequired: !setupComplete,
+      setupComplete: setupComplete,
+      envConfigured: envConfigured,
+      databaseConnected: databaseConnected,
+      adminUserExists: adminUserExists,
       project: {
         name: config.projectName,
         domain: config.domain,
@@ -95,11 +129,11 @@ router.post('/configure', async (req: Request, res: Response) => {
 
 // Helper function to update environment variable
 function updateEnvVar(content: string, key: string, value: string): string {
-  const regex = new RegExp(`^${key}=.*$`, 'm');
+  const regex = new RegExp('^' + key + '=.*$', 'm');
   if (regex.test(content)) {
-    return content.replace(regex, `${key}=${value}`);
+    return content.replace(regex, key + '=' + value);
   } else {
-    return content + `\n${key}=${value}\n`;
+    return content + '\n' + key + '=' + value + '\n';
   }
 }
 

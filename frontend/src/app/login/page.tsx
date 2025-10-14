@@ -16,11 +16,17 @@ import Link from 'next/link';
 
 export default function LoginPage() {
   const { config, loading: configLoading } = useConfig();
+  const router = useRouter();
+
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [systemLoaded, setSystemLoaded] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [showTitle, setShowTitle] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -50,28 +56,28 @@ export default function LoginPage() {
     }
   }, [config]);
 
-  // Check configuration and redirect to setup if needed
+  // Check if setup is required by calling the setup status API
   useEffect(() => {
-    if (!configLoading && mounted) {
-      // Check if configuration is missing or incomplete
-      const needsSetup = !config ||
-        !config.app?.name ||
-        !config.database?.host ||
-        !config.llm?.provider ||
-        !config.llm?.apiKey;
+    const checkSetupStatus = async () => {
+      if (!configLoading && mounted) {
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/setup/status`);
+          const data = await response.json();
 
-      if (needsSetup) {
-        // Redirect to setup landing page with from parameter
-        router.push('/setup/landing?from=login');
-        return;
+          // Only redirect to setup if setup is actually required
+          if (data.setupRequired) {
+            router.push('/setup/landing?from=login');
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to check setup status:', error);
+          // If we can't check setup status, proceed with normal login
+        }
       }
-    }
-  }, [config, configLoading, mounted, router]);
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+    };
+
+    checkSetupStatus();
+  }, [configLoading, mounted, router]);
 
   const { login } = useAuth();
 
@@ -104,24 +110,27 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-slate-900 dark:to-gray-800 relative overflow-hidden">
       {/* Animated background gradients */}
-      <div className="absolute inset-0">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gradient-to-br from-blue-200/20 to-purple-200/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-gradient-to-tl from-indigo-200/20 to-pink-200/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-primary/5 via-transparent to-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '8s' }}></div>
+      <div className="absolute inset-0 overflow-hidden">
+        {/* Main soft glow - center - very slow */}
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-purple-100/5 via-blue-100/3 to-indigo-100/5 rounded-full blur-3xl" style={{ animation: 'softGlow 40s ease-in-out infinite' }}></div>
+
+        {/* Floating glows - extremely slow */}
+        <div className="absolute top-0 left-1/4 w-72 h-72 bg-gradient-to-br from-blue-100/4 via-purple-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'slowDrift 60s ease-in-out infinite' }}></div>
+        <div className="absolute bottom-20 right-20 w-64 h-64 bg-gradient-to-tl from-indigo-100/4 via-cyan-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'slowDrift 70s ease-in-out infinite', animationDelay: '20s' }}></div>
+        <div className="absolute top-20 right-1/3 w-56 h-56 bg-gradient-to-br from-purple-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'gentlePulse 30s ease-in-out infinite' }}></div>
+        <div className="absolute bottom-1/3 left-20 w-48 h-48 bg-gradient-to-tr from-blue-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'gentlePulse 35s ease-in-out infinite', animationDelay: '15s' }}></div>
       </div>
 
   
       <div className="w-full max-w-md px-6 my-6 relative z-10">
         <div className="mb-8">
-          <div className="flex flex-col items-center text-center">
+          <div className="flex flex-col items-center text-center w-full">
             {/* Phase 1: Text Metamorphosis Loading */}
             {initialLoading && !showTitle && (
-              <div className="w-full max-w-sm space-y-3">
-                <AppTitleMetamorphosis
-                  title={config?.app?.name || 'Mali Müşavir Botu'}
-                  description={config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
-                />
-              </div>
+              <AppTitleMetamorphosis
+                title={config?.app?.name || 'Mali Müşavir Botu'}
+                description={config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
+              />
             )}
 
             {/* Phase 2: Elegant Title Reveal */}

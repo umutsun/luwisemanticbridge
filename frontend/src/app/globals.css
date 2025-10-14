@@ -484,3 +484,35 @@ select {
   50% { transform: translateY(20px) translateX(15px); }
   75% { transform: translateY(-15px) translateX(-10px); }
 }
+
+/* Soft glow animations for background - very slow */
+@keyframes softGlow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translate(0, 0) scale(1.1);
+  }
+}
+
+@keyframes gentlePulse {
+  0%, 100% {
+    opacity: 0.2;
+    filter: blur(100px);
+  }
+  50% {
+    opacity: 0.3;
+    filter: blur(80px);
+  }
+}
+
+@keyframes slowDrift {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(20px, -15px);
+  }
+}

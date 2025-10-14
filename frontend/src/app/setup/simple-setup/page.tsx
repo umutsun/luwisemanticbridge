@@ -50,13 +50,14 @@ export default function SimpleSetupPage() {
     fetch(`${API_BASE_URL}/api/v2/setup/status`)
       .then(res => res.json())
       .then(data => {
-        if (data.setupComplete) {
-          if (fromLogin) {
-            router.push('/login');
-          } else {
-            router.push('/login');
-          }
-        } else {
+        // If setup is truly complete (database + admin user), redirect to login
+        if (data.setupComplete && data.databaseConnected && data.adminUserExists) {
+          console.log('Setup already completed with admin user. Redirecting to login...');
+          router.push('/login');
+          return;
+        }
+
+        if (!data.setupComplete) {
           // Pre-fill database info from environment
           setConfig(prev => ({
             ...prev,

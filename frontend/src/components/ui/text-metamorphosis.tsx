@@ -51,126 +51,83 @@ export interface TextMetamorphosisProps {
 function TextMetamorphosis({
   title,
   description,
-  speed = 2500,
+  speed = 3000,
   intensity = 'medium',
   className = ''
 }: TextMetamorphosisProps) {
   const [displayText, setDisplayText] = useState({ title: '', description: '' });
-  const [targetText, setTargetText] = useState({ title, description });
   const [isComplete, setIsComplete] = useState(false);
 
-  // Lorem ipsum first paragraph for loading animation
-  const LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
+  // Character pool for scrambling - using same font weight throughout
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-  // Split into chunks for morphing animation
-  const getLoremChunks = () => {
-    const words = LOREM_IPSUM.split(' ');
-    const chunks = [];
+  // Create scrambled animation that slowly forms the target text
+  const scrambleToTarget = (target: string, callback: (text: string) => void, delay = 0) => {
+    setTimeout(() => {
+      let iterations = 0;
+      const maxIterations = 60; // More iterations for longer animation
+      const interval = 100; // Much slower interval for visibility
 
-    // Create 8 different chunks from the Lorem ipsum text
-    for (let i = 0; i < 8; i++) {
-      const startIdx = i * 6;
-      const title = words.slice(startIdx, startIdx + 3).join(' ');
-      const desc = words.slice(startIdx + 3, startIdx + 7).join(' ');
-      chunks.push({ title, description: desc });
-    }
+      const scrambleInterval = setInterval(() => {
+        let scrambled = '';
 
-    return chunks;
-  };
+        // Keep most characters scrambled until very end
+        const revealProgress = iterations / maxIterations;
+        const charsToReveal = Math.floor(target.length * revealProgress * 0.8);
 
-  const LOADING_PHRASES = getLoremChunks();
-
-  // Smooth letter morphing
-  const morphText = (from: string, to: string, callback: (text: string) => void) => {
-    let step = 0;
-    const totalSteps = 20;
-
-    const morphInterval = setInterval(() => {
-      if (step >= totalSteps) {
-        callback(to);
-        clearInterval(morphInterval);
-        return;
-      }
-
-      const progress = step / totalSteps;
-      let morphed = '';
-
-      for (let i = 0; i < Math.max(from.length, to.length); i++) {
-        if (progress < 0.5) {
-          // First half: scramble
-          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789';
-          morphed += chars[Math.floor(Math.random() * chars.length)];
-        } else {
-          // Second half: settle into target
-          if (i < to.length) {
-            morphed += to[i];
+        for (let i = 0; i < target.length; i++) {
+          if (i < charsToReveal && iterations > maxIterations * 0.85) {
+            // Only reveal in the last 15% of iterations
+            scrambled += target[i];
+          } else {
+            // Keep scrambling characters
+            scrambled += CHARS[Math.floor(Math.random() * CHARS.length)];
           }
         }
-      }
 
-      callback(morphed);
-      step++;
-    }, 50);
+        callback(scrambled);
+        iterations++;
+
+        if (iterations >= maxIterations) {
+          callback(target);
+          clearInterval(scrambleInterval);
+        }
+      }, interval);
+    }, delay);
   };
 
   useEffect(() => {
-    let phraseIndex = 0;
+    // Start with empty text, then scramble to form the title and description
+    scrambleToTarget(title, (newTitle) => {
+      setDisplayText(prev => ({ ...prev, title: newTitle }));
+    }, 0);
 
-    const showNextPhrase = () => {
-      if (phraseIndex < LOADING_PHRASES.length) {
-        const phrase = LOADING_PHRASES[phraseIndex];
-        morphText(displayText.title, phrase.title, (newTitle) => {
-          setDisplayText(prev => ({ ...prev, title: newTitle }));
-        });
-        morphText(displayText.description, phrase.description, (newDesc) => {
-          setDisplayText(prev => ({ ...prev, description: newDesc }));
-        });
-        phraseIndex++;
-      } else {
-        // Final morph to actual title and description
-        morphText(displayText.title, title, (newTitle) => {
-          setDisplayText(prev => ({ ...prev, title: newTitle }));
-        });
-        morphText(displayText.description, description, (newDesc) => {
-          setDisplayText(prev => ({ ...prev, description: newDesc }));
-          setTimeout(() => setIsComplete(true), 500);
-        });
-      }
-    };
-
-    // Start animation
-    showNextPhrase();
-
-    // Schedule next phrase
-    const interval = setInterval(() => {
-      if (phraseIndex <= LOADING_PHRASES.length) {
-        showNextPhrase();
-      } else {
-        clearInterval(interval);
-      }
-    }, speed / (LOADING_PHRASES.length + 1));
-
-    return () => clearInterval(interval);
-  }, [title, description, speed]);
+    scrambleToTarget(description, (newDesc) => {
+      setDisplayText(prev => ({ ...prev, description: newDesc }));
+      // Mark as complete after both are done
+      setTimeout(() => setIsComplete(true), 800);
+    }, 800);
+  }, [title, description]);
 
   return (
     <div className={`text-center w-full space-y-4 ${className}`}>
-      <h1 className={`text-5xl md:text-6xl min-h-[4rem] font-light tracking-tight transition-all duration-1000 ${
+      {/* Both title and description with same font size and weight */}
+      <div className={`text-2xl md:text-3xl font-bold tracking-tight transition-all duration-1000 min-h-[3rem] w-full max-w-md mx-auto ${
         isComplete
-          ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent font-semibold'
-          : 'text-gray-400 dark:text-gray-500 font-light'
-      } leading-tight`}>
-        <span className="inline-block">
-          {displayText.title}
-        </span>
-      </h1>
-      <p className={`text-xl md:text-2xl max-w-lg mx-auto min-h-[3rem] transition-all duration-1000 ${
-        isComplete
-          ? 'text-gray-700 dark:text-gray-300 font-normal'
-          : 'text-gray-400 dark:text-gray-500 font-light'
-      } leading-relaxed`}>
-        {displayText.description}
-      </p>
+          ? 'bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent'
+          : 'text-gray-400 dark:text-gray-500'
+      } leading-relaxed font-sans`}>
+        <div className="space-y-1">
+          {/* Title - supports 2 lines */}
+          <div className="font-bold">
+            {displayText.title}
+          </div>
+          {/* Description - supports 2 lines */}
+          <div className="font-bold">
+            {displayText.description}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

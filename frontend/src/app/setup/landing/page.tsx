@@ -26,12 +26,27 @@ export default function SetupLandingPage() {
         setProjectInfo(data.project);
         setIsChecking(false);
 
-        // If already configured and came from login, redirect back to login
-        if (data.setupComplete && fromLogin) {
-          setTimeout(() => router.push('/login'), 1000);
-        } else if (data.setupComplete) {
-          setTimeout(() => router.push('/login'), 2000);
+        // If setup is complete, redirect to login
+        if (data.setupComplete) {
+          const message = fromLogin
+            ? "Sistem zaten yapılandırılmış. Login sayfasına yönlendiriliyorsunuz..."
+            : "Sistem zaten yapılandırılmış. Login sayfasına yönlendiriliyorsunuz...";
+
+          console.log(message);
+
+          setTimeout(() => {
+            if (fromLogin) {
+              router.push('/login');
+            } else {
+              router.push('/login');
+            }
+          }, fromLogin ? 1000 : 2000);
         }
+      })
+      .catch(error => {
+        console.error('Setup status check failed:', error);
+        setIsChecking(false);
+        // If status check fails, show setup options anyway
       });
   }, [router, fromLogin]);
 
@@ -155,61 +170,6 @@ export default function SetupLandingPage() {
                 </button>
               </div>
             </div>
-
-            {/* Divider */}
-            <div className="flex items-center justify-center space-x-4">
-              <div className="flex-1 h-px bg-gray-200"></div>
-              <span className="text-xs text-gray-400 uppercase tracking-wider">or</span>
-              <div className="flex-1 h-px bg-gray-200"></div>
-            </div>
-
-            {/* Multi-Project */}
-            <div className={`${mounted ? 'opacity-100' : 'opacity-0'} transition-all duration-700 delay-300`}>
-              <div className="border border-gray-200 rounded-lg p-8 hover:border-gray-300 transition-colors">
-                <div className="flex items-start justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-light text-gray-900 mb-2">Multi-Project Setup</h2>
-                    <p className="text-gray-600 max-w-md">
-                      Deploy multiple projects with different domains
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
-                    <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                  </div>
-                </div>
-
-                <ul className="space-y-3 mb-8 text-sm text-gray-600">
-                  <li className="flex items-center">
-                    <svg className="w-4 h-4 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Deploy up to 4 projects
-                  </li>
-                  <li className="flex items-center">
-                    <svg className="w-4 h-4 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Isolated databases
-                  </li>
-                  <li className="flex items-center">
-                    <svg className="w-4 h-4 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Centralized management
-                  </li>
-                </ul>
-
-                <button
-                  onClick={handleMultiProject}
-                  className="w-full border border-gray-300 text-gray-700 py-3 px-6 rounded hover:bg-gray-50 transition-colors"
-                >
-                  Deploy Multiple Projects
-                </button>
-              </div>
-            </div>
-          </div>
 
           {/* Features */}
           <div className="grid md:grid-cols-3 gap-12 mb-20">

@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Luwi Semantic Bridge - AI Legal Assistant",
-  description: "AI-powered Legal Consulting and Client Management System",
+  title: "Luwi Semantic Bridge",
+  description: "AI-powered Semantic Search and Knowledge Management System",
 };
 
 export default function RootLayout({
