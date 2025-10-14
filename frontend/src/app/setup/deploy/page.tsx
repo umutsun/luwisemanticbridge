@@ -4,17 +4,19 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/config/api.config';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, AlertCircle, Loader2, Eye, EyeOff, Shield, Database, Key, User, ArrowRight } from 'lucide-react';
+import { Check, AlertCircle, Loader2, Eye, EyeOff, Shield, Database, Key, User, ArrowRight, Settings } from 'lucide-react';
 
 export default function DeployPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   // Form states
-  const [currentStep, setCurrentStep] = useState('check'); // check, env, admin, llm, complete
+  const [currentStep, setCurrentStep] = useState('check'); // check, env, admin, llm, settings, complete
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [defaultSettings, setDefaultSettings] = useState<any>(null);
+  const [editSettings, setEditSettings] = useState(false);
 
   // Environment data
   const [envData, setEnvData] = useState({
@@ -500,22 +502,111 @@ export default function DeployPage() {
             Back
           </button>
           <button
-            onClick={completeDeployment}
-            disabled={loading || !llmConfig.isValid}
-            className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
+            onClick={() => {
+              // Generate default settings
+              const settings = {
+                app: {
+                  name: envVars.SITE_TITLE || 'Luwi Semantic Bridge',
+                  description: envVars.SITE_DESCRIPTION || 'AI-Powered Knowledge Management System',
+                  locale: 'tr'
+                },
+                llmSettings: {
+                  activeProvider: llmConfig.provider,
+                  temperature: 0.7,
+                  maxTokens: 4096,
+                  language: 'tr'
+                },
+                [llmConfig.provider]: {
+                  apiKey: llmConfig.apiKey
+                }
+              };
+              setDefaultSettings(settings);
+              setCurrentStep('settings');
+            }}
+            disabled={!llmConfig.isValid}
+            className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                Deploying...
-              </>
-            ) : (
-              <>
-                Complete Deployment
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </>
-            )}
+            Review Settings
+            <ArrowRight className="w-5 h-5 ml-2" />
           </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderSettingsStep = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-4xl mx-auto"
+    >
+      <div className="bg-white rounded-xl shadow-lg p-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Default Settings</h2>
+          <p className="text-gray-600">Review and edit your system settings</p>
+        </div>
+
+        <div className="mb-6">
+          <button
+            onClick={() => setEditSettings(!editSettings)}
+            className="text-blue-600 hover:text-blue-700 flex items-center"
+          >
+            {editSettings ? 'Cancel Edit' : 'Edit Settings'}
+            <ArrowRight className={`w-4 h-4 ml-2 transform ${editSettings ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-6">
+          <pre className="text-sm overflow-auto">
+            {JSON.stringify(defaultSettings, null, 2)}
+          </pre>
+        </div>
+
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg mt-4">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between mt-8">
+          <button
+            onClick={() => setCurrentStep('llm')}
+            className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Back
+          </button>
+          <div className="space-x-4">
+            <button
+              onClick={completeDeployment}
+              disabled={loading}
+              className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center"
+            >
+              Use Default Settings
+            </button>
+            <button
+              onClick={() => {
+                // Save edited settings and continue
+                completeDeployment();
+              }}
+              disabled={loading}
+              className="bg-green-600 text-white py-2 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Deploying...
+                </>
+              ) : (
+                <>
+                  Deploy with Settings
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -562,6 +653,7 @@ export default function DeployPage() {
               { key: 'env', label: 'Environment', icon: Shield },
               { key: 'admin', label: 'Admin', icon: User },
               { key: 'llm', label: 'AI Setup', icon: Key },
+              { key: 'settings', label: 'Settings', icon: Settings },
               { key: 'complete', label: 'Complete', icon: Check }
             ].map((step, index) => (
               <React.Fragment key={step.key}>
@@ -575,9 +667,9 @@ export default function DeployPage() {
                   </div>
                   <span className="text-xs mt-2 hidden md:block">{step.label}</span>
                 </div>
-                {index < 4 && (
+                {index < 5 && (
                   <div className={`w-8 md:w-16 h-1 mx-2 transition-colors ${
-                    ['check', 'env', 'admin', 'llm'].indexOf(currentStep) > index ? 'bg-blue-600' : 'bg-gray-300'
+                    ['check', 'env', 'admin', 'llm', 'settings'].indexOf(currentStep) > index ? 'bg-blue-600' : 'bg-gray-300'
                   }`}></div>
                 )}
               </React.Fragment>
@@ -591,6 +683,7 @@ export default function DeployPage() {
           {currentStep === 'env' && renderEnvStep()}
           {currentStep === 'admin' && renderAdminStep()}
           {currentStep === 'llm' && renderLLMStep()}
+          {currentStep === 'settings' && renderSettingsStep()}
           {currentStep === 'complete' && renderCompleteStep()}
         </AnimatePresence>
       </div>

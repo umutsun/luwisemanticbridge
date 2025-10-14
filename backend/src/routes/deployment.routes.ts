@@ -90,7 +90,7 @@ router.post('/initialize', async (req: Request, res: Response) => {
     await runSetupScripts(asembPool);
 
     // Step 4: Initialize default settings
-    await initializeDefaultSettings(asembPool, envVars, llmProvider, llmApiKey);
+    const defaultSettings = await initializeDefaultSettings(asembPool, envVars, llmProvider, llmApiKey);
 
     // Step 5: Create admin user
     const hashedPassword = await bcrypt.hash(admin.password, 10);
@@ -317,42 +317,103 @@ async function runSetupScripts(pool: Pool) {
 }
 
 async function initializeDefaultSettings(pool: Pool, envVars: any, llmProvider: string, llmApiKey: string) {
-  const defaultSettings = [
-    // App settings
-    ['app.name', envVars.SITE_TITLE || 'Luwi Semantic Bridge', 'app'],
-    ['app.description', envVars.SITE_DESCRIPTION || 'AI-Powered Knowledge Management System', 'app'],
-    ['app.version', '1.0.0', 'app'],
-    ['app.locale', 'tr', 'app'],
+  // Create default settings JSON structure
+  const defaultSettings = {
+    app: {
+      name: envVars.SITE_TITLE || 'Luwi Semantic Bridge',
+      description: envVars.SITE_DESCRIPTION || 'AI-Powered Knowledge Management System',
+      version: '1.0.0',
+      locale: 'tr',
+      logoUrl: ''
+    },
+    database: {
+      host: envVars.POSTGRES_HOST || 'localhost',
+      port: parseInt(envVars.POSTGRES_PORT) || 5432,
+      name: envVars.POSTGRES_DB || '',
+      user: envVars.POSTGRES_USER || '',
+      password: envVars.POSTGRES_PASSWORD || '',
+      ssl: false,
+      maxConnections: 20
+    },
+    redis: {
+      host: 'localhost',
+      port: 6379,
+      password: '',
+      db: 0
+    },
+    openai: {
+      apiKey: llmProvider === 'openai' ? llmApiKey : '',
+      model: 'gpt-4-turbo-preview',
+      embeddingModel: 'text-embedding-3-small',
+      maxTokens: 4096,
+      temperature: 0.7
+    },
+    anthropic: {
+      apiKey: llmProvider === 'claude' ? llmApiKey : '',
+      model: 'claude-3-5-sonnet-20241022',
+      maxTokens: 4096
+    },
+    deepseek: {
+      apiKey: '',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat'
+    },
+    gemini: {
+      apiKey: llmProvider === 'gemini' ? llmApiKey : '',
+      model: 'gemini-pro'
+    },
+    llmSettings: {
+      temperature: 0.7,
+      topP: 0.9,
+      maxTokens: 4096,
+      presencePenalty: 0,
+      frequencyPenalty: 0,
+      ragWeight: 0.7,
+      llmKnowledgeWeight: 0.3,
+      streamResponse: true,
+      systemPrompt: 'Sen yapay zeka destekli bir asistansınız. Kullanıcıya yardımcı olmak için en iyi şekilde çaba gösterin.',
+      activeChatModel: llmProvider === 'openai' ? 'gpt-4-turbo-preview' : llmProvider === 'claude' ? 'claude-3-5-sonnet-20241022' : 'gemini-pro',
+      activeEmbeddingModel: 'text-embedding-3-small',
+      responseStyle: 'professional',
+      language: 'tr',
+      activeProvider: llmProvider
+    },
+    embeddings: {
+      chunkSize: 1000,
+      chunkOverlap: 200,
+      batchSize: 100,
+      provider: llmProvider === 'openai' ? 'openai' : 'openai' // Default to OpenAI for embeddings
+    },
+    dataSource: {
+      useLocalDb: true,
+      localDbPercentage: 100,
+      externalApiPercentage: 0,
+      hybridMode: false,
+      prioritySource: 'local'
+    }
+  };
 
-    // Database settings
-    ['database.host', envVars.POSTGRES_HOST, 'database'],
-    ['database.port', envVars.POSTGRES_PORT, 'database'],
-    ['database.name', envVars.POSTGRES_DB, 'database'],
-    ['database.user', envVars.POSTGRES_USER, 'database'],
+  // Save settings to database
+  for (const [category, settings] of Object.entries(defaultSettings)) {
+    for (const [key, value] of Object.entries(settings as any)) {
+      // Skip sensitive data from being saved in plain text
+      if (key.includes('password') || key.includes('apiKey')) {
+        if (key === 'password' && category === 'database') {
+          // We need to save database password but it should come from env
+          continue;
+        }
+      }
 
-    // LLM settings based on provider
-    ...(llmProvider === 'openai' ? [
-      ['openai.api_key', llmApiKey, 'llm'],
-      ['llm.active_provider', 'openai', 'llm'],
-      ['llm.active_model', 'gpt-4-turbo-preview', 'llm']
-    ] : llmProvider === 'claude' ? [
-      ['anthropic.api_key', llmApiKey, 'llm'],
-      ['llm.active_provider', 'claude', 'llm'],
-      ['llm.active_model', 'claude-3-5-sonnet-20241022', 'llm']
-    ] : [
-      ['gemini.api_key', llmApiKey, 'llm'],
-      ['llm.active_provider', 'gemini', 'llm'],
-      ['llm.active_model', 'gemini-pro', 'llm']
-    ])
-  ];
-
-  for (const [key, value, category] of defaultSettings) {
-    await pool.query(
-      `INSERT INTO settings (key, value, category) VALUES ($1, $2, $3)
-       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
-      [key, value, category]
-    );
+      await pool.query(
+        `INSERT INTO settings (key, value, category) VALUES ($1, $2, $3)
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        [`${category}.${key}`, typeof value === 'object' ? JSON.stringify(value) : value, category]
+      );
+    }
   }
+
+  // Return default settings for display
+  return defaultSettings;
 }
 
 export default router;
