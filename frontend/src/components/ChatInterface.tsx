@@ -81,7 +81,7 @@ export default function ChatInterface() {
 
   // Chatbot settings state
   const [chatbotSettings, setChatbotSettings] = useState({
-    title: 'ASB Hukuki Asistan',
+    title: 'LSEM Hukuki Asistan',
     subtitle: 'Yapay Zeka Asistanınız',
     logoUrl: '',
     welcomeMessage: 'Merhaba! Ben Luwi Semantic Bridge AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
@@ -155,7 +155,7 @@ export default function ChatInterface() {
         const settingsData = settingsRes.ok ? await settingsRes.json() : {};
 
         setChatbotSettings({
-          title: chatbotData.title || 'ASB Hukuki Asistan',
+          title: chatbotData.title || 'LSEM Hukuki Asistan',
           subtitle: chatbotData.subtitle || 'Yapay Zeka Asistanınız',
           logoUrl: chatbotData.logoUrl || '',
           welcomeMessage: chatbotData.welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',

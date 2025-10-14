@@ -88,7 +88,7 @@ export default function AuditSettings() {
       pciDss: false,
       customFields: {
         dataController: 'Organization Name',
-        dataProcessor: 'ASB System',
+        dataProcessor: 'LSEM System',
         retentionPolicy: '90 days'
       }
     }
@@ -141,7 +141,7 @@ export default function AuditSettings() {
         pciDss: false,
         customFields: {
           dataController: 'Organization Name',
-          dataProcessor: 'ASB System',
+          dataProcessor: 'LSEM System',
           retentionPolicy: '90 days'
         }
       }

@@ -14,7 +14,7 @@ async function getConfig() {
   }
 }
 
-// ASB Backend URL
+// LSEM Backend URL
 const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || `http://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`;
 
 export async function POST(request: NextRequest) {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[API Stream] Sending streaming request to backend:', `${ASB_API_URL}/api/v2/chat`);
 
-    // Call ASB backend v2 chat API with streaming flag
+    // Call LSEM backend v2 chat API with streaming flag
     const response = await fetch(`${ASB_API_URL}/api/v2/chat`, {
       method: 'POST',
       headers: {
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       console.error('[API Stream] Backend error:', responseText);
-      throw new Error(`ASB API responded with status: ${response.status} - ${responseText}`);
+      throw new Error(`LSEM API responded with status: ${response.status} - ${responseText}`);
     }
 
     let data;

@@ -15,7 +15,7 @@ async function getConfig() {
   }
 }
 
-// ASB Backend URL from environment or default
+// LSEM Backend URL from environment or default
 const ASB_API_URL = process.env.ASB_API_URL || process.env.NEXT_PUBLIC_API_URL || `http://${SERVER.HOSTS.LOCALHOST}:${SERVER.DEFAULT_PORTS.BACKEND}`;
 
 export async function POST(request: NextRequest) {
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     console.log('[API Route] Sending to backend:', `${ASB_API_URL}/api/v2/chat`);
     console.log('[API Route] Request body:', requestBody);
 
-    // Call ASB backend v2 chat API
+    // Call LSEM backend v2 chat API
     const response = await fetch(`${ASB_API_URL}/api/v2/chat`, {
       method: 'POST',
       headers: {
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      throw new Error(`ASB API responded with status: ${response.status} - ${responseText}`);
+      throw new Error(`LSEM API responded with status: ${response.status} - ${responseText}`);
     }
 
     let data;

@@ -130,7 +130,7 @@ export default function WorkflowsPage() {
         // Demo data
         {
           id: '1',
-          name: 'ASB RAG Pipeline',
+          name: 'LSEM RAG Pipeline',
           description: 'Main RAG workflow for document processing',
           status: 'active',
           nodes: 8,
@@ -165,7 +165,7 @@ export default function WorkflowsPage() {
       setN8nWorkflows([
         {
           id: 'n8n-1',
-          name: 'ASB Document Processing',
+          name: 'LSEM Document Processing',
           active: true,
           nodes: [
             { id: '1', type: 'Start', position: [100, 100] },
@@ -432,7 +432,7 @@ export default function WorkflowsPage() {
         <CardHeader>
           <CardTitle>Hazır Şablonlar</CardTitle>
           <CardDescription>
-            ASB için özel olarak hazırlanmış workflow şablonları
+            LSEM için özel olarak hazırlanmış workflow şablonları
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -563,7 +563,7 @@ export default function WorkflowsPage() {
         <CardHeader>
           <CardTitle>Hazır Şablonlar</CardTitle>
           <CardDescription>
-            ASB için özel olarak hazırlanmış workflow şablonları
+            LSEM için özel olarak hazırlanmış workflow şablonları
           </CardDescription>
         </CardHeader>
         <CardContent>

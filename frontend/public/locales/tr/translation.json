@@ -1,7 +1,7 @@
 {
   "settings": {
     "title": "Ayarlar",
-    "description": "ASB sistem konfigürasyonu ve bağlantı ayarları",
+    "description": "LSEM sistem konfigürasyonu ve bağlantı ayarları",
     "saveButton": "Kaydet",
     "savingButton": "Kaydediliyor...",
     "generalTab": "Genel",

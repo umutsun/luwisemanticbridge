@@ -485,34 +485,23 @@ select {
   75% { transform: translateY(-15px) translateX(-10px); }
 }
 
-/* Soft glow animations for background - very slow */
-@keyframes softGlow {
+/* Minimal background animations for zen effect */
+@keyframes subtleShift {
   0%, 100% {
-    opacity: 0.3;
-    transform: translate(0, 0) scale(1);
+    opacity: 0.03;
+    transform: translate(0, 0) rotate(0deg);
   }
   50% {
-    opacity: 0.5;
-    transform: translate(0, 0) scale(1.1);
+    opacity: 0.06;
+    transform: translate(0, 0) rotate(1deg);
   }
 }
 
-@keyframes gentlePulse {
+@keyframes minimalFade {
   0%, 100% {
-    opacity: 0.2;
-    filter: blur(100px);
+    opacity: 0.02;
   }
   50% {
-    opacity: 0.3;
-    filter: blur(80px);
-  }
-}
-
-@keyframes slowDrift {
-  0%, 100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(20px, -15px);
+    opacity: 0.04;
   }
 }

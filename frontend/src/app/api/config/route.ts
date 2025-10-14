@@ -60,7 +60,7 @@ const defaultConfig = {
   scraper: {
     timeout: 30000,
     maxConcurrency: 3,
-    userAgent: 'ASB Web Scraper',
+    userAgent: 'LSEM Web Scraper',
   },
   embeddings: {
     chunkSize: 1000,

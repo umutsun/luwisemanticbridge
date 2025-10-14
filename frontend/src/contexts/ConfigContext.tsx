@@ -187,7 +187,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
         scraper: data.scraper || {
           timeout: 30000,
           maxConcurrency: 3,
-          userAgent: 'ASB Web Scraper',
+          userAgent: 'LSEM Web Scraper',
         },
         embeddings: data.embeddings || {
           chunkSize: 1000,

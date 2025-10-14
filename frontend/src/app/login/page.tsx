@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Lock, Mail, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
-import { AppTitleMetamorphosis } from '@/components/ui/text-metamorphosis';
+import ZenLoader from '@/components/ui/zen-loader';
 import Link from 'next/link';
 
 export default function LoginPage() {
@@ -66,7 +66,7 @@ export default function LoginPage() {
 
           // If no admin user exists, redirect to deployment setup
           if (!data.adminExists) {
-            router.push('/setup/deployment');
+            router.push('/setup/deploy');
             return;
           }
         } catch (error) {
@@ -109,63 +109,27 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-gray-900 dark:via-slate-900 dark:to-gray-800 relative overflow-hidden">
-      {/* Animated background gradients */}
+      {/* Minimal background elements */}
       <div className="absolute inset-0 overflow-hidden">
-        {/* Main soft glow - center - very slow */}
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-purple-100/5 via-blue-100/3 to-indigo-100/5 rounded-full blur-3xl" style={{ animation: 'softGlow 40s ease-in-out infinite' }}></div>
-
-        {/* Floating glows - extremely slow */}
-        <div className="absolute top-0 left-1/4 w-72 h-72 bg-gradient-to-br from-blue-100/4 via-purple-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'slowDrift 60s ease-in-out infinite' }}></div>
-        <div className="absolute bottom-20 right-20 w-64 h-64 bg-gradient-to-tl from-indigo-100/4 via-cyan-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'slowDrift 70s ease-in-out infinite', animationDelay: '20s' }}></div>
-        <div className="absolute top-20 right-1/3 w-56 h-56 bg-gradient-to-br from-purple-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'gentlePulse 30s ease-in-out infinite' }}></div>
-        <div className="absolute bottom-1/3 left-20 w-48 h-48 bg-gradient-to-tr from-blue-100/3 to-transparent rounded-full blur-2xl" style={{ animation: 'gentlePulse 35s ease-in-out infinite', animationDelay: '15s' }}></div>
+        {/* Subtle shifting shapes */}
+        <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-slate-100/20 dark:bg-slate-800/20 rounded-full" style={{ animation: 'subtleShift 50s ease-in-out infinite' }}></div>
+        <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-slate-100/10 dark:bg-slate-800/10 rounded-full" style={{ animation: 'minimalFade 40s ease-in-out infinite', animationDelay: '10s' }}></div>
       </div>
 
   
       <div className="w-full max-w-md px-6 my-6 relative z-10">
         <div className="mb-8">
           <div className="flex flex-col items-center text-center w-full">
-            {/* Phase 1: Text Metamorphosis Loading */}
-            {initialLoading && !showTitle && (
-              <AppTitleMetamorphosis
+            {/* Zen Loading Animation - Only shows during initial load */}
+            {initialLoading && (
+              <ZenLoader
                 title={config?.app?.name || 'Mali Müşavir Botu'}
                 description={config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
+                onComplete={() => setInitialLoading(false)}
               />
             )}
 
-            {/* Phase 2: Elegant Title Reveal */}
-            {showTitle && (
-              <div className="space-y-4">
-                {/* Animated gradient background */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-96 h-96 bg-gradient-to-r from-primary/20 via-purple-600/20 to-indigo-600/20 rounded-full blur-3xl animate-pulse"></div>
-                </div>
-
-                {/* Title with staggered animation */}
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="relative"
-                >
-                  <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-primary via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-4 tracking-tight">
-                    {config?.app?.name || 'Mali Müşavir Botu'}
-                  </h1>
-                </motion.div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-                  className="relative"
-                >
-                  <p className="text-muted-foreground text-lg md:text-xl max-w-md font-medium leading-relaxed">
-                    {config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
-                  </p>
-                </motion.div>
-              </div>
-            )}
-          </div>
+            </div>
         </div>
 
         <motion.div

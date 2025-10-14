@@ -63,7 +63,7 @@ export const handlers = [
       ctx.status(200),
       ctx.json({
         chatbot: {
-          title: 'ASB Hukuki Asistan',
+          title: 'LSEM Hukuki Asistan',
           subtitle: 'Yapay Zeka Asistanınız',
           welcomeMessage: 'Merhaba! Size nasıl yardımcı olabilirim?',
           primaryColor: '#3B82F6'

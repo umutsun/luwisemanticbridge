@@ -54,7 +54,7 @@ describe('ChatContainer', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          title: 'ASB Hukuki Asistan',
+          title: 'LSEM Hukuki Asistan',
           subtitle: 'Yapay Zeka Asistanınız',
           welcomeMessage: 'Merhaba! Size nasıl yardımcı olabilirim?',
           primaryColor: '#3B82F6',

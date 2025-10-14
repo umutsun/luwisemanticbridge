@@ -121,9 +121,10 @@ export default function SetupLandingPage() {
               </>
             )}
           </div>
+        </div>
 
-          {/* Setup Options */}
-          <div className="space-y-6 mb-20">
+        {/* Setup Options */}
+        <div className="space-y-6 mb-20">
             {/* Quick Setup */}
             <div className={`${mounted ? 'opacity-100' : 'opacity-0'} transition-all duration-700 delay-200`}>
               <div className="border border-gray-200 rounded-lg p-8 hover:border-gray-300 transition-colors">

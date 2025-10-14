@@ -318,7 +318,7 @@ export default function Header() {
                   ) : (
                     <Brain className="h-6 w-6 text-primary" />
                   )}
-                  <span className="text-lg font-bold">{config?.app?.name || 'ASB'}</span>
+                  <span className="text-lg font-bold">{config?.app?.name || 'LSEM'}</span>
                 </SheetTitle>
               </SheetHeader>
               <nav className="mt-6 space-y-1">

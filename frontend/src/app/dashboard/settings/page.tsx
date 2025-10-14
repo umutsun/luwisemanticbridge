@@ -386,7 +386,7 @@ export default function SettingsPage() {
     scraper: {
       timeout: 30000,
       maxConcurrency: 3,
-      userAgent: 'ASB Web Scraper',
+      userAgent: 'LSEM Web Scraper',
     },
     embeddings: {
       chunkSize: 1000,
@@ -439,7 +439,7 @@ export default function SettingsPage() {
     },
     logging: {
       level: 'info',
-      file: 'logs/asb.log',
+      file: 'logs/lsem.log',
       maxSize: '10m',
       maxFiles: 5,
     },
@@ -607,7 +607,7 @@ export default function SettingsPage() {
           scraper: {
             timeout: data.scraper?.timeout ?? 30000,
             maxConcurrency: data.scraper?.maxConcurrency ?? 3,
-            userAgent: data.scraper?.userAgent ?? 'ASB Web Scraper',
+            userAgent: data.scraper?.userAgent ?? 'LSEM Web Scraper',
           },
           // Add fallback for system prompts
           systemPrompts: data.systemPrompts || [
@@ -1288,7 +1288,7 @@ export default function SettingsPage() {
         scraper: {
           timeout: 30000,
           maxConcurrency: 3,
-          userAgent: 'ASB Web Scraper',
+          userAgent: 'LSEM Web Scraper',
         },
         embeddings: {
           chunkSize: 1000,
@@ -1341,7 +1341,7 @@ export default function SettingsPage() {
         },
         logging: {
           level: 'info',
-          file: 'logs/asb.log',
+          file: 'logs/lsem.log',
           maxSize: '10m',
           maxFiles: 5,
         },
@@ -1360,7 +1360,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'asb-config.json';
+    link.download = 'lsem-config.json';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -3207,7 +3207,7 @@ export default function SettingsPage() {
                       id="userAgent"
                       value={config.scraper.userAgent}
                       onChange={(e) => updateConfig('scraper.userAgent', e.target.value)}
-                      placeholder="ASB Web Scraper"
+                      placeholder="LSEM Web Scraper"
                     />
                   </div>
                 </div>
@@ -3249,7 +3249,7 @@ export default function SettingsPage() {
                       id="logFile"
                       value={config.logging.file}
                       onChange={(e) => updateConfig('logging.file', e.target.value)}
-                      placeholder="logs/asb.log"
+                      placeholder="logs/lsem.log"
                     />
                   </div>
                   <div className="space-y-2">

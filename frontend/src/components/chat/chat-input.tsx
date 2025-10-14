@@ -146,7 +146,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
             <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-            ASB RAG Sistemi
+            LSEM RAG Sistemi
           </p>
         </div>
       </div>

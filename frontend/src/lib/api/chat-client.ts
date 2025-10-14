@@ -15,7 +15,7 @@ class ChatClient {
 
   async sendMessage(params: SendMessageParams): Promise<ChatResponse> {
     try {
-      // Call ASB backend RAG chat endpoint
+      // Call LSEM backend RAG chat endpoint
       const response = await this.client.post('/api/v2/chat', {
         query: params.content,
         conversation_id: params.conversationId,
@@ -64,7 +64,7 @@ class ChatClient {
 
   async searchDocuments(query: string, limit = 10) {
     try {
-      // Call ASB backend search endpoint
+      // Call LSEM backend search endpoint
       const response = await this.client.post('/api/v2/search', {
         query,
         limit,

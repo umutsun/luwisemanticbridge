@@ -22,7 +22,7 @@ interface ChatbotSettings {
 export function MessageList({ messages, isLoading }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [settings, setSettings] = useState<ChatbotSettings>({
-    title: 'ASB Hukuki Asistan',
+    title: 'LSEM Hukuki Asistan',
     welcomeMessage: 'Türk hukuku hakkında soru sorun, belgeler arasında arama yapın ve hukuki danışmanlık alın.',
     placeholder: 'Hukuki sorunuzu yazın...',
     primaryColor: '#3B82F6',

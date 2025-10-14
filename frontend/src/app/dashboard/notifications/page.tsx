@@ -380,8 +380,8 @@ export default function NotificationSettings() {
                 <div className="space-y-2">
                   <Label>Konu Şablonu</Label>
                   <Input
-                    placeholder="[ASB] {{type}}: {{title}}"
-                    defaultValue="[ASB] {{type}}: {{title}}"
+                    placeholder="[LSEM] {{type}}: {{title}}"
+                    defaultValue="[LSEM] {{type}}: {{title}}"
                   />
                 </div>
                 <div className="space-y-2">
