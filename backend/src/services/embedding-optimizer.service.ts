@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import { Pool } from 'pg';
-import Redis from 'redis';
+import { redis } from '../config/redis';
 
 interface EmbeddingCache {
   hash: string;
@@ -34,13 +34,9 @@ export class EmbeddingOptimizer {
     this.pool = new Pool({
       connectionString: process.env.TARGET_DB
     });
-    
-    this.redis = Redis.createClient({
-      socket: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379')
-      }
-    });
+
+    // Use centralized Redis configuration (port 6379)
+    this.redis = redis;
     
     this.embeddingCache = new Map();
     

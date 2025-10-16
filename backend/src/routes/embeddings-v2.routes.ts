@@ -1,10 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import OpenAI from 'openai';
-import Redis from 'ioredis';
+import { redis } from '../config/redis';
 import crypto from 'crypto';
 import { getDatabaseSettings, lsembPool } from '../config/database.config';
 import { TIMEOUTS } from '../config';
+import { createEmbeddingRateLimit, createUploadRateLimit } from '../middleware/rate-limit.middleware';
 
 // Helper function to log embedding operations - TEMPORARILY DISABLED
 function logEmbeddingOperation(data: {
@@ -77,12 +78,7 @@ function estimateTokens(text: string, model: string): number {
 
 const router = Router();
 
-// Redis client for caching
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  db: parseInt(process.env.REDIS_DB || '2')
-});
+// Use centralized Redis configuration (port 6379)
 
 // Get source database name from settings
 async function getSourceDatabaseName(): Promise<string> {
@@ -770,7 +766,7 @@ router.post('/auto-resume', async (req: Request, res: Response) => {
 });
 
 // Generate embeddings for tables
-router.post('/generate', async (req: Request, res: Response) => {
+router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Request, res: Response) => {
   console.log('🚀 Generate endpoint called');
 
   try {
@@ -3202,6 +3198,58 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
   req.on('close', () => {
     clearInterval(interval);
   });
+});
+
+// Analytics endpoint
+router.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const client = await lsembPool.connect();
+
+    try {
+      // Get overall analytics from embedding operations
+      const analyticsQuery = `
+        SELECT
+          COUNT(*) as total_operations,
+          AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) as avg_processing_time,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END)::float / COUNT(*) as success_rate,
+          SUM(error_count) as total_errors,
+          SUM(total_records) as total_records_processed,
+          SUM(tokens_used) as total_tokens_used
+        FROM embedding_operations
+        WHERE started_at >= NOW() - INTERVAL '30 days'
+      `;
+
+      const analyticsResult = await client.query(analyticsQuery);
+      const analytics = analyticsResult.rows[0];
+
+      // Calculate average speed (records per minute)
+      const avgProcessingTime = analytics.avg_processing_time || 0;
+      const totalRecords = analytics.total_records_processed || 0;
+      const averageSpeed = avgProcessingTime > 0 ? (totalRecords / (avgProcessingTime / 60)) : 0;
+
+      // Calculate token efficiency (tokens per record)
+      const totalTokens = analytics.total_tokens_used || 0;
+      const tokenEfficiency = totalRecords > 0 ? (totalTokens / totalRecords) : 0;
+
+      const analyticsData = {
+        totalProcessingTime: avgProcessingTime * 1000, // Convert to milliseconds
+        averageSpeed,
+        successRate: analytics.success_rate || 0,
+        errorCount: analytics.total_errors || 0,
+        tokenEfficiency,
+        totalOperations: analytics.total_operations || 0,
+        totalRecordsProcessed: totalRecords,
+        totalTokensUsed: totalTokens
+      };
+
+      res.json(analyticsData);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error fetching analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
 });
 
 // End of embeddings-v2.routes.ts

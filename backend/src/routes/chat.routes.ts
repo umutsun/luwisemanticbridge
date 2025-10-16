@@ -5,6 +5,8 @@ import { SubscriptionService } from '../services/subscription.service';
 import { lsembPool } from '../config/database.config';
 import dbConfig from '../config/database';
 import { chatWss, chatConnections } from '../server';
+import { MessageStorageService } from '../services/message-storage.service';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();
@@ -90,6 +92,49 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       hasResponse: !!result.response,
       sourcesCount: result.sources?.length || 0
     });
+
+    // Save enhanced chat interaction with search results and sources
+    // This is done asynchronously to not block the response
+    if (result.response && result.response.trim() !== '') {
+      setImmediate(async () => {
+        try {
+          // Save with enhanced storage (includes search results and sources)
+          await MessageStorageService.saveChatInteraction(
+            conversationId || uuidv4(),
+            userId,
+            message,
+            result.response,
+            (result as any).searchResults || [],
+            result.sources || [],
+            {
+              model: model || 'default',
+              processingTime: (result as any).processingTime,
+              confidence: (result as any).confidence,
+              ragWeight: ragWeight,
+              temperature: temperature
+            }
+          );
+
+          // Also save to basic storage for backward compatibility
+          await MessageStorageService.saveQAPair(
+            conversationId || uuidv4(),
+            message,
+            result.response,
+            userId,
+            {
+              model: model || 'default',
+              sourcesCount: result.sources?.length || 0,
+              processingTime: (result as any).processingTime,
+              confidence: (result as any).confidence
+            }
+          );
+
+          console.log('Enhanced message interaction saved:', { conversationId, userId });
+        } catch (saveError) {
+          console.error('Failed to save message interaction:', saveError);
+        }
+      });
+    }
 
     // Track user usage with semantic insights
     try {
@@ -655,5 +700,55 @@ async function streamChatResponse(
     }
   }
 }
+
+/**
+ * Chat service health check
+ */
+router.get('/api/v2/chat/health', async (req: Request, res: Response) => {
+  try {
+    const startTime = Date.now();
+
+    // Check RAG chat service
+    const ragChatStatus = ragChat ? 'initialized' : 'not initialized';
+
+    // Check WebSocket connections
+    const activeConnections = chatConnections ? chatConnections.size : 0;
+
+    // Check database connectivity
+    let dbStatus = 'disconnected';
+    try {
+      const testClient = await lsembPool.connect();
+      await testClient.query('SELECT 1');
+      testClient.release();
+      dbStatus = 'connected';
+    } catch (error) {
+      dbStatus = 'error';
+    }
+
+    const responseTime = Date.now() - startTime;
+
+    res.json({
+      status: 'healthy',
+      service: 'Chat',
+      responseTime: `${responseTime}ms`,
+      components: {
+        ragChat: ragChatStatus,
+        database: dbStatus,
+        websockets: {
+          active: activeConnections,
+          status: activeConnections >= 0 ? 'active' : 'inactive'
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'unhealthy',
+      service: 'Chat',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 export default router;

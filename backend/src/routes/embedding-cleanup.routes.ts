@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { Redis } from 'ioredis';
+import { redis } from '../config/redis';
 import pool from '../config/database';
 import dotenv from 'dotenv';
 
@@ -7,13 +7,7 @@ dotenv.config();
 
 const router = Router();
 
-// Redis connection for cleanup operations
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  db: parseInt(process.env.REDIS_DB || '2'),
-  maxRetriesPerRequest: 3
-});
+// Use centralized Redis configuration (port 6379)
 
 /**
  * Check embedding system consistency

@@ -48,7 +48,7 @@ interface CrawlState {
   errors: string[];
 }
 
-export class AdvancedScraperService {
+export class ScraperService {
   private browser: Browser | null = null;
   private openai: OpenAI | null = null;
   private crawlState: CrawlState = {
@@ -689,4 +689,4 @@ export class AdvancedScraperService {
   }
 }
 
-export default new AdvancedScraperService();
+export default new ScraperService();

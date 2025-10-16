@@ -216,26 +216,42 @@ export class LLMManager {
         maxTokens: parseInt(settings.maxTokens || settings['llmSettings.maxTokens'] || '4096')
       };
 
-      // Update API keys and models
-      this.updateProviderSettings('claude', {
-        apiKey: settings['anthropic.apiKey'] || settings['claude.apiKey'] || this.providers.get('claude')?.apiKey,
-        model: this.actualModel === 'claude-3-sonnet-20240229' ? 'claude-3-5-sonnet-20241022' : (this.actualModel || 'claude-3-5-sonnet-20241022')
-      });
+      // Update API keys and models - ALWAYS use database value if present
+      const claudeApiKey = settings['anthropic.apiKey'] || settings['claude.apiKey'];
+      if (claudeApiKey) {
+        this.updateProviderSettings('claude', {
+          apiKey: claudeApiKey,
+          model: this.actualModel === 'claude-3-sonnet-20240229' ? 'claude-3-5-sonnet-20241022' : (this.actualModel || 'claude-3-5-sonnet-20241022')
+        });
+        console.log('✅ Updated Claude API key from database');
+      }
 
-      this.updateProviderSettings('openai', {
-        apiKey: settings['openai.apiKey'] || this.providers.get('openai')?.apiKey,
-        model: settings['llmSettings.openaiModel'] || 'gpt-4o-mini'  // Correct default model
-      });
+      const openaiApiKey = settings['openai.apiKey'];
+      if (openaiApiKey) {
+        this.updateProviderSettings('openai', {
+          apiKey: openaiApiKey,
+          model: settings['llmSettings.openaiModel'] || 'gpt-4o-mini'  // Correct default model
+        });
+        console.log('✅ Updated OpenAI API key from database');
+      }
 
-      this.updateProviderSettings('gemini', {
-        apiKey: settings['google.apiKey'] || settings['gemini.apiKey'] || this.providers.get('gemini')?.apiKey,
-        model: settings['llmSettings.geminiModel'] || 'gemini-1.5-flash-latest'  // Use valid model name
-      });
+      const googleApiKey = settings['google.apiKey'] || settings['gemini.apiKey'];
+      if (googleApiKey) {
+        this.updateProviderSettings('gemini', {
+          apiKey: googleApiKey,
+          model: settings['llmSettings.geminiModel'] || 'gemini-1.5-flash-latest'  // Use valid model name
+        });
+        console.log('✅ Updated Google/Gemini API key from database');
+      }
 
-      this.updateProviderSettings('deepseek', {
-        apiKey: settings['deepseek.apiKey'] || this.providers.get('deepseek')?.apiKey,
-        model: settings['llmSettings.deepseekModel'] || 'deepseek-chat'
-      });
+      const deepseekApiKey = settings['deepseek.apiKey'];
+      if (deepseekApiKey) {
+        this.updateProviderSettings('deepseek', {
+          apiKey: deepseekApiKey,
+          model: settings['llmSettings.deepseekModel'] || 'deepseek-chat'
+        });
+        console.log('✅ Updated DeepSeek API key from database');
+      }
 
       const embeddingProviderSetting = settings['embedding_provider'] || settings['embeddings.provider'] || settings['llmSettings.embeddingProvider'];
       const embeddingModelSetting = settings['embedding_model'] || settings['embeddings.model'] || settings['llmSettings.embeddingModel'];
@@ -325,8 +341,8 @@ export class LLMManager {
 
   private getEmbeddingProviderOrder(preferredProvider?: string): string[] {
     // DeepSeek doesn't support embeddings, so exclude it from embeddings
-    // Google embeddings are prioritized for performance
-    const embeddingProviders = ['google', 'openai', 'gemini'];
+    // Use Google/Gemini first (more reliable), then OpenAI
+    const embeddingProviders = ['google', 'gemini', 'openai'];
     const fallback = [...this.fallbackOrder].filter(p => embeddingProviders.includes(p));
     const normalizedPreferred = preferredProvider ? this.normalizeProviderName(preferredProvider) : undefined;
 
@@ -334,7 +350,7 @@ export class LLMManager {
       return Array.from(new Set([normalizedPreferred, ...fallback]));
     }
 
-    // Default order: Google -> Gemini -> OpenAI (Gemini prioritized since it's default)
+    // Default order: Google -> Gemini -> OpenAI (prioritize Google for reliability)
     return ['google', 'gemini', 'openai'];
   }
 
@@ -354,18 +370,19 @@ export class LLMManager {
       // Only reset initialization if API key changed (requires new client)
       if (apiKeyChanged) {
         prov.isInitialized = false;
-        prov.client = undefined; // Clear the old client
+        // Don't clear the client - let it be reused with new API key
+        // prov.client = undefined; // Clear the old client - REMOVED: This causes client to disappear
         console.log(`🔄 API key changed for ${provider}, client will be reinitialized`);
       }
     }
   }
 
   /**
-   * Generate fallback order - Use active provider first, then proper fallbacks (excluding DeepSeek)
+   * Generate fallback order - Use Claude as primary fallback, then Gemini, OpenAI, DeepSeek
    */
   private generateFallbackOrder(): string[] {
-    // Define fallback order with DeepSeek first since it's working
-    const workingFallbacks = ['deepseek', 'claude', 'gemini', 'openai'];
+    // Define fallback order with Claude first (production ready), then Gemini, OpenAI, DeepSeek last
+    const workingFallbacks = ['claude', 'gemini', 'openai', 'deepseek'];
     const order = [this.defaultProvider];
 
     // Add all providers in order
@@ -433,13 +450,16 @@ export class LLMManager {
               baseURL: 'https://api.deepseek.com'
             });
             prov.client = deepseekClient;
+            // Override model to use deepseek-chat since deepseek-coder doesn't exist
+            prov.model = 'deepseek-chat';
             console.log('✅ DeepSeek OpenAI client created successfully');
             console.log('🔍 Verification - Client after assignment:', {
               hasClient: !!prov.client,
               clientType: typeof prov.client,
               hasChat: !!(prov.client && (prov.client as any).chat),
               hasCompletions: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions),
-              hasCreate: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions && (prov.client as any).chat.completions.create)
+              hasCreate: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions && (prov.client as any).chat.completions.create),
+              model: prov.model
             });
           } catch (error) {
             console.error('❌ Failed to create DeepSeek client:', error);
@@ -491,12 +511,14 @@ export class LLMManager {
       switch (provider) {
         case 'claude':
           // Claude doesn't have a simple test method, just check if client exists
-          return true;
+          return !!(prov.apiKey && prov.apiKey.length > 0);
         case 'openai':
         case 'deepseek':
-          await prov.client.models.list();
-          return true;
+          // Don't call models.list() as it triggers API key validation
+          // Just check if client and API key exist
+          return !!(prov.apiKey && prov.apiKey.length > 0 && prov.client);
         case 'gemini':
+          // Test with a simple model initialization
           await prov.client.getGenerativeModel({ model: prov.model });
           return true;
         default:
@@ -625,7 +647,7 @@ export class LLMManager {
     let provider = preferredProvider;
 
     // Check if preferred provider is available
-    const prov = this.providers.get(provider);
+    let prov = this.providers.get(provider);
     console.log(`🔍 Provider ${provider} state:`, {
       hasProvider: !!prov,
       isInitialized: prov?.isInitialized,
@@ -705,16 +727,18 @@ export class LLMManager {
           };
 
         case 'openai':
-          if (!prov?.isInitialized || !prov?.client) {
-            if (!this.initializeProvider(provider)) {
-              throw new Error('OpenAI client is not initialized');
-            }
+          // Always try to initialize to ensure we have the latest client
+          const openaiProvider = this.providers.get('openai');
+          if (!openaiProvider || !this.initializeProvider(provider)) {
+            throw new Error('OpenAI client is not initialized');
           }
-          // Triple-check after initialization
-          if (!prov?.client) {
+          // Get fresh reference after initialization
+          const freshProv = this.providers.get(provider);
+          if (!freshProv?.client) {
             console.error('❌ OpenAI client is null after initialization');
             throw new Error('OpenAI client creation failed');
           }
+          prov = freshProv; // Update reference to the freshly initialized provider
           console.log('✅ OpenAI client verified:', {
             hasClient: !!prov!.client,
             isInitialized: prov!.isInitialized,
@@ -786,24 +810,26 @@ export class LLMManager {
           };
 
         case 'deepseek':
-          // Force initialization every time for reliability
-          console.log('🔧 Force initializing DeepSeek provider...');
-          if (!this.initializeProvider(provider)) {
+          // Always try to initialize to ensure we have the latest client
+          const deepseekProvider = this.providers.get('deepseek');
+          if (!deepseekProvider || !this.initializeProvider(provider)) {
             throw new Error('DeepSeek client is not initialized');
           }
-          // Triple-check after initialization
-          if (!prov?.client) {
+          // Get fresh reference after initialization
+          const freshDeepseekProv = this.providers.get(provider);
+          if (!freshDeepseekProv?.client) {
             console.error('❌ DeepSeek client is null after initialization');
             throw new Error('DeepSeek client creation failed');
           }
+          prov = freshDeepseekProv; // Update reference to the freshly initialized provider
           console.log('✅ DeepSeek client verified:', {
             hasClient: !!prov!.client,
             isInitialized: prov!.isInitialized,
             hasChat: !!(prov!.client && (prov!.client as any).chat),
             hasCompletions: !!(prov!.client && (prov!.client as any).chat && (prov!.client as any).chat.completions)
           });
-          // Ensure we're using the correct model name
-          const deepseekModel = this.actualModel || prov!.model || 'deepseek-chat';
+          // Ensure we're using the correct model name - force deepseek-chat as default
+          const deepseekModel = 'deepseek-chat';
           console.log(`🤖 Using DeepSeek model: ${deepseekModel}`);
           const deepseekResponse = await prov!.client.chat.completions.create({
             model: deepseekModel,

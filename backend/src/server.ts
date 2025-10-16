@@ -1,108 +1,145 @@
-import dotenv from 'dotenv';
-import path from 'path';
+import dotenv from "dotenv";
+import path from "path";
 
 // Load environment file from the root directory
-const envPath = path.resolve(__dirname, '../../.env.lsemb');
+const envPath = path.resolve(__dirname, "../../.env.lsemb");
 dotenv.config({ path: envPath });
 
-import express, { Application, Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import morgan from 'morgan';
-import { createServer } from 'http';
-import { Server as SocketServer } from 'socket.io';
-import { WebSocketServer as StandardWebSocketServer } from 'ws';
-import Redis from 'ioredis';
-import { SERVER, API } from './config';
-import { initializeRedis } from './config/redis';
-import { initializeConfigs, getAppConfig, lsembPool, initializeLsembDatabase, syncAPIKeysToDatabase } from './config/database.config';
+import express, { Application, Request, Response, NextFunction } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import morgan from "morgan";
+import { createServer } from "http";
+import { Server as SocketServer } from "socket.io";
+import { WebSocketServer as StandardWebSocketServer } from "ws";
+import Redis from "ioredis";
+import { SERVER, API } from "./config";
+import { initializeRedis } from "./config/redis";
+import {
+  initializeConfigs,
+  getAppConfig,
+  lsembPool,
+  initializeLsembDatabase,
+  syncAPIKeysToDatabase,
+} from "./config/database.config";
 
 // Chat WebSocket connection manager
 const chatConnections = new Map<string, any>();
 
 // Import routes
-import searchRoutes from './routes/search.routes';
-import chatRoutes from './routes/chat.routes';
-import dashboardRoutes from './routes/dashboard.routes';
-import scraperRoutes from './routes/scraper.routes';
-import chatbotSettingsRoutes from './routes/chatbot-settings.routes';
-import historyRoutes from './routes/history.routes';
-import documentsRoutes from './routes/documents.routes';
-import migrationRoutes from './routes/migration.routes';
-import embeddingsV2Routes from './routes/embeddings-v2.routes';
-import embeddingProgressRoutes from './routes/embedding-progress.routes';
-import settingsRoutes from './routes/settings.routes';
-import migrationCheckRoutes from './routes/migration-check.routes';
-import activityRoutes from './routes/activity.routes';
-import ragAnythingRoutes from './routes/raganything.routes';
-import ragRoutes from './routes/rag.routes';
-import authRoutes from './routes/auth.routes';
-import usersRoutes from './routes/users.routes';
-import subscriptionRoutes from './routes/subscription.routes';
-import embeddingHistoryRoutes from './routes/embedding-history.routes';
-import embeddingCleanupRoutes from './routes/embedding-cleanup.routes';
-import aiSettingsRoutes from './routes/ai-settings.routes';
-import appSettingsRoutes from './routes/app-settings.routes';
-import healthRoutes from './routes/health.routes';
-import adminRoutes from './routes/admin.routes';
-import llmStatusRoutes from './routes/llm-status.routes';
-import logsRoutes, { initializeLogWebSocket } from './routes/logs.routes';
-import systemLogsRoutes, { initializeLogWebSocket as initializeSystemLogs } from './routes/system.logs.routes';
-import frontendLogsRoutes from './routes/frontend.logs.routes';
-import embeddingsTablesRoutes from './routes/embeddings-tables.routes';
-import databaseRoutes from './routes/database.routes';
-import apiTestsRoutes from './routes/api-tests.routes';
-import setupRoutes from './routes/setup.routes';
-import deploymentRoutes from './routes/deployment.routes';
+import searchRoutes from "./routes/search.routes";
+import chatRoutes from "./routes/chat.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
+import scraperRoutes from "./routes/scraper.routes";
+import chatbotSettingsRoutes from "./routes/chatbot-settings.routes";
+import historyRoutes from "./routes/history.routes";
+import documentsRoutes from "./routes/documents.routes";
+import migrationRoutes from "./routes/migration.routes";
+import embeddingsV2Routes from "./routes/embeddings-v2.routes";
+import embeddingProgressRoutes from "./routes/embedding-progress.routes";
+import settingsRoutes from "./routes/settings.routes";
+import migrationCheckRoutes from "./routes/migration-check.routes";
+import activityRoutes from "./routes/activity.routes";
+import ragAnythingRoutes from "./routes/raganything.routes";
+import ragRoutes from "./routes/rag.routes";
+import authRoutes from "./routes/auth.routes";
+import usersRoutes from "./routes/users.routes";
+import subscriptionRoutes from "./routes/subscription.routes";
+import embeddingHistoryRoutes from "./routes/embedding-history.routes";
+import embeddingCleanupRoutes from "./routes/embedding-cleanup.routes";
+import aiSettingsRoutes from "./routes/ai-settings.routes";
+import appSettingsRoutes from "./routes/app-settings.routes";
+import healthRoutes from "./routes/health.routes";
+import adminRoutes from "./routes/admin.routes";
+import llmStatusRoutes from "./routes/llm-status.routes";
+import logsRoutes, { initializeLogWebSocket } from "./routes/logs.routes";
+import translateRoutes from "./routes/translate.routes";
+import {
+  preventNoSQLInjection,
+  rateLimits,
+  payloadSizeLimits,
+  handleSecurityError,
+  securityHeaders,
+} from "./middleware/security.middleware";
+import { responseMiddleware } from "./middleware/response.middleware";
+import { errorHandler, notFoundHandler, asyncHandler } from "./middleware/error.middleware";
+import { generalRateLimit, createEmbeddingRateLimit, createUploadRateLimit, createAuthRateLimit } from "./middleware/rate-limit.middleware";
+import systemLogsRoutes, {
+  initializeLogWebSocket as initializeSystemLogs,
+} from "./routes/system.logs.routes";
+import frontendLogsRoutes from "./routes/frontend.logs.routes";
+import embeddingsTablesRoutes from "./routes/embeddings-tables.routes";
+import databaseRoutes from "./routes/database.routes";
+import redisRoutes from "./routes/redis.routes";
+import apiTestsRoutes from "./routes/api-tests.routes";
+import setupRoutes from "./routes/setup.routes";
+import deploymentRoutes from "./routes/deployment.routes";
+import messageEmbeddingsRoutes from "./routes/message-embeddings.routes";
+import messageAnalyticsRoutes from "./routes/message-analytics.routes";
+import documentProcessingRoutes from "./routes/document-processing.routes";
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
-import { AuthService } from './services/auth.service';
-import { SettingsService } from './services/settings.service';
-
+import { AuthService } from "./services/auth.service";
+import { SettingsService } from "./services/settings.service";
+import { MessageCleanupService } from "./services/message-cleanup.service";
 
 // Initialize Express app
 const app: Application = express();
 const httpServer = createServer(app);
 
 // Parse CORS origins from environment variable - use CORS_ORIGINS from .env.lsemb
-const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`).split(',').map(origin => origin.trim());
+const corsOrigins = (
+  process.env.CORS_ORIGINS ||
+  process.env.CORS_ORIGIN ||
+  `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`
+)
+  .split(",")
+  .map((origin) => origin.trim());
 
 // Initialize Socket.io if WebSocket is enabled
-console.log('🔌 WebSocket Configuration:', {
+console.log("🔌 WebSocket Configuration:", {
   ENABLED: SERVER.WEBSOCKET.ENABLED,
   PORT: SERVER.WEBSOCKET.PORT,
   PATH: SERVER.WEBSOCKET.PATH,
   CORS_ORIGINS: corsOrigins,
-  ENV_ENABLED: process.env.ENABLE_WEBSOCKET
+  ENV_ENABLED: process.env.ENABLE_WEBSOCKET,
 });
 
-const io = SERVER.WEBSOCKET.ENABLED ? new SocketServer(httpServer, {
-  cors: {
-    origin: corsOrigins,
-    credentials: true,
-    methods: ["GET", "POST"]
-  },
-  path: SERVER.WEBSOCKET.PATH,
-  transports: ['websocket', 'polling']
-}) : null;
+const io = SERVER.WEBSOCKET.ENABLED
+  ? new SocketServer(httpServer, {
+      cors: {
+        origin: corsOrigins,
+        credentials: true,
+        methods: ["GET", "POST"],
+      },
+      path: SERVER.WEBSOCKET.PATH,
+      transports: ["websocket", "polling"],
+    })
+  : null;
 
 // Initialize Standard WebSocket Server for notifications if enabled
-const wss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
-  noServer: true,
-  path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH
-}) : null;
+const wss = SERVER.WEBSOCKET.ENABLED
+  ? new StandardWebSocketServer({
+      noServer: true,
+      path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH,
+    })
+  : null;
 
 // Initialize WebSocket Server for chat streaming
-const chatWss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
-  noServer: true,
-  path: '/ws/chat'
-}) : null;
+const chatWss = SERVER.WEBSOCKET.ENABLED
+  ? new StandardWebSocketServer({
+      noServer: true,
+      path: "/ws/chat",
+    })
+  : null;
 
 // Initialize WebSocket Server for logs
-const logWss = SERVER.WEBSOCKET.ENABLED ? new StandardWebSocketServer({
-  noServer: true,
-  path: '/ws/logs'
-}) : null;
+const logWss = SERVER.WEBSOCKET.ENABLED
+  ? new StandardWebSocketServer({
+      noServer: true,
+      path: "/ws/logs",
+    })
+  : null;
 
 // Initialize log WebSocket service
 if (SERVER.WEBSOCKET.ENABLED && logWss) {
@@ -111,32 +148,36 @@ if (SERVER.WEBSOCKET.ENABLED && logWss) {
 
 // Handle WebSocket upgrade for standard WebSocket connections if enabled
 if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
-  httpServer.on('upgrade', (request, socket, head) => {
-    const host = request.headers.host || 'localhost';
-    const pathname = new URL(request.url!, 'http://' + host).pathname;
+  httpServer.on("upgrade", (request, socket, head) => {
+    const host = request.headers.host || "localhost";
+    const pathname = new URL(request.url!, "http://" + host).pathname;
 
     if (pathname === SERVER.WEBSOCKET.NOTIFICATIONS_PATH && wss) {
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
+        wss.emit("connection", ws, request);
       });
-    } else if (pathname === '/ws/logs' && logWss) {
+    } else if (pathname === "/ws/logs" && logWss) {
       logWss.handleUpgrade(request, socket, head, (ws) => {
-        logWss.emit('connection', ws, request);
+        logWss.emit("connection", ws, request);
       });
-    } else if (pathname === '/ws/chat' && chatWss) {
+    } else if (pathname === "/ws/chat" && chatWss) {
       chatWss.handleUpgrade(request, socket, head, (ws) => {
-        const url = new URL(request.url!, 'http://' + (request.headers.host || 'localhost'));
-        const userId = url.searchParams.get('userId') || url.searchParams.get('client-id');
+        const url = new URL(
+          request.url!,
+          "http://" + (request.headers.host || "localhost")
+        );
+        const userId =
+          url.searchParams.get("userId") || url.searchParams.get("client-id");
         if (userId) {
           chatConnections.set(userId, ws);
 
-          ws.on('message', (data) => {
+          ws.on("message", (data) => {
             // Handle incoming chat WebSocket messages
             try {
               const message = JSON.parse(data);
-              if (message.type === 'ping') {
-                ws.send(JSON.stringify({ type: 'pong' }));
-              } else if (message.type === 'connect') {
+              if (message.type === "ping") {
+                ws.send(JSON.stringify({ type: "pong" }));
+              } else if (message.type === "connect") {
                 // Store client ID for connection
                 const clientId = message.clientId;
                 if (clientId && clientId !== userId) {
@@ -149,11 +190,11 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
             }
           });
 
-          ws.on('close', () => {
+          ws.on("close", () => {
             chatConnections.delete(userId);
           });
 
-          ws.send(JSON.stringify({ type: 'connected' }));
+          ws.send(JSON.stringify({ type: "connected" }));
         }
       });
     } else {
@@ -164,25 +205,20 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
 
 // Use the ASEMB pool from database.config - it will be initialized properly
 
-// Initialize Redis
+// Initialize Redis - ALWAYS use port 6379 for this project
 const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  db: parseInt(process.env.REDIS_DB || '2'),
-  password: process.env.REDIS_PASSWORD || undefined
+  host: process.env.REDIS_HOST || "localhost",
+  port: 6379, // ALWAYS use port 6379 for this project, ignore system env
+  db: parseInt(process.env.REDIS_DB || "2"),
+  password: process.env.REDIS_PASSWORD || undefined,
 });
 
 // Initialize Console Log Service
-import { initializeConsoleLogService } from './services/console-log.service';
+import { initializeConsoleLogService } from "./services/console-log.service";
 let consoleLogService: any = null;
 
-// Disable helmet for CORS issues during development
-app.use(helmet({
-  contentSecurityPolicy: false, // For development
-  crossOriginEmbedderPolicy: false, // For CORS
-  crossOriginResourcePolicy: false, // For CORS
-  crossOriginOpenerPolicy: false, // For CORS
-}));
+// Apply security headers (more restrictive for production)
+app.use(securityHeaders);
 
 // CORS middleware - place AFTER helmet
 app.use((req, res, next) => {
@@ -191,26 +227,41 @@ app.use((req, res, next) => {
   // console.log(`CORS Debug - Request received: ${req.method} ${req.url}, Origin: ${origin}`);
 
   // Parse CORS origins from environment variable
-  const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`).split(',').map(o => o.trim());
+  const corsOrigins = (
+    process.env.CORS_ORIGINS ||
+    process.env.CORS_ORIGIN ||
+    `http://localhost:${SERVER.DEFAULT_PORTS.FRONTEND},http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3008`
+  )
+    .split(",")
+    .map((o) => o.trim());
 
   // Check if origin is in allowed list
   const isOriginAllowed = origin && corsOrigins.includes(origin);
 
   // Set CORS headers based on origin validation
   if (isOriginAllowed) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   } else {
     // For requests without origin or disallowed origins, use a safe default
-    res.setHeader('Access-Control-Allow-Origin', corsOrigins[0] || 'http://localhost:3000');
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      corsOrigins[0] || "http://localhost:3000"
+    );
   }
 
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Origin, Accept, X-API-Key, Cache-Control, Pragma');
-  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Origin, Accept, X-API-Key, Cache-Control, Pragma"
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
 
   // Handle preflight requests
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     // console.log('CORS Debug - Handling OPTIONS preflight request');
     res.status(200).end();
     return;
@@ -218,43 +269,121 @@ app.use((req, res, next) => {
 
   next();
 });
-app.use(require('cookie-parser')());
+app.use(require("cookie-parser")());
 app.use(compression());
-app.use(morgan('dev', {
-  skip: (req, res) => {
-    // Skip logging for progress endpoint to reduce console noise
-    return req.path.includes('/embeddings/progress') || req.path.includes('/embeddings/progress/stream');
-  }
-}));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(
+  morgan("dev", {
+    skip: (req, res) => {
+      // Skip logging for progress endpoint to reduce console noise
+      return (
+        req.path.includes("/embeddings/progress") ||
+        req.path.includes("/embeddings/progress/stream")
+      );
+    },
+  })
+);
+app.use(express.json({ limit: payloadSizeLimits.json }));
+app.use(express.urlencoded({ extended: true, limit: payloadSizeLimits.json }));
+
+// Apply response formatting middleware first
+app.use(responseMiddleware);
+
+// Apply NoSQL injection prevention middleware
+app.use(preventNoSQLInjection);
+
+// Apply enhanced general rate limiting - REACTIVATED
+app.use(generalRateLimit.middleware);
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static('uploads'));
+app.use("/uploads", express.static("uploads"));
 
-// Health check endpoint
+// Enhanced health check endpoint
 app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
-    // Check PostgreSQL
-    await lsembPool.query('SELECT 1');
+    const startTime = Date.now();
 
-    // Check Redis
-    await redis.ping();
+    // Check PostgreSQL with timing
+    let postgresStatus = "disconnected";
+    let postgresResponseTime = 0;
+    try {
+      const dbStart = Date.now();
+      await lsembPool.query("SELECT 1");
+      postgresResponseTime = Date.now() - dbStart;
+      postgresStatus = "connected";
+    } catch (dbError: any) {
+      postgresStatus = "disconnected";
+    }
+
+    // Check Redis with timing
+    let redisStatus = "disconnected";
+    let redisResponseTime = 0;
+    try {
+      const redisStart = Date.now();
+      await redis.ping();
+      redisResponseTime = Date.now() - redisStart;
+      redisStatus = "connected";
+    } catch (redisError: any) {
+      redisStatus = "disconnected";
+    }
+
+    // Get performance metrics
+    const memoryUsage = process.memoryUsage();
+    const totalResponseTime = Date.now() - startTime;
+
+    // Determine overall status
+    const overallStatus = postgresStatus === "connected" && redisStatus === "connected"
+      ? "healthy"
+      : postgresStatus === "connected" || redisStatus === "connected"
+      ? "degraded"
+      : "unhealthy";
 
     res.json({
-      status: 'healthy',
+      status: overallStatus,
       timestamp: new Date().toISOString(),
+      responseTime: totalResponseTime,
       services: {
-        postgres: 'connected',
-        redis: 'connected',
-        lightrag: 'disabled'
+        postgres: {
+          status: postgresStatus,
+          responseTime: postgresResponseTime
+        },
+        redis: {
+          status: redisStatus,
+          responseTime: redisResponseTime
+        },
+        lightrag: {
+          status: "disabled",
+          reason: "LightRAG service intentionally disabled for performance"
+        }
       },
-      agent: 'claude'
+      performance: {
+        memory: {
+          heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+          heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+          external: Math.round(memoryUsage.external / 1024 / 1024),
+          rss: Math.round(memoryUsage.rss / 1024 / 1024)
+        },
+        uptime: Math.round(process.uptime()),
+        databasePool: {
+          total: lsembPool.totalCount,
+          idle: lsembPool.idleCount,
+          waiting: lsembPool.waitingCount
+        }
+      },
+      agent: "claude",
+      version: "2.0.0",
+      recommendations: overallStatus === "healthy"
+        ? ["System is operating normally"]
+        : postgresStatus === "disconnected"
+        ? ["Check database connection and credentials"]
+        : redisStatus === "disconnected"
+        ? ["Check Redis service and connection"]
+        : ["Multiple services need attention"]
     });
   } catch (error: any) {
     res.status(500).json({
-      status: 'unhealthy',
-      error: error.message
+      status: "unhealthy",
+      error: error.message,
+      timestamp: new Date().toISOString(),
     });
   }
 });
@@ -262,202 +391,228 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
 // API Routes
 app.use(searchRoutes);
 app.use(chatRoutes);
-app.use('/api/v2/dashboard', dashboardRoutes);
-app.use('/api/v2/scraper', scraperRoutes);
-app.use('/api/v2/chatbot', chatbotSettingsRoutes);
+app.use("/api/v2/dashboard", dashboardRoutes);
+app.use("/api/v2/scraper", scraperRoutes);
+app.use("/api/v2/chatbot", chatbotSettingsRoutes);
+app.use("/api/v2/translate", translateRoutes);
 app.use(historyRoutes);
-app.use('/api/v2/documents', documentsRoutes);
+app.use("/api/v2/documents", documentsRoutes);
+app.use("/documents", documentsRoutes);
 app.use(API.ENDPOINTS.V2.MIGRATION, migrationRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingsV2Routes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingProgressRoutes);
 // settingsRoutes and appSettingsRoutes moved down to fix conflicts
-app.use('/api/v2/migration-check', migrationCheckRoutes);
+app.use("/api/v2/migration-check", migrationCheckRoutes);
 app.use(API.ENDPOINTS.V2.ACTIVITY, activityRoutes);
-app.use('/api/v2/raganything', ragAnythingRoutes);
+app.use("/api/v2/raganything", ragAnythingRoutes);
 app.use(API.ENDPOINTS.V2.RAG, ragRoutes);
 app.use(API.ENDPOINTS.V2.AUTH, authRoutes);
 app.use(API.ENDPOINTS.V2.USERS, usersRoutes);
-app.use('/api/v2/subscription', subscriptionRoutes);
-app.use('/api/v2/embedding-history', embeddingHistoryRoutes);
+// Basic health endpoints
+app.use("/health", healthRoutes);
+app.use("/api/health", healthRoutes);
+
+app.use("/api/v2/subscription", subscriptionRoutes);
+app.use("/api/v2/embedding-history", embeddingHistoryRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
-app.use('/api/v2/ai', aiSettingsRoutes);
+app.use("/api/v2/ai", aiSettingsRoutes);
 // TODO: Fix route conflict - only use one settings route
 // app.use('/api/v2/settings', appSettingsRoutes);
 app.use(API.ENDPOINTS.V2.SETTINGS, settingsRoutes);
-app.use('/api/v2/config', settingsRoutes);
-app.use('/api/v2/health', healthRoutes);
-app.use('/api/v2/llm', llmStatusRoutes);
-app.use('/api/v2/admin', adminRoutes);
-app.use('/api/v2/logs', logsRoutes);
-app.use('/api/v2/embeddings-tables', embeddingsTablesRoutes);
-app.use('/api/v2/database', databaseRoutes);
-app.use('/api/v2/api-tests', apiTestsRoutes);
-app.use('/api/v2/setup', setupRoutes);
-app.use('/api/v2/deployment', deploymentRoutes);
+app.use("/api/v2/config", settingsRoutes);
+app.use("/api/v2/health", healthRoutes);
+app.use("/api/v2/llm", llmStatusRoutes);
+app.use("/api/v2/admin", adminRoutes);
+app.use("/api/v2/logs", logsRoutes);
+app.use("/api/v2/embeddings-tables", embeddingsTablesRoutes);
+app.use("/api/v2/database", databaseRoutes);
+app.use("/api/v2/redis", redisRoutes);
+app.use("/api/v2/api-tests", apiTestsRoutes);
+app.use("/api/v2/setup", setupRoutes);
+app.use("/api/v2/deployment", deploymentRoutes);
+app.use(messageEmbeddingsRoutes);
+app.use(messageAnalyticsRoutes);
 // app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
-app.use('/api/v2/system', systemLogsRoutes);
-app.use('/api/v2/frontend', frontendLogsRoutes);
+app.use("/api/v2/system", systemLogsRoutes);
+app.use("/api/v2/frontend", frontendLogsRoutes);
+app.use("/api/v2/document-processing", documentProcessingRoutes);
 
 // Base route
-app.get('/api/v2', (req: Request, res: Response) => {
+app.get("/api/v2", (req: Request, res: Response) => {
   res.json({
-    message: 'ASB Backend API v2',
-    version: '2.0.0',
+    message: "ASB Backend API v2",
+    version: "2.0.0",
     endpoints: {
       health: API.ENDPOINTS.V2.HEALTH,
       chat: API.ENDPOINTS.V2.CHAT,
       search: {
-        semantic: API.ENDPOINTS.V2.SEARCH + '/semantic',
-        hybrid: API.ENDPOINTS.V2.SEARCH + '/hybrid',
-        stats: API.ENDPOINTS.V2.SEARCH + '/stats'
+        semantic: API.ENDPOINTS.V2.SEARCH + "/semantic",
+        hybrid: API.ENDPOINTS.V2.SEARCH + "/hybrid",
+        stats: API.ENDPOINTS.V2.SEARCH + "/stats",
       },
       scraper: API.ENDPOINTS.V2.SCRAPER,
       embeddings: API.ENDPOINTS.V2.EMBEDDINGS,
       dashboard: {
-        overview: API.ENDPOINTS.V2.DASHBOARD
-      }
-    }
+        overview: API.ENDPOINTS.V2.DASHBOARD,
+      },
+    },
   });
 });
 
 // WebSocket handling - only if enabled
 if (SERVER.WEBSOCKET.ENABLED && io) {
   console.log(`🔌 WebSocket enabled on path: ${SERVER.WEBSOCKET.PATH}`);
-  io.on('connection', (socket) => {
-  console.log('WebSocket client connected');
+  io.on("connection", (socket) => {
+    console.log("WebSocket client connected");
 
-  // Handle notifications namespace
-  if (socket.handshake.query.namespace === 'notifications') {
-    socket.join('notifications');
-    console.log('Client joined notifications room');
-  }
+    // Handle notifications namespace
+    if (socket.handshake.query.namespace === "notifications") {
+      socket.join("notifications");
+      console.log("Client joined notifications room");
+    }
 
-  // Join user room
-  socket.on('join', (userId: string) => {
-    socket.join(`user:${userId}`);
-  });
+    // Join user room
+    socket.on("join", (userId: string) => {
+      socket.join(`user:${userId}`);
+    });
 
-  // Handle typing indicators
-  socket.on('chat:typing', (data: any) => {
-    socket.broadcast.to(`conversation:${data.conversationId}`).emit('chat:typing', data);
-  });
+    // Handle typing indicators
+    socket.on("chat:typing", (data: any) => {
+      socket.broadcast
+        .to(`conversation:${data.conversationId}`)
+        .emit("chat:typing", data);
+    });
 
-  // Handle chat messages
-  socket.on('chat:message', async (data: any) => {
-    // Broadcast to conversation participants
-    io.to(`conversation:${data.conversationId}`).emit('chat:message', data);
+    // Handle chat messages
+    socket.on("chat:message", async (data: any) => {
+      // Broadcast to conversation participants
+      io.to(`conversation:${data.conversationId}`).emit("chat:message", data);
 
-    // Update Redis for real-time sync
-    await redis.publish('asb:chat:messages', JSON.stringify(data));
-  });
+      // Update Redis for real-time sync
+      await redis.publish("asb:chat:messages", JSON.stringify(data));
+    });
 
-  // Dashboard real-time updates
-  socket.on('dashboard:subscribe', () => {
-    socket.join('dashboard:updates');
-  });
+    // Dashboard real-time updates
+    socket.on("dashboard:subscribe", () => {
+      socket.join("dashboard:updates");
+    });
 
-  // Test notification endpoint
-  socket.on('notification:test', () => {
-    socket.emit('notification', {
-      type: 'test',
-      id: Date.now().toString(),
-      severity: 'info',
-      title: 'Test Notification',
-      message: 'WebSocket connection is working',
-      timestamp: new Date().toISOString(),
-      source: 'System'
+    // Test notification endpoint
+    socket.on("notification:test", () => {
+      socket.emit("notification", {
+        type: "test",
+        id: Date.now().toString(),
+        severity: "info",
+        title: "Test Notification",
+        message: "WebSocket connection is working",
+        timestamp: new Date().toISOString(),
+        source: "System",
+      });
+    });
+
+    socket.on("disconnect", () => {
+      console.log("WebSocket client disconnected");
     });
   });
-
-  socket.on('disconnect', () => {
-    console.log('WebSocket client disconnected');
-  });
-});
 } else {
-  console.log('🔌 WebSocket disabled by configuration');
+  console.log("🔌 WebSocket disabled by configuration");
 }
 
 // Standard WebSocket connection handling - only if enabled
 if (SERVER.WEBSOCKET.ENABLED && wss) {
-  console.log(`🔌 Standard WebSocket enabled on path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`);
-  wss.on('connection', (ws, request) => {
-  console.log('Standard WebSocket client connected to /ws/notifications');
+  console.log(
+    `🔌 Standard WebSocket enabled on path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`
+  );
+  wss.on("connection", (ws, request) => {
+    console.log("Standard WebSocket client connected to /ws/notifications");
 
-  // Store the IP address for logging/security
-  const clientIp = request.socket.remoteAddress;
+    // Store the IP address for logging/security
+    const clientIp = request.socket.remoteAddress;
 
-  // Send initial connection confirmation
-  ws.send(JSON.stringify({
-    type: 'connection',
-    message: 'WebSocket connection established',
-    timestamp: new Date().toISOString()
-  }));
+    // Send initial connection confirmation
+    ws.send(
+      JSON.stringify({
+        type: "connection",
+        message: "WebSocket connection established",
+        timestamp: new Date().toISOString(),
+      })
+    );
 
-  // Handle incoming messages
-  ws.on('message', async (data) => {
-    try {
-      const message = JSON.parse(data.toString());
+    // Handle incoming messages
+    ws.on("message", async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
 
-      // Handle different message types
-      switch (message.type) {
-        case 'test':
-          // Send test notification
-          ws.send(JSON.stringify({
-            type: 'notification',
-            id: Date.now().toString(),
-            severity: 'info',
-            title: 'Test Notification',
-            message: 'Standard WebSocket connection is working',
+        // Handle different message types
+        switch (message.type) {
+          case "test":
+            // Send test notification
+            ws.send(
+              JSON.stringify({
+                type: "notification",
+                id: Date.now().toString(),
+                severity: "info",
+                title: "Test Notification",
+                message: "Standard WebSocket connection is working",
+                timestamp: new Date().toISOString(),
+                source: "System",
+              })
+            );
+            break;
+
+          case "ping":
+            ws.send(
+              JSON.stringify({
+                type: "pong",
+                timestamp: new Date().toISOString(),
+              })
+            );
+            break;
+
+          default:
+            console.log("Received unknown message type:", message.type);
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            message: "Invalid message format",
             timestamp: new Date().toISOString(),
-            source: 'System'
-          }));
-          break;
-
-        case 'ping':
-          ws.send(JSON.stringify({
-            type: 'pong',
-            timestamp: new Date().toISOString()
-          }));
-          break;
-
-        default:
-          console.log('Received unknown message type:', message.type);
+          })
+        );
       }
-    } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
-      ws.send(JSON.stringify({
-        type: 'error',
-        message: 'Invalid message format',
-        timestamp: new Date().toISOString()
-      }));
-    }
-  });
+    });
 
-  // Handle connection close
-  ws.on('close', (code, reason) => {
-    console.log(`Standard WebSocket client disconnected: ${code} - ${reason}`);
-  });
+    // Handle connection close
+    ws.on("close", (code, reason) => {
+      console.log(
+        `Standard WebSocket client disconnected: ${code} - ${reason}`
+      );
+    });
 
-  // Handle errors
-  ws.on('error', (error) => {
-    console.error('Standard WebSocket error:', error);
-  });
+    // Handle errors
+    ws.on("error", (error) => {
+      console.error("Standard WebSocket error:", error);
+    });
 
-  // Set up a ping interval to keep the connection alive
-  const pingInterval = setInterval(() => {
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'ping',
-        timestamp: new Date().toISOString()
-      }));
-    }
-  }, 30000); // Every 30 seconds
+    // Set up a ping interval to keep the connection alive
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: "ping",
+            timestamp: new Date().toISOString(),
+          })
+        );
+      }
+    }, 30000); // Every 30 seconds
 
-  // Clean up ping interval when connection closes
-  ws.on('close', () => {
-    clearInterval(pingInterval);
+    // Clean up ping interval when connection closes
+    ws.on("close", () => {
+      clearInterval(pingInterval);
+    });
   });
-});
 }
 
 // Helper function to broadcast notifications to all connected standard WebSocket clients
@@ -475,8 +630,8 @@ export function broadcastNotification(notification: {
   }
 
   const message = JSON.stringify({
-    type: 'notification',
-    ...notification
+    type: "notification",
+    ...notification,
   });
 
   wss.clients.forEach((client) => {
@@ -488,150 +643,140 @@ export function broadcastNotification(notification: {
 
 // Also forward Socket.IO notifications to standard WebSocket clients
 if (SERVER.WEBSOCKET.ENABLED && io) {
-  io.on('connection', (socket) => {
-    socket.on('notification', (notification) => {
+  io.on("connection", (socket) => {
+    socket.on("notification", (notification) => {
       broadcastNotification(notification);
     });
   });
 }
 
-// Error handling middleware
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('Error:', err);
-  
-  // Send error to monitoring
-  redis.publish('asb:backend:errors', JSON.stringify({
-    timestamp: new Date(),
-    error: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method
-  }));
-  
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
-  });
-});
+// Enhanced error handling middleware
+app.use(errorHandler);
 
 // 404 handler
-app.use((req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' });
-});
+app.use(notFoundHandler);
 
 // LightRAG service disabled
 export let lightRAGService = null;
 
 // Import embeddings progress loader
-import { loadProgressFromRedis } from './routes/embeddings.routes';
-import { loadProgressFromRedis as loadV2ProgressFromRedis } from './routes/embeddings-v2.routes';
+import { loadProgressFromRedis } from "./routes/embeddings.routes";
+import { loadProgressFromRedis as loadV2ProgressFromRedis } from "./routes/embeddings-v2.routes";
 
 // Start server with database dependency
 const PORT = SERVER.PORT;
 
 async function startServer() {
-  console.log('\n🚀 ===============================================');
+  console.log("\n🚀 ===============================================");
   console.log(`   LUWI SEMANTIC BRIDGE BACKEND v2.0.0`);
-  console.log('==============================================');
+  console.log("==============================================");
   console.log(`📍 Port: ${PORT}`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'}`);
+  console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(
+    `🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? "Enabled" : "Disabled"}`
+  );
   if (SERVER.WEBSOCKET.ENABLED) {
     console.log(`   • Socket.IO Path: ${SERVER.WEBSOCKET.PATH}`);
-    console.log(`   • Notifications Path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`);
+    console.log(
+      `   • Notifications Path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`
+    );
   }
-  console.log('==============================================\n');
+  console.log("==============================================\n");
 
   // Database connection variables
   let dbConnectionAttempts = 0;
   const maxDbRetries = 5;
   const dbRetryDelay = 5000; // 5 seconds
 
-  console.log('\n📊 [1/4] DATABASE CONNECTION');
-  console.log('--------------------------');
+  console.log("\n📊 [1/4] DATABASE CONNECTION");
+  console.log("--------------------------");
 
   // Retry database connection with backoff
   while (dbConnectionAttempts < maxDbRetries) {
     try {
       console.log(`🔄 Connecting to PostgreSQL...`);
-      console.log(`   Host: ${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}`);
-      console.log(`   Database: ${process.env.POSTGRES_DB || 'lsemb'}`);
+      console.log(
+        `   Host: ${process.env.POSTGRES_HOST || "localhost"}:${process.env.POSTGRES_PORT || "5432"}`
+      );
+      console.log(`   Database: ${process.env.POSTGRES_DB || "lsemb"}`);
 
-      await lsembPool.query('SELECT 1');
-      console.log('✅ PostgreSQL: Connected');
+      await lsembPool.query("SELECT 1");
+      console.log("✅ PostgreSQL: Connected");
       break; // Success, exit retry loop
-
     } catch (dbError: any) {
       dbConnectionAttempts++;
-      console.error(`❌ Attempt ${dbConnectionAttempts}/${maxDbRetries} failed`);
+      console.error(
+        `❌ Attempt ${dbConnectionAttempts}/${maxDbRetries} failed`
+      );
 
       if (dbConnectionAttempts >= maxDbRetries) {
-        console.error('\n💥 DATABASE CONNECTION FAILED');
-        console.error('   Server will continue in LIMITED MODE');
+        console.error("\n💥 DATABASE CONNECTION FAILED");
+        console.error("   Server will continue in LIMITED MODE");
 
         // Set server status to indicate database connection failure
         (global as any).serverStatus = {
-          database: 'disconnected',
+          database: "disconnected",
           loading: true,
-          error: dbError.message
+          error: dbError.message,
         };
         break;
       }
 
-      console.log(`⏳ Retrying in ${dbRetryDelay/1000} seconds...`);
-      await new Promise(resolve => setTimeout(resolve, dbRetryDelay));
+      console.log(`⏳ Retrying in ${dbRetryDelay / 1000} seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, dbRetryDelay));
     }
   }
 
   // Only proceed with full initialization if database is connected
-  if ((global as any).serverStatus?.database !== 'disconnected') {
+  if ((global as any).serverStatus?.database !== "disconnected") {
     try {
       // Initialize LSEMB database tables
-      console.log('\n🗃️ [2/4] DATABASE SETUP');
-      console.log('------------------------');
-      console.log('🔄 Initializing tables...');
+      console.log("\n🗃️ [2/4] DATABASE SETUP");
+      console.log("------------------------");
+      console.log("🔄 Initializing tables...");
       await initializeLsembDatabase();
-      console.log('✅ Tables: Ready');
+      console.log("✅ Tables: Ready");
 
       // Create default admin user if not exists
       const authService = new AuthService();
       await authService.createDefaultAdmin();
-      console.log('✅ Admin user: Checked');
+      console.log("✅ Admin user: Checked");
 
       // Load all configurations from ASEMB database
-      console.log('\n⚙️ [3/4] CONFIGURATION');
-      console.log('---------------------');
-      console.log('🔄 Loading settings from database...');
+      console.log("\n⚙️ [3/4] CONFIGURATION");
+      console.log("---------------------");
+      console.log("🔄 Loading settings from database...");
       await initializeConfigs();
-      console.log('✅ Settings: Loaded');
+      console.log("✅ Settings: Loaded");
 
       // Sync API keys from environment variables to database
       await syncAPIKeysToDatabase();
-      console.log('✅ API keys: Synced');
+      console.log("✅ API keys: Synced");
 
       // Update server status to indicate successful database connection
       (global as any).serverStatus = {
-        database: 'connected',
+        database: "connected",
         loading: false,
-        settings: 'loaded'
+        settings: "loaded",
       };
     } catch (configError: any) {
-      console.error('⚠️ Configuration loading failed:', configError.message);
+      console.error("⚠️ Configuration loading failed:", configError.message);
       (global as any).serverStatus = {
-        database: 'connected',
+        database: "connected",
         loading: false,
-        settings: 'failed',
-        error: configError.message
+        settings: "failed",
+        error: configError.message,
       };
     }
   }
 
-    // Initialize Redis
-  console.log('\n📡 REDIS CONNECTION');
-  console.log('---------------------');
+  // Initialize Redis
+  console.log("\n📡 REDIS CONNECTION");
+  console.log("---------------------");
   try {
-    console.log('🔄 Connecting to Redis...');
+    console.log("🔄 Connecting to Redis...");
     await initializeRedis();
-    console.log('✅ Redis: Connected');
+    console.log("✅ Redis: Connected");
 
     // Initialize Console Log Service after Redis is connected
     consoleLogService = initializeConsoleLogService(redis);
@@ -639,49 +784,69 @@ async function startServer() {
     // Check Redis database info
     if (redis) {
       try {
-        const redisInfo = await redis.info('keyspace');
+        const redisInfo = await redis.info("keyspace");
         const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
         if (dbKeys) {
           console.log(`📊 DB Keys: ${dbKeys[1]} items`);
         }
       } catch (redisInfoError) {
-        console.warn('⚠️ Could not get Redis info');
+        console.warn("⚠️ Could not get Redis info");
       }
     }
 
     // Update server status with Redis connection
     if ((global as any).serverStatus) {
-      (global as any).serverStatus.redis = 'connected';
+      (global as any).serverStatus.redis = "connected";
     }
   } catch (redisError: any) {
-    console.error('❌ Redis connection failed');
+    console.error("❌ Redis connection failed");
     if ((global as any).serverStatus) {
-      (global as any).serverStatus.redis = 'disconnected';
+      (global as any).serverStatus.redis = "disconnected";
       (global as any).serverStatus.redisError = redisError.message;
     }
   }
 
   // Initialize AI Services
-  console.log('\n🤖 [4/4] AI SERVICES');
-  console.log('-------------------');
+  console.log("\n🤖 [4/4] AI SERVICES");
+  console.log("-------------------");
   const settingsService = SettingsService.getInstance();
   const aiServices = [
-    { name: 'OpenAI', key: 'OPENAI_API_KEY', model: 'GPT-4/3.5', settingKey: 'openai.apiKey' },
-    { name: 'Claude', key: 'CLAUDE_API_KEY', model: 'Claude 3.5', settingKey: 'anthropic.apiKey' },
-    { name: 'Gemini', key: 'GEMINI_API_KEY', model: 'Gemini 1.5', settingKey: 'google.apiKey' },
-    { name: 'DeepSeek', key: 'DEEPSEEK_API_KEY', model: 'DeepSeek', settingKey: 'deepseek.apiKey' }
+    {
+      name: "OpenAI",
+      key: "OPENAI_API_KEY",
+      model: "GPT-4/3.5",
+      settingKey: "openai.apiKey",
+    },
+    {
+      name: "Claude",
+      key: "CLAUDE_API_KEY",
+      model: "Claude 3.5",
+      settingKey: "anthropic.apiKey",
+    },
+    {
+      name: "Gemini",
+      key: "GEMINI_API_KEY",
+      model: "Gemini 1.5",
+      settingKey: "google.apiKey",
+    },
+    {
+      name: "DeepSeek",
+      key: "DEEPSEEK_API_KEY",
+      model: "DeepSeek",
+      settingKey: "deepseek.apiKey",
+    },
   ];
 
   for (const service of aiServices) {
     let isConfigured = false;
-    let source = 'not configured';
+    let source = "not configured";
 
     try {
       // Try to get API key from database first
       const allSettings = await settingsService.getAllSettings();
       let parsedSettings = allSettings;
 
-      if (typeof allSettings === 'string') {
+      if (typeof allSettings === "string") {
         try {
           parsedSettings = JSON.parse(allSettings);
         } catch (parseError) {
@@ -691,166 +856,208 @@ async function startServer() {
 
       const dbApiKey = parsedSettings[service.settingKey];
 
-      if (dbApiKey && dbApiKey.trim() !== '') {
+      if (dbApiKey && dbApiKey.trim() !== "") {
         isConfigured = true;
-        source = 'database';
+        source = "database";
       } else if (process.env[service.key]) {
         isConfigured = true;
-        source = 'env';
+        source = "env";
       }
     } catch (error) {
       if (process.env[service.key]) {
         isConfigured = true;
-        source = 'env';
+        source = "env";
       }
     }
 
     if (isConfigured) {
-      console.log(`✅ ${service.name}: Available (${service.model}) [${source}]`);
+      console.log(
+        `✅ ${service.name}: Available (${service.model}) [${source}]`
+      );
     } else {
       console.log(`❌ ${service.name}: Not configured`);
     }
   }
 
   // Check Embedding settings
-  console.log('\n🔤 EMBEDDINGS');
-  console.log('-------------');
-  if (process.env.USE_LOCAL_EMBEDDINGS === 'true') {
-    console.log('📦 Provider: Local');
+  console.log("\n🔤 EMBEDDINGS");
+  console.log("-------------");
+  if (process.env.USE_LOCAL_EMBEDDINGS === "true") {
+    console.log("📦 Provider: Local");
   } else {
-    console.log('📦 Provider: OpenAI (default)');
+    console.log("📦 Provider: OpenAI (default)");
   }
 
   // LightRAG service disabled
-  console.log('\n🔍 LightRAG: Disabled');
+  console.log("\n🔍 LightRAG: Disabled");
   lightRAGService = null;
 
-    // Load migration progress from Redis (only if Redis is available)
+  // Load migration progress from Redis (only if Redis is available)
   if (redis) {
     try {
-      console.log('\n📈 Migration Status:');
+      console.log("\n📈 Migration Status:");
       await loadProgressFromRedis();
     } catch (migrationError: any) {
-      console.log('⚠️ Migration progress check failed:', migrationError.message);
+      console.log(
+        "⚠️ Migration progress check failed:",
+        migrationError.message
+      );
     }
   }
 
-    // Also check v2 embedding progress
-    const v2ProgressLoaded = await loadV2ProgressFromRedis();
-    if (v2ProgressLoaded) {
-      console.log('🔄 Found active v2 embedding process');
+  // Also check v2 embedding progress
+  const v2ProgressLoaded = await loadV2ProgressFromRedis();
+  if (v2ProgressLoaded) {
+    console.log("🔄 Found active v2 embedding process");
 
-      // If process was paused, auto-resume it after backend restart
-      const embeddingStatus = await redis.get('embedding:status');
-      if (embeddingStatus === 'paused') {
-        console.log('🔄 Auto-resuming paused embedding process...');
-        try {
-          // Internal auto-resume - don't log this as user operation
-          await fetch(`http://localhost:${PORT}/api/v2/embeddings/auto-resume`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-        } catch (autoResumeError) {
-          if (autoResumeError instanceof Error) {
-            console.log('⚠️ Auto-resume failed, user can resume manually:', autoResumeError.message);
-          } else {
-            console.log('⚠️ Auto-resume failed with an unknown error, user can resume manually.');
-          }
-        }
-      }
-    }
-
-    // Check embedding progress
-    try {
-      const embeddingProgress = await redis.get('embedding:progress');
-      if (embeddingProgress) {
-        const progress = JSON.parse(embeddingProgress);
-        console.log(`📊 Migration Status: ${progress.status || 'unknown'}`);
-        if (progress.currentTable) {
-          console.log(`   Active Table: ${progress.currentTable}`);
-          console.log(`   Progress: ${progress.current || 0}/${progress.total || 0} records`);
-        }
-      }
-    } catch (error) {
-      // Silently ignore
-    }
-
-    // Clean up stale embedding progress records (only if database is connected)
-    if ((global as any).serverStatus?.database === 'connected') {
+    // If process was paused, auto-resume it after backend restart
+    const embeddingStatus = await redis.get("embedding:status");
+    if (embeddingStatus === "paused") {
+      console.log("🔄 Auto-resuming paused embedding process...");
       try {
-        await lsembPool.query(`
+        // Internal auto-resume - don't log this as user operation
+        await fetch(`http://localhost:${PORT}/api/v2/embeddings/auto-resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (autoResumeError) {
+        if (autoResumeError instanceof Error) {
+          console.log(
+            "⚠️ Auto-resume failed, user can resume manually:",
+            autoResumeError.message
+          );
+        } else {
+          console.log(
+            "⚠️ Auto-resume failed with an unknown error, user can resume manually."
+          );
+        }
+      }
+    }
+  }
+
+  // Check embedding progress
+  try {
+    const embeddingProgress = await redis.get("embedding:progress");
+    if (embeddingProgress) {
+      const progress = JSON.parse(embeddingProgress);
+      console.log(`📊 Migration Status: ${progress.status || "unknown"}`);
+      if (progress.currentTable) {
+        console.log(`   Active Table: ${progress.currentTable}`);
+        console.log(
+          `   Progress: ${progress.current || 0}/${progress.total || 0} records`
+        );
+      }
+    }
+  } catch (error) {
+    // Silently ignore
+  }
+
+  // Clean up stale embedding progress records (only if database is connected)
+  if ((global as any).serverStatus?.database === "connected") {
+    try {
+      await lsembPool.query(`
           UPDATE embedding_progress
           SET status = 'completed', completed_at = CURRENT_TIMESTAMP
           WHERE status IN ('processing', 'paused')
           AND started_at < NOW() - INTERVAL '1 hour'
         `);
-      } catch (cleanupError) {
-        // Silently ignore
-      }
+    } catch (cleanupError) {
+      // Silently ignore
+    }
 
-      // Check for existing embedding process on startup (only if database is connected)
-      try {
-        const existingProcess = await lsembPool.query(`
+    // Check for existing embedding process on startup (only if database is connected)
+    try {
+      const existingProcess = await lsembPool.query(`
           SELECT * FROM embedding_progress
           WHERE status IN ('processing', 'paused')
           ORDER BY started_at DESC
           LIMIT 1
         `);
 
-        if (existingProcess.rows.length > 0) {
-          const process = existingProcess.rows[0];
+      if (existingProcess.rows.length > 0) {
+        const process = existingProcess.rows[0];
 
-          // If process was 'processing', mark it as 'paused' for safety
-          if (process.status === 'processing') {
-            // Found orphaned processing process, marking as paused
-            await lsembPool.query(`
+        // If process was 'processing', mark it as 'paused' for safety
+        if (process.status === "processing") {
+          // Found orphaned processing process, marking as paused
+          await lsembPool.query(
+            `
               UPDATE embedding_progress
               SET status = 'paused'
               WHERE id = $1
-            `, [process.id]);
+            `,
+            [process.id]
+          );
 
-            // Also update Redis
-            await redis.set('embedding:status', 'paused');
-            const progressData = {
-              status: 'paused',
-              current: process.processed_chunks || 0,
-              total: process.total_chunks || 0,
-              percentage: process.total_chunks > 0 ? Math.round((process.processed_chunks / process.total_chunks) * 100) : 0,
-              currentTable: process.document_type,
-              error: process.error_message,
-              startTime: new Date(process.started_at).getTime(),
-                newlyEmbedded: process.processed_chunks || 0,
-              errorCount: process.error_message ? 1 : 0,
-              processedTables: process.document_type ? [process.document_type] : []
-            };
-            await redis.set('embedding:progress', JSON.stringify(progressData), 'EX', 7 * 24 * 60 * 60);
-            // Process marked as paused, user can resume manually
-          }
+          // Also update Redis
+          await redis.set("embedding:status", "paused");
+          const progressData = {
+            status: "paused",
+            current: process.processed_chunks || 0,
+            total: process.total_chunks || 0,
+            percentage:
+              process.total_chunks > 0
+                ? Math.round(
+                    (process.processed_chunks / process.total_chunks) * 100
+                  )
+                : 0,
+            currentTable: process.document_type,
+            error: process.error_message,
+            startTime: new Date(process.started_at).getTime(),
+            newlyEmbedded: process.processed_chunks || 0,
+            errorCount: process.error_message ? 1 : 0,
+            processedTables: process.document_type
+              ? [process.document_type]
+              : [],
+          };
+          await redis.set(
+            "embedding:progress",
+            JSON.stringify(progressData),
+            "EX",
+            7 * 24 * 60 * 60
+          );
+          // Process marked as paused, user can resume manually
         }
-      } catch (checkError) {
-        // Silently ignore
       }
+    } catch (checkError) {
+      // Silently ignore
     }
   }
-
+}
 
 // Start HTTP server (this should always happen regardless of database status)
 const startHttpServer = () => {
-  console.log('\n🌐 SERVER STARTUP');
-  console.log('==================');
+  console.log("\n🌐 SERVER STARTUP");
+  console.log("==================");
   console.log(`📡 WebSocket: Ready`);
   console.log(`🌐 API: http://localhost:${PORT}`);
   console.log(`📊 Health: GET /health`);
+
+  // Initialize message cleanup service
+  try {
+    const cleanupService = MessageCleanupService.getInstance();
+    console.log("🧹 Message cleanup service initialized");
+  } catch (error) {
+    console.log("⚠️ Failed to initialize message cleanup service:", error);
+  }
   console.log(`📚 Docs: GET /api/v2`);
 
   // Publish startup event
   if (redis) {
-    redis.publish('asb:backend:status', JSON.stringify({
-      event: 'startup',
-      timestamp: new Date(),
-      port: PORT,
-      status: (global as any).serverStatus?.database === 'connected' ? 'ready' : 'limited'
-    })).catch(err => console.log('Could not publish startup event:', err));
+    redis
+      .publish(
+        "asb:backend:status",
+        JSON.stringify({
+          event: "startup",
+          timestamp: new Date(),
+          port: PORT,
+          status:
+            (global as any).serverStatus?.database === "connected"
+              ? "ready"
+              : "limited",
+        })
+      )
+      .catch((err) => console.log("Could not publish startup event:", err));
   }
 
   // Start the HTTP server
@@ -861,30 +1068,36 @@ const startHttpServer = () => {
 
       // Display final status
       const serverStatus = (global as any).serverStatus;
-      if (serverStatus?.database === 'connected') {
-        console.log('🟢 Status: FULLY OPERATIONAL');
+      if (serverStatus?.database === "connected") {
+        console.log("🟢 Status: FULLY OPERATIONAL");
       } else if (serverStatus?.loading) {
-        console.log('🟡 Status: LIMITED MODE (DB Connection Failed)');
+        console.log("🟡 Status: LIMITED MODE (DB Connection Failed)");
       } else {
-        console.log('🟡 Status: LIMITED MODE');
+        console.log("🟡 Status: LIMITED MODE");
       }
-      console.log('==============================\n');
+      console.log("==============================\n");
     });
   }
 };
 
 // 🚀 Emergency Chat Routes - Quick Fix
 const setupChatRoutes = () => {
-  console.log('🔄 Setting up emergency /api/v2/chatbot routes...');
-  console.log('🔄 Setting up emergency /api/v2/chatbot routes...');
+  console.log("🔄 Setting up emergency /api/v2/chatbot routes...");
+  console.log("🔄 Setting up emergency /api/v2/chatbot routes...");
 
   // 1. Settings
-  app.get('/api/v2/chatbot/settings', async (req, res) => {
+  app.get("/api/v2/chatbot/settings", async (req, res) => {
     try {
-      console.log('✅ /api/v2/chatbot/settings called');
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+      console.log("✅ /api/v2/chatbot/settings called");
+      res.header("Access-Control-Allow-Origin", "*");
+      res.header(
+        "Access-Control-Allow-Methods",
+        "GET, POST, PUT, DELETE, OPTIONS"
+      );
+      res.header(
+        "Access-Control-Allow-Headers",
+        "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+      );
 
       // Get chatbot settings from database
       const settingsResult = await lsembPool.query(`
@@ -897,60 +1110,77 @@ const setupChatRoutes = () => {
       }
 
       res.json({
-        title: (chatbotSettings as any).title || 'ASB Hukuki Asistan',
-        subtitle: (chatbotSettings as any).subtitle || 'Yapay Zeka Asistanınız',
-        logoUrl: (chatbotSettings as any).logoUrl || '',
-        welcomeMessage: (chatbotSettings as any).welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
-        placeholder: (chatbotSettings as any).placeholder || 'Sorunuzu yazın...',
-        primaryColor: (chatbotSettings as any).primaryColor || '#3B82F6',
-        activeModel: (chatbotSettings as any).activeModel || 'Claude 3'
+        title: (chatbotSettings as any).title || "ASB Hukuki Asistan",
+        subtitle: (chatbotSettings as any).subtitle || "Yapay Zeka Asistanınız",
+        logoUrl: (chatbotSettings as any).logoUrl || "",
+        welcomeMessage:
+          (chatbotSettings as any).welcomeMessage ||
+          "Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.",
+        placeholder:
+          (chatbotSettings as any).placeholder || "Sorunuzu yazın...",
+        primaryColor: (chatbotSettings as any).primaryColor || "#3B82F6",
+        activeModel: (chatbotSettings as any).activeModel || "Claude 3",
       });
     } catch (error) {
-      console.error('Error fetching chatbot settings:', error);
+      console.error("Error fetching chatbot settings:", error);
       res.json({
-        title: 'ASB Hukuki Asistan',
-        subtitle: 'Yapay Zeka Asistanınız',
-        logoUrl: '',
-        welcomeMessage: 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
-        placeholder: 'Sorunuzu yazın...',
-        primaryColor: '#3B82F6',
-        activeModel: 'Claude 3'
+        title: "ASB Hukuki Asistan",
+        subtitle: "Yapay Zeka Asistanınız",
+        logoUrl: "",
+        welcomeMessage:
+          "Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.",
+        placeholder: "Sorunuzu yazın...",
+        primaryColor: "#3B82F6",
+        activeModel: "Claude 3",
       });
     }
   });
 
   // 2. Chat
-  app.post('/api/v2/chat', (req, res) => {
-    console.log('✅ /api/v2/chat called', req.body);
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  app.post("/api/v2/chat", (req, res) => {
+    console.log("✅ /api/v2/chat called", req.body);
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, OPTIONS"
+    );
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    );
     res.json({
       id: Date.now().toString(),
-      sessionId: 'default',
-      message: "Backend çalışıyor! Emergency route devrede. / Merhaba! Backend çalışıyor ve emergency route devrede.",
+      sessionId: "default",
+      message:
+        "Backend çalışıyor! Emergency route devrede. / Merhaba! Backend çalışıyor ve emergency route devrede.",
       timestamp: new Date().toISOString(),
-      type: 'bot',
+      type: "bot",
       sources: [],
       relatedTopics: [],
-      conversationId: 'emergency-' + Date.now()
+      conversationId: "emergency-" + Date.now(),
     });
   });
 
   // 3. Suggestions
-  app.get('/api/v2/chat/suggestions', (req, res) => {
-    console.log('✅ /api/v2/chat/suggestions called');
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  app.get("/api/v2/chat/suggestions", (req, res) => {
+    console.log("✅ /api/v2/chat/suggestions called");
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET, POST, PUT, DELETE, OPTIONS"
+    );
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+    );
     res.json([
-      'Hukuki sistem hakkında bilgi verir misiniz?',
-      'Hangi konularda yardımcı olabilirsiniz?',
-      'Mevzuat taraması nasıl yapılır?'
+      "Hukuki sistem hakkında bilgi verir misiniz?",
+      "Hangi konularda yardımcı olabilirsiniz?",
+      "Mevzuat taraması nasıl yapılır?",
     ]);
   });
 
-  console.log('✅ Emergency routes mounted successfully!');
+  console.log("✅ Emergency routes mounted successfully!");
 };
 
 // Setup emergency routes first - will be called after function declaration
@@ -960,22 +1190,27 @@ setupChatRoutes();
 const emergencyServerStarted = false;
 
 // Try to start full services (but don't block)
-startServer().then(() => {
-  // After trying to start full services, ensure HTTP server is ready
-  if (!emergencyServerStarted) {
-    startHttpServer();
-  }
-}).catch(err => {
-  console.error('⚠️ Full startup failed, but emergency routes are working:', err);
-  // Even if full startup fails, start HTTP server in limited mode
-  if (!emergencyServerStarted) {
-    startHttpServer();
-  }
-});
+startServer()
+  .then(() => {
+    // After trying to start full services, ensure HTTP server is ready
+    if (!emergencyServerStarted) {
+      startHttpServer();
+    }
+  })
+  .catch((err) => {
+    console.error(
+      "⚠️ Full startup failed, but emergency routes are working:",
+      err
+    );
+    // Even if full startup fails, start HTTP server in limited mode
+    if (!emergencyServerStarted) {
+      startHttpServer();
+    }
+  });
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('Shutting down gracefully...');
+process.on("SIGTERM", async () => {
+  console.log("Shutting down gracefully...");
 
   httpServer.close(() => {
     // HTTP server closed
@@ -987,9 +1222,50 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+// Apply security error handler
+app.use(handleSecurityError);
+
+// Global error handler (fallback)
+app.use((error: any, req: Request, res: Response, next: NextFunction) => {
+  console.error("Fallback error handler:", {
+    error: error.message,
+    stack: error.stack,
+    url: req.url,
+    method: req.method,
+    ip: req.ip,
+  });
+
+  // Use the enhanced error handler if available, otherwise basic response
+  if (res.error) {
+    res.error(
+      process.env.NODE_ENV === "development" ? error.message : "Internal server error",
+      500,
+      { stack: error.stack }
+    );
+  } else {
+    res.status(500).json({
+      success: false,
+      error: "Internal server error",
+      message:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 export function getSocketIO() {
   return io;
 }
 
-export { app, io, httpServer, lsembPool as pgPool, redis, chatWss, chatConnections };
+export {
+  app,
+  io,
+  httpServer,
+  lsembPool as pgPool,
+  redis,
+  chatWss,
+  chatConnections,
+};
 // Trigger restart

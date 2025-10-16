@@ -166,9 +166,23 @@ router.post('/validate-llm', async (req: Request, res: Response) => {
 // Check if admin exists
 router.get('/check-admin', async (req: Request, res: Response) => {
   try {
-    const envFile = path.join(process.cwd(), '.env.lsemb');
+    // Try multiple paths for .env.lsemb
+    const possiblePaths = [
+      path.join(process.cwd(), '.env.lsemb'),
+      path.join(__dirname, '../../..', '.env.lsemb'), // From src/routes/
+      path.join(process.cwd(), 'backend', '.env.lsemb'),
+      path.join(process.cwd(), '..', '.env.lsemb'), // If backend is subfolder
+    ];
 
-    if (!fs.existsSync(envFile)) {
+    let envFile = null;
+    for (const testPath of possiblePaths) {
+      if (fs.existsSync(testPath)) {
+        envFile = testPath;
+        break;
+      }
+    }
+
+    if (!envFile) {
       return res.json({ adminExists: false, databaseConnected: false, envConfigured: false });
     }
 
@@ -415,5 +429,147 @@ async function initializeDefaultSettings(pool: Pool, envVars: any, llmProvider: 
   // Return default settings for display
   return defaultSettings;
 }
+
+// Get current environment variables
+router.get('/env-current', async (req: Request, res: Response) => {
+  try {
+    const envFile = path.join(process.cwd(), '.env.lsemb');
+
+    if (!fs.existsSync(envFile)) {
+      return res.json({ exists: false, vars: {} });
+    }
+
+    const envContent = fs.readFileSync(envFile, 'utf8');
+    const vars: any = {};
+
+    envContent.split('\n').forEach(line => {
+      const [key, ...valueParts] = line.split('=');
+      if (key && !key.startsWith('#')) {
+        vars[key.trim()] = valueParts.join('=').trim();
+      }
+    });
+
+    res.json({ exists: true, vars });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update environment variables
+router.post('/env-update', async (req: Request, res: Response) => {
+  try {
+    const { envVars } = req.body;
+    const envFile = path.join(process.cwd(), '.env.lsemb');
+    let envContent = '';
+
+    // Read existing content
+    if (fs.existsSync(envFile)) {
+      envContent = fs.readFileSync(envFile, 'utf8');
+    }
+
+    // Update variables
+    Object.entries(envVars).forEach(([key, value]) => {
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      if (regex.test(envContent)) {
+        envContent = envContent.replace(regex, `${key}=${value}`);
+      } else {
+        envContent += `\n${key}=${value}`;
+      }
+    });
+
+    fs.writeFileSync(envFile, envContent);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Initialize default settings
+router.post('/init-defaults', async (req: Request, res: Response) => {
+  try {
+    const { settings } = req.body;
+
+    const envFile = path.join(process.cwd(), '.env.lsemb');
+    if (!fs.existsSync(envFile)) {
+      return res.status(400).json({ success: false, error: 'Environment file not configured' });
+    }
+
+    const envContent = fs.readFileSync(envFile, 'utf8');
+    const envVars: any = {};
+
+    envContent.split('\n').forEach(line => {
+      const [key, ...valueParts] = line.split('=');
+      if (key && !key.startsWith('#')) {
+        envVars[key.trim()] = valueParts.join('=').trim();
+      }
+    });
+
+    // Connect to database and create default settings
+    const asembPool = new Pool({
+      host: envVars.POSTGRES_HOST,
+      port: parseInt(envVars.POSTGRES_PORT) || 5432,
+      user: envVars.POSTGRES_USER,
+      password: envVars.POSTGRES_PASSWORD,
+      database: envVars.POSTGRES_DB
+    });
+
+    // Run setup scripts if tables don't exist
+    await runSetupScripts(asembPool);
+
+    // Initialize default settings
+    const defaultSettings = await initializeDefaultSettings(asembPool, settings, settings.OPENAI_API_KEY ? 'openai' : 'claude', settings.OPENAI_API_KEY || settings.ANTHROPIC_API_KEY);
+
+    await asembPool.end();
+
+    res.json({ success: true, settings: defaultSettings });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create admin user
+router.post('/create-admin', async (req: Request, res: Response) => {
+  try {
+    const { admin } = req.body;
+
+    const envFile = path.join(process.cwd(), '.env.lsemb');
+    if (!fs.existsSync(envFile)) {
+      return res.status(400).json({ success: false, error: 'Environment file not configured' });
+    }
+
+    const envContent = fs.readFileSync(envFile, 'utf8');
+    const envVars: any = {};
+
+    envContent.split('\n').forEach(line => {
+      const [key, ...valueParts] = line.split('=');
+      if (key && !key.startsWith('#')) {
+        envVars[key.trim()] = valueParts.join('=').trim();
+      }
+    });
+
+    const asembPool = new Pool({
+      host: envVars.POSTGRES_HOST,
+      port: parseInt(envVars.POSTGRES_PORT) || 5432,
+      user: envVars.POSTGRES_USER,
+      password: envVars.POSTGRES_PASSWORD,
+      database: envVars.POSTGRES_DB
+    });
+
+    const hashedPassword = await bcrypt.hash(admin.password, 10);
+    await asembPool.query(
+      `INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (email) DO NOTHING`,
+      [admin.email, hashedPassword, admin.firstName, admin.lastName, 'admin', true]
+    );
+
+    await asembPool.end();
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 export default router;

@@ -1,0 +1,21 @@
+This is a test document for the ALICE Semantic Bridge system.
+
+It contains multiple paragraphs to test the document upload and processing functionality.
+
+The document should be:
+1. Uploaded successfully
+2. Processed by the system
+3. Available for embedding generation
+4. Searchable via the semantic search functionality
+
+This test document was created on October 16, 2025 to verify the Documents frontend integration with the backend API.
+
+Key features to test:
+- File upload via FormData
+- Authentication token handling
+- Document preview functionality
+- OCR processing for image-based documents
+- Embedding generation for semantic search
+- Document listing and management
+
+End of test document.

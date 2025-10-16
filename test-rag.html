@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Settings Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .settings-display {
+            background: #e8f4ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-top: 20px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .error {
+            color: red;
+            background: #ffe6e6;
+        }
+        .success {
+            color: green;
+            background: #e6ffe6;
+        }
+        .source-item {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 3px solid #007bff;
+        }
+        .similarity-score {
+            color: #007bff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 RAG Settings Test</h1>
+
+        <div class="settings-display">
+            <h3>Current RAG Settings (from backend startup logs):</h3>
+            <ul>
+                <li><strong>Similarity Threshold:</strong> 0.049 (4.9%)</li>
+                <li><strong>Max Results:</strong> 10</li>
+                <li><strong>Min Results:</strong> 5</li>
+                <li><strong>Hybrid Search:</strong> false</li>
+                <li><strong>Keyword Boost:</strong> false</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Chatbot</h3>
+            <p>Send a message to test if RAG settings are working:</p>
+            <input type="text" id="testMessage" placeholder="Ask about legal documents or similarity thresholds..." value="What is the similarity threshold setting?">
+            <button onclick="testChatbot()">Send Message</button>
+            <div id="response" class="response" style="display:none;"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Expected Behavior:</h3>
+            <ul>
+                <li>Search results should show similarity scores as percentages (e.g., 4.9%, 10%, 15%)</li>
+                <li>Maximum of 10 sources should be returned</li>
+                <li>Results with similarity below 4.9% should be filtered out</li>
+                <li>Response should include relevant document sources if available</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // First, let's get an auth token by logging in
+        async function getAuthToken() {
+            try {
+                const response = await fetch('http://localhost:8083/api/v2/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'admin123'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.token) {
+                    localStorage.setItem('authToken', data.token);
+                    return data.token;
+                }
+            } catch (error) {
+                console.error('Login failed:', error);
+            }
+            return null;
+        }
+
+        async function testChatbot() {
+            const messageInput = document.getElementById('testMessage');
+            const responseDiv = document.getElementById('response');
+            const message = messageInput.value.trim();
+
+            if (!message) {
+                alert('Please enter a message');
+                return;
+            }
+
+            responseDiv.style.display = 'block';
+            responseDiv.className = 'response';
+            responseDiv.textContent = 'Sending message...';
+
+            // Get or create auth token
+            let token = localStorage.getItem('authToken');
+            if (!token) {
+                token = await getAuthToken();
+                if (!token) {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = 'Failed to authenticate. Please check if admin/admin123 is valid.';
+                    return;
+                }
+            }
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch('http://localhost:8083/api/v2/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversationId: 'rag-test-' + Date.now()
+                    })
+                });
+
+                const data = await response.json();
+                const endTime = Date.now();
+                const responseTime = endTime - startTime;
+
+                if (data.error) {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = `Error: ${data.error}\n${data.details || ''}`;
+                } else {
+                    responseDiv.className = 'response success';
+
+                    let output = `✅ Response received in ${responseTime}ms\n\n`;
+                    output += `💬 Message: ${message}\n\n`;
+                    output += `🤖 Response:\n${data.response || 'No response text'}\n\n`;
+
+                    if (data.sources && data.sources.length > 0) {
+                        output += `📚 Sources found (${data.sources.length}):\n`;
+                        data.sources.forEach((source, index) => {
+                            const score = source.score ? (source.score * 100).toFixed(1) : 'N/A';
+                            output += `\n${index + 1}. [Score: ${score}%] ${source.title || 'Untitled Document'}\n`;
+                            output += `   ${source.content ? source.content.substring(0, 200) + '...' : 'No preview'}\n`;
+                        });
+
+                        // Verify RAG settings are applied
+                        if (data.sources.length > 10) {
+                            output += `\n⚠️ WARNING: More than 10 sources returned (maxResults setting not working!)`;
+                        }
+
+                        const lowScoreSources = data.sources.filter(s => s.score && s.score < 0.049);
+                        if (lowScoreSources.length > 0) {
+                            output += `\n⚠️ WARNING: Sources with similarity below 4.9% found (threshold not working!)`;
+                        }
+                    } else {
+                        output += `📚 No sources found (this might be due to high similarity threshold or no matching documents)`;
+                    }
+
+                    responseDiv.textContent = output;
+                }
+            } catch (error) {
+                responseDiv.className = 'response error';
+                responseDiv.textContent = `Network error: ${error.message}\n\nMake sure the backend is running on port 8083`;
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = async function() {
+            console.log('Page loaded. Ready to test RAG settings.');
+            console.log('Backend should be running on http://localhost:8083');
+            console.log('Current RAG settings from backend logs:');
+            console.log('- similarityThreshold: 0.049');
+            console.log('- maxResults: 10');
+            console.log('- enableHybridSearch: false');
+        };
+    </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import OpenAI from 'openai';
-import Redis from 'ioredis';
+import { redis } from '../config/redis';
 import crypto from 'crypto';
 import { getDatabaseSettings, getSettingsBasedPool, resetSettingsBasedPool } from '../config/database.config';
 
@@ -12,12 +12,7 @@ const lsembPool = new Pool({
 
 const router = Router();
 
-// Redis client for caching
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  db: parseInt(process.env.REDIS_DB || '0')
-});
+// Use centralized Redis configuration (port 6379)
 
 // Source database - where we read data from (dynamic from settings)
 let sourcePool: Pool | null = null;
@@ -372,15 +367,26 @@ function getEmbeddingCacheKey(text: string): string {
 // Export the load function to be called on server startup
 export { loadProgressFromRedis };
 
-// Get embedding from cache or generate new one
+// Enhanced embedding cache with performance tracking
 async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ embedding: number[], cached: boolean, tokens: number }> {
   const cacheKey = getEmbeddingCacheKey(text);
-  
-  // Check Redis cache first
+  const startTime = Date.now();
+
+  // Check Redis cache first with detailed logging
   try {
     const cached = await redis.get(cacheKey);
     if (cached) {
-      console.log(`Cache HIT for text (${text.substring(0, 50)}...)`);
+      const cacheTime = Date.now() - startTime;
+      console.log(`🎯 Cache HIT for text (${text.substring(0, 50)}...) - ${cacheTime}ms`);
+
+      // Track cache hit statistics
+      try {
+        await redis.incr('cache:hits');
+        await redis.incr('cache:embedding_hits');
+      } catch (statErr) {
+        // Ignore stats errors
+      }
+
       return {
         embedding: JSON.parse(cached),
         cached: true,
@@ -388,25 +394,36 @@ async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ em
       };
     }
   } catch (err) {
-    console.error('Redis cache read error:', err);
+    console.error('❌ Redis cache read error:', err);
   }
-  
+
   // Generate new embedding if not cached
-  console.log(`Cache MISS for text (${text.substring(0, 50)}...)`);
+  console.log(`❌ Cache MISS for text (${text.substring(0, 50)}...)`);
   const response = await openai.embeddings.create({
     model: 'text-embedding-ada-002',
     input: text.substring(0, 8000)
   });
-  
+
   const embedding = response.data[0].embedding;
-  
-  // Store in Redis cache (expire after 30 days)
+
+  // Store in Redis cache with optimized TTL (longer for better hit rate)
   try {
-    await redis.set(cacheKey, JSON.stringify(embedding), 'EX', 30 * 24 * 60 * 60);
+    await redis.set(cacheKey, JSON.stringify(embedding), 'EX', 90 * 24 * 60 * 60); // 90 days instead of 30
+
+    // Track cache miss statistics
+    await redis.incr('cache:misses');
+    await redis.incr('cache:embedding_misses');
+
+    // Set expiration for stats
+    await redis.expire('cache:hits', 24 * 60 * 60); // 1 day
+    await redis.expire('cache:misses', 24 * 60 * 60);
+    await redis.expire('cache:embedding_hits', 24 * 60 * 60);
+    await redis.expire('cache:embedding_misses', 24 * 60 * 60);
+
   } catch (err) {
-    console.error('Redis cache write error:', err);
+    console.error('❌ Redis cache write error:', err);
   }
-  
+
   return {
     embedding,
     cached: false,
@@ -2655,5 +2672,99 @@ async function getPrimaryKey(tableName: string): Promise<string> {
     return 'ROW_NUMBER';
   }
 }
+
+// Get analytics data for enterprise dashboard
+router.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    console.log('📊 Fetching analytics data for enterprise dashboard');
+
+    // Get token usage from unified_embeddings
+    const tokenUsageResult = await targetPool.query(`
+      SELECT
+        COALESCE(SUM(tokens_used), 0) as used,
+        (SELECT COALESCE(SUM(tokens_used), 0) FROM unified_embeddings) as remaining,
+        1000000 as limit
+      FROM unified_embeddings
+    `).catch(err => {
+      console.error('Error querying token usage:', err);
+      return { rows: [{ used: 0, remaining: 1000000, limit: 1000000 }] };
+    });
+
+    // Get processing speed (records per minute in last hour)
+    const speedResult = await targetPool.query(`
+      SELECT
+        COUNT(*) as records_processed,
+        DATE_TRUNC('hour', created_at) as hour
+      FROM unified_embeddings
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+      GROUP BY hour
+    `).catch(err => {
+      console.error('Error querying processing speed:', err);
+      return { rows: [{ records_processed: 0 }] };
+    });
+
+    // Get real-time data for charts
+    const realtimeData = await targetPool.query(`
+      SELECT
+        DATE_TRUNC('minute', created_at) as timestamp,
+        COUNT(*) as value
+      FROM unified_embeddings
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+      GROUP BY timestamp
+      ORDER BY timestamp DESC
+      LIMIT 60
+    `).catch(err => {
+      console.error('Error querying real-time data:', err);
+      return { rows: [] };
+    });
+
+    // Get table data for advanced viewer
+    const tableDataResult = await targetPool.query(`
+      SELECT
+        source_table as table_name,
+        COUNT(*) as record_count,
+        array_agg(DISTINCT source_id) as sample_ids
+      FROM unified_embeddings
+      WHERE source_type = 'database'
+      GROUP BY source_table
+      ORDER BY record_count DESC
+      LIMIT 10
+    `).catch(err => {
+      console.error('Error querying table data:', err);
+      return { rows: [] };
+    });
+
+    // Calculate metrics
+    const tokensUsed = parseInt(tokenUsageResult.rows[0]?.used) || 0;
+    const processingSpeed = speedResult.rows[0]?.records_processed || 0;
+
+    // Format data for frontend
+    const analyticsData = {
+      tokenUsage: {
+        used: tokensUsed,
+        remaining: Math.max(0, 1000000 - tokensUsed),
+        limit: 1000000
+      },
+      processingSpeed: processingSpeed,
+      eta: processingSpeed > 0 ? Math.round((1000000 - tokensUsed) / processingSpeed) + ' min' : '--',
+      realtimeData: realtimeData.rows.map(row => ({
+        timestamp: new Date(row.timestamp).getTime(),
+        value: parseInt(row.value) || 0
+      })),
+      tableData: {
+        records: tableDataResult.rows,
+        count: tableDataResult.rows.length,
+        columns: ['table_name', 'record_count', 'sample_ids'],
+        tableName: 'Embeddings Analytics'
+      }
+    };
+
+    console.log('✅ Analytics data fetched successfully');
+    res.json(analyticsData);
+  } catch (error) {
+    console.error('❌ Error fetching analytics data:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics data' });
+  }
+});
 
 export default router;

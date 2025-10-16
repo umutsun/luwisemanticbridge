@@ -26,7 +26,8 @@ import {
   Cpu,
   Plus,
   Settings,
-  LayoutDashboard
+  LayoutDashboard,
+  MessageSquare
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -115,6 +116,8 @@ export default function ChatInterface() {
   ]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
@@ -414,7 +417,7 @@ export default function ChatInterface() {
   };
 
   const handleSendMessage = async (fromSource: boolean = false) => {
-    if (!inputText.trim() || isLoading) return;
+    if (!inputText.trim() || isLoading || isStreaming) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -430,15 +433,18 @@ export default function ChatInterface() {
     setIsLoading(true);
     setShowSuggestions(false);
 
-    // Typing indicator
-    const typingMessage: Message = {
-      id: 'typing',
+    // Create empty streaming message
+    const messageId = (Date.now() + 1).toString();
+    const streamingMessage: Message = {
+      id: messageId,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
-      isTyping: true,
+      isStreaming: true,
     };
-    setMessages(prev => [...prev, typingMessage]);
+    setMessages(prev => [...prev, streamingMessage]);
+    setStreamingMessageId(messageId);
+    setIsStreaming(true);
 
     try {
       const response = await fetch(getEndpoint('chat', 'send'), {
@@ -450,7 +456,8 @@ export default function ChatInterface() {
         body: JSON.stringify({
           message: messageContent,
           enableSemanticAnalysis: true,
-          trackUserInsights: true
+          trackUserInsights: true,
+          stream: true
         }),
       });
 
@@ -460,30 +467,104 @@ export default function ChatInterface() {
         throw new Error(`Failed to get response: ${response.status} - ${errorText}`);
       }
 
-      const data = await response.json();
+      // Handle streaming response
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedContent = '';
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.message?.content || data.response || data.message || 'Üzgünüm, bir hata oluştu.',
-        timestamp: new Date(),
-        sources: data.sources,
-        relatedTopics: data.relatedTopics,
-        context: data.context,
-      };
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-      setMessages(prev => prev.filter(m => m.id !== 'typing').concat(assistantMessage));
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.content) {
+                  accumulatedContent += data.content;
+                  setMessages(prev => prev.map(msg =>
+                    msg.id === messageId
+                      ? { ...msg, content: accumulatedContent }
+                      : msg
+                  ));
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+          }
+        }
+
+        // Get final sources and metadata
+        let finalData: any = {};
+        try {
+          const finalResponse = await fetch(getEndpoint('chat', 'send'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              message: messageContent,
+              enableSemanticAnalysis: true,
+              trackUserInsights: true,
+              stream: false
+            }),
+          });
+          if (finalResponse.ok) {
+            finalData = await finalResponse.json();
+          }
+        } catch (e) {
+          console.error('Failed to get final data:', e);
+        }
+
+        // Finalize message
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                isStreaming: false,
+                sources: finalData.sources,
+                relatedTopics: finalData.relatedTopics,
+                context: finalData.context
+              }
+            : msg
+        ));
+      } else {
+        // Fallback to non-streaming
+        const data = await response.json();
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                content: data.message?.content || data.response || data.message || 'Üzgünüm, bir hata oluştu.',
+                isStreaming: false,
+                sources: data.sources,
+                relatedTopics: data.relatedTopics,
+                context: data.context
+              }
+            : msg
+        ));
+      }
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Üzgünüm, şu anda yanıt veremiyorum. Lütfen daha sonra tekrar deneyin.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => prev.filter(m => m.id !== 'typing').concat(errorMessage));
+      setMessages(prev => prev.map(msg =>
+        msg.id === messageId
+          ? {
+              ...msg,
+              content: 'Üzgünüm, şu anda yanıt veremiyorum. Lütfen daha sonra tekrar deneyin.',
+              isStreaming: false
+            }
+          : msg
+      ));
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
+      setStreamingMessageId(null);
     }
   };
 
@@ -574,39 +655,35 @@ export default function ChatInterface() {
               {/* Admin/Manager View */}
               {user && (user.role === 'admin' || user.role === 'manager') ? (
                 <>
-                  {/* Active Model Display - Only for Admins */}
-                  {availableModels.length > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-md">
-                      <Cpu className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-medium">{currentModel}</span>
-                    </div>
-                  )}
-
                   {/* Admin-only Controls */}
                   <div className="flex items-center gap-1">
-                    {/* Settings Chip */}
-                    <Link href="/dashboard/settings">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-2 px-2"
-                        title="Ayarlar"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                    </Link>
+                    {/* Settings Chip - Admin Only */}
+                    {user?.role === 'admin' && (
+                      <Link href="/dashboard/settings">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-2 px-2"
+                          title="Ayarlar"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                    )}
 
-                    {/* Dashboard Link */}
-                    <Link href="/dashboard">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-2 px-2"
-                        title="Dashboard"
-                      >
-                        <LayoutDashboard className="w-4 h-4" />
-                      </Button>
-                    </Link>
+                    {/* Dashboard Link - Admin Only */}
+                    {user?.role === 'admin' && (
+                      <Link href="/dashboard">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-2 px-2"
+                          title="Dashboard"
+                        >
+                          <LayoutDashboard className="w-4 h-4" />
+                        </Button>
+                      </Link>
+                    )}
                   </div>
 
                   {/* User Dropdown */}
@@ -634,6 +711,14 @@ export default function ChatInterface() {
                               Profil
                             </Button>
                           </Link>
+                          {(user?.role === 'admin' || user?.role === 'manager') && (
+                            <Link href="/dashboard/messages">
+                              <Button variant="ghost" className="w-full justify-start text-sm h-8 px-2">
+                                <MessageSquare className="w-4 h-4 mr-2" />
+                                Mesaj Analizleri
+                              </Button>
+                            </Link>
+                          )}
                           <Button
                             variant="ghost"
                             className="w-full justify-start text-sm h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
@@ -677,6 +762,30 @@ export default function ChatInterface() {
         <div className="pt-20 pb-32 max-w-4xl mx-auto px-4">
           <ScrollArea className="h-[calc(100vh-12rem)]">
             <div className="space-y-4 py-4">
+              {/* Suggestions skeleton loader */}
+              {isClient && showSuggestions && messages.length === 1 && isSuggestionsLoading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="my-8"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="col-span-full text-center mb-4">
+                      <h2 className="text-lg font-semibold text-muted-foreground">
+                        Öneriler hazırlanıyor...
+                      </h2>
+                    </div>
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="p-4 bg-muted/50 rounded-lg">
+                        <Skeleton className="h-4 w-full mb-2" />
+                        <Skeleton className="h-4 w-3/4" />
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+
               {/* Suggestions for new conversations */}
               {isClient && showSuggestions && messages.length === 1 && !isSuggestionsLoading && suggestedQuestions.length > 0 && (
                 <motion.div
@@ -755,7 +864,23 @@ export default function ChatInterface() {
                                 {message.role === 'user' && message.isFromSource && (
                                   <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                 )}
-                                <p className="text-sm whitespace-pre-wrap flex-1">{message.content}</p>
+                                <p className="text-sm whitespace-pre-wrap flex-1">
+                                  {message.content}
+                                  {message.isStreaming && (
+                                    <span className="inline-block ml-1">
+                                      <motion.span
+                                        animate={{ opacity: [1, 0] }}
+                                        transition={{
+                                          duration: 1,
+                                          repeat: Infinity,
+                                          ease: "easeInOut"
+                                        }}
+                                      >
+                                        ▊
+                                      </motion.span>
+                                    </span>
+                                  )}
+                                </p>
                               </div>
 
                               {message.sources && message.sources.length > 0 && (
@@ -789,6 +914,18 @@ export default function ChatInterface() {
                                                   </div>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
+                                                  {source.sourceType && (
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                      <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                                        {source.sourceType}
+                                                      </span>
+                                                      {source.score && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                          %{Math.min(100, Math.round(source.score))}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  )}
                                                   {source.content && (
                                                     <p className="text-xs text-muted-foreground line-clamp-4 mt-1.5 pl-0.5">
                                                       {source.content}
@@ -851,12 +988,12 @@ export default function ChatInterface() {
                                                       <div className="flex items-center gap-1 flex-shrink-0">
                                                         <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                                                           <div
-                                                            className="h-full bg-gradient-to-r from-slate-400 to-slate-600 dark:from-slate-500 dark:to-slate-400 transition-all duration-300"
+                                                            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 transition-all duration-300"
                                                             style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
                                                           />
                                                         </div>
-                                                        <span className="text-[10px] text-muted-foreground w-8 text-right">
-                                                          {Math.round(source.score)}
+                                                        <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium w-10 text-right">
+                                                          %{Math.min(100, Math.round(source.score))}
                                                         </span>
                                                       </div>
                                                     )}

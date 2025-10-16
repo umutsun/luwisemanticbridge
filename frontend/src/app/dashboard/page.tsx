@@ -442,17 +442,15 @@ export default function DashboardPage() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/documents'));
+      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/history/documents'));
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
       }
 
       const payload = await response.json();
-      const docs = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.documents)
-          ? payload.documents
-          : [];
+      const docs = Array.isArray(payload?.history)
+        ? payload.history
+        : [];
 
       setDocuments(docs);
     } catch (err) {
@@ -463,17 +461,15 @@ export default function DashboardPage() {
 
   const fetchSessions = async () => {
     try {
-      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/sessions'));
+      const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/history/scraper'));
       if (!response.ok) {
         throw new Error('Failed to fetch scraper sessions');
       }
 
       const payload = await response.json();
-      const sessionList = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.sessions)
-          ? payload.sessions
-          : [];
+      const sessionList = Array.isArray(payload?.history)
+        ? payload.history
+        : [];
 
       setSessions(sessionList);
     } catch (err) {
@@ -526,9 +522,9 @@ export default function DashboardPage() {
     }
   };
 
-  const filteredDocuments = documents.filter(doc => 
-    doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.url.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredDocuments = documents.filter(doc =>
+    (doc.title && doc.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (doc.url && doc.url.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const getStatusIcon = (status: string) => {
@@ -845,6 +841,180 @@ export default function DashboardPage() {
                     </div>
                   </>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Embeddings Management Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Embedding Provider Status */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-blue-500" />
+                  <h3 className="text-sm font-semibold tracking-tight">Embedding Provider</h3>
+                </div>
+                <Badge variant="outline" className="text-xs">Active</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Provider</p>
+                  <p className="font-semibold">Google Gemini</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Model</p>
+                  <p className="font-mono text-xs">text-embedding-004</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Dimensions</p>
+                  <p className="font-semibold">768</p>
+                </div>
+                <Button size="sm" className="w-full mt-2">
+                  <Settings className="h-3 w-3 mr-1" />
+                  Configure
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Embedding Statistics */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-green-500" />
+                  <h3 className="text-sm font-semibold tracking-tight">Embedding Stats</h3>
+                </div>
+                <Badge variant="outline" className="text-xs">Live</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-600">2,847</div>
+                  <div className="text-xs text-muted-foreground">Documents</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
+                  <div className="text-2xl font-bold text-green-600">15.2K</div>
+                  <div className="text-xs text-muted-foreground">Chunks</div>
+                </div>
+                <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
+                  <div className="text-2xl font-bold text-purple-600">100%</div>
+                  <div className="text-xs text-muted-foreground">Processed</div>
+                </div>
+                <div className="text-center p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-600">0</div>
+                  <div className="text-xs text-muted-foreground">Pending</div>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Last updated</span>
+                  <span>2 min ago</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Embeddings Kaynak Paneli */}
+          <Card className="border-0 shadow-sm hover:shadow-md transition-all duration-300">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-blue-500" />
+                  <h3 className="text-sm font-semibold tracking-tight">Embeddings Kaynakları</h3>
+                </div>
+                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                  18,788 Total
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-3">
+                {/* Migrated Data */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                      <span className="text-sm font-medium">Migrated Data</span>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">5 Tablo</Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Documents:</span>
+                      <div className="font-semibold">4,239</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Embeddings:</span>
+                      <div className="font-semibold">18,788</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Documents Embeddings */}
+                <div className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
+                      <span className="text-sm font-medium">Documents</span>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">Active</Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Upload edilmiş dokümanlar - OCR desteği ile
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="font-semibold">12,847 chunks</span>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-xs">
+                      Yönet →
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Scraped Embeddings */}
+                <div className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                      <span className="text-sm font-medium">Scraped Content</span>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">Web</Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Web scraper ile toplanan içerikler
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="font-semibold">3,245 pages</span>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-xs">
+                      Yönet →
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Message History Embeddings */}
+                <div className="p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-orange-500 rounded-full" />
+                      <span className="text-sm font-medium">Message History</span>
+                    </div>
+                    <Badge variant="secondary" className="text-xs">Chat</Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Konuşma geçmişi ve mesaj içerikleri
+                  </div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="font-semibold">2,696 messages</span>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-xs">
+                      Yönet →
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

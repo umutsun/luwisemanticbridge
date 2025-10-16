@@ -135,9 +135,21 @@ export default function Header() {
       }
 
       const [healthResponse, dbResponse, redisResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/v2/health/system`, { headers }),
-        fetch(`${API_BASE_URL}/api/v2/database/stats`, { headers }),
-        fetch(`${API_BASE_URL}/api/v2/database/schema`, { headers })
+        fetch(`${API_BASE_URL}/api/v2/health/system`, {
+          headers,
+          mode: 'cors',
+          credentials: 'include'
+        }),
+        fetch(`${API_BASE_URL}/api/v2/database/stats`, {
+          headers,
+          mode: 'cors',
+          credentials: 'include'
+        }),
+        fetch(`${API_BASE_URL}/api/v2/database/schema`, {
+          headers,
+          mode: 'cors',
+          credentials: 'include'
+        })
       ]);
 
       if (healthResponse.ok && dbResponse.ok) {
@@ -264,8 +276,8 @@ export default function Header() {
     ...(currentUser?.role === 'admin' ? [
       { href: '/dashboard', label: 'Yönetim Paneli', icon: Home },
       { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
+      { href: '/dashboard/embeddings-manager', label: 'Migration', icon: Database },
       { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
-      { href: '/dashboard/embeddings-manager', label: 'Embeddings Manager', icon: Database },
       { href: '/dashboard/scraper', label: 'Web Scraper', icon: Globe },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
     ] : [])

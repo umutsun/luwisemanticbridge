@@ -1,1134 +1,363 @@
+// OPTIMIZED SETTINGS ROUTES
+// Implements high-performance caching, category filtering, and validation
+
 import { Router, Request, Response } from 'express';
 import { lsembPool } from '../config/database.config';
-import { authenticateToken } from '../middleware/auth.middleware';
-const axios = require('axios');
+import { settingsCache } from '../services/cache.service';
 
 const router = Router();
 
-// Apply authentication middleware to all routes
-// router.use(authenticateToken); // Temporarily disabled for testing
+// Cache middleware with performance tracking
+function cacheMiddleware(req: Request, res: Response, next: any) {
+  const startTime = Date.now();
+  const key = `settings:${req.originalUrl}`;
+  const cached = settingsCache.get(key);
 
-// Get all settings
-router.get('/all', async (req: Request, res: Response) => {
+  if (cached !== null) {
+    const duration = Date.now() - startTime;
+    console.log(`📦 [CACHE] Hit for ${key} (${duration}ms)`);
+    return res.json(cached);
+  }
+
+  console.log(`🌐 [API] Miss for ${key}`);
+
+  // Override res.json to cache response
+  const originalJson = res.json;
+  res.json = function(data) {
+    const duration = Date.now() - startTime;
+    console.log(`⚡ [API] Response in ${duration}ms, caching...`);
+
+    // Cache with 30s TTL
+    settingsCache.set(key, data, 30000);
+
+    return originalJson.call(this, data);
+  };
+
+  next();
+}
+
+// Optimized category getter - returns ONLY the requested category
+router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
   try {
-    const result = await lsembPool.query('SELECT key, value FROM settings');
+    const { category } = req.query;
 
-    const settings: { [key: string]: any } = {};
+    if (!category) {
+      // Return minimal full config if no category
+      const result = await lsembPool.query(
+        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
+        ['app.name', 'app.version', 'app.locale']
+      );
+
+      const config = {
+        app: {
+          name: 'Mali Müşavir Asistanı',
+          version: '1.0.0',
+          locale: 'tr'
+        }
+      };
+
+      result.rows.forEach(row => {
+        const [section, key] = row.key.split('.');
+        if (!config[section]) config[section] = {};
+        config[section][key] = row.value;
+      });
+
+      return res.json(config);
+    }
+
+    // Category-specific optimized queries
+    const categoryQueries = {
+      llm: `SELECT key, value FROM settings
+             WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
+                OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'`,
+
+      embeddings: `SELECT key, value FROM settings
+                  WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding.%'`,
+
+      rag: `SELECT key, value FROM settings
+           WHERE key LIKE 'ragSettings.%' OR key LIKE 'rag.%'`,
+
+      database: `SELECT key, value FROM settings
+                WHERE key LIKE 'database.%'`,
+
+      security: `SELECT key, value FROM settings
+                WHERE key LIKE 'security.%' OR key LIKE 'jwt.%'`,
+
+      app: `SELECT key, value FROM settings
+           WHERE key LIKE 'app.%'`,
+
+      scraper: `SELECT key, value FROM settings
+               WHERE key LIKE 'scraper.%'`
+    };
+
+    const query = categoryQueries[category as string];
+    if (!query) {
+      return res.json({});
+    }
+
+    const result = await lsembPool.query(query);
+    console.log(`🔧 [OPTIMIZED] Found ${result.rows.length} settings for category: ${category}`);
+
+    // Build category-specific response
+    const config: any = {};
+
     result.rows.forEach(row => {
-      settings[row.key] = row.value;
+      const [section, ...keyParts] = row.key.split('.');
+      const key = keyParts.join('.');
+
+      if (!config[section]) {
+        config[section] = {};
+      }
+
+      // Parse value
+      try {
+        config[section][key] = JSON.parse(row.value);
+      } catch {
+        config[section][key] = row.value;
+      }
     });
 
-    res.json(settings);
+    // Add only essential defaults if missing
+    if (category === 'llm' && !config.openai) {
+      config.openai = {
+        model: 'gpt-4o-mini',
+        temperature: 0.7,
+        maxTokens: 4096
+      };
+    }
+
+    res.json(config);
+
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    console.error('Error fetching optimized settings:', error);
     res.status(500).json({ error: 'Failed to fetch settings' });
   }
 });
 
-// Get configuration in nested format (for frontend)
-router.get('/', async (req: Request, res: Response) => {
+// Optimized settings update with validation and cache invalidation
+router.post('/', async (req: Request, res: Response) => {
   try {
-    console.log('🔧 [SETTINGS] Loading configuration from database...');
+    const settings = req.body;
+    const updates = [];
 
-    // Get all settings from database
-    const result = await lsembPool.query('SELECT key, value FROM settings');
-    console.log(`🔧 [SETTINGS] Found ${result.rows.length} settings in database`);
-
-    // Initialize default configuration
-    const config: any = {
-      app: {
-        name: 'Mali Müşavir Asistanı',
-        description: 'Context Engine',
-        logoUrl: '',
-        locale: 'tr'
-      },
-      database: {
-        type: 'postgresql',
-        host: 'localhost',
-        port: 5432,
-        name: 'alice_semantic_bridge',
-        user: 'postgres',
-        password: 'postgres',
-        ssl: false,
-        maxConnections: 20
-      },
-      redis: {
-        host: 'localhost',
-        port: 6379,
-        password: '',
-        db: 0
-      },
-      openai: {
-        apiKey: '',
-        model: 'gpt-4-turbo-preview',
-        embeddingModel: 'text-embedding-3-small',
-        maxTokens: 4096,
-        temperature: 0.7
-      },
-      google: {
-        apiKey: '',
-        projectId: ''
-      },
-      anthropic: {
-        apiKey: '',
-        model: 'claude-3-opus-20240229',
-        maxTokens: 4096
-      },
-      deepseek: {
-        apiKey: '',
-        baseUrl: 'https://api.deepseek.com',
-        model: 'deepseek-coder'
-      },
-      ollama: {
-        baseUrl: 'http://localhost:11434',
-        model: 'llama2',
-        embeddingModel: 'nomic-embed-text'
-      },
-      huggingface: {
-        apiKey: '',
-        model: 'sentence-transformers/all-MiniLM-L6-v2',
-        endpoint: 'https://api-inference.huggingface.co/models/'
-      },
-      embeddings: {
-        chunkSize: 1000,
-        chunkOverlap: 200,
-        batchSize: 10,
-        provider: 'google',
-        model: 'google/text-embedding-004',
-        normalizeEmbeddings: true,
-        cacheEmbeddings: true
-      },
-      llmSettings: {
-        embeddingProvider: 'google',
-        embeddingModel: 'google/text-embedding-004',
-        ollamaBaseUrl: 'http://localhost:11434',
-        ollamaEmbeddingModel: 'nomic-embed-text',
-        temperature: 0.1,
-        topP: 0.9,
-        maxTokens: 2048,
-        presencePenalty: 0,
-        frequencyPenalty: 0,
-        ragWeight: 95,
-        llmKnowledgeWeight: 5,
-        streamResponse: true,
-        systemPrompt: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver. Context dışında bilgi verme.',
-        activeChatModel: 'deepseek/deepseek-chat',
-        activeEmbeddingModel: 'google/text-embedding-004',
-        responseStyle: 'professional',
-        language: 'tr'
-      },
-      ragSettings: {
-        similarityThreshold: 0.014,
-        maxResults: 15,
-        minResults: 5,
-        enableHybridSearch: false,
-        enableKeywordBoost: false,
-        enableParallelLLM: true,
-        parallelLLMCount: 4,
-        parallelLLMBatchSize: 4
-      },
-      security: {
-        enableAuth: false,
-        jwtSecret: '',
-        sessionTimeout: 3600,
-        rateLimit: 100,
-        corsOrigins: ['http://localhost:3000']
-      },
-      logging: {
-        level: 'info',
-        file: 'logs/asb.log',
-        maxSize: '10m',
-        maxFiles: 5
+    // Validate and prepare updates
+    for (const [key, value] of Object.entries(settings)) {
+      // Basic validation
+      if (key.includes('temperature') && (typeof value !== 'number' || value < 0 || value > 2)) {
+        return res.status(400).json({ error: `Invalid temperature value: ${value}. Must be between 0 and 2.` });
       }
-    };
 
-    // Process database settings
-    const apiKeysFound: { [key: string]: boolean } = {
-      openai: false,
-      google: false,
-      anthropic: false,
-      deepseek: false,
-      huggingface: false
-    };
+      if (key.includes('chunkSize') && (typeof value !== 'number' || value < 100 || value > 5000)) {
+        return res.status(400).json({ error: `Invalid chunkSize value: ${value}. Must be between 100 and 5000.` });
+      }
 
-    result.rows.forEach(row => {
-      const key = row.key;
-      const value = row.value;
+      if (key.includes('similarityThreshold') && (typeof value !== 'number' || value < 0 || value > 1)) {
+        return res.status(400).json({ error: `Invalid similarityThreshold value: ${value}. Must be between 0 and 1.` });
+      }
 
-      // Handle API keys - prioritize database values
-      // Check multiple possible key formats
-      // Handle API keys - prioritize database values
-    // Only set if value is not empty to prevent overwriting with empty strings
-    if (key === 'openai.apiKey' || key === 'openai_apiKey' || key === 'openai.api_key') {
-      if (value && value.trim() !== '') {
-        config.openai.apiKey = value;
-        apiKeysFound.openai = true;
-        console.log('✅ [SETTINGS] Loaded OpenAI API key from database (key:', key, ')');
-      }
-    } else if (key === 'openai.model') {
-      config.openai.model = value;
-      console.log('✅ [SETTINGS] Loaded OpenAI model from database:', value);
-    } else if (key === 'google.apiKey' || key === 'google_apiKey' || key === 'google.api_key') {
-      if (value && value.trim() !== '') {
-        config.google.apiKey = value;
-        apiKeysFound.google = true;
-        console.log('✅ [SETTINGS] Loaded Google API key from database (key:', key, ')');
-      }
-    } else if (key === 'anthropic.apiKey' || key === 'anthropic_apiKey' || key === 'anthropic.api_key') {
-      if (value && value.trim() !== '') {
-        config.anthropic.apiKey = value;
-        apiKeysFound.anthropic = true;
-        console.log('✅ [SETTINGS] Loaded Anthropic API key from database (key:', key, ')');
-      }
-    } else if (key === 'deepseek.apiKey' || key === 'deepseek_apiKey' || key === 'deepseek.api_key') {
-      if (value && value.trim() !== '') {
-        config.deepseek.apiKey = value;
-        apiKeysFound.deepseek = true;
-        console.log('✅ [SETTINGS] Loaded DeepSeek API key from database (key:', key, ')');
-      }
-    } else if (key === 'huggingface.apiKey' || key === 'huggingface_apiKey' || key === 'huggingface.api_key') {
-      if (value && value.trim() !== '') {
-        config.huggingface.apiKey = value;
-        apiKeysFound.huggingface = true;
-        console.log('✅ [SETTINGS] Loaded HuggingFace API key from database (key:', key, ')');
-      }
-    }
-
-    // Process RAG settings from database
-    if (key === 'similarity_threshold' || key === 'ragSettings.similarityThreshold') {
-      const threshold = parseFloat(value);
-      if (!isNaN(threshold) && threshold >= 0 && threshold <= 1) {
-        config.ragSettings.similarityThreshold = threshold;
-      }
-    } else if (key === 'max_results' || key === 'ragSettings.maxResults') {
-      const maxResults = parseInt(value, 10);
-      if (!isNaN(maxResults) && maxResults > 0) {
-        config.ragSettings.maxResults = maxResults;
-      }
-    } else if (key === 'min_results' || key === 'ragSettings.minResults') {
-      const minResults = parseInt(value, 10);
-      if (!isNaN(minResults) && minResults > 0) {
-        config.ragSettings.minResults = minResults;
-      }
-    } else if (key === 'enable_hybrid_search' || key === 'ragSettings.enableHybridSearch') {
-      config.ragSettings.enableHybridSearch = value === 'true' || value === true;
-    } else if (key === 'enable_keyword_boost' || key === 'ragSettings.enableKeywordBoost') {
-      config.ragSettings.enableKeywordBoost = value === 'true' || value === true;
-    } else if (key === 'parallel_llm_count') {
-      const count = parseInt(value, 10);
-      if (!isNaN(count) && count > 0 && count <= 10) {
-        config.ragSettings.parallelLLMCount = count;
-      }
-    } else if (key === 'parallel_llm_batch_size') {
-      const batchSize = parseInt(value, 10);
-      if (!isNaN(batchSize) && batchSize > 0 && batchSize <= 20) {
-        config.ragSettings.parallelLLMBatchSize = batchSize;
-      }
-    }
-      // Handle Google Project ID
-      else if (key === 'google.projectId' || key === 'google_projectId') {
-        config.google.projectId = value || '';
-        console.log('✅ [SETTINGS] Loaded Google Project ID from database');
-      }
-      // Handle nested keys with dot notation
-      else if (key.includes('.')) {
-        const keys = key.split('.');
-        let current = config;
-
-        // Navigate to the correct nested level
-        for (let i = 0; i < keys.length - 1; i++) {
-          if (!current[keys[i]]) {
-            current[keys[i]] = {};
-          }
-          current = current[keys[i]];
-        }
-
-        // Set the value
-        const lastKey = keys[keys.length - 1];
-
-        // Try to parse as JSON, if fails keep as string
-        try {
-          current[lastKey] = JSON.parse(value);
-        } catch {
-          // Handle numeric values
-          if (!isNaN(Number(value)) && value !== '') {
-            current[lastKey] = Number(value);
-          } else if (value === 'true' || value === 'false') {
-            current[lastKey] = value === 'true';
-          } else {
-            current[lastKey] = value;
-          }
-        }
-      }
-    });
-
-    // If API keys not found in database, try environment variables as fallback
-    if (!apiKeysFound.openai && process.env.OPENAI_API_KEY) {
-      config.openai.apiKey = process.env.OPENAI_API_KEY;
-      console.log('⚠️ [SETTINGS] Using OpenAI API key from environment (fallback)');
-    }
-    if (!apiKeysFound.google && process.env.GEMINI_API_KEY) {
-      config.google.apiKey = process.env.GEMINI_API_KEY;
-      console.log('⚠️ [SETTINGS] Using Google API key from environment (fallback)');
-    }
-    if (!apiKeysFound.anthropic && process.env.CLAUDE_API_KEY) {
-      config.anthropic.apiKey = process.env.CLAUDE_API_KEY;
-      console.log('⚠️ [SETTINGS] Using Anthropic API key from environment (fallback)');
-    }
-    if (!apiKeysFound.deepseek && process.env.DEEPSEEK_API_KEY) {
-      config.deepseek.apiKey = process.env.DEEPSEEK_API_KEY;
-      console.log('⚠️ [SETTINGS] Using DeepSeek API key from environment (fallback)');
-    }
-    if (!apiKeysFound.huggingface && process.env.HUGGINGFACE_API_KEY) {
-      config.huggingface.apiKey = process.env.HUGGINGFACE_API_KEY;
-      console.log('⚠️ [SETTINGS] Using HuggingFace API key from environment (fallback)');
-    }
-
-    console.log('🔧 [SETTINGS] API Keys Status:');
-    console.log(`  - OpenAI: ${config.openai.apiKey ? '✅ SET' : '❌ EMPTY'}`);
-    console.log(`  - Google: ${config.google.apiKey ? '✅ SET' : '❌ EMPTY'}`);
-    console.log(`  - Anthropic: ${config.anthropic.apiKey ? '✅ SET' : '❌ EMPTY'}`);
-    console.log(`  - DeepSeek: ${config.deepseek.apiKey ? '✅ SET' : '❌ EMPTY'}`);
-    console.log(`  - HuggingFace: ${config.huggingface.apiKey ? '✅ SET' : '❌ EMPTY'}`);
-
-    res.json(config);
-  } catch (error) {
-    console.error('Error fetching configuration:', error);
-    res.status(500).json({ error: 'Failed to fetch configuration' });
-  }
-});
-
-// Save entire configuration
-router.put('/', async (req: Request, res: Response) => {
-  try {
-    const config = req.body;
-    const updates: { key: string; value: string }[] = [];
-
-    // Flatten the config object into key-value pairs
-    const flattenConfig = (obj: any, prefix = '') => {
-      Object.entries(obj).forEach(([key, value]) => {
-        const fullKey = prefix ? `${prefix}.${key}` : key;
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          flattenConfig(value, fullKey);
-        } else {
-          updates.push({
-            key: fullKey,
-            value: typeof value === 'string' ? value : JSON.stringify(value)
-          });
-        }
+      updates.push({
+        key,
+        value: typeof value === 'string' ? value : JSON.stringify(value)
       });
-    };
+    }
 
-    flattenConfig(config);
-
-    // Save all settings
+    // Batch update
     for (const update of updates) {
       await lsembPool.query(
         `INSERT INTO settings (key, value)
          VALUES ($1, $2)
          ON CONFLICT (key)
-         DO UPDATE SET value = $2`,
+         DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
         [update.key, update.value]
       );
     }
 
-    console.log(`✅ [SETTINGS] Saved ${updates.length} settings to database`);
-    res.json({ success: true, message: 'Configuration saved successfully' });
+    // Clear cache intelligently
+    const cleared = settingsCache.clearPattern('settings');
+    console.log(`🗑️ [CACHE] Cleared ${cleared} entries`);
+
+    res.json({ success: true, message: 'Settings updated successfully' });
+
   } catch (error) {
-    console.error('Error saving configuration:', error);
-    res.status(500).json({ error: 'Failed to save configuration' });
+    console.error('Error updating settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
   }
 });
 
-// Get specific setting
-router.get('/:key', async (req: Request, res: Response) => {
-  try {
-    const { key } = req.params;
-    const result = await lsembPool.query(
-      'SELECT value FROM settings WHERE key = $1',
-      [key]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Setting not found' });
-    }
-
-    res.json({ value: result.rows[0].value });
-  } catch (error) {
-    console.error('Error fetching setting:', error);
-    res.status(500).json({ error: 'Failed to fetch setting' });
-  }
+// Health check for settings service
+router.get('/health', (req: Request, res: Response) => {
+  const stats = settingsCache.getStats();
+  res.json({
+    status: 'healthy',
+    cache: stats,
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Update setting
-router.put('/:key', async (req: Request, res: Response) => {
+// Specific category routes for direct access
+router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res: Response) => {
   try {
-    const { key } = req.params;
-    let { value } = req.body;
+    const { categoryName } = req.params;
 
-    // Handle case where value might be wrapped or null
-    if (value === null || value === undefined) {
-      return res.status(400).json({ error: 'Value cannot be null or undefined' });
-    }
+    // Map category names to query patterns
+    const categoryQueries = {
+      llm: `SELECT key, value FROM settings
+             WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
+                OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
+                OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%'`,
 
-    // If value is already a string and looks like JSON, parse and stringify to validate
-    if (typeof value === 'string') {
-      try {
-        // Try to parse as JSON to validate, then stringify back
-        const parsed = JSON.parse(value);
-        value = JSON.stringify(parsed);
-      } catch {
-        // If it's not valid JSON, keep as is
-        value = String(value);
-      }
-    } else {
-      // If it's an object or other type, stringify it
-      value = JSON.stringify(value);
-    }
+      embeddings: `SELECT key, value FROM settings
+                  WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding.%'`,
 
-    // Check if setting exists
-    const checkResult = await lsembPool.query(
-      'SELECT key FROM settings WHERE key = $1',
-      [key]
-    );
+      rag: `SELECT key, value FROM settings
+           WHERE key LIKE 'ragSettings.%' OR key LIKE 'rag.%'`,
 
-    if (checkResult.rows.length === 0) {
-      // Insert new setting
-      await lsembPool.query(
-        'INSERT INTO settings (key, value) VALUES ($1, $2)',
-        [key, value]
-      );
-      console.log(`✅ [SETTINGS] Inserted new setting: ${key}`);
-    } else {
-      // Update existing setting
-      await lsembPool.query(
-        'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
-        [value, key]
-      );
-      console.log(`✅ [SETTINGS] Updated setting: ${key}`);
-    }
+      database: `SELECT key, value FROM settings
+                WHERE key LIKE 'database.%'`,
 
-    res.json({ success: true, key, value });
-  } catch (error) {
-    console.error('Error updating setting:', error);
-    res.status(500).json({ error: 'Failed to update setting' });
-  }
-});
+      security: `SELECT key, value FROM settings
+                WHERE key LIKE 'security.%' OR key LIKE 'jwt.%'`,
 
-// Save OpenAI API key
-router.post('/openai-api-key', async (req: Request, res: Response) => {
-  try {
-    const { apiKey } = req.body;
+      app: `SELECT key, value FROM settings
+           WHERE key LIKE 'app.%'`,
 
-    if (!apiKey) {
-      return res.status(400).json({ error: 'API key is required' });
-    }
+      scraper: `SELECT key, value FROM settings
+               WHERE key LIKE 'scraper.%'`,
 
-    // Save to database
-    await lsembPool.query(
-      `INSERT INTO settings (key, value, description)
-       VALUES ('openai.apiKey', $1, 'OpenAI API Key')
-       ON CONFLICT (key)
-       DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
-      [apiKey]
-    );
-
-    console.log('✅ [SETTINGS] Saved OpenAI API key to database');
-    res.json({ success: true, message: 'OpenAI API key saved successfully' });
-  } catch (error) {
-    console.error('Error saving OpenAI API key:', error);
-    res.status(500).json({ error: 'Failed to save OpenAI API key' });
-  }
-});
-
-// Get OpenAI API key
-router.get('/openai-api-key', async (req: Request, res: Response) => {
-  try {
-    const result = await lsembPool.query(
-      'SELECT value FROM settings WHERE key = $1',
-      ['openai.apiKey']
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ apiKey: '' });
-    }
-
-    res.json({ apiKey: result.rows[0].value });
-  } catch (error) {
-    console.error('Error fetching OpenAI API key:', error);
-    res.status(500).json({ error: 'Failed to fetch OpenAI API key' });
-  }
-});
-
-// Test OpenAI API Key
-router.post('/openai-api-key/test', async (req: Request, res: Response) => {
-  const { apiKey } = req.body;
-
-  if (!apiKey) {
-    return res.status(400).json({ success: false, error: 'API key is required' });
-  }
-
-  try {
-    const openai = new (require('openai'))({ apiKey });
-    // A simple, low-cost call to check the key and quota status
-    await openai.embeddings.create({
-      model: 'text-embedding-ada-002',
-      input: 'test'
-    });
-    res.json({ success: true, message: 'OpenAI connection successful and key has quota.' });
-  } catch (error: any) {
-    console.error('OpenAI test failed:', error);
-
-    // The OpenAI library now uses structured errors
-    if (error.status === 401) {
-      return res.status(401).json({ success: false, error: 'Invalid OpenAI API Key.' });
-    }
-
-    if (error.status === 429 && error.code === 'insufficient_quota') {
-      return res.status(429).json({ success: true, message: 'API key is valid, but you have exceeded your current quota. Please check your plan and billing details.' });
-    }
-
-    const errorMessage = error.error?.message || error.message || 'Unknown error';
-    res.status(400).json({ success: false, error: `OpenAI connection failed: ${errorMessage}` });
-  }
-});
-
-// Save Gemini API key
-router.post('/gemini-api-key', async (req: Request, res: Response) => {
-  try {
-    const { apiKey } = req.body;
-
-    if (!apiKey) {
-      return res.status(400).json({ error: 'API key is required' });
-    }
-
-    // Save to database
-    await lsembPool.query(
-      `INSERT INTO settings (key, value, description)
-       VALUES ('google.apiKey', $1, 'Google Gemini API Key')
-       ON CONFLICT (key)
-       DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
-      [apiKey]
-    );
-
-    console.log('✅ [SETTINGS] Saved Google API key to database');
-    res.json({ success: true, message: 'Gemini API key saved successfully' });
-  } catch (error) {
-    console.error('Error saving Gemini API key:', error);
-    res.status(500).json({ error: 'Failed to save Gemini API key' });
-  }
-});
-
-// Get Gemini API key
-router.get('/gemini-api-key', async (req: Request, res: Response) => {
-  try {
-    const result = await lsembPool.query(
-      'SELECT value FROM settings WHERE key = $1',
-      ['google.apiKey']
-    );
-
-    if (result.rows.length === 0) {
-      return res.json({ apiKey: '' });
-    }
-
-    res.json({ apiKey: result.rows[0].value });
-  } catch (error) {
-    console.error('Error fetching Gemini API key:', error);
-    res.status(500).json({ error: 'Failed to fetch Gemini API key' });
-  }
-});
-
-// Get AI settings
-router.get('/ai', async (req: Request, res: Response) => {
-  try {
-    const keys = [
-      'active_chat_model',
-      'active_embedding_model',
-      'temperature',
-      'top_p',
-      'max_tokens',
-      'presence_penalty',
-      'frequency_penalty',
-      'rag_weight',
-      'llm_knowledge_weight',
-      'stream_response',
-      'system_prompt',
-      'response_style',
-      'response_language',
-      'google.apiKey',
-      'openai.apiKey',
-      'anthropic.apiKey',
-      'deepseek.apiKey'
-    ];
-
-    const result = await lsembPool.query(
-      'SELECT key, value FROM settings WHERE key = ANY($1)',
-      [keys]
-    );
-
-    const settings: any = {
-      activeChatModel: 'google/gemini-pro',
-      activeEmbeddingModel: 'google/text-embedding-004',
-      temperature: 0.1,
-      topP: 0.9,
-      maxTokens: 2048,
-      presencePenalty: 0,
-      frequencyPenalty: 0,
-      ragWeight: 95,
-      llmKnowledgeWeight: 5,
-      streamResponse: true,
-      systemPrompt: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver. Context dışında bilgi verme.',
-      responseStyle: 'professional',
-      language: 'tr',
-      openaiApiKey: '',
-      googleApiKey: '',
-      anthropicApiKey: '',
-      deepseekApiKey: ''
+      translation: `SELECT key, value FROM settings
+                   WHERE key LIKE 'deepl.%' OR key LIKE 'google.translate.%'`
     };
+
+    const query = categoryQueries[categoryName as keyof typeof categoryQueries];
+    if (!query) {
+      return res.status(404).json({ error: `Category '${categoryName}' not found` });
+    }
+
+    const result = await lsembPool.query(query);
+    console.log(`🔧 [CATEGORY] Found ${result.rows.length} settings for category: ${categoryName}`);
+
+    // Build category-specific response
+    const config: any = {};
 
     result.rows.forEach(row => {
-      switch(row.key) {
-        case 'active_chat_model':
-          settings.activeChatModel = row.value;
-          break;
-        case 'active_embedding_model':
-          settings.activeEmbeddingModel = row.value;
-          break;
-        case 'temperature':
-          settings.temperature = parseFloat(row.value);
-          break;
-        case 'top_p':
-          settings.topP = parseFloat(row.value);
-          break;
-        case 'max_tokens':
-          settings.maxTokens = parseInt(row.value);
-          break;
-        case 'presence_penalty':
-          settings.presencePenalty = parseFloat(row.value);
-          break;
-        case 'frequency_penalty':
-          settings.frequencyPenalty = parseFloat(row.value);
-          break;
-        case 'rag_weight':
-          settings.ragWeight = parseInt(row.value);
-          break;
-        case 'llm_knowledge_weight':
-          settings.llmKnowledgeWeight = parseInt(row.value);
-          break;
-        case 'stream_response':
-          settings.streamResponse = row.value === 'true';
-          break;
-        case 'system_prompt':
-          settings.systemPrompt = row.value;
-          break;
-        case 'response_style':
-          settings.responseStyle = row.value;
-          break;
-        case 'response_language':
-          settings.language = row.value;
-          break;
-        case 'google.apiKey':
-          settings.googleApiKey = row.value;
-          break;
-        case 'openai.apiKey':
-          settings.openaiApiKey = row.value;
-          break;
-        case 'anthropic.apiKey':
-          settings.anthropicApiKey = row.value;
-          break;
-        case 'deepseek.apiKey':
-          settings.deepseekApiKey = row.value;
-          break;
+      const [section, ...keyParts] = row.key.split('.');
+      const key = keyParts.join('.');
+
+      if (!config[section]) {
+        config[section] = {};
+      }
+
+      // Parse value
+      try {
+        config[section][key] = JSON.parse(row.value);
+      } catch {
+        config[section][key] = row.value;
       }
     });
 
-    res.json(settings);
+    // Add essential defaults if missing
+    if (categoryName === 'llm' && !config.openai) {
+      config.openai = {
+        model: 'gpt-4o-mini',
+        temperature: 0.7,
+        maxTokens: 4096,
+        apiKey: process.env.OPENAI_API_KEY || ''
+      };
+    }
+
+    if (categoryName === 'embeddings' && !config.embeddings) {
+      config.embeddings = {
+        chunkSize: 1000,
+        chunkOverlap: 200,
+        batchSize: 10,
+        provider: 'openai',
+        model: 'text-embedding-ada-002',
+        normalizeEmbeddings: true,
+        cacheEmbeddings: true,
+        enabled: true,
+        useLocal: false,
+        dimension: 1536,
+        maxTokens: 8191
+      };
+    }
+
+    if (categoryName === 'database' && !config.database) {
+      config.database = {
+        host: process.env.POSTGRES_HOST || 'localhost',
+        port: parseInt(process.env.POSTGRES_PORT) || 5432,
+        name: process.env.POSTGRES_DB || 'lsemb',
+        user: process.env.POSTGRES_USER || 'postgres',
+        password: process.env.POSTGRES_PASSWORD || '',
+        ssl: false,
+        maxConnections: 20
+      };
+    }
+
+    res.json(config);
+
   } catch (error) {
-    console.error('Error fetching AI settings:', error);
-    res.status(500).json({
-      error: 'AI ayarları alınamadı.',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error(`Error fetching ${req.params.categoryName} settings:`, error);
+    res.status(500).json({ error: `Failed to fetch ${req.params.categoryName} settings` });
   }
 });
 
-// Save settings (general endpoint) - This handles POST /api/v2/settings
-router.post('/', async (req: Request, res: Response) => {
+// Update specific category
+router.put('/category/:categoryName', async (req: Request, res: Response) => {
   try {
+    const { categoryName } = req.params;
     const settings = req.body;
-    console.log('🔧 [SETTINGS] Saving settings:', Object.keys(settings));
 
-    // Handle both flat and nested config structures
-    const settingsToSave = [];
+    // Validate category name
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation'];
+    if (!validCategories.includes(categoryName)) {
+      return res.status(400).json({ error: `Invalid category: ${categoryName}` });
+    }
 
-    // Helper function to extract settings from nested objects
-    const extractSettings = (obj: any, prefix: string = '') => {
-      for (const [key, value] of Object.entries(obj)) {
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          // Recursively extract from nested objects
-          extractSettings(value, prefix ? `${prefix}.${key}` : key);
-        } else {
-          // Convert nested key to flat format
-          const flatKey = prefix ? `${prefix}.${key}` : key;
-          const stringValue = typeof value === 'boolean' ? value.toString() :
-                            typeof value === 'number' ? value.toString() :
-                            value;
-          settingsToSave.push({ key: flatKey, value: stringValue });
+    const updates = [];
+
+    // Validate and prepare updates
+    for (const [key, value] of Object.entries(settings)) {
+      // Flatten nested objects for storage
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        for (const [subKey, subValue] of Object.entries(value)) {
+          const fullKey = `${key}.${subKey}`;
+          updates.push({
+            key: fullKey,
+            value: typeof subValue === 'string' ? subValue : JSON.stringify(subValue)
+          });
         }
-      }
-    };
-
-    // Extract all settings from the nested config
-    extractSettings(settings);
-
-    // Special handling for LLM settings with camelCase to snake_case conversion
-    const llmSettings = settings.llmSettings;
-    if (llmSettings) {
-      if (llmSettings.activeChatModel !== undefined) {
-        settingsToSave.push({ key: 'active_chat_model', value: llmSettings.activeChatModel });
-      }
-      if (llmSettings.activeEmbeddingModel !== undefined) {
-        settingsToSave.push({ key: 'active_embedding_model', value: llmSettings.activeEmbeddingModel });
-      }
-      if (llmSettings.temperature !== undefined) {
-        settingsToSave.push({ key: 'llmSettings.temperature', value: llmSettings.temperature.toString() });
-      }
-      if (llmSettings.topP !== undefined) {
-        settingsToSave.push({ key: 'llmSettings.topP', value: llmSettings.topP.toString() });
-      }
-      if (llmSettings.maxTokens !== undefined) {
-        settingsToSave.push({ key: 'llmSettings.maxTokens', value: llmSettings.maxTokens.toString() });
-      }
-      if (llmSettings.streamResponse !== undefined) {
-        settingsToSave.push({ key: 'llmSettings.streamResponse', value: llmSettings.streamResponse.toString() });
-      }
-      if (llmSettings.ragWeight !== undefined) {
-        settingsToSave.push({ key: 'llmSettings.ragWeight', value: llmSettings.ragWeight.toString() });
-      }
-      if (llmSettings.llmKnowledgeWeight !== undefined) {
-        settingsToSave.push({ key: 'llmSettings.llmKnowledgeWeight', value: llmSettings.llmKnowledgeWeight.toString() });
-      }
-    }
-
-    // Special handling for RAG settings
-    const ragSettings = settings.ragSettings;
-    if (ragSettings) {
-      if (ragSettings.similarityThreshold !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.similarityThreshold', value: ragSettings.similarityThreshold.toString() });
-      }
-      if (ragSettings.minResults !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.minResults', value: ragSettings.minResults.toString() });
-      }
-      if (ragSettings.maxResults !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.maxResults', value: ragSettings.maxResults.toString() });
-      }
-      if (ragSettings.enableHybridSearch !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.enableHybridSearch', value: ragSettings.enableHybridSearch.toString() });
-      }
-      if (ragSettings.enableKeywordBoost !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.enableKeywordBoost', value: ragSettings.enableKeywordBoost.toString() });
-      }
-      if (ragSettings.parallelLLMCount !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.parallelLLMCount', value: ragSettings.parallelLLMCount.toString() });
-      }
-      if (ragSettings.parallelLLMBatchSize !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.parallelLLMBatchSize', value: ragSettings.parallelLLMBatchSize.toString() });
-      }
-      if (ragSettings.batchSize !== undefined) {
-        settingsToSave.push({ key: 'ragSettings.batchSize', value: ragSettings.batchSize.toString() });
-      }
-    }
-
-    // Save each setting
-    for (const setting of settingsToSave) {
-      if (setting.key && setting.value !== undefined) {
-        await lsembPool.query(
-          `INSERT INTO settings (key, value, updated_at)
-           VALUES ($1, $2, CURRENT_TIMESTAMP)
-           ON CONFLICT (key)
-           DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-          [setting.key, setting.value]
-        );
-        console.log(`✅ Saved setting: ${setting.key} = ${setting.value}`);
-      }
-    }
-
-    // Clear settings cache after saving
-    const { SettingsService } = require('../services/settings.service');
-    const settingsService = SettingsService.getInstance();
-    settingsService.clearCache('all_settings');
-    console.log('✅ Settings cache cleared after save');
-
-    res.json({ success: true, message: 'Settings saved successfully' });
-  } catch (error) {
-    console.error('Error saving settings:', error);
-    res.status(500).json({ error: 'Failed to save settings', details: error.message });
-  }
-});
-
-// Save AI settings (legacy endpoint)
-router.post('/ai', async (req: Request, res: Response) => {
-  try {
-    const {
-      activeChatModel,
-      activeEmbeddingModel,
-      temperature,
-      topP,
-      maxTokens,
-      presencePenalty,
-      frequencyPenalty,
-      ragWeight,
-      llmKnowledgeWeight,
-      streamResponse,
-      systemPrompt,
-      responseStyle,
-      language
-    } = req.body;
-
-    // Save each setting separately
-    const settings = [
-      { key: 'active_chat_model', value: activeChatModel },
-      { key: 'active_embedding_model', value: activeEmbeddingModel },
-      { key: 'temperature', value: temperature.toString() },
-      { key: 'top_p', value: topP.toString() },
-      { key: 'max_tokens', value: maxTokens.toString() },
-      { key: 'presence_penalty', value: presencePenalty.toString() },
-      { key: 'frequency_penalty', value: frequencyPenalty.toString() },
-      { key: 'rag_weight', value: ragWeight.toString() },
-      { key: 'llm_knowledge_weight', value: llmKnowledgeWeight.toString() },
-      { key: 'stream_response', value: streamResponse.toString() },
-      { key: 'system_prompt', value: systemPrompt },
-      { key: 'response_style', value: responseStyle },
-      { key: 'response_language', value: language },
-      // RAG Settings - Default values if not provided
-      { key: 'similarity_threshold', value: '0.014' },
-      { key: 'min_results', value: '5' },
-      { key: 'max_results', value: '15' },
-      { key: 'enable_hybrid_search', value: 'false' },
-      { key: 'enable_keyword_boost', value: 'false' },
-      { key: 'parallel_llm_count', value: '4' },
-      { key: 'parallel_llm_batch_size', value: '4' }
-    ];
-
-    for (const setting of settings) {
-      // Check if setting exists
-      const checkResult = await lsembPool.query(
-        'SELECT key FROM settings WHERE key = $1',
-        [setting.key]
-      );
-
-      if (checkResult.rows.length === 0) {
-        // Insert new setting
-        await lsembPool.query(
-          'INSERT INTO settings (key, value) VALUES ($1, $2)',
-          [setting.key, setting.value]
-        );
       } else {
-        // Update existing setting
-        await lsembPool.query(
-          'UPDATE settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2',
-          [setting.value, setting.key]
-        );
+        updates.push({
+          key,
+          value: typeof value === 'string' ? value : JSON.stringify(value)
+        });
       }
     }
 
-    console.log('✅ [SETTINGS] Saved AI settings to database');
-    res.json({
-      success: true,
-      message: 'AI ayarları başarıyla kaydedildi.'
-    });
-  } catch (error) {
-    console.error('Error saving AI settings:', error);
-    res.status(500).json({
-      error: 'AI ayarları kaydedilemedi.',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Test API key - Generic endpoint for multiple providers
-router.post('/test/:provider', async (req: Request, res: Response) => {
-  const { provider } = req.params;
-  const { apiKey, model } = req.body;
-
-  if (!apiKey) {
-    return res.status(400).json({ success: false, error: 'API key is required' });
-  }
-
-  if (!model) {
-    return res.status(400).json({ success: false, error: 'Model name is required' });
-  }
-
-  try {
-    switch(provider) {
-      case 'openai':
-        const openai = new (require('openai'))({ apiKey });
-
-        // Test with specific model and get usage info
-        const completion = await openai.chat.completions.create({
-          model: model,
-          messages: [{ role: 'user', content: 'Hello, this is a test.' }],
-          max_tokens: 5,
-          temperature: 0
-        });
-
-        res.json({
-          success: true,
-          message: `OpenAI API key and model "${model}" are valid`,
-          model: model,
-          tokens: {
-            input: completion.usage?.prompt_tokens || 0,
-            output: completion.usage?.completion_tokens || 0,
-            total: completion.usage?.total_tokens || 0
-          }
-        });
-        break;
-
-      case 'google':
-      case 'gemini':
-        // Test Google/Gemini API key with specific model
-        const { GoogleGenerativeAI } = require('@google/generative-ai');
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const geminiModel = genAI.getGenerativeModel({ model: model });
-
-        const result = await geminiModel.generateContent('Hello, this is a test.');
-        const response = await result.response;
-
-        res.json({
-          success: true,
-          message: `Google API key and model "${model}" are valid`,
-          model: model,
-          tokens: {
-            input: response.usageMetadata?.promptTokenCount || 0,
-            output: response.usageMetadata?.candidatesTokenCount || 0,
-            total: response.usageMetadata?.totalTokenCount || 0
-          }
-        });
-        break;
-
-      case 'anthropic':
-      case 'claude':
-        // Test Anthropic/Claude API key with specific model
-        const Anthropic = require('@anthropic-ai/sdk');
-        const anthropic = new Anthropic({ apiKey });
-
-        const claudeResponse = await anthropic.messages.create({
-          model: model,
-          max_tokens: 5,
-          messages: [{ role: 'user', content: 'Hello, this is a test.' }]
-        });
-
-        res.json({
-          success: true,
-          message: `Anthropic API key and model "${model}" are valid`,
-          model: model,
-          tokens: {
-            input: claudeResponse.usage?.input_tokens || 0,
-            output: claudeResponse.usage?.output_tokens || 0,
-            total: claudeResponse.usage?.input_tokens + claudeResponse.usage?.output_tokens || 0
-          }
-        });
-        break;
-      case 'deepseek':
-        // Test DeepSeek API key
-        await axios.post('https://api.deepseek.com/v1/chat/completions', {
-          model: 'deepseek-chat',
-          messages: [{ role: 'user', content: 'test' }],
-          max_tokens: 1
-        }, {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        res.json({ success: true, message: 'DeepSeek API key is valid' });
-        break;
-
-      default:
-        res.status(400).json({ success: false, error: 'Unsupported provider' });
-    }
-  } catch (error: any) {
-    console.error(`${provider} API test failed:`, error);
-
-    if (error.status === 401 || error.response?.status === 401) {
-      res.status(401).json({ success: false, error: `Invalid ${provider} API key` });
-    } else if (error.status === 429 || error.response?.status === 429) {
-      res.status(429).json({ success: false, error: `${provider} API quota exceeded` });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: error.message || error.response?.data?.error?.message || 'API test failed'
-      });
-    }
-  }
-});
-
-// Initialize default settings
-router.post('/initialize-defaults', async (req: Request, res: Response) => {
-  try {
-    // Default embeddings settings
-    const defaultEmbeddingSettings = [
-      { key: 'embedding_chunk_size', value: '1000', description: 'Default chunk size for text embeddings' },
-      { key: 'embedding_chunk_overlap', value: '200', description: 'Default chunk overlap for text embeddings' },
-      { key: 'embedding_batch_size', value: '10', description: 'Default batch size for embedding generation' },
-      { key: 'embedding_normalize', value: 'true', description: 'Whether to normalize embeddings' },
-      { key: 'embedding_cache', value: 'true', description: 'Whether to cache embeddings' },
-      { key: 'embedding_provider', value: 'openai', description: 'Default embedding provider' },
-      { key: 'embedding_model', value: 'text-embedding-3-small', description: 'Default embedding model' }
-    ];
-
-    // Insert defaults if they don't exist
-    for (const setting of defaultEmbeddingSettings) {
-      const checkResult = await lsembPool.query(
-        'SELECT key FROM settings WHERE key = $1',
-        [setting.key]
-      );
-
-      if (checkResult.rows.length === 0) {
-        await lsembPool.query(
-          `INSERT INTO settings (key, value, description)
-           VALUES ($1, $2, $3)`,
-          [setting.key, setting.value, setting.description]
-        );
-        console.log(`✅ Initialized default setting: ${setting.key} = ${setting.value}`);
-      }
-    }
-
-    res.json({
-      success: true,
-      message: 'Default settings initialized successfully',
-      initialized: defaultEmbeddingSettings.length
-    });
-  } catch (error) {
-    console.error('Error initializing default settings:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to initialize default settings'
-    });
-  }
-});
-
-// Save system prompt configuration
-router.post('/config/prompts', async (req: Request, res: Response) => {
-  try {
-    console.log('🔧 [SETTINGS] Saving system prompt configuration...');
-    const { prompt, temperature, maxTokens } = req.body;
-
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' });
-    }
-
-    // Save prompt to database
-    await lsembPool.query(
-      `INSERT INTO settings (key, value, category, description)
-       VALUES ('llmSettings.systemPrompt', $1, 'llm', 'System prompt for AI assistant')
-       ON CONFLICT (key)
-       DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
-      [prompt]
-    );
-
-    // Save temperature if provided
-    if (temperature !== undefined) {
+    // Batch update
+    for (const update of updates) {
       await lsembPool.query(
-        `INSERT INTO settings (key, value, category, description)
-         VALUES ('llmSettings.temperature', $1, 'llm', 'Temperature for AI responses')
+        `INSERT INTO settings (key, value)
+         VALUES ($1, $2)
          ON CONFLICT (key)
-         DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
-        [temperature.toString()]
+         DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+        [update.key, update.value]
       );
     }
 
-    // Save maxTokens if provided
-    if (maxTokens !== undefined) {
-      await lsembPool.query(
-        `INSERT INTO settings (key, value, category, description)
-         VALUES ('llmSettings.maxTokens', $1, 'llm', 'Maximum tokens for AI responses')
-         ON CONFLICT (key)
-         DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
-        [maxTokens.toString()]
-      );
-    }
+    // Clear cache
+    const cleared = settingsCache.clearPattern('settings');
+    console.log(`🗑️ [CACHE] Cleared ${cleared} entries for category ${categoryName}`);
 
-    console.log('✅ [SETTINGS] System prompt configuration saved successfully');
     res.json({
       success: true,
-      message: 'System prompt configuration saved successfully',
-      prompt: prompt,
-      temperature: temperature || 0.7,
-      maxTokens: maxTokens || 2048
-    });
-  } catch (error) {
-    console.error('❌ [SETTINGS] Error saving system prompt configuration:', error);
-    res.status(500).json({ error: 'Failed to save system prompt configuration' });
-  }
-});
-
-// Get system prompt configuration
-router.get('/config/prompts', async (req: Request, res: Response) => {
-  try {
-    console.log('🔧 [SETTINGS] Fetching system prompt configuration...');
-
-    // Try to get prompt from database first
-    let promptConfig = {
-      prompt: '',
-      name: 'System Prompt',
-      temperature: 0.7,
-      maxTokens: 2048
-    };
-
-    try {
-      const result = await lsembPool.query(
-        `SELECT value FROM settings WHERE key = 'system.prompt' OR key = 'systemPrompt' OR key = 'llmSettings.systemPrompt'`
-      );
-
-      if (result.rows.length > 0) {
-        promptConfig.prompt = result.rows[0].value;
-        console.log('✅ [SETTINGS] Found system prompt in database');
-      } else {
-        // Use default prompt
-        promptConfig.prompt = "Sen bir RAG asistanısın. SADECE verilen context'ten cevap ver. Context dışında bilgi verme.";
-        console.log('⚠️ [SETTINGS] Using default system prompt');
-      }
-    } catch (dbError) {
-      console.error('❌ [SETTINGS] Error fetching system prompt from database:', dbError);
-      // Use default prompt
-      promptConfig.prompt = "Sen bir RAG asistanısın. SADECE verilen context'ten cevap ver. Context dışında bilgi verme.";
-    }
-
-    // Try to get temperature and maxTokens from database
-    try {
-      const tempResult = await lsembPool.query(
-        `SELECT value FROM settings WHERE key = 'llmSettings.temperature' OR key = 'temperature'`
-      );
-      if (tempResult.rows.length > 0) {
-        promptConfig.temperature = parseFloat(tempResult.rows[0].value) || 0.7;
-      }
-    } catch (tempError) {
-      console.error('❌ [SETTINGS] Error fetching temperature from database:', tempError);
-    }
-
-    try {
-      const tokensResult = await lsembPool.query(
-        `SELECT value FROM settings WHERE key = 'llmSettings.maxTokens' OR key = 'max_tokens'`
-      );
-      if (tokensResult.rows.length > 0) {
-        promptConfig.maxTokens = parseInt(tokensResult.rows[0].value) || 2048;
-      }
-    } catch (tokensError) {
-      console.error('❌ [SETTINGS] Error fetching maxTokens from database:', tokensError);
-    }
-
-    console.log('✅ [SETTINGS] Returning prompt configuration:', {
-      name: promptConfig.name,
-      hasPrompt: !!promptConfig.prompt,
-      temperature: promptConfig.temperature,
-      maxTokens: promptConfig.maxTokens
+      message: `${categoryName} settings updated successfully`,
+      updatedKeys: updates.length
     });
 
-    res.json(promptConfig);
   } catch (error) {
-    console.error('❌ [SETTINGS] Error fetching system prompt configuration:', error);
-    res.status(500).json({ error: 'Failed to fetch system prompt configuration' });
+    console.error(`Error updating ${req.params.categoryName} settings:`, error);
+    res.status(500).json({ error: `Failed to update ${req.params.categoryName} settings` });
   }
 });
 

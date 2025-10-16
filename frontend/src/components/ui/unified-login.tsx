@@ -129,14 +129,32 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
             animate={{
               x: mousePosition.x * 0.01 * (i + 1),
               y: mousePosition.y * 0.01 * (i + 1),
-              rotateX: mousePosition.y * 0.005,
-              rotateY: mousePosition.x * 0.005,
+              rotateX: 15 + mousePosition.y * 0.01,
+              rotateY: [25, 35, 25],
+              rotateZ: i % 2 === 0 ? [5, 15, 5] : [-5, -15, -5],
               opacity: 0.02 + i * 0.01
             }}
             transition={{
-              type: "spring",
-              stiffness: 20,
-              damping: 30
+              rotateY: {
+                duration: 4 + i,
+                repeat: Infinity,
+                ease: "easeInOut"
+              },
+              rotateZ: {
+                duration: 3 + i,
+                repeat: Infinity,
+                ease: "easeInOut"
+              },
+              x: {
+                type: "spring",
+                stiffness: 20,
+                damping: 30
+              },
+              y: {
+                type: "spring",
+                stiffness: 20,
+                damping: 30
+              }
             }}
             style={{
               left: `${15 + i * 40}%`,

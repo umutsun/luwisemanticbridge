@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
-import UnifiedLogin from '@/components/ui/unified-login';
+import VitrinLoader from '@/components/ui/vitrin-loader';
 
 export default function LoginPage() {
   const { config, loading: configLoading } = useConfig();
@@ -15,24 +15,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-    // 3 second loading time
-    const phase1 = setTimeout(() => {
-      setSystemLoaded(true);
-    }, 1500);
-
-    const phase2 = setTimeout(() => {
-      setShowTitle(true);
-    }, 2500);
-
-    const phase3 = setTimeout(() => {
-      setInitialLoading(false);
-    }, 3000);
-
-    return () => {
-      clearTimeout(phase1);
-      clearTimeout(phase2);
-      clearTimeout(phase3);
-    };
   }, []);
 
   useEffect(() => {
@@ -42,6 +24,7 @@ export default function LoginPage() {
   }, [config]);
 
   // Check if admin user exists and redirect to deployment setup if needed
+  // Only do this check on initial app load, not during normal login flow
   useEffect(() => {
     const checkDeploymentStatus = async () => {
       if (!configLoading && mounted) {
@@ -49,11 +32,14 @@ export default function LoginPage() {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/deployment/check-admin`);
           const data = await response.json();
 
-          // If no admin user exists, redirect to deployment setup
-          if (!data.adminExists) {
+          // Only redirect to setup if no admin user exists AND environment is not configured
+          if (!data.adminExists && (!data.envConfigured || !data.databaseConnected)) {
             router.push('/setup/deploy');
             return;
           }
+
+          // If admin exists but we're somehow on login page without being logged in,
+          // continue with normal login flow
         } catch (error) {
           console.error('Failed to check deployment status:', error);
           // If we can't check status, proceed with normal login
@@ -67,6 +53,9 @@ export default function LoginPage() {
   const { login } = useAuth();
 
   const handleLogin = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
+
     const result = await login(email, password);
 
     if (result.success) {
@@ -78,18 +67,21 @@ export default function LoginPage() {
         // Redirect to the requested page
         router.push(from);
       } else {
-        // Default redirect to chatbot (main page)
-        router.push('/chat');
+        // Default redirect to dashboard for admin users
+        router.push('/dashboard');
       }
+    } else {
+      setError(result.error || 'Login failed');
     }
 
+    setLoading(false);
     return result;
   };
 
   return (
-    <UnifiedLogin
-      title={config?.app?.name || 'Mali Müşavir Botu'}
-      description={config?.app?.description || 'Yapay zeka destekli mali danışmanlık platformu'}
+    <VitrinLoader
+      title={config?.app?.name || 'Application'}
+      description={config?.app?.description || 'AI-powered intelligent assistant platform'}
       onLogin={handleLogin}
       loginError={error}
       loginLoading={loading}

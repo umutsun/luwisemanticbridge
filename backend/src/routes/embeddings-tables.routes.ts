@@ -288,4 +288,136 @@ router.get('/token-stats', async (req, res) => {
   }
 });
 
+// Get table preview with pagination
+router.get('/:tableName/preview', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const customerSettings = await getDatabaseSettings();
+    if (!customerSettings) {
+      return res.json({
+        records: [],
+        count: 0,
+        columns: [],
+        message: 'No customer database configured'
+      });
+    }
+
+    const ragChatbotPool = getCustomerPool(customerSettings.database);
+
+    // Get column information
+    const columnsResult = await ragChatbotPool.query(`
+      SELECT column_name, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1
+      ORDER BY ordinal_position
+    `, [tableName]);
+
+    const columns = columnsResult.rows.map(row => row.column_name);
+
+    // Get sample records
+    const recordsResult = await ragChatbotPool.query(`
+      SELECT * FROM public.${tableName}
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    // Get total record count
+    const countResult = await ragChatbotPool.query(`
+      SELECT COUNT(*) as count FROM public.${tableName}
+    `, []);
+
+    res.json({
+      records: recordsResult.rows,
+      count: parseInt(countResult.rows[0].count),
+      columns,
+      tableName
+    });
+  } catch (error: any) {
+    console.error('Failed to get table preview:', error);
+    res.status(500).json({
+      error: 'Failed to get table preview',
+      details: error.message
+    });
+  }
+});
+
+// Get table statistics
+router.get('/:tableName/stats', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+
+    const customerSettings = await getDatabaseSettings();
+    if (!customerSettings) {
+      return res.json({
+        error: 'No customer database configured'
+      });
+    }
+
+    const ragChatbotPool = getCustomerPool(customerSettings.database);
+    const lsembClient = await lsembPool.connect();
+
+    try {
+      // Get table size
+      const sizeResult = await ragChatbotPool.query(`
+        SELECT
+          pg_size_pretty(pg_total_relation_size('${tableName}')) as table_size,
+          pg_total_relation_size('${tableName}') as size_bytes
+      `);
+
+      // Get average text length for token estimation
+      const textColumnsResult = await ragChatbotPool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+        AND table_name = $1
+        AND data_type IN ('text', 'varchar', 'character varying')
+      `, [tableName]);
+
+      let avgTokens = 0;
+      if (textColumnsResult.rows.length > 0) {
+        const textColumn = textColumnsResult.rows[0].column_name;
+        const avgLengthResult = await ragChatbotPool.query(`
+          SELECT AVG(LENGTH(${textColumn})) as avg_length
+          FROM public.${tableName}
+          WHERE ${textColumn} IS NOT NULL
+        `);
+        const avgLength = parseFloat(avgLengthResult.rows[0].avg_length) || 0;
+        avgTokens = Math.ceil(avgLength / 4); // Rough token estimation
+      }
+
+      // Get embedding count
+      let embeddedCount = 0;
+      try {
+        const embeddingResult = await lsembClient.query(`
+          SELECT COUNT(DISTINCT source_id) as count
+          FROM unified_embeddings
+          WHERE source_table ILIKE $1
+        `, [`%${tableName}%`]);
+        embeddedCount = parseInt(embeddingResult.rows[0].count) || 0;
+      } catch (error) {
+        // Table might not exist, ignore
+      }
+
+      res.json({
+        tableName,
+        size: sizeResult.rows[0].size_bytes,
+        tableSize: sizeResult.rows[0].table_size,
+        avgTokens,
+        embeddedRecords: embeddedCount,
+        textColumns: textColumnsResult.rows.length
+      });
+    } finally {
+      lsembClient.release();
+    }
+  } catch (error: any) {
+    console.error('Failed to get table stats:', error);
+    res.status(500).json({
+      error: 'Failed to get table statistics',
+      details: error.message
+    });
+  }
+});
+
 export default router;

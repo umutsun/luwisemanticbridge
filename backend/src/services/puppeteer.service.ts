@@ -1,7 +1,7 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 import * as cheerio from 'cheerio';
 
-interface EnhancedScrapeOptions {
+interface PuppeteerScrapeOptions {
   waitForSelector?: string;
   customSelectors?: string[];
   prioritySelectors?: string[];
@@ -27,7 +27,7 @@ interface ScrapeResult {
   extractedFrom?: string[];
 }
 
-export class EnhancedPuppeteerService {
+export class PuppeteerService {
   private browser: Browser | null = null;
 
   async initialize() {
@@ -52,7 +52,7 @@ export class EnhancedPuppeteerService {
     return this.browser;
   }
 
-  async scrape(url: string, options: EnhancedScrapeOptions = {}): Promise<ScrapeResult> {
+  async scrape(url: string, options: PuppeteerScrapeOptions = {}): Promise<ScrapeResult> {
     const browser = await this.initialize();
     const page = await browser.newPage();
 
@@ -153,7 +153,7 @@ export class EnhancedPuppeteerService {
         metadata: {
           statusCode: response?.status(),
           contentLength: content.length,
-          scrapingMethod: 'enhanced-puppeteer',
+          scrapingMethod: 'puppeteer',
           selectors: options.customSelectors || [],
           extractMode: options.extractMode || 'best'
         },
@@ -275,7 +275,7 @@ export class EnhancedPuppeteerService {
     });
   }
 
-  private async extractContent($: cheerio.CheerioAPI, page: Page, options: EnhancedScrapeOptions): Promise<string> {
+  private async extractContent($: cheerio.CheerioAPI, page: Page, options: PuppeteerScrapeOptions): Promise<string> {
     const allSelectors = [
       ...(options.prioritySelectors || []),
       ...(options.customSelectors || []),
@@ -423,4 +423,4 @@ export class EnhancedPuppeteerService {
 }
 
 // Singleton instance
-export const enhancedPuppeteer = new EnhancedPuppeteerService();
+export const puppeteer = new PuppeteerService();

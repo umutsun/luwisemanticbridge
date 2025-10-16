@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/config/api.config';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,8 +54,28 @@ export default function DeployPage() {
 
   useEffect(() => {
     setMounted(true);
-    checkEnvironment();
+    checkDeploymentStatus();
   }, []);
+
+  const checkDeploymentStatus = async () => {
+    try {
+      // First check if admin already exists
+      const adminResponse = await fetch(`${API_BASE_URL}/api/v2/deployment/check-admin`);
+      const adminData = await adminResponse.json();
+
+      if (adminData.adminExists && adminData.databaseConnected && adminData.envConfigured) {
+        // Everything is set up, redirect to login
+        router.push('/login');
+        return;
+      }
+
+      // If not fully configured, check environment
+      checkEnvironment();
+    } catch (error) {
+      console.error('Deployment status check failed:', error);
+      checkEnvironment();
+    }
+  };
 
   const checkEnvironment = async () => {
     try {

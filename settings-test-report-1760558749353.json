@@ -1,0 +1,336 @@
+{
+  "cachePerformance": {
+    "category_llm_response": {
+      "passed": false,
+      "details": {
+        "avg": "239.05",
+        "min": "228.53",
+        "max": "253.47"
+      }
+    },
+    "category_embeddings_response": {
+      "passed": false,
+      "details": {
+        "avg": "253.21",
+        "min": "219.01",
+        "max": "309.85"
+      }
+    },
+    "category_rag_response": {
+      "passed": false,
+      "details": {
+        "avg": "277.79",
+        "min": "222.45",
+        "max": "422.12"
+      }
+    },
+    "category_database_response": {
+      "passed": false,
+      "details": {
+        "avg": "223.61",
+        "min": "217.58",
+        "max": "228.16"
+      }
+    },
+    "category_security_response": {
+      "passed": false,
+      "details": {
+        "avg": "239.29",
+        "min": "229.05",
+        "max": "259.10"
+      }
+    },
+    "cache_llm_ratio": {
+      "passed": false,
+      "details": {
+        "hitRatio": "0.00",
+        "avgTime": "258.67"
+      }
+    },
+    "cache_embeddings_ratio": {
+      "passed": false,
+      "details": {
+        "hitRatio": "0.00",
+        "avgTime": "237.57"
+      }
+    },
+    "cache_rag_ratio": {
+      "passed": false,
+      "details": {
+        "hitRatio": "0.00",
+        "avgTime": "277.37"
+      }
+    },
+    "concurrent_requests": {
+      "passed": true,
+      "details": {
+        "total": 10,
+        "successful": 10,
+        "totalTime": "1424.33"
+      }
+    }
+  },
+  "apiEndpoints": {
+    "get_category_llm": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 2836,
+        "sections": [
+          "openai",
+          "google",
+          "anthropic",
+          "deepseek",
+          "ollama",
+          "huggingface",
+          "llmSettings"
+        ]
+      }
+    },
+    "get_category_embeddings": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 835,
+        "sections": [
+          "embeddings",
+          "llmSettings"
+        ]
+      }
+    },
+    "get_category_rag": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 237,
+        "sections": [
+          "ragSettings"
+        ]
+      }
+    },
+    "get_category_database": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 163,
+        "sections": [
+          "database"
+        ]
+      }
+    },
+    "get_category_security": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 196,
+        "sections": [
+          "security"
+        ]
+      }
+    },
+    "get_category_app": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 122,
+        "sections": [
+          "app"
+        ]
+      }
+    },
+    "get_category_scraper": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "dataSize": 97,
+        "sections": [
+          "scraper"
+        ]
+      }
+    },
+    "invalid_category_invalid": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasData": true
+      }
+    },
+    "invalid_category_nonexistent": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasData": true
+      }
+    },
+    "invalid_category_": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasData": true
+      }
+    },
+    "invalid_category_null": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasData": true
+      }
+    },
+    "invalid_category_undefined": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasData": true
+      }
+    },
+    "put_valid_openai.temperature": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasSuccess": true
+      }
+    },
+    "put_valid_embeddings.chunkSize": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasSuccess": true
+      }
+    },
+    "put_valid_ragSettings.similarityThreshold": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "hasSuccess": true
+      }
+    },
+    "put_invalid_openai.temperature": {
+      "passed": false,
+      "details": {
+        "status": 200,
+        "rejected": false
+      }
+    },
+    "put_invalid_embeddings.chunkSize": {
+      "passed": false,
+      "details": {
+        "status": 200,
+        "rejected": false
+      }
+    },
+    "put_invalid_ragSettings.similarityThreshold": {
+      "passed": false,
+      "details": {
+        "status": 200,
+        "rejected": false
+      }
+    }
+  },
+  "frontendIntegration": {
+    "page_load_app": {
+      "passed": false,
+      "details": {
+        "loadTime": "282.91",
+        "expected": "<50ms"
+      }
+    },
+    "page_load_llm": {
+      "passed": false,
+      "details": {
+        "loadTime": "247.99",
+        "expected": "<100ms"
+      }
+    },
+    "page_load_embeddings": {
+      "passed": false,
+      "details": {
+        "loadTime": "243.78",
+        "expected": "<100ms"
+      }
+    },
+    "page_load_rag": {
+      "passed": false,
+      "details": {
+        "loadTime": "271.90",
+        "expected": "<100ms"
+      }
+    },
+    "tab_switching": {
+      "passed": false,
+      "details": {
+        "avgTime": "227.71",
+        "tests": 10
+      }
+    },
+    "settings_persistence": {
+      "passed": true,
+      "details": {
+        "testValue": "test_value_1760558734902",
+        "found": true
+      }
+    }
+  },
+  "edgeCases": {
+    "large_payload": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "payloadSize": 15067
+      }
+    },
+    "special_chars_test.turkish": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "valueType": "string"
+      }
+    },
+    "special_chars_test.unicode": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "valueType": "string"
+      }
+    },
+    "special_chars_test.html": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "valueType": "string"
+      }
+    },
+    "special_chars_test.sql": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "valueType": "string"
+      }
+    },
+    "special_chars_test.json": {
+      "passed": true,
+      "details": {
+        "status": 200,
+        "valueType": "string"
+      }
+    },
+    "rapid_requests": {
+      "passed": true,
+      "details": {
+        "total": 50,
+        "errors": 0,
+        "avgTime": "247.98",
+        "rps": "4.03"
+      }
+    }
+  },
+  "summary": {
+    "totalTests": 40,
+    "passed": 24,
+    "failed": 16,
+    "warnings": [
+      "16 tests failed",
+      "5 endpoints >100ms",
+      "Average response time >80ms"
+    ]
+  }
+}

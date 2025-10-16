@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-10-15T21:20:16.023Z",
+  "performance": {
+    "average": 413.2990833333334,
+    "improvement": 62.6,
+    "passed": false
+  },
+  "validation": {
+    "rate": 28.6,
+    "passed": false
+  },
+  "filtering": {
+    "rate": 100,
+    "passed": true
+  },
+  "overall": {
+    "score": 63.7,
+    "ready": false
+  }
+}

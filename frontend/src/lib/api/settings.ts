@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { settingsCache, withCache } from '../settings-cache';
 
 export interface AppSettings {
   app: {
@@ -111,6 +112,17 @@ export interface AppSettings {
     rateLimit: number;
     corsOrigins: string[];
   };
+  deepl: {
+    apiKey: string;
+    plan: string;
+  };
+  google: {
+    apiKey: string;
+    projectId: string;
+    translate: {
+      apiKey: string;
+    };
+  };
   logging: {
     level: string;
     file: string;
@@ -142,6 +154,40 @@ export async function getAppSettings(): Promise<AppSettings> {
   }
 }
 
+// Base category fetch function
+async function fetchSettingsCategory(category: string): Promise<any> {
+  try {
+    const response = await apiClient.get(`/api/v2/settings?category=${category}`, {
+      timeout: 3000 // 3 second timeout for category requests
+    });
+
+    if (response.data && response.data.error) {
+      throw new Error(response.data.error || `Failed to load ${category} settings`);
+    }
+
+    return response.data || {};
+  } catch (error: any) {
+    console.warn(`${category} settings endpoint unavailable:`, error.message);
+    return {};
+  }
+}
+
+// Cached category-based settings loading for performance
+export const getSettingsCategory = withCache(
+  fetchSettingsCategory,
+  (category: string) => `settings:${category}`,
+  30000 // 30 seconds TTL for category settings
+);
+
+// Specific category getters for better performance (with caching)
+export const getLLMSettings = () => getSettingsCategory('llm');
+export const getEmbeddingsSettings = () => getSettingsCategory('embeddings');
+export const getRAGSettings = () => getSettingsCategory('rag');
+export const getDatabaseSettings = () => getSettingsCategory('database');
+export const getSecuritySettings = () => getSettingsCategory('security');
+export const getAppSettingsOnly = () => getSettingsCategory('app');
+export const getTranslationSettings = () => getSettingsCategory('translation');
+
 export async function getLLMProviders() {
   const response = await apiClient.get('/api/v2/settings/llm');
 
@@ -168,6 +214,11 @@ export async function updateAppSettings(settings: Partial<AppSettings>): Promise
   if (response.data.error) {
     throw new Error(response.data.error || 'Failed to update settings');
   }
+
+  // Invalidate relevant cache entries
+  Object.keys(settings).forEach(key => {
+    settingsCache.invalidate(key);
+  });
 
   return response.data as AppSettings;
 }

@@ -1,0 +1,334 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Filter,
+  Table,
+  BarChart3,
+  FileText,
+  Maximize2,
+  Minimize2
+} from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+interface CSVColumn {
+  name: string;
+  type: 'numeric' | 'text' | 'date';
+  uniqueValues: number;
+  nullCount: number;
+}
+
+interface CSVViewerProps {
+  data: string;
+  title?: string;
+  className?: string;
+  metadata?: {
+    csvStats?: {
+      totalRows: number;
+      totalColumns: number;
+      columnTypes: CSVColumn[];
+    };
+  };
+}
+
+export default function CSVTableViewer({ data, title = "CSV Data", className = "", metadata }: CSVViewerProps) {
+  const { toast } = useToast();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedColumn, setSelectedColumn] = useState<string>('all');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<string>('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const rowsPerPage = 50;
+
+  // Parse CSV data
+  const { headers, rows, stats } = useMemo(() => {
+    if (!data) return { headers: [], rows: [], stats: null };
+
+    try {
+      const lines = data.split('\n').filter(line => line.trim());
+      if (lines.length === 0) return { headers: [], rows: [], stats: null };
+
+      // Parse headers
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+
+      // Parse rows
+      const rows = lines.slice(1).map((line, index) => {
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        const row: any = { _id: index + 1 };
+        headers.forEach((header, i) => {
+          row[header] = values[i] || '';
+        });
+        return row;
+      });
+
+      // Calculate stats if not provided
+      const stats = metadata?.csvStats || {
+        totalRows: rows.length,
+        totalColumns: headers.length,
+        columnTypes: headers.map(header => {
+          const values = rows.map(row => row[header]);
+          const numericValues = values.filter(v => !isNaN(parseFloat(v)) && v !== '');
+
+          return {
+            name: header,
+            type: numericValues.length > values.length * 0.7 ? 'numeric' : 'text',
+            uniqueValues: [...new Set(values)].length,
+            nullCount: values.filter(v => !v || v === '').length
+          };
+        })
+      };
+
+      return { headers, rows, stats };
+    } catch (error) {
+      console.error('Error parsing CSV:', error);
+      return { headers: [], rows: [], stats: null };
+    }
+  }, [data, metadata]);
+
+  // Filter and sort data
+  const filteredAndSortedRows = useMemo(() => {
+    let filtered = rows;
+
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(row =>
+        Object.values(row).some(value =>
+          value.toString().toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      );
+    }
+
+    // Apply column filter
+    if (selectedColumn !== 'all') {
+      filtered = filtered.filter(row =>
+        row[selectedColumn] && row[selectedColumn].toString().trim() !== ''
+      );
+    }
+
+    // Apply sorting
+    if (sortColumn) {
+      filtered = [...filtered].sort((a, b) => {
+        const aVal = a[sortColumn];
+        const bVal = b[sortColumn];
+
+        // Handle numeric sorting
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+        }
+
+        // Handle string sorting
+        const aStr = aVal.toString().toLowerCase();
+        const bStr = bVal.toString().toLowerCase();
+
+        if (sortDirection === 'asc') {
+          return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
+        } else {
+          return aStr > bStr ? -1 : aStr < bStr ? 1 : 0;
+        }
+      });
+    }
+
+    return filtered;
+  }, [rows, searchTerm, selectedColumn, sortColumn, sortDirection]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredAndSortedRows.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const paginatedRows = filteredAndSortedRows.slice(startIndex, startIndex + rowsPerPage);
+
+  // Reset page when filters change
+  useState(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedColumn, sortColumn]);
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  
+  if (!stats) {
+    return (
+      <div className={`p-6 text-center text-muted-foreground ${className}`}>
+        <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+        <p>No CSV data available</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`space-y-4 ${className}`}>
+      {/* Header with stats */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Table className="h-5 w-5" />
+            {title}
+          </h3>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>{stats.totalRows.toLocaleString()} rows</span>
+            <span>•</span>
+            <span>{stats.totalColumns} columns</span>
+            <span>•</span>
+            <span>{filteredAndSortedRows.length.toLocaleString()} filtered</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+
+      {/* Column Analysis */}
+      <div className="flex flex-wrap gap-2">
+        {stats.columnTypes.map((col, index) => (
+          <Badge
+            key={index}
+            variant={col.type === 'numeric' ? 'default' : 'secondary'}
+            className="cursor-pointer hover:opacity-80"
+            onClick={() => setSelectedColumn(col.name)}
+          >
+            {col.name}
+            <span className="ml-1 text-xs opacity-75">
+              ({col.type === 'numeric' ? '#' : 'T'})
+            </span>
+          </Badge>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search in all columns..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={selectedColumn} onValueChange={setSelectedColumn}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Filter by column" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Columns</SelectItem>
+            {stats.columnTypes.map((col, index) => (
+              <SelectItem key={index} value={col.name}>
+                {col.name} ({col.uniqueValues} unique)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      <div className={`border rounded-lg ${isFullscreen ? 'fixed inset-4 z-50 bg-background' : ''}`}>
+        <ScrollArea className={isFullscreen ? 'h-[calc(100vh-12rem)]' : 'h-96'}>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="w-16 p-2 text-left font-medium">#</th>
+                {headers.map((header, index) => (
+                  <th
+                    key={index}
+                    className="p-2 text-left font-medium cursor-pointer hover:bg-muted/80 transition-colors"
+                    onClick={() => handleSort(header)}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>{header}</span>
+                      {sortColumn === header && (
+                        <span className="text-xs">
+                          {sortDirection === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                      <Badge variant="outline" className="ml-1 text-xs">
+                        {stats.columnTypes[index]?.type === 'numeric' ? '#' : 'T'}
+                      </Badge>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedRows.map((row, index) => (
+                <tr key={index} className="border-b hover:bg-muted/20">
+                  <td className="p-2 text-muted-foreground font-mono text-xs">
+                    {startIndex + index + 1}
+                  </td>
+                  {headers.map((header, colIndex) => (
+                    <td
+                      key={colIndex}
+                      className={`p-2 max-w-xs truncate ${
+                        stats.columnTypes[colIndex]?.type === 'numeric'
+                          ? 'text-right font-mono'
+                          : 'text-left'
+                      }`}
+                      title={row[header]}
+                    >
+                      {row[header] || (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollArea>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          Showing {startIndex + 1}-{Math.min(startIndex + rowsPerPage, filteredAndSortedRows.length)} of {filteredAndSortedRows.length} rows
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+          <span className="text-sm px-3">
+            Page {currentPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

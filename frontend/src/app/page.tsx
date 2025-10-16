@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthProvider';
 import ChatInterface from '@/components/ChatInterface';
 
 export default function Home() {
-  const { token, user, isLoading: authLoading } = useAuth();
+  const { token, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [isRedirecting, setIsRedirecting] = useState(false);
 

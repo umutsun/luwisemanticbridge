@@ -9,7 +9,13 @@ import { nerService } from '../services/ner-service';
 import { categoryScraperService } from '../services/category-scraper.service';
 import { deduplicationService } from '../services/deduplication.service';
 import { loggingService } from '../services/logging.service';
+import { scrapingCacheService } from '../services/scraping-cache.service';
+import scraperService from '../services/scraper.service';
+import { scraperQueueService } from '../services/scraper-queue.service';
+import { scraperMonitorService } from '../services/scraper-monitor.service';
+import { scraperQualityService } from '../services/scraper-quality.service';
 import { v4 as uuidv4 } from 'uuid';
+import { URL } from 'url';
 
 const router = Router();
 
@@ -199,13 +205,34 @@ router.post('/init-tables', async (req: Request, res: Response) => {
 // Analyze URL for automatic selector detection
 router.post('/analyze', async (req: Request, res: Response) => {
   try {
-    const { url } = req.body;
+    const { url, useCache = true } = req.body;
 
     if (!url) {
       return res.status(400).json({ success: false, error: 'URL is required' });
     }
 
+    // Check cache for site structure analysis (24 hour cache)
+    if (useCache) {
+      const cachedStructure = await scrapingCacheService.getCachedSiteStructure(url);
+      if (cachedStructure) {
+        console.log(`Cache hit for site analysis: ${url}`);
+        return res.json({
+          success: true,
+          fromCache: true,
+          analyzedAt: cachedStructure.analyzedAt,
+          ...cachedStructure.structure
+        });
+      }
+    }
+
+    // Perform analysis
     const result = await webScraperService.analyzeUrl(url);
+
+    // Cache the analysis result
+    if (result.success && useCache) {
+      await scrapingCacheService.cacheSiteStructure(url, result);
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Analysis failed:', error);
@@ -213,87 +240,272 @@ router.post('/analyze', async (req: Request, res: Response) => {
   }
 });
 
-// Scrape single URL
-router.post('/scrape', async (req: Request, res: Response) => {
+// Preview scrape - immediate result for testing and configuration
+router.post('/preview', async (req: Request, res: Response) => {
   try {
-    const { url, mode, options, projectId, siteId } = req.body;
+    const { url, options = {} } = req.body;
 
     if (!url) {
-      return res.status(400).json({ success: false, error: 'URL is required' });
+      return res.status(400).json({
+        success: false,
+        error: 'URL is required'
+      });
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid URL format'
+      });
+    }
+
+    console.log(`Starting preview scrape for: ${url}`);
+
+    // Use scraper service for immediate scraping
+    const results = await scraperService.scrapeWebsite(url, {
+      ...options,
+      maxDepth: options.maxDepth || 1,
+      maxPages: options.maxPages || 1,
+      followLinks: false,
+      generateEmbeddings: false,
+      saveToDb: false,
+      mode: options.mode || 'auto'
+    });
+
+    if (results.length === 0) {
+      return res.json({
+        success: true,
+        preview: {
+          url,
+          title: 'No content found',
+          content: 'Could not extract content from this URL. The site might be blocked, require JavaScript, or have no accessible content.',
+          contentLength: 0,
+          metadata: {
+            contentLength: 0,
+            chunksCount: 0,
+            linksCount: 0,
+            imagesCount: 0
+          }
+        },
+        message: 'No content could be extracted from this URL'
+      });
+    }
+
+    const result = results[0];
+
+    // Format preview response
+    const preview = {
+      url: result.url,
+      title: result.title || 'No title found',
+      content: result.content || 'No content found',
+      description: result.description,
+      keywords: result.keywords,
+      author: result.author,
+      publishDate: result.publishDate,
+      contentLength: result.content?.length || 0,
+      images: result.images?.slice(0, 5) || [], // Limit to first 5 images
+      links: result.links?.slice(0, 10) || [], // Limit to first 10 links
+      metadata: {
+        contentLength: result.content?.length || 0,
+        chunksCount: result.chunks?.length || 0,
+        linksCount: result.links?.length || 0,
+        imagesCount: result.images?.length || 0,
+        scrapingMode: options.mode || 'auto',
+        scrapedAt: new Date().toISOString()
+      }
+    };
+
+    // Log successful preview
+    console.log(`Preview completed for ${url}: ${preview.contentLength} characters extracted`);
+
+    res.json({
+      success: true,
+      preview,
+      message: `Successfully extracted ${preview.contentLength} characters from ${url}`
+    });
+
+  } catch (error: any) {
+    console.error('Preview scrape failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Preview failed',
+      details: error.message,
+      preview: {
+        url: req.body.url,
+        title: 'Error',
+        content: `Failed to scrape this URL: ${error.message}`,
+        contentLength: 0,
+        metadata: {
+          error: error.message,
+          scrapedAt: new Date().toISOString()
+        }
+      }
+    });
+  }
+});
+
+// Scrape with Redis caching and LLM processing
+router.post('/scrape', async (req: Request, res: Response) => {
+  try {
+    const {
+      url,
+      options = {},
+      useCache = true,
+      llmFiltering = true,
+      entityExtraction = true,
+      saveToDatabase = true
+    } = req.body;
+
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        error: 'URL is required'
+      });
     }
 
     // Start scraping in background
     const jobId = uuidv4();
 
-    // Save job to Redis
-    await redis.setex(`scrape-job:${jobId}`, 3600, JSON.stringify({
-      id: jobId,
-      url,
-      mode,
-      options,
-      projectId,
-      siteId,
-      status: 'processing',
-      progress: 0,
-      createdAt: new Date().toISOString()
-    }));
+    // Create job tracking
+    const job = await scraperService.createScrapeJob(url, {
+      ...options,
+      useCache,
+      llmFiltering,
+      entityExtraction,
+      saveToDatabase
+    });
 
     // Process asynchronously
     (async () => {
       try {
-        const result = await webScraperService.scrape(url, options || {});
-        const itemId = await webScraperService.saveToDatabase(result, projectId, siteId);
+        const results = await scraperService.scrapeWebsite(url, {
+          ...options,
+          useCache,
+          llmFiltering,
+          entityExtraction,
+          saveToDatabase
+        });
 
         // Update job status
-        await redis.setex(`scrape-job:${jobId}`, 3600, JSON.stringify({
-          ...JSON.parse(await redis.get(`scrape-job:${jobId}`)),
+        await scraperService.updateScrapeJob(jobId, {
           status: 'completed',
           progress: 100,
-          result,
-          itemId,
-          completedAt: new Date().toISOString()
-        }));
+          result: results
+        });
 
-        // Emit via Socket.IO
-        if (io) {
-          io.emit('scrape-complete', { jobId, result, itemId });
+        // Emit via Socket.IO if available
+        const socketIO = getSocketIO();
+        if (socketIO) {
+          socketIO.emit('scrape-complete', { jobId, results });
         }
+
       } catch (error) {
         console.error('Scraping error:', error);
-        await redis.setex(`scrape-job:${jobId}`, 3600, JSON.stringify({
-          ...JSON.parse(await redis.get(`scrape-job:${jobId}`)),
+        await scraperService.updateScrapeJob(jobId, {
           status: 'failed',
           error: error instanceof Error ? error.message : 'Unknown error'
-        }));
+        });
 
-        if (io) {
-          io.emit('scrape-error', { jobId, error: error instanceof Error ? error.message : 'Unknown error' });
+        const socketIO = getSocketIO();
+        if (socketIO) {
+          socketIO.emit('scrape-error', {
+            jobId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
     })();
 
-    res.json({ success: true, jobId });
+    res.json({
+      success: true,
+      jobId: job.id,
+      message: 'Scraping started with caching and AI processing'
+    });
+
   } catch (error) {
-    console.error('Scrape failed:', error);
-    res.status(500).json({ success: false, error: 'Scraping failed' });
+    console.error('Failed to start scraping:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start scraping'
+    });
   }
 });
 
 // Batch scrape
 router.post('/batch-scrape', async (req: Request, res: Response) => {
   try {
-    const { urls, mode, options, projectId, siteId } = req.body;
+    const { urls, mode = 'puppeteer', options = {}, projectId, siteId, useQueue = true, useCache = true } = req.body;
 
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       return res.status(400).json({ success: false, error: 'Valid URLs array is required' });
     }
 
-    const jobId = await webScraperService.createJob(urls, options || {}, projectId, siteId);
+    // Filter out cached URLs if cache is enabled
+    let urlsToScrape = urls;
+    let cachedResults = [];
 
-    // Process in background
-    webScraperService.processJob(jobId).catch(console.error);
+    if (useCache) {
+      const cachePromises = urls.map(async (url) => {
+        const cached = await scrapingCacheService.getCachedPage(url);
+        if (cached) {
+          return { url, cached: true, data: JSON.parse(cached.data) };
+        }
+        return { url, cached: false };
+      });
 
-    res.json({ success: true, jobId });
+      const cacheResults = await Promise.all(cachePromises);
+      cachedResults = cacheResults.filter(r => r.cached);
+      urlsToScrape = cacheResults.filter(r => !r.cached).map(r => r.url);
+    }
+
+    if (useQueue && urlsToScrape.length > 0) {
+      // Add to scraping queue with priority
+      const jobIds = await scrapingCacheService.addToQueue(urlsToScrape, mode, options, 1);
+
+      // Create job tracking
+      const batchJobId = uuidv4();
+      await redis.setex(`batch-scrape:${batchJobId}`, 7200, JSON.stringify({
+        id: batchJobId,
+        total: urls.length,
+        cached: cachedResults.length,
+        queued: urlsToScrape.length,
+        jobIds,
+        status: 'queued',
+        progress: 0,
+        cachedResults,
+        createdAt: new Date().toISOString()
+      }));
+
+      // Process queue in background
+      processScrapingQueue(batchJobId);
+
+      res.json({
+        success: true,
+        batchJobId,
+        total: urls.length,
+        cached: cachedResults.length,
+        queued: urlsToScrape.length,
+        cachedResults,
+        message: `${cachedResults.length} URLs loaded from cache, ${urlsToScrape.length} added to queue`
+      });
+    } else {
+      // Traditional batch processing without queue
+      const jobId = await webScraperService.createJob(urls, options, projectId, siteId);
+      webScraperService.processJob(jobId).catch(console.error);
+
+      res.json({
+        success: true,
+        jobId,
+        total: urls.length,
+        cached: cachedResults.length,
+        message: cachedResults.length > 0 ?
+          `${cachedResults.length} URLs loaded from cache, processing remaining...` :
+          'Processing all URLs'
+      });
+    }
   } catch (error) {
     console.error('Batch scrape failed:', error);
     res.status(500).json({ success: false, error: 'Batch scraping failed' });
@@ -337,6 +549,40 @@ router.get('/jobs', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Failed to get jobs:', error);
     res.status(500).json({ success: false, error: 'Failed to get jobs' });
+  }
+});
+
+// Get all sessions (alias for jobs)
+router.get('/sessions', async (req: Request, res: Response) => {
+  try {
+    const keys = await redis.keys('scrape-job:*');
+    const sessions = [];
+
+    for (const key of keys) {
+      const jobData = await redis.get(key);
+      if (jobData) {
+        const job = JSON.parse(jobData);
+        // Transform job data to session format
+        sessions.push({
+          id: job.id,
+          url: job.url,
+          status: job.status,
+          progress: job.progress,
+          createdAt: job.createdAt,
+          completedAt: job.completedAt,
+          error: job.error,
+          result: job.result
+        });
+      }
+    }
+
+    // Sort by creation date (newest first)
+    sessions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({ success: true, sessions });
+  } catch (error) {
+    console.error('Failed to get sessions:', error);
+    res.status(500).json({ success: false, error: 'Failed to get sessions' });
   }
 });
 
@@ -587,6 +833,52 @@ router.post('/projects/:projectId/sites/:siteId/reanalyze', async (req: Request,
     res.status(500).json({
       success: false,
       error: 'Failed to re-analyze site'
+    });
+  }
+});
+
+// Analyze a specific site (frontend expects this endpoint)
+router.post('/sites/:siteId/analyze', async (req: Request, res: Response) => {
+  try {
+    const { siteId } = req.params;
+
+    // Get site configuration
+    const siteResult = await lsembPool.query(
+      'SELECT base_url FROM site_configurations WHERE id = $1',
+      [siteId]
+    );
+
+    if (siteResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Site not found' });
+    }
+
+    const baseUrl = siteResult.rows[0].base_url;
+
+    // Analyze site structure
+    const structure = await intelligentScraperService.analyzeSiteStructure(baseUrl);
+
+    // Save structure
+    await intelligentScraperService.saveSiteStructure(siteId, structure);
+
+    // Get updated site with structure
+    const updatedSiteResult = await lsembPool.query(`
+      SELECT sc.*, ss.structure
+      FROM site_configurations sc
+      LEFT JOIN site_structures ss ON sc.id = ss.site_id
+      WHERE sc.id = $1
+    `, [siteId]);
+
+    res.json({
+      success: true,
+      site: updatedSiteResult.rows[0],
+      structure,
+      message: 'Site analyzed successfully'
+    });
+  } catch (error) {
+    console.error('Failed to analyze site:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze site'
     });
   }
 });
@@ -1564,8 +1856,57 @@ router.put('/items/:itemId/entities', async (req: Request, res: Response) => {
 router.post('/sites/:siteId/entity-types', async (req: Request, res: Response) => {
   try {
     const { siteId } = req.params;
-    const { entityType, pattern, description } = req.body;
+    const { entityType, pattern, description, entityTypes } = req.body;
 
+    // Handle bulk update of entity types (frontend sends entityTypes array)
+    if (entityTypes && Array.isArray(entityTypes)) {
+      const siteResult = await lsembPool.query(
+        'SELECT selectors FROM site_configurations WHERE id = $1',
+        [siteId]
+      );
+
+      if (siteResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Site not found'
+        });
+      }
+
+      let selectors = siteResult.rows[0].selectors || {};
+      selectors.entityTypes = {};
+
+      // Add all entity types
+      for (const entity of entityTypes) {
+        if (entity.enabled && entity.pattern) {
+          selectors.entityTypes[entity.type] = {
+            pattern: entity.pattern,
+            description: entity.label,
+            category: entity.category,
+            createdAt: new Date().toISOString()
+          };
+
+          // Add to NER service
+          const regexPattern = new RegExp(entity.pattern, 'gi');
+          nerService.addPattern(entity.type, regexPattern);
+        }
+      }
+
+      // Update site configuration
+      await lsembPool.query(`
+        UPDATE site_configurations
+        SET selectors = $1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [JSON.stringify(selectors), siteId]);
+
+      return res.json({
+        success: true,
+        entityTypes,
+        message: 'Entity types updated successfully'
+      });
+    }
+
+    // Handle single entity type addition
     if (!entityType || !pattern) {
       return res.status(400).json({
         success: false,
@@ -1654,6 +1995,85 @@ router.get('/sites/:siteId/entity-types', async (req: Request, res: Response) =>
     res.status(500).json({
       success: false,
       error: 'Failed to get entity types'
+    });
+  }
+});
+
+// Update site configuration (for the configure/save functionality)
+router.put('/sites/:siteId/config', async (req: Request, res: Response) => {
+  try {
+    const { siteId } = req.params;
+    const {
+      contentSelectors,
+      pagination,
+      rateLimit,
+      headers,
+      ecommerce,
+      customSelectors
+    } = req.body;
+
+    // Get current site configuration
+    const siteResult = await lsembPool.query(
+      'SELECT selectors FROM site_configurations WHERE id = $1',
+      [siteId]
+    );
+
+    if (siteResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Site not found'
+      });
+    }
+
+    let selectors = siteResult.rows[0].selectors || {};
+
+    // Update configuration
+    if (contentSelectors) {
+      selectors.contentSelectors = contentSelectors;
+    }
+
+    if (pagination) {
+      selectors.pagination = pagination;
+    }
+
+    if (rateLimit !== undefined) {
+      selectors.rateLimit = rateLimit;
+    }
+
+    if (headers) {
+      selectors.headers = headers;
+    }
+
+    if (ecommerce) {
+      selectors.ecommerce = ecommerce;
+    }
+
+    if (customSelectors) {
+      selectors.customSelectors = customSelectors;
+    }
+
+    // Mark configuration as updated
+    selectors.configuredAt = new Date().toISOString();
+    selectors.configVersion = (selectors.configVersion || 0) + 1;
+
+    // Update site configuration
+    await lsembPool.query(`
+      UPDATE site_configurations
+      SET selectors = $1,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [JSON.stringify(selectors), siteId]);
+
+    res.json({
+      success: true,
+      message: 'Site configuration updated successfully',
+      config: selectors
+    });
+  } catch (error) {
+    console.error('Failed to update site configuration:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update site configuration'
     });
   }
 });
@@ -1956,4 +2376,1720 @@ router.post('/test-embeddings', async (req: Request, res: Response) => {
   }
 });
 
+// Get workflow jobs
+router.get('/workflows', async (req: Request, res: Response) => {
+  try {
+    // Get all workflow jobs from Redis
+    const keys = await redis.keys('workflow-job:*');
+    const workflows = [];
+
+    for (const key of keys) {
+      const jobData = await redis.get(key);
+      if (jobData) {
+        const job = JSON.parse(jobData);
+        workflows.push({
+          id: job.id,
+          type: job.type || 'concept_workflow',
+          concept: job.concept,
+          projectId: job.projectId,
+          status: job.status,
+          progress: job.progress || 0,
+          currentStep: job.currentStep,
+          createdAt: job.createdAt,
+          completedAt: job.completedAt,
+          error: job.error,
+          results: job.results
+        });
+      }
+    }
+
+    // Sort by creation date (newest first)
+    workflows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json({ success: true, workflows });
+  } catch (error) {
+    console.error('Failed to get workflows:', error);
+    res.status(500).json({ success: false, error: 'Failed to get workflows' });
+  }
+});
+
+// Create new workflow job
+router.post('/workflows', async (req: Request, res: Response) => {
+  try {
+    const { concept, projectId, options = {} } = req.body;
+
+    if (!concept || !projectId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Concept and project ID are required'
+      });
+    }
+
+    // Create workflow job
+    const jobId = uuidv4();
+
+    await redis.setex(`workflow-job:${jobId}`, 7200, JSON.stringify({
+      id: jobId,
+      type: 'concept_workflow',
+      concept,
+      projectId,
+      options,
+      status: 'pending',
+      progress: 0,
+      currentStep: 'initialized',
+      createdAt: new Date().toISOString()
+    }));
+
+    res.json({
+      success: true,
+      jobId,
+      message: 'Workflow job created successfully'
+    });
+  } catch (error) {
+    console.error('Failed to create workflow:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create workflow'
+    });
+  }
+});
+
+// Get workflow job status
+router.get('/workflows/:jobId', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    const job = await redis.get(`workflow-job:${jobId}`);
+
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Workflow job not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      job: JSON.parse(job)
+    });
+  } catch (error) {
+    console.error('Failed to get workflow job:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get workflow job'
+    });
+  }
+});
+
+// Cancel workflow job
+router.post('/workflows/:jobId/cancel', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+
+    const job = await redis.get(`workflow-job:${jobId}`);
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Workflow job not found'
+      });
+    }
+
+    const jobData = JSON.parse(job);
+    jobData.status = 'cancelled';
+    jobData.completedAt = new Date().toISOString();
+
+    await redis.setex(`workflow-job:${jobId}`, 7200, JSON.stringify(jobData));
+
+    res.json({
+      success: true,
+      message: 'Workflow job cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Failed to cancel workflow job:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cancel workflow job'
+    });
+  }
+});
+
+// Test all scraping methods
+router.post('/test-all-methods', async (req: Request, res: Response) => {
+  try {
+    const { url = 'https://example.com' } = req.body;
+    const results: any = {
+      url,
+      methods: {},
+      summary: {
+        total: 0,
+        successful: 0,
+        failed: 0
+      }
+    };
+
+    // 1. Test Puppeteer
+    try {
+      const puppeteerResult = await webScraperService.scrape(url, {
+        timeout: 10000,
+        removeOverlayElements: true
+      });
+      results.methods.puppeteer = {
+        success: puppeteerResult.success,
+        title: puppeteerResult.title,
+        contentLength: puppeteerResult.content?.length || 0,
+        error: puppeteerResult.error
+      };
+      results.summary.successful++;
+    } catch (error) {
+      results.methods.puppeteer = { success: false, error: error.message };
+      results.summary.failed++;
+    }
+    results.summary.total++;
+
+    // 2. Test Playwright
+    try {
+      const { chromium } = require('playwright');
+      const browser = await chromium.launch({ headless: true });
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 10000 });
+      const title = await page.title();
+      const content = await page.content();
+      await browser.close();
+
+      results.methods.playwright = {
+        success: true,
+        title,
+        contentLength: content.length
+      };
+      results.summary.successful++;
+    } catch (error) {
+      results.methods.playwright = { success: false, error: error.message };
+      results.summary.failed++;
+    }
+    results.summary.total++;
+
+    // 3. Test Axios
+    try {
+      const axios = require('axios');
+      const response = await axios.get(url, { timeout: 10000 });
+      results.methods.axios = {
+        success: true,
+        status: response.status,
+        contentLength: response.data?.length || 0,
+        contentType: response.headers['content-type']
+      };
+      results.summary.successful++;
+    } catch (error) {
+      results.methods.axios = { success: false, error: error.message };
+      results.summary.failed++;
+    }
+    results.summary.total++;
+
+    // 4. Test Cheerio (via Axios + Cheerio)
+    try {
+      const axios = require('axios');
+      const cheerio = require('cheerio');
+      const response = await axios.get(url, { timeout: 10000 });
+      const $ = cheerio.load(response.data);
+      const title = $('title').text();
+      const links = $('a').length;
+
+      results.methods.cheerio = {
+        success: true,
+        title,
+        linksFound: links,
+        contentLength: response.data?.length || 0
+      };
+      results.summary.successful++;
+    } catch (error) {
+      results.methods.cheerio = { success: false, error: error.message };
+      results.summary.failed++;
+    }
+    results.summary.total++;
+
+    // 5. Test node-fetch
+    try {
+      const fetch = require('node-fetch');
+      const response = await fetch(url);
+      const text = await response.text();
+      results.methods.nodeFetch = {
+        success: true,
+        status: response.status,
+        contentLength: text.length,
+        contentType: response.headers.get('content-type')
+      };
+      results.summary.successful++;
+    } catch (error) {
+      results.methods.nodeFetch = { success: false, error: error.message };
+      results.summary.failed++;
+    }
+    results.summary.total++;
+
+    // 6. Test Custom Selectors with Puppeteer
+    try {
+      const customResult = await webScraperService.scrape(url, {
+        customSelectors: {
+          title: 'h1',
+          content: 'p',
+          links: 'a'
+        },
+        timeout: 10000
+      });
+      results.methods.customSelectors = {
+        success: customResult.success,
+        title: customResult.title,
+        hasCustomSelectors: true,
+        error: customResult.error
+      };
+      results.summary.successful++;
+    } catch (error) {
+      results.methods.customSelectors = { success: false, error: error.message };
+      results.summary.failed++;
+    }
+    results.summary.total++;
+
+    // Add timestamp
+    results.timestamp = new Date().toISOString();
+    results.overallStatus = results.summary.failed === 0 ? 'All methods working' : 'Some methods failed';
+
+    res.json({
+      success: true,
+      data: results
+    });
+
+  } catch (error) {
+    console.error('Test all methods failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test scraping methods',
+      details: error.message
+    });
+  }
+});
+
+// Get available scraping methods and their capabilities
+router.get('/methods', async (req: Request, res: Response) => {
+  try {
+    const methods = {
+      puppeteer: {
+        name: 'Puppeteer',
+        description: 'Headless Chrome with full JavaScript rendering',
+        capabilities: [
+          'JavaScript execution',
+          'Dynamic content',
+          'Screenshots',
+          'PDF generation',
+          'Form submission',
+          'Complex interactions'
+        ],
+        useCases: ['SPAs', 'React/Vue/Angular apps', 'JavaScript-heavy sites']
+      },
+      playwright: {
+        name: 'Playwright',
+        description: 'Modern browser automation with multi-browser support',
+        capabilities: [
+          'Multi-browser (Chrome, Firefox, Safari)',
+          'Mobile emulation',
+          'Network interception',
+          'Geolocation',
+          'Permissions',
+          'Video recording'
+        ],
+        useCases: ['Cross-browser testing', 'Mobile scraping', 'Complex workflows']
+      },
+      axios: {
+        name: 'Axios',
+        description: 'HTTP client with promise support',
+        capabilities: [
+          'HTTP/HTTPS requests',
+          'Request/Response interceptors',
+          'Automatic JSON transformation',
+          'Request cancellation',
+          'File uploads'
+        ],
+        useCases: ['APIs', 'Static content', 'JSON data', 'File downloads']
+      },
+      cheerio: {
+        name: 'Cheerio',
+        description: 'Fast and flexible server-side HTML parsing',
+        capabilities: [
+          'jQuery-like API',
+          'HTML parsing',
+          'DOM manipulation',
+          'CSS selectors',
+          'Attribute extraction'
+        ],
+        useCases: ['Static HTML', 'Web scraping', 'Data extraction']
+      },
+      'node-fetch': {
+        name: 'Node-Fetch',
+        description: 'Fetch API for Node.js',
+        capabilities: [
+          'Fetch API compatibility',
+          'Streams',
+          'Blob/File support',
+          'Headers manipulation',
+          'Response cloning'
+        ],
+        useCases: ['API requests', 'File downloads', 'Stream processing']
+      }
+    };
+
+    res.json({
+      success: true,
+      methods
+    });
+  } catch (error) {
+    console.error('Failed to get methods:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get scraping methods'
+    });
+  }
+});
+
+// Category-based scraping - scrape all items from category pages
+router.post('/scrape-category', async (req: Request, res: Response) => {
+  try {
+    const {
+      siteId,
+      categoryUrls,
+      paginationConfig = {},
+      maxPages = 10,
+      method = 'puppeteer' // puppeteer, playwright, axios+cheerio
+    } = req.body;
+
+    if (!siteId || !categoryUrls || !Array.isArray(categoryUrls)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Site ID and category URLs array are required'
+      });
+    }
+
+    // Get site configuration
+    const siteResult = await lsembPool.query(
+      'SELECT * FROM site_configurations WHERE id = $1',
+      [siteId]
+    );
+
+    if (siteResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Site not found'
+      });
+    }
+
+    const site = siteResult.rows[0];
+    const jobId = uuidv4();
+
+    // Create job tracking
+    const job = {
+      id: jobId,
+      type: 'category_scraping',
+      siteId,
+      categoryUrls,
+      status: 'starting',
+      progress: 0,
+      items: [],
+      errors: [],
+      createdAt: new Date().toISOString()
+    };
+
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+    // Start scraping in background
+    scrapeCategoryInBackground(jobId, site, categoryUrls, paginationConfig, maxPages, method);
+
+    res.json({
+      success: true,
+      jobId,
+      message: 'Category scraping started',
+      estimatedItems: categoryUrls.length * maxPages
+    });
+
+  } catch (error) {
+    console.error('Failed to start category scraping:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start category scraping'
+    });
+  }
+});
+
+// Concept-based scraping - scrape content matching a concept from multiple sites
+router.post('/scrape-concept', async (req: Request, res: Response) => {
+  try {
+    const {
+      concept,
+      sites = [], // Array of site IDs or URLs
+      keywords = [],
+      filters = {},
+      maxResultsPerSite = 50,
+      method = 'intelligent' // intelligent, puppeteer, playwright
+    } = req.body;
+
+    if (!concept || (!sites || sites.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Concept and sites are required'
+      });
+    }
+
+    const jobId = uuidv4();
+
+    // Create job tracking
+    const job = {
+      id: jobId,
+      type: 'concept_scraping',
+      concept,
+      sites,
+      keywords,
+      filters,
+      status: 'starting',
+      progress: 0,
+      results: [],
+      matchedItems: [],
+      createdAt: new Date().toISOString()
+    };
+
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+    // Start concept scraping in background
+    scrapeConceptInBackground(jobId, concept, sites, keywords, filters, maxResultsPerSite, method);
+
+    res.json({
+      success: true,
+      jobId,
+      message: 'Concept scraping started',
+      sitesCount: sites.length
+    });
+
+  } catch (error) {
+    console.error('Failed to start concept scraping:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to start concept scraping'
+    });
+  }
+});
+
+// Background function for category scraping
+async function scrapeCategoryInBackground(jobId: string, site: any, categoryUrls: string[], paginationConfig: any, maxPages: number, method: string) {
+  try {
+    const job = JSON.parse(await redis.get(`scrape-job:${jobId}`) || '{}');
+    job.status = 'scraping';
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+    const allItems = [];
+    const totalPages = categoryUrls.length * maxPages;
+    let processedPages = 0;
+
+    for (const categoryUrl of categoryUrls) {
+      let currentPage = categoryUrl;
+      let pageCount = 0;
+
+      while (currentPage && pageCount < maxPages) {
+        try {
+          // Scrape current page
+          let result;
+
+          if (method === 'puppeteer') {
+            result = await webScraperService.scrape(currentPage, {
+              timeout: 30000,
+              removeOverlayElements: true,
+              customSelectors: site.scraping_config?.contentSelectors || {}
+            });
+          } else if (method === 'playwright') {
+            const { chromium } = require('playwright');
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.goto(currentPage, { waitUntil: 'networkidle' });
+            const content = await page.content();
+            result = {
+              success: true,
+              title: await page.title(),
+              content,
+              url: currentPage
+            };
+            await browser.close();
+          } else {
+            // Axios + Cheerio
+            const axios = require('axios');
+            const cheerio = require('cheerio');
+            const response = await axios.get(currentPage, { timeout: 30000 });
+            const $ = cheerio.load(response.data);
+            result = {
+              success: true,
+              title: $('title').text(),
+              content: response.data,
+              url: currentPage
+            };
+          }
+
+          if (result.success) {
+            // Extract items based on site configuration
+            const items = await extractItemsFromPage(result, site.scraping_config || {});
+            allItems.push(...items);
+          }
+
+          // Find next page
+          if (paginationConfig.nextSelector) {
+            const { chromium } = require('playwright');
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.goto(currentPage);
+
+            const nextUrl = await page.$eval(paginationConfig.nextSelector, (el: any) => {
+              return el.href || el.getAttribute('href');
+            }).catch(() => null);
+
+            await browser.close();
+            currentPage = nextUrl;
+          } else {
+            currentPage = null;
+          }
+
+          pageCount++;
+          processedPages++;
+
+          // Update progress
+          const progress = Math.round((processedPages / totalPages) * 100);
+          job.progress = progress;
+          job.items = allItems;
+          await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+        } catch (error) {
+          console.error(`Failed to scrape page ${currentPage}:`, error);
+          job.errors.push({ page: currentPage, error: error.message });
+        }
+      }
+    }
+
+    // Final update
+    job.status = 'completed';
+    job.progress = 100;
+    job.items = allItems;
+    job.completedAt = new Date().toISOString();
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+  } catch (error) {
+    console.error('Category scraping failed:', error);
+    const job = JSON.parse(await redis.get(`scrape-job:${jobId}`) || '{}');
+    job.status = 'failed';
+    job.error = error.message;
+    job.completedAt = new Date().toISOString();
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+  }
+}
+
+// Background function for concept scraping
+async function scrapeConceptInBackground(jobId: string, concept: string, sites: any[], keywords: string[], filters: any, maxResultsPerSite: number, method: string) {
+  try {
+    const job = JSON.parse(await redis.get(`scrape-job:${jobId}`) || '{}');
+    job.status = 'analyzing';
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+    const allResults = [];
+    let processedSites = 0;
+
+    for (const site of sites) {
+      try {
+        let searchResults = [];
+
+        if (method === 'intelligent') {
+          // Use intelligent scraper for semantic search
+          const query = `${concept} ${keywords.join(' ')}`;
+          searchResults = await intelligentScraperService.semanticSearch({
+            query,
+            siteIds: [typeof site === 'string' ? site : site.id],
+            maxResultsPerSite
+          });
+        } else {
+          // Use traditional scraping
+          const baseUrl = typeof site === 'string' ? site : site.base_url;
+          const result = await webScraperService.scrape(baseUrl, {
+            timeout: 30000,
+            removeOverlayElements: true
+          });
+
+          if (result.success) {
+            // Find concept-related content
+            searchResults = await findConceptRelatedContent(result.content, concept, keywords);
+          }
+        }
+
+        allResults.push(...searchResults);
+        processedSites++;
+
+        // Update progress
+        const progress = Math.round((processedSites / sites.length) * 100);
+        job.progress = progress;
+        job.matchedItems = allResults;
+        await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+      } catch (error) {
+        console.error(`Failed to scrape site ${site}:`, error);
+        job.errors.push({ site, error: error.message });
+      }
+    }
+
+    // Final update
+    job.status = 'completed';
+    job.progress = 100;
+    job.matchedItems = allResults;
+    job.completedAt = new Date().toISOString();
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+
+  } catch (error) {
+    console.error('Concept scraping failed:', error);
+    const job = JSON.parse(await redis.get(`scrape-job:${jobId}`) || '{}');
+    job.status = 'failed';
+    job.error = error.message;
+    job.completedAt = new Date().toISOString();
+    await redis.setex(`scrape-job:${jobId}`, 7200, JSON.stringify(job));
+  }
+}
+
+// Helper function to extract items from a page
+async function extractItemsFromPage(pageResult: any, config: any): Promise<any[]> {
+  const items = [];
+
+  if (!pageResult || !pageResult.content) {
+    return items;
+  }
+
+  try {
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(pageResult.content);
+
+    // Extract items based on selectors
+    const itemSelector = config.itemSelector || '.product, .item, article, .post';
+    $(itemSelector).each((i, element) => {
+      const item = {
+        title: $(element).find(config.titleSelector || 'h1, h2, h3, .title').first().text().trim(),
+        price: $(element).find(config.priceSelector || '.price, [itemprop="price"]').first().text().trim(),
+        description: $(element).find(config.descriptionSelector || '.description, p').first().text().trim(),
+        image: $(element).find(config.imageSelector || 'img').first().attr('src'),
+        link: $(element).find(config.linkSelector || 'a').first().attr('href'),
+        url: pageResult.url
+      };
+
+      // Clean up and add item
+      if (item.title || item.description) {
+        items.push(item);
+      }
+    });
+
+  } catch (error) {
+    console.error('Error extracting items:', error);
+  }
+
+  return items;
+}
+
+// Helper function to find concept-related content
+async function findConceptRelatedContent(content: string, concept: string, keywords: string[]): Promise<any[]> {
+  const results = [];
+
+  try {
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(content);
+
+    // Look for headings, paragraphs, and other content containing the concept or keywords
+    const selectors = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'article', '.content', '.description'];
+
+    selectors.forEach(selector => {
+      $(selector).each((i, element) => {
+        const text = $(element).text().toLowerCase();
+        const searchTerms = [concept.toLowerCase(), ...keywords.map(k => k.toLowerCase())];
+
+        if (searchTerms.some(term => text.includes(term))) {
+          results.push({
+            type: selector,
+            content: $(element).text().trim(),
+            html: $(element).html(),
+            relevance: calculateRelevance(text, concept, keywords)
+          });
+        }
+      });
+    });
+
+    // Sort by relevance and limit results
+    results.sort((a, b) => b.relevance - a.relevance);
+
+  } catch (error) {
+    console.error('Error finding concept content:', error);
+  }
+
+  return results;
+}
+
+// Helper function to calculate content relevance
+function calculateRelevance(text: string, concept: string, keywords: string[]): number {
+  let score = 0;
+
+  // Check for exact concept match
+  if (text.includes(concept.toLowerCase())) {
+    score += 10;
+  }
+
+  // Check for keyword matches
+  keywords.forEach(keyword => {
+    if (text.includes(keyword.toLowerCase())) {
+      score += 5;
+    }
+  });
+
+  // Bonus for heading tags
+  if (text.includes('<h1>')) score += 5;
+  if (text.includes('<h2>')) score += 3;
+
+  return score;
+}
+
+// Process scraping queue
+async function processScrapingQueue(batchJobId: string) {
+  try {
+    const batchJob = JSON.parse(await redis.get(`batch-scrape:${batchJobId}`) || '{}');
+    batchJob.status = 'processing';
+    await redis.setex(`batch-scrape:${batchJobId}`, 7200, JSON.stringify(batchJob));
+
+    const results = [];
+    let processed = 0;
+
+    while (true) {
+      // Get next batch from queue
+      const items = await scrapingCacheService.getFromQueue(5);
+
+      if (items.length === 0) {
+        break;
+      }
+
+      // Process items in parallel
+      const promises = items.map(async (item) => {
+        try {
+          let result;
+
+          switch (item.method) {
+            case 'playwright':
+              const { chromium } = require('playwright');
+              const browser = await chromium.launch({ headless: true });
+              const page = await browser.newPage();
+              await page.goto(item.url, { waitUntil: 'networkidle' });
+              result = {
+                success: true,
+                title: await page.title(),
+                content: await page.content(),
+                url: item.url
+              };
+              await browser.close();
+              break;
+
+            case 'axios':
+              const axios = require('axios');
+              const response = await axios.get(item.url, { timeout: 30000 });
+              result = {
+                success: true,
+                status: response.status,
+                content: response.data,
+                url: item.url
+              };
+              break;
+
+            default: // puppeteer
+              result = await webScraperService.scrape(item.url, item.options);
+              break;
+          }
+
+          // Cache the result
+          if (result.success) {
+            await scrapingCacheService.cachePage(item.url, JSON.stringify(result));
+          }
+
+          await scrapingCacheService.markQueueCompleted(item.id, result);
+          return { url: item.url, result };
+
+        } catch (error) {
+          console.error(`Failed to scrape ${item.url}:`, error);
+          return { url: item.url, error: error.message };
+        }
+      });
+
+      const batchResults = await Promise.all(promises);
+      results.push(...batchResults);
+      processed += items.length;
+
+      // Update progress
+      batchJob.progress = Math.round((processed / batchJob.queued) * 100);
+      batchJob.results = results;
+      await redis.setex(`batch-scrape:${batchJobId}`, 7200, JSON.stringify(batchJob));
+    }
+
+    // Mark as completed
+    batchJob.status = 'completed';
+    batchJob.progress = 100;
+    batchJob.completedAt = new Date().toISOString();
+    await redis.setex(`batch-scrape:${batchJobId}`, 7200, JSON.stringify(batchJob));
+
+  } catch (error) {
+    console.error('Queue processing failed:', error);
+    const batchJob = JSON.parse(await redis.get(`batch-scrape:${batchJobId}`) || '{}');
+    batchJob.status = 'failed';
+    batchJob.error = error.message;
+    batchJob.completedAt = new Date().toISOString();
+    await redis.setex(`batch-scrape:${batchJobId}`, 7200, JSON.stringify(batchJob));
+  }
+}
+
+// Cache statistics endpoint
+router.get('/cache/stats', async (req: Request, res: Response) => {
+  try {
+    const stats = await scrapingCacheService.getCacheStats();
+
+    // Add additional statistics
+    const [
+      totalScrapedToday,
+      topDomains,
+      cacheHitRate
+    ] = await Promise.all([
+      redis.get('stats:scraped:today') || 0,
+      redis.zrevrange('stats:domains', 0, 9, 'WITHSCORES'),
+      calculateCacheHitRate()
+    ]);
+
+    res.json({
+      success: true,
+      cache: stats,
+      additional: {
+        totalScrapedToday,
+        topDomains: topDomains.map(([domain, count]) => ({ domain, count: parseInt(count) })),
+        cacheHitRate
+      }
+    });
+  } catch (error) {
+    console.error('Failed to get cache stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get cache statistics'
+    });
+  }
+});
+
+// Clear cache endpoint
+router.post('/cache/clear', async (req: Request, res: Response) => {
+  try {
+    const { tag, pattern } = req.body;
+
+    let deleted = 0;
+
+    if (tag) {
+      // Clear by tag
+      deleted = await scrapingCacheService.invalidateByTag(tag);
+    } else if (pattern) {
+      // Clear by pattern
+      const keys = await redis.keys(pattern);
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        deleted = keys.length;
+      }
+    } else {
+      // Clear all cache (dangerous!)
+      const keys = await redis.keys('cache:*');
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        deleted = keys.length;
+      }
+    }
+
+    res.json({
+      success: true,
+      deleted,
+      message: `Cleared ${deleted} cache entries`
+    });
+  } catch (error) {
+    console.error('Failed to clear cache:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear cache'
+    });
+  }
+});
+
+// Clean expired cache entries
+router.post('/cache/clean', async (req: Request, res: Response) => {
+  try {
+    const cleaned = await scrapingCacheService.cleanExpiredCache();
+
+    res.json({
+      success: true,
+      cleaned,
+      message: `Cleaned ${cleaned} expired cache entries`
+    });
+  } catch (error) {
+    console.error('Failed to clean cache:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clean cache'
+    });
+  }
+});
+
+// Helper function to calculate cache hit rate
+async function calculateCacheHitRate(): Promise<number> {
+  const totalHits = await redis.get('stats:cache:hits') || 0;
+  const totalMisses = await redis.get('stats:cache:misses') || 0;
+  const total = parseInt(totalHits) + parseInt(totalMisses);
+
+  return total > 0 ? Math.round((parseInt(totalHits) / total) * 100) : 0;
+}
+
+// Get scrape job status
+router.get('/scrape/:jobId', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+
+    if (!redis) {
+      return res.status(500).json({
+        success: false,
+        error: 'Cache not available'
+      });
+    }
+
+    const jobData = await redis.get(`scrape:job:${jobId}`);
+    if (!jobData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found'
+      });
+    }
+
+    const job = JSON.parse(jobData);
+    res.json({
+      success: true,
+      job
+    });
+
+  } catch (error) {
+    console.error('Failed to get scrape job:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get job status'
+    });
+  }
+});
+
+// Get scraping performance metrics
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const performanceMetrics = scraperService.getPerformanceMetrics();
+    const cacheStats = await scraperService.getCacheStats();
+
+    // Get database statistics
+    const dbStats = {};
+
+    // Scrape embeddings table stats
+    const scrapeResult = await lsembPool.query(`
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN llm_analysis IS NOT NULL THEN 1 END) as ai_processed,
+        COUNT(CASE WHEN entities IS NOT NULL THEN 1 END) as entities_extracted,
+        AVG(LENGTH(content)) as avg_content_length,
+        MAX(created_at) as last_scraped
+      FROM scrape_embeddings
+    `);
+
+    dbStats.scrapeEmbeddings = scrapeResult.rows[0];
+
+    // Overall scraping stats
+    const overallResult = await lsembPool.query(`
+      SELECT
+        COUNT(DISTINCT url) as unique_urls,
+        SUM(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) as last_24h,
+        SUM(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END) as last_7d
+      FROM scrape_embeddings
+    `);
+
+    dbStats.overall = overallResult.rows[0];
+
+    res.json({
+      success: true,
+      performance: performanceMetrics,
+      cache: cacheStats,
+      database: dbStats,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Failed to get stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get scraper statistics'
+    });
+  }
+});
+
+// Get AI configuration
+router.get('/ai-config', async (req: Request, res: Response) => {
+  try {
+    let config = {
+      enabled: true,
+      qualityThreshold: 0.3,
+      sentimentFilter: 'all',
+      topicsFilter: [],
+      customPrompt: ''
+    };
+
+    if (redis) {
+      const savedConfig = await redis.get('scraper:ai-config');
+      if (savedConfig) {
+        config = { ...config, ...JSON.parse(savedConfig) };
+      }
+    }
+
+    res.json({
+      success: true,
+      config
+    });
+
+  } catch (error) {
+    console.error('Failed to get AI config:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get AI configuration'
+    });
+  }
+});
+
+// ==================== PRODUCTION GRADE ENDPOINTS ====================
+
+// Queue Management
+router.post('/queue/add', async (req: Request, res: Response) => {
+  try {
+    const { url, options = {}, priority = 5, scheduledAt } = req.body;
+
+    if (!url) {
+      return res.status(400).json({
+        success: false,
+        error: 'URL is required'
+      });
+    }
+
+    const jobId = await scraperQueueService.addJob({
+      url,
+      options,
+      priority,
+      scheduledAt,
+      metadata: {
+        useCache: options.useCache ?? true,
+        llmFiltering: options.llmFiltering ?? true,
+        entityExtraction: options.entityExtraction ?? true
+      }
+    });
+
+    res.json({
+      success: true,
+      jobId,
+      message: 'Job added to queue'
+    });
+
+  } catch (error) {
+    console.error('Failed to add job to queue:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add job to queue'
+    });
+  }
+});
+
+// Bulk queue operations
+router.post('/queue/add-bulk', async (req: Request, res: Response) => {
+  try {
+    const { urls, options = {}, priority = 5 } = req.body;
+
+    if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid URLs array is required'
+      });
+    }
+
+    const jobs = urls.map(url => ({
+      url,
+      options,
+      priority,
+      metadata: {
+        useCache: options.useCache ?? true,
+        llmFiltering: options.llmFiltering ?? true,
+        entityExtraction: options.entityExtraction ?? true
+      }
+    }));
+
+    const jobIds = await scraperQueueService.addBulkJobs(jobs);
+
+    res.json({
+      success: true,
+      jobIds,
+      total: urls.length,
+      message: `Added ${urls.length} jobs to queue`
+    });
+
+  } catch (error) {
+    console.error('Failed to add bulk jobs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add bulk jobs'
+    });
+  }
+});
+
+// Get queue status
+router.get('/queue/status', async (req: Request, res: Response) => {
+  try {
+    const metrics = await scraperQueueService.getMetrics();
+    const queueStats = await scraperQueueService.getQueueStats();
+
+    res.json({
+      success: true,
+      metrics,
+      queueStats
+    });
+
+  } catch (error) {
+    console.error('Failed to get queue status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get queue status'
+    });
+  }
+});
+
+// Cancel job
+router.post('/queue/cancel/:jobId', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    const cancelled = await scraperQueueService.cancelJob(jobId);
+
+    res.json({
+      success: true,
+      cancelled,
+      message: cancelled ? 'Job cancelled' : 'Job not found or already processing'
+    });
+
+  } catch (error) {
+    console.error('Failed to cancel job:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cancel job'
+    });
+  }
+});
+
+// Monitoring Dashboard
+router.get('/monitor/realtime', async (req: Request, res: Response) => {
+  try {
+    const metrics = await scraperMonitorService.getRealTimeMetrics();
+    const alerts = await scraperMonitorService.getActiveAlerts();
+
+    res.json({
+      success: true,
+      metrics,
+      alerts
+    });
+
+  } catch (error) {
+    console.error('Failed to get real-time metrics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get real-time metrics'
+    });
+  }
+});
+
+// Historical metrics
+router.get('/monitor/history', async (req: Request, res: Response) => {
+  try {
+    const { hours = 24 } = req.query;
+    const metrics = await scraperMonitorService.getHistoricalMetrics(parseInt(hours as string));
+
+    res.json({
+      success: true,
+      metrics,
+      period: `${hours} hours`
+    });
+
+  } catch (error) {
+    console.error('Failed to get historical metrics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get historical metrics'
+    });
+  }
+});
+
+// Generate performance report
+router.get('/monitor/report', async (req: Request, res: Response) => {
+  try {
+    const { hours = 24, format = 'json' } = req.query;
+    const report = await scraperMonitorService.generateReport(parseInt(hours as string));
+
+    if (format === 'csv') {
+      // Convert to CSV (simplified)
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="scraper-report-${hours}h.csv"`);
+      return res.send(convertToCSV(report));
+    }
+
+    res.json({
+      success: true,
+      report
+    });
+
+  } catch (error) {
+    console.error('Failed to generate report:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate report'
+    });
+  }
+});
+
+// Quality Control
+router.post('/quality/check', async (req: Request, res: Response) => {
+  try {
+    const { url, title, content } = req.body;
+
+    if (!url || !title || !content) {
+      return res.status(400).json({
+        success: false,
+        error: 'URL, title, and content are required'
+      });
+    }
+
+    // Check for duplicates
+    const duplicateCheck = await scraperQualityService.checkDuplicate(url, title, content);
+
+    // Analyze quality
+    const qualityAnalysis = await scraperQualityService.analyzeQuality(url, title, content);
+
+    // Update freshness
+    const freshness = await scraperQualityService.updateFreshness(url);
+
+    res.json({
+      success: true,
+      duplicate: duplicateCheck,
+      quality: qualityAnalysis,
+      freshness
+    });
+
+  } catch (error) {
+    console.error('Failed to check quality:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check quality'
+    });
+  }
+});
+
+// Get quality statistics
+router.get('/quality/stats', async (req: Request, res: Response) => {
+  try {
+    const { days = 7 } = req.query;
+    const stats = await scraperQualityService.getQualityStats(parseInt(days as string));
+
+    res.json({
+      success: true,
+      stats,
+      period: `${days} days`
+    });
+
+  } catch (error) {
+    console.error('Failed to get quality stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get quality stats'
+    });
+  }
+});
+
+// Bulk status check
+router.post('/status/bulk', async (req: Request, res: Response) => {
+  try {
+    const { jobIds } = req.body;
+
+    if (!jobIds || !Array.isArray(jobIds)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Job IDs array is required'
+      });
+    }
+
+    const statuses = await scraperQueueService.getBulkJobStatus(jobIds);
+
+    res.json({
+      success: true,
+      total: jobIds.length,
+      statuses: Object.fromEntries(statuses)
+    });
+
+  } catch (error) {
+    console.error('Failed to get bulk status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get bulk status'
+    });
+  }
+});
+
+// Export results
+router.post('/export', async (req: Request, res: Response) => {
+  try {
+    const { format = 'json', urls, dateRange, filters } = req.body;
+
+    // Query results based on criteria
+    let query = `
+      SELECT url, title, content, created_at, llm_analysis, entities
+      FROM scrape_embeddings
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (urls && urls.length > 0) {
+      query += ` AND url = ANY($${paramIndex})`;
+      params.push(urls);
+      paramIndex++;
+    }
+
+    if (dateRange) {
+      query += ` AND created_at BETWEEN $${paramIndex} AND $${paramIndex + 1}`;
+      params.push(dateRange.start, dateRange.end);
+      paramIndex += 2;
+    }
+
+    if (filters) {
+      if (filters.minQualityScore) {
+        query += ` AND (llm_analysis->>'qualityScore')::float >= $${paramIndex}`;
+        params.push(filters.minQualityScore);
+        paramIndex++;
+      }
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT 10000`;
+
+    const result = await lsembPool.query(query, params);
+
+    // Format based on export type
+    if (format === 'csv') {
+      const csv = convertResultsToCSV(result.rows);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="scraped-data.csv"`);
+      return res.send(csv);
+    }
+
+    if (format === 'xml') {
+      const xml = convertResultsToXML(result.rows);
+      res.setHeader('Content-Type', 'application/xml');
+      res.setHeader('Content-Disposition', `attachment; filename="scraped-data.xml"`);
+      return res.send(xml);
+    }
+
+    // Default JSON
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length,
+      format
+    });
+
+  } catch (error) {
+    console.error('Failed to export results:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to export results'
+    });
+  }
+});
+
+// Schedule recurring scrape
+router.post('/schedule', async (req: Request, res: Response) => {
+  try {
+    const { urls, schedule, options = {} } = req.body;
+
+    if (!urls || !schedule) {
+      return res.status(400).json({
+        success: false,
+        error: 'URLs and schedule are required'
+      });
+    }
+
+    // Parse cron-like schedule (simplified)
+    // For production, use a proper cron library
+    const jobId = uuidv4();
+
+    // Store schedule in Redis
+    if (redis) {
+      await redis.hset('scraper:schedules', jobId, JSON.stringify({
+        urls,
+        schedule,
+        options,
+        createdAt: new Date().toISOString(),
+        lastRun: null,
+        nextRun: calculateNextRun(schedule)
+      }));
+    }
+
+    res.json({
+      success: true,
+      jobId,
+      nextRun: calculateNextRun(schedule),
+      message: 'Recurring scrape scheduled'
+    });
+
+  } catch (error) {
+    console.error('Failed to schedule scrape:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to schedule scrape'
+    });
+  }
+});
+
+// Configuration endpoints
+router.post('/config/queue', async (req: Request, res: Response) => {
+  try {
+    const { concurrencyLimit, rateLimits } = req.body;
+
+    if (concurrencyLimit) {
+      scraperQueueService.setConcurrencyLimit(concurrencyLimit);
+    }
+
+    if (rateLimits) {
+      for (const [domain, rpm] of Object.entries(rateLimits)) {
+        scraperQueueService.setRateLimit(domain, rpm as number);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Queue configuration updated'
+    });
+
+  } catch (error) {
+    console.error('Failed to update queue config:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update queue configuration'
+    });
+  }
+});
+
+router.post('/config/monitoring', async (req: Request, res: Response) => {
+  try {
+    const { alertThresholds, notifications } = req.body;
+
+    scraperMonitorService.updateConfig({
+      alertThresholds,
+      notifications
+    });
+
+    res.json({
+      success: true,
+      message: 'Monitoring configuration updated'
+    });
+
+  } catch (error) {
+    console.error('Failed to update monitoring config:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update monitoring configuration'
+    });
+  }
+});
+
+// Helper functions
+function convertToCSV(data: any): string {
+  const headers = Object.keys(data);
+  const csvRows = [headers.join(',')];
+
+  for (const row of [data.summary, data.trends]) {
+    const values = headers.map(header => {
+      const value = (row as any)[header];
+      return typeof value === 'string' ? `"${value}"` : value;
+    });
+    csvRows.push(values.join(','));
+  }
+
+  return csvRows.join('\n');
+}
+
+function convertResultsToCSV(rows: any[]): string {
+  if (rows.length === 0) return '';
+
+  const headers = ['url', 'title', 'created_at', 'quality_score', 'entity_count'];
+  const csvRows = [headers.join(',')];
+
+  for (const row of rows) {
+    const qualityScore = row.llm_analysis?.qualityScore || 0;
+    const entityCount = row.entities?.length || 0;
+
+    const values = [
+      `"${row.url}"`,
+      `"${row.title?.replace(/"/g, '""') || ''}"`,
+      row.created_at,
+      qualityScore,
+      entityCount
+    ];
+
+    csvRows.push(values.join(','));
+  }
+
+  return csvRows.join('\n');
+}
+
+function convertResultsToXML(rows: any[]): string {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<scraped_data>\n';
+
+  for (const row of rows) {
+    xml += '  <item>\n';
+    xml += `    <url>${escapeXml(row.url)}</url>\n`;
+    xml += `    <title>${escapeXml(row.title || '')}</title>\n`;
+    xml += `    <created_at>${row.created_at}</created_at>\n`;
+    xml += `    <quality_score>${row.llm_analysis?.qualityScore || 0}</quality_score>\n`;
+    xml += `    <entity_count>${row.entities?.length || 0}</entity_count>\n`;
+    xml += '  </item>\n';
+  }
+
+  xml += '</scraped_data>';
+  return xml;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function calculateNextRun(schedule: string): string {
+  // Simplified implementation
+  // In production, use a proper cron parser
+  const now = new Date();
+  const next = new Date(now.getTime() + 3600000); // Add 1 hour
+  return next.toISOString();
+}
+
+/**
+ * Scraper service health check
+ */
+router.get('/api/v2/scraper/health', async (req: Request, res: Response) => {
+  try {
+    const startTime = Date.now();
+
+    // Check all scraper services
+    const services = {
+      webScraper: !!webScraperService,
+      intelligentScraper: !!intelligentScraperService,
+      contentAnalyzer: !!contentAnalyzerService,
+      projectSiteManager: !!projectSiteManagerService,
+      nerService: !!nerService,
+      categoryScraper: !!categoryScraperService,
+      deduplication: !!deduplicationService,
+      scrapingCache: !!scrapingCacheService,
+      scraperQueue: !!scraperQueueService,
+      scraperMonitor: !!scraperMonitorService,
+      scraperQuality: !!scraperQualityService
+    };
+
+    // Check Redis connectivity
+    let redisStatus = 'disconnected';
+    if (redis) {
+      try {
+        await redis.ping();
+        redisStatus = 'connected';
+      } catch (error) {
+        redisStatus = 'error';
+      }
+    }
+
+    // Check database connectivity
+    let dbStatus = 'disconnected';
+    try {
+      const testClient = await lsembPool.connect();
+      await testClient.query('SELECT 1');
+      testClient.release();
+      dbStatus = 'connected';
+    } catch (error) {
+      dbStatus = 'error';
+    }
+
+    const responseTime = Date.now() - startTime;
+
+    res.json({
+      status: 'healthy',
+      service: 'Scraper',
+      responseTime: `${responseTime}ms`,
+      components: {
+        services,
+        redis: redisStatus,
+        database: dbStatus
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'unhealthy',
+      service: 'Scraper',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * Scraper service status (authenticated endpoint)
+ */
+router.get('/api/v2/scraper/status', async (req: Request, res: Response) => {
+  try {
+    // Get comprehensive status
+    const [
+      queueMetrics,
+      cacheStats,
+      performanceMetrics
+    ] = await Promise.all([
+      scraperQueueService.getMetrics().catch(() => null),
+      scrapingCacheService.getCacheStats().catch(() => null),
+      scraperService.getPerformanceMetrics().catch(() => null)
+    ]);
+
+    // Get recent job counts
+    let recentJobs = 0;
+    if (redis) {
+      const today = new Date().toISOString().split('T')[0];
+      const dailyCount = await redis.get(`stats:scraped:${today}`);
+      recentJobs = parseInt(dailyCount || '0');
+    }
+
+    res.json({
+      status: 'active',
+      service: 'Scraper',
+      metrics: {
+        jobsToday: recentJobs,
+        queue: queueMetrics,
+        cache: cacheStats,
+        performance: performanceMetrics
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'error',
+      service: 'Scraper',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 export default router;
+

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
-import Redis from 'ioredis';
+import { redis } from '../config/redis';
 import RAGAnythingService from '../services/raganything.service';
 import multer from 'multer';
 import path from 'path';
@@ -9,11 +9,8 @@ const router = Router();
 const pgPool = new Pool({
   connectionString: process.env.DATABASE_URL
 });
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  db: parseInt(process.env.REDIS_DB || '2')
-});
+
+// Use centralized Redis configuration (port 6379)
 
 // Initialize RAGAnything service
 const ragAnything = new RAGAnythingService(pgPool, redis);

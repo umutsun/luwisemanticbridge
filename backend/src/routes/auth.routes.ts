@@ -2,12 +2,13 @@ import { Router, Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
 import { CreateUserDto, LoginDto } from '../types/user.types';
 import { authenticateToken } from '../middleware/auth.middleware';
+import { createAuthRateLimit, createUploadRateLimit } from '../middleware/rate-limit.middleware';
 
 const router = Router();
 const authService = new AuthService();
 
 // Register new user
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', createAuthRateLimit.middleware, async (req: Request, res: Response) => {
   try {
     const userData: CreateUserDto = req.body;
 
@@ -31,7 +32,7 @@ router.post('/register', async (req: Request, res: Response) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
     res.status(201).json({
@@ -44,7 +45,7 @@ router.post('/register', async (req: Request, res: Response) => {
 });
 
 // Login user
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', createAuthRateLimit.middleware, async (req: Request, res: Response) => {
   try {
     const loginData: LoginDto = req.body;
 
@@ -59,7 +60,7 @@ router.post('/login', async (req: Request, res: Response) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
     res.json({
@@ -87,7 +88,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
     res.json({ accessToken: tokens.accessToken });

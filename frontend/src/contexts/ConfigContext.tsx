@@ -118,11 +118,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
         setStoredToken(authToken);
       }
 
-      const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings/?t=${Date.now()}`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-        },
+      const headers: { [key: string]: string } = {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+      };
+
+      // Add Authorization header if token exists
+      const token = authToken || storedToken;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/v2/settings/?t=${Date.now()}`, {
+        headers,
       });
 
       if (!response.ok) {

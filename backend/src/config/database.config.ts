@@ -6,12 +6,15 @@ dotenv.config();
 
 // LSEMB System Database - Get from .env file
 export const lsembDbConfig = {
-  host: process.env.POSTGRES_HOST || 'localhost',
+  host: process.env.POSTGRES_HOST || '91.99.229.96',
   port: parseInt(process.env.POSTGRES_PORT || '5432'),
   database: process.env.POSTGRES_DB || 'lsemb',
   user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || '',
-  ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
+  password: process.env.POSTGRES_PASSWORD || '123456',
+  ssl: false, // SSL disabled for local development
+  connectionTimeoutMillis: 30000, // 30 seconds timeout
+  idleTimeoutMillis: 30000,
+  max: 20 // Maximum number of clients in the pool
 };
 
 
@@ -78,7 +81,7 @@ export async function initializeConfigs(): Promise<void> {
 
 // Sync API keys from environment variables to database
 export async function syncAPIKeysToDatabase(): Promise<void> {
-  console.log('🔄 Syncing API keys from environment variables to database...');
+  console.log('🔄 Syncing API keys from environment variables to database (only if not exists)...');
 
   try {
     const apiKeys = [
@@ -94,29 +97,25 @@ export async function syncAPIKeysToDatabase(): Promise<void> {
       if (apiKey.value) {
         // Check if key already exists
         const existing = await lsembPool.query(
-          'SELECT key FROM settings WHERE key = $1',
+          'SELECT key, value FROM settings WHERE key = $1',
           [apiKey.key]
         );
 
         if (existing.rows.length === 0) {
-          // Insert new key
+          // Insert new key only if it doesn't exist
           await lsembPool.query(
             'INSERT INTO settings (key, value, category, description) VALUES ($1, $2, $3, $4)',
             [apiKey.key, apiKey.value, 'api_keys', `API key for ${apiKey.key.replace('.apiKey', '').replace('.', ' ').toUpperCase()}`]
           );
           console.log(`✅ Added ${apiKey.key} to database`);
         } else {
-          // Update existing key
-          await lsembPool.query(
-            'UPDATE settings SET value = $1 WHERE key = $2',
-            [apiKey.value, apiKey.key]
-          );
-          console.log(`✅ Updated ${apiKey.key} in database`);
+          // Keep existing key in database, don't override
+          console.log(`🔒 Keeping existing ${apiKey.key} in database (not overriding from environment)`);
         }
       }
     }
 
-    console.log('✅ API keys synced to database successfully');
+    console.log('✅ API keys sync completed successfully');
   } catch (error) {
     console.error('❌ Failed to sync API keys to database:', error);
     throw error;
@@ -140,13 +139,42 @@ export function getAppConfig(): any {
   return appConfig;
 }
 
-// LSEMB System Database Pool
+// LSEMB System Database Pool - OPTIMIZED
 export const lsembPool = new Pool({
   ...lsembDbConfig,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 30000,
+  max: 25, // Increased from 20 to 25 for better concurrency
+  idleTimeoutMillis: 10000, // Reduced from 30000 to 10000 for faster cleanup
+  connectionTimeoutMillis: 60000, // Increased from 30000 to 60000 for reliability
+  // Add connection pool monitoring
+  allowExitOnIdle: false,
+  // Enable automatic connection recovery
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
 });
+
+// Connection pool monitoring and memory leak prevention
+lsembPool.on('connect', (client) => {
+  console.log('🔗 Database client connected');
+});
+
+lsembPool.on('error', (err, client) => {
+  console.error('❌ Database client error:', err);
+});
+
+lsembPool.on('remove', (client) => {
+  console.log('🗑️ Database client removed from pool');
+});
+
+// Monitor pool status every 30 seconds
+setInterval(() => {
+  const totalCount = lsembPool.totalCount;
+  const idleCount = lsembPool.idleCount;
+  const waitingCount = lsembPool.waitingCount;
+
+  if (totalCount > 15) { // Alert if using more than 60% of pool
+    console.log(`⚠️ Pool usage: ${totalCount}/25 (Idle: ${idleCount}, Waiting: ${waitingCount})`);
+  }
+}, 30000);
 
 // Alias for backward compatibility - some services still use lsembPool
 export const lsembPool = lsembPool;

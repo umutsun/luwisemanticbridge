@@ -13,8 +13,9 @@ export const API_CONFIG = {
     messages: '/api/v2/messages',
 
     // Documents
-    documents: '/api/v2/documents',
-    upload: '/api/v2/documents/upload',
+    documents: '/documents',
+    upload: '/documents/upload',
+    history: '/api/v2/history/documents',
 
     // Embeddings
     embeddings: '/api/v2/embeddings',

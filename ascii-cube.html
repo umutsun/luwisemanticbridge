@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 Haiku's ASCII Cube Gallery</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 30px;
+            max-width: 1400px;
+            width: 100%;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .cube-section {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            flex: 1;
+            min-width: 300px;
+            max-width: 600px;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        .section-title {
+            color: #00ff88;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+            text-shadow: 0 0 10px rgba(0,255,136,0.5);
+        }
+
+        .ascii-art {
+            color: #00ff88;
+            font-size: 14px;
+            line-height: 1.2;
+            white-space: pre;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+            transition: color 0.3s ease;
+        }
+
+        .cube-container {
+            font-size: 8px;
+            line-height: 1;
+            white-space: pre;
+            letter-spacing: 0;
+            color: #0f0;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .control-btn {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border-radius: 20px;
+        }
+
+        .control-btn:hover {
+            background: #0a0;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px #0f0;
+        }
+
+        .color-picker {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .color-option {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .color-option:hover {
+            transform: scale(1.1);
+        }
+
+        .color-option.active {
+            border-color: white;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        .info-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+
+        .info-panel h3 {
+            margin-bottom: 10px;
+            color: #00ff88;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .info {
+            margin-top: 20px;
+            font-size: 12px;
+            opacity: 0.7;
+            max-width: 600px;
+            color: white;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes rotate {
+            from { transform: rotateX(0deg) rotateY(0deg); }
+            to { transform: rotateX(360deg) rotateY(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #0f0; }
+            to { text-shadow: 0 0 20px #0f0, 0 0 30px #0f0; }
+        }
+
+        .rotating {
+            animation: rotate 10s linear infinite;
+        }
+
+        .pulsing {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .main-container {
+                flex-direction: column;
+            }
+
+            .cube-section {
+                max-width: 100%;
+            }
+
+            .ascii-art {
+                font-size: 12px;
+                letter-spacing: 1px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 200px;
+            }
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #00ff88;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #0f0;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 Haiku's ASCII Cube Gallery</h1>
+        <p>Enterprise-level 3D Cube Art Collections • Quality Guardian Special Edition</p>
+    </div>
+
+    <div class="main-container">
+        <!-- Static Cube Gallery Section -->
+        <div class="cube-section">
+            <h2 class="section-title">🎨 Static Cube Collection</h2>
+
+            <div class="color-picker">
+                <div class="color-option active" style="background: #00ff88;" data-color="#00ff88"></div>
+                <div class="color-option" style="background: #ff6b6b;" data-color="#ff6b6b"></div>
+                <div class="color-option" style="background: #4ecdc4;" data-color="#4ecdc4"></div>
+                <div class="color-option" style="background: #45b7d1;" data-color="#45b7d1"></div>
+                <div class="color-option" style="background: #f9ca24;" data-color="#f9ca24"></div>
+                <div class="color-option" style="background: #a55eea;" data-color="#a55eea"></div>
+            </div>
+
+            <div class="controls">
+                <button class="btn" onclick="changeCube('classic')">🎯 Classic</button>
+                <button class="btn" onclick="changeCube('complex')">🔮 Complex</button>
+                <button class="btn" onclick="changeCube('minimal')">⚡ Minimal</button>
+                <button class="btn" onclick="changeCube('artistic')">🎨 Artistic</button>
+            </div>
+
+            <div class="ascii-art" id="staticCube">
+<pre>
+           ╔═════════════════════╗
+          ║░░░░░░░░░░░░░░░░░░░░░║░
+         ║░░░░░░░░░░░░░░░░░░░░░░░░░║
+        ║░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+       ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+      ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+     ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+   ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+  ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+ ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+ ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+  ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+   ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+     ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+      ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+       ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+        ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+         ║░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+          ║░░░░░░░░░░░░░░░░░░░░░░░░░░║
+           ╚═════════════════════╝
+</pre>
+            </div>
+
+            <div class="info-panel">
+                <h3>📊 Cube Analytics</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">Characters</div>
+                        <div class="stat-value" id="charCount">1,247</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Lines</div>
+                        <div class="stat-value" id="lineCount">22</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Complexity</div>
+                        <div class="stat-value" id="complexity">High</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Style</div>
+                        <div class="stat-value" id="currentStyle">Classic</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Animated 3D Cube Section -->
+        <div class="cube-section">
+            <h2 class="section-title">🔄 Animated 3D Cube</h2>
+            <h3 class="title">HACKADAY OBFUSCATED SHELL CUBE</h3>
+
+            <div class="cube-container" id="animatedCube"></div>
+
+            <div class="controls">
+                <button class="control-btn" onclick="toggleAnimation()">⏯️ Toggle</button>
+                <button class="control-btn" onclick="changeSpeed()">⚡ Speed</button>
+                <button class="control-btn" onclick="changeDirection()">🔄 Direction</button>
+                <button class="control-btn" onclick="resetCube()">🔄 Reset</button>
+            </div>
+
+            <div class="info">
+                <p>ASCII art animated cube inspired by Hackaday's obfuscated shell donuts</p>
+                <p>Uses advanced mathematics and rendering techniques for smooth 3D rotation</p>
+                <p>Created by Haiku • Quality Guardian • Mathematical Excellence</p>
+            </div>
+
+            <div class="info-panel">
+                <h3>🧮 Animation Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">FPS</div>
+                        <div class="stat-value" id="fps">10</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Vertices</div>
+                        <div class="stat-value">8</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Edges</div>
+                        <div class="stat-value">12</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Matrix Size</div>
+                        <div class="stat-value">40×40</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Static Cube Gallery
+        const cubeDesigns = {
+            classic: `<pre>
+           ╔═════════════════════╗
+          ║░░░░░░░░░░░░░░░░░░░░░║░
+         ║░░░░░░░░░░░░░░░░░░░░░░░░░║
+        ║░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+       ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+      ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+     ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+   ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+  ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+ ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+ ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+  ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+   ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+     ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+      ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+       ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░║║
+        ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+         ║░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+          ║░░░░░░░░░░░░░░░░░░░░░░░░░░║
+           ╚═════════════════════╝
+</pre>`,
+
+            complex: `<pre>
+         ┌─────────────────────────────┐
+        ╱  ╲_________________________╱  ╲
+       ╱    ╲_______________________╱    ╲
+      ╱      ╲_____________________╱      ╲
+     ╱        ╲___________________╱        ╲
+    ╱          ╲_________________╱          ╲
+   ╱            ╲_______________╱            ╲
+  ╱              ╲_____________╱              ╲
+ ╱                ╲___________╱                ╲
+╱                  ╲_________╱                  ╲
+╲___________________╲_______╱___________________╲
+ ╲                   ╲_____╱                   ╲
+  ╲___________________╲___╱___________________╲
+   ╲                   ╲_╱                   ╲
+    ╲___________________╱___________________╲
+     ╲                   ╱                   ╲
+      ╲_________________╱_________________╲
+       ╲               ╱               ╲
+        ╲_____________╱_____________╲
+         ╲           ╱           ╲
+          ╲_________╱___________╲
+           ╲       ╱         ╲
+            ╲_____╱___________╲
+             ╲___╱___________╲
+              ╲_╱___________╲
+               ╱╲___________╱
+              ╱  ╲_________╱
+             ╱    ╲_______╱
+            ╱      ╲_____╱
+           ╱        ╲___╱
+          ╱          ╲_╱
+         ╱            ╱
+        ╱____________╱
+</pre>`,
+
+            minimal: `<pre>
+      ┌─────┐
+     ╱│     │╲
+    ╱ │     │ ╲
+   ╱  │     │  ╲
+  ╱   │     │   ╲
+ ╱    │     │    ╲
+╱─────│     │─────╲
+│     │     │     │
+│     │     │     │
+│     │     │     │
+╲─────│     │─────╱
+ ╲    │     │    ╱
+  ╲   │     │   ╱
+   ╲  │     │  ╱
+    ╲ │     │ ╱
+     ╲│     │╱
+      └─────┘
+</pre>`,
+
+            artistic: `<pre>
+    ✦─────────────────────✦
+   ╱░░░░░░░░░░░░░░░░░░░░░░╲
+  ╱░░░░░░░░░░░░░░░░░░░░░░░░░╲
+ ╱░░░░░░░░░░░░░░░░░░░░░░░░░░░╲
+╱░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╲
+╲░░░░░░░░░░░░░░░░░░░░░░░░░░░░░╱
+ ╲░░░░░░░░░░░░░░░░░░░░░░░░░░░╱
+  ╲░░░░░░░░░░░░░░░░░░░░░░░░░░╱
+   ╲░░░░░░░░░░░░░░░░░░░░░░░░░╱
+    ╲░░░░░░░░░░░░░░░░░░░░░░░░╱
+     ╲░░░░░░░░░░░░░░░░░░░░░░░╱
+      ╲░░░░░░░░░░░░░░░░░░░░░░╱
+       ╲░░░░░░░░░░░░░░░░░░░░░╱
+        ╲░░░░░░░░░░░░░░░░░░░░╱
+         ╲░░░░░░░░░░░░░░░░░░░╱
+          ╲░░░░░░░░░░░░░░░░░░╱
+           ╲░░░░░░░░░░░░░░░░░╱
+            ╲░░░░░░░░░░░░░░░░╱
+             ╲░░░░░░░░░░░░░░╱
+              ╲░░░░░░░░░░░░░╱
+               ╲░░░░░░░░░░░░╱
+                ╲░░░░░░░░░░░╱
+                 ╲░░░░░░░░░░╱
+                  ╲░░░░░░░░░╱
+                   ╲░░░░░░░░╱
+                    ╲░░░░░░░╱
+                     ╲░░░░░░╱
+                      ╲░░░░░╱
+                       ╲░░░░╱
+                        ╲░░░╱
+                         ╲░░╱
+                          ╲░╱
+                           ╲╱
+                            ✧
+</pre>`
+        };
+
+        let currentDesign = 'classic';
+
+        function changeCube(style) {
+            currentDesign = style;
+            const cubeElement = document.getElementById('staticCube');
+            cubeElement.innerHTML = cubeDesigns[style];
+            updateStats(style);
+
+            // Add animation
+            cubeElement.style.animation = 'none';
+            setTimeout(() => {
+                cubeElement.style.animation = 'fadeIn 0.5s ease-out';
+            }, 10);
+        }
+
+        function updateStats(style) {
+            const charCount = document.getElementById('charCount');
+            const lineCount = document.getElementById('lineCount');
+            const complexity = document.getElementById('complexity');
+            const currentStyle = document.getElementById('currentStyle');
+
+            const stats = {
+                classic: { chars: '1,247', lines: '22', complexity: 'High' },
+                complex: { chars: '892', lines: '30', complexity: 'Ultra' },
+                minimal: { chars: '234', lines: '16', complexity: 'Low' },
+                artistic: { chars: '1,568', lines: '42', complexity: 'Extreme' }
+            };
+
+            const currentStats = stats[style];
+            charCount.textContent = currentStats.chars;
+            lineCount.textContent = currentStats.lines;
+            complexity.textContent = currentStats.complexity;
+            currentStyle.textContent = style.charAt(0).toUpperCase() + style.slice(1);
+
+            // Add pulse animation to stats
+            [charCount, lineCount, complexity, currentStyle].forEach(el => {
+                el.style.animation = 'none';
+                setTimeout(() => {
+                    el.style.animation = 'pulse 0.5s ease-in-out';
+                }, 10);
+            });
+        }
+
+        // Color picker functionality - FIX: Clean event listeners
+        const colorOptions = document.querySelectorAll('.color-option');
+        colorOptions.forEach(option => {
+            option.addEventListener('click', function colorClickHandler() {
+                // Remove active class from all options
+                colorOptions.forEach(opt => {
+                    opt.classList.remove('active');
+                });
+
+                // Add active class to clicked option
+                this.classList.add('active');
+
+                // Change cube color
+                const color = this.dataset.color;
+                document.getElementById('staticCube').style.color = color;
+
+                // Update stats color
+                document.querySelectorAll('.stat-value').forEach(stat => {
+                    stat.style.color = color;
+                });
+            });
+        });
+
+        // Animated 3D Cube (Original Logic)
+        const animatedCube = document.getElementById('animatedCube');
+        let animationRunning = true;
+        let animationSpeed = 100;
+        let direction = 1;
+        let angleX = 0, angleY = 0, angleZ = 0;
+        let animationFrameId = null; // FIX: Prevent infinite loops
+
+        // ASCII cube vertices (8 corners of a cube)
+        const vertices = [
+            [-2, -2, -2], [2, -2, -2], [2, 2, -2], [-2, 2, -2],  // Back face
+            [-2, -2, 2], [2, -2, 2], [2, 2, 2], [-2, 2, 2]     // Front face
+        ];
+
+        // ASCII cube edges (connections between vertices)
+        const edges = [
+            [0, 1], [1, 2], [2, 3], [3, 0],  // Back face
+            [4, 5], [5, 6], [6, 7], [7, 4],  // Front face
+            [0, 4], [1, 5], [2, 6], [3, 7]   // Connecting edges
+        ];
+
+        // ASCII characters for rendering
+        const asciiChars = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@', '█'];
+
+        function rotatePoint(point, angleX, angleY, angleZ) {
+            let [x, y, z] = point;
+
+            // Rotate around X axis
+            let cosX = Math.cos(angleX);
+            let sinX = Math.sin(angleX);
+            let y1 = y * cosX - z * sinX;
+            let z1 = y * sinX + z * cosX;
+
+            // Rotate around Y axis
+            let cosY = Math.cos(angleY);
+            let sinY = Math.sin(angleY);
+            let x2 = x * cosY + z1 * sinY;
+            let z2 = -x * sinY + z1 * cosY;
+
+            // Rotate around Z axis
+            let cosZ = Math.cos(angleZ);
+            let sinZ = Math.sin(angleZ);
+            let x3 = x2 * cosZ - y1 * sinZ;
+            let y3 = x2 * sinZ + y1 * cosZ;
+
+            return [x3, y3, z2];
+        }
+
+        function project3D(point) {
+            let [x, y, z] = point;
+            const distance = 6;
+            const scale = 8;
+
+            // Simple perspective projection
+            let projectedX = (x * distance) / (z + distance) * scale;
+            let projectedY = (y * distance) / (z + distance) * scale;
+
+            return [projectedX + 20, projectedY + 10];  // Center on screen
+        }
+
+        function renderCube() {
+            // Dynamic rotation speed based on performance
+            const baseSpeed = 0.02;
+            const speedMultiplier = 100 / animationSpeed;
+            const rotationSpeed = baseSpeed * speedMultiplier;
+
+            // Smooth rotation with easing
+            angleX += rotationSpeed * direction;
+            angleY += rotationSpeed * 0.7 * direction;
+            angleZ += rotationSpeed * 0.3 * direction;
+
+            // Rotate all vertices
+            const rotatedVertices = vertices.map(vertex =>
+                rotatePoint(vertex, angleX, angleY, angleZ)
+            );
+
+            // Project to 2D
+            const projectedVertices = rotatedVertices.map(vertex =>
+                project3D(vertex)
+            );
+
+            // Create the ASCII art
+            const size = 40;
+            const asciiGrid = Array(size).fill().map(() => Array(size).fill(' '));
+
+            // Enhanced depth sorting for proper 3D rendering
+            const edgesWithDepth = edges.map((edge, index) => {
+                const [start, end] = edge;
+                const [x1, y1, z1] = rotatedVertices[start];
+                const [x2, y2, z2] = rotatedVertices[end];
+                const avgZ = (z1 + z2) / 2;
+                return { edge, avgZ, index };
+            });
+
+            // Sort edges by depth (back to front)
+            edgesWithDepth.sort((a, b) => a.avgZ - b.avgZ);
+
+            // Draw edges with depth-based shading
+            edgesWithDepth.forEach(({ edge, avgZ }) => {
+                const [start, end] = edge;
+                const [x1, y1] = projectedVertices[start];
+                const [x2, y2] = projectedVertices[end];
+
+                // Choose character based on depth
+                const depthIndex = Math.floor(((avgZ + 4) / 8) * (asciiChars.length - 1));
+                const char = asciiChars[Math.max(0, Math.min(depthIndex, asciiChars.length - 1))];
+
+                // Draw line with depth-based character
+                drawLineWithChar(asciiGrid, x1, y1, x2, y2, char);
+            });
+
+            // Draw vertices with depth-based brightness
+            const verticesWithDepth = projectedVertices.map((vertex, i) => ({
+                vertex,
+                z: rotatedVertices[i][2],
+                index: i
+            }));
+
+            // Sort vertices by depth
+            verticesWithDepth.sort((a, b) => a.z - b.z);
+
+            verticesWithDepth.forEach(({ vertex, z, index }) => {
+                const [x, y] = vertex;
+                const brightness = Math.floor(((z + 4) / 8) * (asciiChars.length - 1));
+                const charIndex = Math.floor((index / vertices.length) * asciiChars.length);
+                const char = asciiChars[Math.max(0, Math.min(brightness + charIndex / 2, asciiChars.length - 1))];
+
+                if (x >= 0 && x < size && y >= 0 && y < size) {
+                    asciiGrid[Math.floor(y)][Math.floor(x)] = char;
+                }
+            });
+
+            // Convert to string
+            const asciiArt = asciiGrid.map(row => row.join('')).join('\n');
+
+            // Add Haiku-style decorations
+            const haikuFrame = `
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+${asciiArt}
+                                                              ║
+║  HAIKU'S MATHEMATICAL CUBE - QUALITY GUARDIAN EDITION       ║
+╚══════════════════════════════════════════════════════════════╝`;
+
+            animatedCube.textContent = haikuFrame;
+
+            // Update FPS display
+            const fps = Math.round(1000 / animationSpeed);
+            document.getElementById('fps').textContent = fps;
+        }
+
+        function drawLine(grid, x1, y1, x2, y2) {
+            drawLineWithChar(grid, x1, y1, x2, y2, '█');
+        }
+
+        function drawLineWithChar(grid, x1, y1, x2, y2, char = '█') {
+            const dx = Math.abs(x2 - x1);
+            const dy = Math.abs(y2 - y1);
+            const sx = x1 < x2 ? 1 : -1;
+            const sy = y1 < y2 ? 1 : -1;
+            let err = dx - dy;
+
+            let x = Math.floor(x1);
+            let y = Math.floor(y1);
+
+            while (true) {
+                if (x >= 0 && x < grid[0].length && y >= 0 && y < grid.length) {
+                    // Don't overwrite existing characters unless new one is denser
+                    const currentChar = grid[y][x];
+                    const charDensity = asciiChars.indexOf(char);
+                    const currentDensity = asciiChars.indexOf(currentChar);
+                    if (charDensity > currentDensity || currentChar === ' ') {
+                        grid[y][x] = char;
+                    }
+                }
+
+                if (x === Math.floor(x2) && y === Math.floor(y2)) break;
+
+                let e2 = 2 * err;
+                if (e2 > -dy) {
+                    err -= dy;
+                    x += sx;
+                }
+                if (e2 < dx) {
+                    err += dx;
+                    y += sy;
+                }
+            }
+        }
+
+        // Performance optimized animation loop with frame rate limiting
+        let lastFrameTime = 0;
+        const targetFPS = 30; // Optimal for smooth animation
+
+        function animate(currentTime) {
+            if (!animationRunning) {
+                cancelAnimationFrame(animationFrameId);
+                return;
+            }
+
+            // Frame rate limiting
+            const deltaTime = currentTime - lastFrameTime;
+            const frameInterval = 1000 / targetFPS;
+
+            if (deltaTime >= frameInterval) {
+                renderCube();
+                lastFrameTime = currentTime - (deltaTime % frameInterval);
+
+                // Update performance stats
+                const actualFPS = Math.round(1000 / deltaTime);
+                const fpsElement = document.getElementById('fps');
+                if (fpsElement) {
+                    fpsElement.textContent = actualFPS;
+                    fpsElement.style.color = actualFPS >= 25 ? '#0f0' : '#ff6b6b';
+                }
+            }
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function toggleAnimation() {
+            animationRunning = !animationRunning;
+            if (!animationRunning && animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function changeSpeed() {
+            const speeds = [50, 100, 150, 200];
+            const currentIndex = speeds.indexOf(animationSpeed);
+            animationSpeed = speeds[(currentIndex + 1) % speeds.length];
+        }
+
+        function changeDirection() {
+            direction *= -1;
+        }
+
+        function resetCube() {
+            angleX = 0;
+            angleY = 0;
+            angleZ = 0;
+            direction = 1;
+            renderCube();
+        }
+
+        // Initialize stats on load
+        updateStats('classic');
+
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            switch(e.key) {
+                case '1':
+                    changeCube('classic');
+                    break;
+                case '2':
+                    changeCube('complex');
+                    break;
+                case '3':
+                    changeCube('minimal');
+                    break;
+                case '4':
+                    changeCube('artistic');
+                    break;
+                case ' ':
+                    e.preventDefault();
+                    toggleAnimation();
+                    break;
+            }
+        });
+
+        // Add click to randomize static cube
+        document.getElementById('staticCube').addEventListener('click', function() {
+            const designs = Object.keys(cubeDesigns);
+            const randomDesign = designs[Math.floor(Math.random() * designs.length)];
+            changeCube(randomDesign);
+        });
+
+        // Add hover effects
+        document.getElementById('staticCube').addEventListener('mouseenter', function() {
+            this.style.cursor = 'pointer';
+            this.style.transform = 'scale(1.02)';
+            this.style.transition = 'transform 0.3s ease';
+        });
+
+        document.getElementById('staticCube').addEventListener('mouseleave', function() {
+            this.style.transform = 'scale(1)';
+        });
+
+        // Start animation
+        animate();
+
+        // Console welcome message
+        console.log('%c🎨 Haiku\'s ASCII Cube Gallery', 'color: #00ff88; font-size: 20px; font-weight: bold;');
+        console.log('%cKeyboard shortcuts: 1-4 (change cube), Space (toggle animation)', 'color: #667eea;');
+        console.log('%cCreated by Haiku • Quality Guardian • Mathematical Excellence', 'color: #764ba2;');
+
+        // Cleanup function - FIX: Prevent memory leaks
+        window.addEventListener('beforeunload', function() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+        });
+    </script>
+</body>
+</html>

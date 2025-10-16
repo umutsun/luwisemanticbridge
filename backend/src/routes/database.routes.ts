@@ -3,6 +3,85 @@ import { lsembPool } from '../config/database.config';
 
 const router = Router();
 
+// Database health check
+router.get('/health', async (req: Request, res: Response) => {
+  try {
+    const startTime = Date.now();
+    const client = await lsembPool.connect();
+
+    // Test basic connectivity
+    await client.query('SELECT 1');
+
+    // Get connection pool stats
+    const poolStats = {
+      totalCount: lsembPool.totalCount,
+      idleCount: lsembPool.idleCount,
+      waitingCount: lsembPool.waitingCount
+    };
+
+    client.release();
+
+    const responseTime = Date.now() - startTime;
+
+    res.json({
+      status: 'healthy',
+      database: 'PostgreSQL',
+      connectionTime: `${responseTime}ms`,
+      pool: poolStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: 'unhealthy',
+      database: 'PostgreSQL',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Get database tables (simplified version)
+router.get('/tables', async (req: Request, res: Response) => {
+  try {
+    const client = await lsembPool.connect();
+
+    const tablesQuery = `
+      SELECT table_name, table_type
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `;
+    const result = await client.query(tablesQuery);
+
+    // Get row counts for each table
+    const tables = [];
+    for (const table of result.rows) {
+      const countQuery = `SELECT COUNT(*) as count FROM "${table.table_name}"`;
+      const countResult = await client.query(countQuery);
+      tables.push({
+        name: table.table_name,
+        type: table.table_type,
+        rowCount: parseInt(countResult.rows[0].count)
+      });
+    }
+
+    client.release();
+
+    res.json({
+      success: true,
+      database: 'PostgreSQL',
+      totalTables: tables.length,
+      tables
+    });
+  } catch (error: any) {
+    console.error('Database tables error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Get database schema information
 router.get('/schema', async (req: Request, res: Response) => {
   try {

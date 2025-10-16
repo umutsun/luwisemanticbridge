@@ -34,17 +34,33 @@ const config = {
       settings: '/api/v2/dashboard/settings',
     },
 
+    // Settings endpoints
+    settings: {
+      base: '/api/v2/settings',
+      all: '/api/v2/settings/all',
+      llm: '/api/v2/settings?category=llm',
+      embeddings: '/api/v2/settings?category=embeddings',
+      rag: '/api/v2/settings?category=rag',
+      database: '/api/v2/settings?category=database',
+      redis: '/api/v2/settings?category=redis',
+      security: '/api/v2/settings?category=security',
+      app: '/api/v2/settings?category=app',
+      n8n: '/api/v2/settings?category=n8n',
+      smtp: '/api/v2/settings?category=smtp',
+      scraper: '/api/v2/settings?category=scraper',
+    },
+
     // Scraper endpoints
     scraper: {
       scrape: '/api/v2/scraper',
       status: '/api/v2/scraper/status',
-      history: '/api/v2/scraper/history',
-      sessions: '/api/v2/scraper/sessions',
+      history: '/api/v2/history/scraper',
+      sessions: '/api/v2/history/scraper',
     },
 
     // Documents endpoints
     documents: {
-      list: '/api/v2/documents',
+      list: '/api/v2/history/documents',
       upload: '/api/v2/documents/upload',
       search: '/api/v2/documents/search',
       stats: '/api/v2/documents/stats',

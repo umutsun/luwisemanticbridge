@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASB :: Donut Shell Boot</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap');
+
+        body {
+            background-color: #00001a;
+            color: #89cff0;
+            font-family: 'Roboto Mono', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            font-size: 16px;
+        }
+
+        #terminal {
+            width: 98%;
+            max-width: 1200px;
+            height: 95%;
+            border: 1px solid #2a3a7d;
+            box-shadow: 0 0 10px #2a3a7d, 0 0 20px #2a3a7d inset;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            background: #00001a;
+            position: relative;
+        }
+        
+        #terminal::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(10, 20, 50, 0.1), rgba(10, 20, 50, 0.1) 1px, transparent 1px, transparent 3px);
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        #header {
+            text-align: center;
+            margin-bottom: 15px;
+            text-shadow: 0 0 5px #89cff0;
+            color: #d0f0ff;
+            font-size: 1.2em;
+        }
+
+        #content {
+            display: flex;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        #status-container {
+            width: 45%;
+            padding-right: 20px;
+            border-right: 1px dashed #2a3a7d;
+        }
+
+        #donut-container {
+            width: 55%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            line-height: 1.0;
+            white-space: pre;
+        }
+
+        .status-line {
+            margin-bottom: 12px;
+        }
+        .status-line .label {
+            color: #89cff0;
+        }
+        .status-line .value {
+            color: #d0f0ff;
+        }
+        .status-line .dots {
+            display: inline-block;
+            width: 80px;
+        }
+        .done {
+            color: #4a7a9d;
+        }
+        
+        /* Gradient colors for the donut */
+        .c0 { color: #001f3f; text-shadow: none; } /* Darkest Navy */
+        .c1 { color: #002b55; }
+        .c2 { color: #00376b; }
+        .c3 { color: #004381; }
+        .c4 { color: #004f97; }
+        .c5 { color: #005bad; }
+        .c6 { color: #207acc; }
+        .c7 { color: #4098eb; }
+        .c8 { color: #60b6ff; }
+        .c9 { color: #89cff0; }
+        .c10 { color: #a1d9f5; }
+        .c11 { color: #d0f0ff; text-shadow: 0 0 5px #d0f0ff; } /* Brightest */
+
+    </style>
+</head>
+<body>
+    <div id="terminal">
+        <div id="header">ALICE SEMANTIC BRIDGE :: CORE INITIALIZATION</div>
+        <div id="content">
+            <div id="status-container"></div>
+            <div id="donut-container"></div>
+        </div>
+    </div>
+
+    <script>
+    const donutContainer = document.getElementById('donut-container');
+    const statusContainer = document.getElementById('status-container');
+
+    // --- ASCII Donut 3D Rotation - JS Port of donut.c by Andy Sloane ---
+    const screenWidth = 80, screenHeight = 40;
+    let A = 0, B = 0;
+
+    const luminanceChars = '.,-~:;=!*#$@';
+    const colorPalette = Array.from({length: 12}, (_, i) => `c${i}`);
+
+    function renderFrame() {
+        const output = Array(screenWidth * screenHeight).fill(' ');
+        const zBuffer = Array(screenWidth * screenHeight).fill(0);
+
+        const cA = Math.cos(A), sA = Math.sin(A);
+        const cB = Math.cos(B), sB = Math.sin(B);
+
+        // phi goes from 0 to 2*pi
+        for (let j = 0; j < 6.28; j += 0.07) {
+            const ct = Math.cos(j), st = Math.sin(j);
+            // theta goes from 0 to 2*pi
+            for (let i = 0; i < 6.28; i += 0.02) {
+                const sp = Math.sin(i), cp = Math.cos(i);
+                
+                const h = ct + 2; // R1 + R2*cos(theta)
+                const D = 1 / (sp * h * sA + st * cA + 5);
+                const t = sp * h * cA - st * sA;
+
+                const x = Math.floor(screenWidth / 2 + 30 * D * (cp * h * cB - t * sB));
+                const y = Math.floor(screenHeight / 2 + 15 * D * (cp * h * sB + t * cB));
+
+                const o = x + screenWidth * y;
+                const N = Math.floor(8 * ((st * sA - sp * ct * cA) * cB - sp * ct * sA - st * cA - cp * ct * sB));
+
+                if (y < screenHeight && y >= 0 && x >= 0 && x < screenWidth && D > zBuffer[o]) {
+                    zBuffer[o] = D;
+                    const luminanceIndex = N > 0 ? N : 0;
+                    const char = luminanceChars[luminanceIndex];
+
+                    const colorIndex = Math.min(colorPalette.length - 1, luminanceIndex);
+                    const colorClass = colorPalette[colorIndex];
+
+                    output[o] = `<span class="${colorClass}">${char}</span>`;
+                }
+            }
+        }
+
+        let html = '';
+        for (let k = 0; k < screenWidth * screenHeight; k++) {
+            html += (k % screenWidth === screenWidth - 1) ? (output[k] + '\n') : output[k];
+        }
+        donutContainer.innerHTML = html;
+
+        A += 0.04;
+        B += 0.02;
+
+        requestAnimationFrame(renderFrame);
+    }
+
+    // --- Status Text Animation ---
+    const statusMessages = [
+        { label: "Bootstrapping Kernel", time: 500 },
+        { label: "Initializing Semantic Bridge", time: 700 },
+        { label: "Loading Embedding Models", time: 1000 },
+        { label: "Calibrating Context Engine", time: 800 },
+        { label: "Deploying Data Mining Agents", time: 1200 },
+        { label: "Verifying Knowledge Graph", time: 900 },
+        { label: "Syncing Multi-Agent Structure", time: 1100 },
+        { label: "Translation Layers", time: 600 },
+        { label: "System Ready", time: 300, final: true }
+    ];
+
+    async function animateStatus() {
+        for (const message of statusMessages) {
+            const line = document.createElement('div');
+            line.classList.add('status-line');
+            
+            const labelSpan = document.createElement('span');
+            labelSpan.classList.add('label');
+            labelSpan.textContent = message.label;
+            
+            const dotsSpan = document.createElement('span');
+            dotsSpan.classList.add('dots');
+
+            line.appendChild(labelSpan);
+            line.appendChild(dotsSpan);
+            statusContainer.appendChild(line);
+
+            let dotCount = 0;
+            const dotInterval = setInterval(() => {
+                dotsSpan.textContent = ".".repeat(dotCount % 10);
+                dotCount++;
+            }, 100);
+
+            await new Promise(resolve => setTimeout(resolve, message.time));
+            
+            clearInterval(dotInterval);
+            dotsSpan.textContent = ".".repeat(10);
+            
+            const doneSpan = document.createElement('span');
+            doneSpan.classList.add('done');
+            doneSpan.textContent = message.final ? "[OK]" : "[DONE]";
+            line.appendChild(doneSpan);
+        }
+    }
+
+    // --- Start Animations ---
+    renderFrame();
+    animateStatus();
+
+    </script>
+</body>
+</html>

@@ -84,40 +84,95 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Check for existing session on mount
   useEffect(() => {
-    let storedToken = localStorage.getItem('token');
-    let storedUser = localStorage.getItem('user');
+    const initAuth = () => {
+      let storedToken = localStorage.getItem('token');
+      let storedUser = localStorage.getItem('user');
 
-    const legacyToken = localStorage.getItem('asb_token');
-    if (!storedToken && legacyToken) {
-      setStoredToken(legacyToken);
-      storedToken = legacyToken;
-    }
-    if (legacyToken) {
-      localStorage.removeItem('asb_token');
-    }
-
-    const legacyUser = localStorage.getItem('asb_user');
-    if (!storedUser && legacyUser) {
-      localStorage.setItem('user', legacyUser);
-      storedUser = legacyUser;
-    }
-    if (legacyUser) {
-      localStorage.removeItem('asb_user');
-    }
-
-    if (storedToken && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setToken(storedToken);
-        setUser(parsedUser);
-      } catch (error) {
-        console.error('Failed to parse stored user:', error);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+      const legacyToken = localStorage.getItem('asb_token');
+      if (!storedToken && legacyToken) {
+        setStoredToken(legacyToken);
+        storedToken = legacyToken;
       }
+      if (legacyToken) {
+        localStorage.removeItem('asb_token');
+      }
+
+      const legacyUser = localStorage.getItem('asb_user');
+      if (!storedUser && legacyUser) {
+        localStorage.setItem('user', legacyUser);
+        storedUser = legacyUser;
+      }
+      if (legacyUser) {
+        localStorage.removeItem('asb_user');
+      }
+
+      if (storedToken && storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setToken(storedToken);
+          setUser(parsedUser);
+        } catch (error) {
+          console.error('Failed to parse stored user:', error);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      }
+
+      setLoading(false);
+    };
+
+    initAuth();
+
+    // Development'da focus event'ini devre dışı bırak, sadece production'da aktif et
+    const isDevelopment = process.env.NODE_ENV === 'development';
+
+    if (!isDevelopment) {
+      const handleFocus = () => {
+        const currentToken = localStorage.getItem('token');
+        const currentUser = localStorage.getItem('user');
+
+        console.log('[AuthProvider] Focus event - Token:', !!currentToken, 'User:', !!currentUser);
+
+        if (!currentToken || !currentUser) {
+          // If either token or user is missing, clear auth state
+          console.log('[AuthProvider] Missing token or user, clearing auth state');
+          setToken(null);
+          setUser(null);
+        } else {
+          // Token'ın expired olup olmadığını kontrol et
+          try {
+            const parsedUser = JSON.parse(currentUser);
+            const tokenPayload = JSON.parse(atob(currentToken.split('.')[1]));
+            const isExpired = tokenPayload.exp * 1000 < Date.now();
+
+            if (isExpired) {
+              console.log('[AuthProvider] Token expired, clearing auth state');
+              setToken(null);
+              setUser(null);
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+            } else {
+              console.log('[AuthProvider] Updating auth state from localStorage');
+              setToken(currentToken);
+              setUser(parsedUser);
+            }
+          } catch (error) {
+            console.error('Failed to parse user or token on focus:', error);
+            setToken(null);
+            setUser(null);
+          }
+        }
+      };
+
+      window.addEventListener('focus', handleFocus);
+      return () => {
+        window.removeEventListener('focus', handleFocus);
+      };
     }
 
-    setLoading(false);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -144,8 +199,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setStoredToken(data.accessToken);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Also set token in cookie
-      document.cookie = `auth-token=${data.accessToken}; path=/; max-age=86400; SameSite=Lax`;
+      // Also set token in cookie with 30 days expiration
+      document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
 
       setToken(data.accessToken);
       setUser(data.user);

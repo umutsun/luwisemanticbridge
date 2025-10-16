@@ -21,6 +21,7 @@ module.exports = {
       // Environment
       env: {
         NODE_ENV: 'development',
+        DATABASE_URL: 'postgresql://user:password@YOUR_POSTGRES_IP:5432/asemb',
         PORT: 8083,
         API_PORT: 8083,
         BACKEND_PORT: 8083

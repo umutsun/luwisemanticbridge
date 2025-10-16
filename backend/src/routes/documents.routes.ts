@@ -4,6 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import { lsembPool } from '../config/database.config';
 import documentProcessor from '../services/document-processor.service';
+import contextualDocumentProcessor from '../services/contextual-document-processor.service';
+import { ocrService } from '../services/ocr.service';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { createUploadRateLimit } from '../middleware/rate-limit.middleware';
 
 const router = Router();
 
@@ -71,8 +75,8 @@ router.post('/init', async (req: Request, res: Response) => {
   }
 });
 
-// Get all documents
-router.get('/', async (req: Request, res: Response) => {
+// Get all documents (with trailing slash) - REQUIRES AUTHENTICATION
+router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // First ensure table exists
     await lsembPool.query(`
@@ -152,8 +156,8 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// Upload document
-router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+// Upload document - REQUIRES AUTHENTICATION
+router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -179,19 +183,25 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
       }
     }
 
-    // Process file based on type
+    // Process file based on type using contextual processor
     let processedDoc;
     try {
-      processedDoc = await documentProcessor.processFile(filePath, originalname, mimetype);
+      processedDoc = await contextualDocumentProcessor.processFile(filePath, originalname, mimetype);
     } catch (err) {
-      console.error('Error processing file:', err);
-      // Fallback to simple text reading
-      processedDoc = {
-        title: originalname,
-        content: fs.readFileSync(filePath, 'utf-8').substring(0, 100000),
-        chunks: [],
-        metadata: { error: 'Processing failed, stored as text' }
-      };
+      console.error('Error processing file with contextual processor:', err);
+      // Fallback to standard processor
+      try {
+        processedDoc = await documentProcessor.processFile(filePath, originalname, mimetype);
+      } catch (fallbackErr) {
+        console.error('Error processing file with fallback:', fallbackErr);
+        // Final fallback to simple text reading
+        processedDoc = {
+          title: originalname,
+          content: fs.readFileSync(filePath, 'utf-8').substring(0, 100000),
+          chunks: [],
+          metadata: { error: 'Processing failed, stored as text' }
+        };
+      }
     }
 
     // Check for content-based duplicate using first 500 characters (skip if force flag is set)
@@ -273,8 +283,8 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
   }
 });
 
-// Add document manually
-router.post('/', async (req: Request, res: Response) => {
+// Add document manually - REQUIRES AUTHENTICATION
+router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { title, content, type = 'text' } = req.body;
 
@@ -323,8 +333,8 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Get document statistics (must come before /:id route)
-router.get('/stats', async (req: Request, res: Response) => {
+// Get document statistics (must come before /:id route) - REQUIRES AUTHENTICATION
+router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Ensure table exists first
     await lsembPool.query(`
@@ -369,8 +379,8 @@ router.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
-// Get single document
-router.get('/:id', async (req: Request, res: Response) => {
+// Get single document - REQUIRES AUTHENTICATION
+router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -407,8 +417,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Update document
-router.put('/:id', async (req: Request, res: Response) => {
+// Update document - REQUIRES AUTHENTICATION
+router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { title, content, type } = req.body;
@@ -459,8 +469,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Delete document
-router.delete('/:id', async (req: Request, res: Response) => {
+// Delete document - REQUIRES AUTHENTICATION
+router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -499,8 +509,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// Create embeddings for a document
-router.post('/:id/embeddings', async (req: Request, res: Response) => {
+// Create embeddings for a document - REQUIRES AUTHENTICATION
+router.post('/:id/embeddings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -531,11 +541,13 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
       });
     }
 
-    // Create embeddings
-    await documentProcessor.processAndEmbedDocument(
+    // Determine document type and create embeddings using contextual processor
+    const documentType = doc.metadata?.document_type || 'text';
+    await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
       doc.id,
       doc.content,
-      doc.title
+      doc.title,
+      documentType
     );
 
     // Get the count of created embeddings
@@ -558,12 +570,24 @@ router.post('/:id/embeddings', async (req: Request, res: Response) => {
   }
 });
 
-// Delete embeddings for a document
-router.delete('/:id/embeddings', async (req: Request, res: Response) => {
+// Delete embeddings for a document - REQUIRES AUTHENTICATION
+router.delete('/:id/embeddings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
     
-    await documentProcessor.deleteDocumentEmbeddings(parseInt(id));
+    // Use contextual processor for deletion
+    const docResult = await lsembPool.query(
+      'SELECT metadata->>\'document_type\' as document_type FROM documents WHERE id = $1',
+      [id]
+    );
+
+    const documentType = docResult.rows[0]?.document_type || 'text';
+    await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
+      parseInt(id),
+      '', // Empty content to trigger deletion
+      '',
+      documentType
+    );
 
     res.json({
       success: true,
@@ -577,8 +601,8 @@ router.delete('/:id/embeddings', async (req: Request, res: Response) => {
   }
 });
 
-// Search documents by similarity
-router.post('/search', async (req: Request, res: Response) => {
+// Search documents by similarity - REQUIRES AUTHENTICATION
+router.post('/search', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { query, limit = 5 } = req.body;
     
@@ -586,7 +610,8 @@ router.post('/search', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    const results = await documentProcessor.searchSimilarDocuments(query, limit);
+    const contentType = req.body.contentType;
+    const results = await contextualDocumentProcessor.searchSimilarDocumentsEnhanced(query, limit, contentType);
 
     res.json({
       success: true,
@@ -600,8 +625,8 @@ router.post('/search', async (req: Request, res: Response) => {
   }
 });
 
-// Bulk create embeddings
-router.post('/bulk-embed', async (req: Request, res: Response) => {
+// Bulk create embeddings - REQUIRES AUTHENTICATION
+router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const client = await lsembPool.connect();
 
   try {
@@ -684,6 +709,182 @@ router.post('/bulk-embed', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to create bulk embeddings' });
   } finally {
     client.release();
+  }
+});
+
+// Get embedding statistics - REQUIRES AUTHENTICATION
+router.get('/embeddings/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const stats = await contextualDocumentProcessor.getEmbeddingStatistics();
+    res.json({
+      success: true,
+      statistics: stats
+    });
+  } catch (error) {
+    console.error('Error fetching embedding statistics:', error);
+    res.status(500).json({
+      error: 'Failed to fetch embedding statistics'
+    });
+  }
+});
+
+// Re-index all documents with contextual processor - REQUIRES AUTHENTICATION
+router.post('/reindex', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await lsembPool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Get all documents
+    const documentsResult = await client.query(
+      'SELECT id, title, content, metadata FROM documents ORDER BY created_at'
+    );
+
+    const results = {
+      processed: 0,
+      failed: 0,
+      errors: [] as string[]
+    };
+
+    for (const doc of documentsResult.rows) {
+      try {
+        // Delete existing embeddings
+        await client.query(
+          'DELETE FROM document_embeddings WHERE document_id = $1',
+          [doc.id]
+        );
+
+        // Determine document type
+        const documentType = doc.metadata?.document_type ||
+          (doc.title.match(/\.(csv|json)$/i) ? 'tabular' :
+           doc.title.match(/\.(pdf|doc|docx|md)$/i) ? 'structured' : 'text');
+
+        // Create new embeddings with contextual processor
+        await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
+          doc.id,
+          doc.content,
+          doc.title,
+          documentType
+        );
+
+        results.processed++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push(`${doc.title}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: `Re-indexed ${results.processed} documents`,
+      results
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error re-indexing documents:', error);
+    res.status(500).json({
+      error: 'Failed to re-index documents'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// OCR endpoint for processing documents - REQUIRES AUTHENTICATION
+router.post('/ocr/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { language = 'tur+eng' } = req.body;
+
+    // Get document from database
+    const docResult = await lsembPool.query(
+      'SELECT * FROM documents WHERE id = $1',
+      [id]
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const document = docResult.rows[0];
+
+    if (!document.file_path || !fs.existsSync(document.file_path)) {
+      return res.status(400).json({ error: 'File not found on disk' });
+    }
+
+    // Check if document already has OCR content
+    if (document.title.includes('[OCR]')) {
+      return res.status(400).json({ error: 'Document already processed with OCR' });
+    }
+
+    console.log(`Starting OCR processing for document: ${document.title}`);
+
+    // Perform OCR
+    const ocrResult = await ocrService.processDocument(document.file_path, document.type);
+
+    if (ocrResult.confidence < 30) {
+      console.warn(`Low OCR confidence: ${ocrResult.confidence}% for document ${document.title}`);
+    }
+
+    // Update document with OCR content
+    await lsembPool.query(
+      `UPDATE documents
+       SET content = COALESCE($1, content),
+           title = $2,
+           metadata = jsonb_set(
+             jsonb_set(
+               jsonb_set(COALESCE(metadata, '{}'), '$.ocr_processed', 'true'),
+               '$.ocr_confidence', $3::text::jsonb
+             ),
+             '$.ocr_type', $4
+           ),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5`,
+      [
+        ocrResult.text || document.content,
+        `[OCR] ${document.title}`,
+        ocrResult.confidence,
+        ocrResult.type,
+        id
+      ]
+    );
+
+    console.log(`OCR completed for document: ${document.title} (Confidence: ${ocrResult.confidence}%)`);
+
+    res.json({
+      success: true,
+      message: 'OCR processing completed',
+      data: {
+        id,
+        title: `[OCR] ${document.title}`,
+        text: ocrResult.text,
+        confidence: ocrResult.confidence,
+        type: ocrResult.type
+      }
+    });
+
+  } catch (error) {
+    console.error('OCR processing error:', error);
+    res.status(500).json({
+      error: 'Failed to process document with OCR',
+      details: error.message
+    });
+  }
+});
+
+// Get supported OCR languages - REQUIRES AUTHENTICATION
+router.get('/ocr/languages', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const languages = ocrService.getSupportedLanguages();
+    res.json({
+      languages,
+      default: 'tur+eng'
+    });
+  } catch (error) {
+    console.error('Error getting OCR languages:', error);
+    res.status(500).json({ error: 'Failed to get supported languages' });
   }
 });
 

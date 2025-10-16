@@ -2,8 +2,72 @@ import { Router, Request, Response } from 'express';
 import { lsembPool, initializeConfigs } from '../config/database.config';
 import { initializeRedis } from '../config/redis';
 import { SettingsService } from '../services/settings.service';
+import { settingsCache } from '../services/cache.service';
 
 const router = Router();
+
+// Basic health check for load balancers
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'luwi-semantic-bridge',
+      version: '2.0.0',
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// API health check
+router.get('/api', async (req: Request, res: Response) => {
+  try {
+    const timestamp = new Date().toISOString();
+
+    // Check database connection
+    let dbStatus = 'connected';
+    try {
+      await lsembPool.query('SELECT 1');
+    } catch (error) {
+      dbStatus = 'disconnected';
+    }
+
+    // Check Redis connection
+    let redisStatus = 'connected';
+    try {
+      const redis = await initializeRedis();
+      if (redis && redis.status === 'ready') {
+        await redis.ping();
+      } else {
+        redisStatus = 'disconnected';
+      }
+    } catch (error) {
+      redisStatus = 'disconnected';
+    }
+
+    res.json({
+      status: dbStatus === 'connected' && redisStatus === 'connected' ? 'healthy' : 'degraded',
+      timestamp,
+      services: {
+        database: dbStatus,
+        redis: redisStatus
+      },
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 // System health status
 router.get('/system', async (req: Request, res: Response) => {
@@ -121,9 +185,56 @@ router.get('/system', async (req: Request, res: Response) => {
   }
 });
 
-// Detailed service status
+// Detailed service status with cache statistics
 router.get('/services', async (req: Request, res: Response) => {
   try {
+    // Get Redis instance for cache stats
+    let cacheStats = {
+      status: 'disconnected',
+      hitRate: 0,
+      hits: 0,
+      misses: 0,
+      totalKeys: 0,
+      memory: 'unknown'
+    };
+
+    try {
+      const redis = await initializeRedis();
+      if (redis && redis.status === 'ready') {
+        // Get cache statistics
+        const hits = await redis.get('cache:hits') || '0';
+        const misses = await redis.get('cache:misses') || '0';
+        const embeddingHits = await redis.get('cache:embedding_hits') || '0';
+        const embeddingMisses = await redis.get('cache:embedding_misses') || '0';
+
+        const totalHits = parseInt(hits) + parseInt(embeddingHits);
+        const totalMisses = parseInt(misses) + parseInt(embeddingMisses);
+        const totalRequests = totalHits + totalMisses;
+
+        cacheStats = {
+          status: 'connected',
+          hitRate: totalRequests > 0 ? Math.round((totalHits / totalRequests) * 100) : 0,
+          hits: totalHits,
+          misses: totalMisses,
+          totalKeys: await redis.dbsize(),
+          memory: 'info not available'
+        };
+
+        // Try to get memory usage
+        try {
+          const info = await redis.info('memory');
+          const match = info.match(/used_memory_human:(.+)/);
+          if (match) {
+            cacheStats.memory = match[1].trim();
+          }
+        } catch (memErr) {
+          // Ignore memory info errors
+        }
+      }
+    } catch (redisErr) {
+      console.error('Redis stats error:', redisErr);
+    }
+
     const serviceStatus = {
       timestamp: new Date().toISOString(),
       services: {
@@ -142,12 +253,18 @@ router.get('/services', async (req: Request, res: Response) => {
           }
         },
         redis: {
-          status: 'healthy',
+          status: cacheStats.status,
           config: {
             host: process.env.REDIS_HOST || 'localhost',
             port: process.env.REDIS_PORT || 6379,
             db: process.env.REDIS_DB || 2
-          }
+          },
+          cache: cacheStats
+        },
+        embeddings: {
+          status: 'healthy',
+          cacheHitRate: `${cacheStats.hitRate}%`,
+          performance: cacheStats.hitRate > 50 ? 'good' : cacheStats.hitRate > 20 ? 'fair' : 'poor'
         },
         llm_providers: {
           openai: !!process.env.OPENAI_API_KEY,
@@ -160,7 +277,50 @@ router.get('/services', async (req: Request, res: Response) => {
         nodeVersion: process.version,
         platform: process.platform,
         uptime: process.uptime(),
-        memory: process.memoryUsage()
+        memory: process.memoryUsage(),
+        load: {
+          average: require('os').loadavg(),
+          cpus: require('os').cpus().length
+        }
+      },
+      performance: {
+        cacheEfficiency: cacheStats.hitRate,
+        recommendation: cacheStats.hitRate < 30 ? 'Consider increasing cache TTL or warming up cache with common queries' : 'Cache performance is acceptable',
+        metrics: {
+          cacheStats,
+          settingsCacheStats: settingsCache.getStats(),
+          memoryUsage: {
+            heap: {
+              used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+              total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+              percentage: Math.round((process.memoryUsage().heapUsed / process.memoryUsage().heapTotal) * 100)
+            },
+            external: Math.round(process.memoryUsage().external / 1024 / 1024),
+            rss: Math.round(process.memoryUsage().rss / 1024 / 1024)
+          },
+          cpu: {
+            loadAverage: require('os').loadavg(),
+            cpuCount: require('os').cpus().length,
+            usage: Math.round((require('os').loadavg()[0] / require('os').cpus().length) * 100)
+          },
+          database: {
+            poolEfficiency: {
+              utilization: Math.round((lsembPool.totalCount / 25) * 100), // Out of max 25
+              idleRatio: lsembPool.totalCount > 0 ? Math.round((lsembPool.idleCount / lsembPool.totalCount) * 100) : 0,
+              waitingRequests: lsembPool.waitingCount
+            }
+          }
+        }
+      },
+      alerts: {
+        warnings: [
+          ...(cacheStats.hitRate < 30 ? ['Low cache hit rate detected'] : []),
+          ...(process.memoryUsage().heapUsed / process.memoryUsage().heapTotal > 0.8 ? ['High memory usage'] : []),
+          ...((lsembPool.totalCount / 25) > 0.8 ? ['High database pool utilization'] : [])
+        ],
+        errors: [
+          ...(cacheStats.status === 'disconnected' ? ['Redis disconnected'] : [])
+        ]
       }
     };
 

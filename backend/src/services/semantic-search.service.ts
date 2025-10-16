@@ -27,10 +27,22 @@ export class SemanticSearchService {
   private enableKeywordBoost: boolean = true;
   private parallelLLMCount: number = 5;
   private parallelLLMBatchSize: number = 3;
-  private readonly RAG_SETTINGS_TTL = 30000;
-  private readonly EMBEDDING_SETTINGS_TTL = 30000;
+  private readonly RAG_SETTINGS_TTL = 5000; // Reduced to 5 seconds
+  private readonly EMBEDDING_SETTINGS_TTL = 5000; // Reduced to 5 seconds
   private lastRAGSettingsRefresh: number = 0;
   private lastEmbeddingSettingsRefresh: number = 0;
+
+  // Add refresh method for immediate refresh
+  async refreshRAGSettingsNow(): Promise<void> {
+    console.log('[SemanticSearch] Force refreshing RAG settings...');
+    this.lastRAGSettingsRefresh = 0; // Force refresh
+    await this.loadRAGSettings();
+  }
+
+  // Embedding cache for performance
+  private embeddingCache: Map<string, number[]> = new Map();
+  private readonly EMBEDDING_CACHE_TTL = 300000; // 5 minutes
+  private embeddingCacheTimestamps: Map<string, number> = new Map();
 
   constructor() {
     this.customerPool = new Pool({
@@ -343,6 +355,17 @@ export class SemanticSearchService {
       await this.refreshEmbeddingSettings();
       const llmManager = LLMManager.getInstance();
 
+      // Create cache key
+      const cacheKey = `${text}_${this.embeddingSettings.provider}_${this.embeddingSettings.model}`;
+      const now = Date.now();
+      const cachedTime = this.embeddingCacheTimestamps.get(cacheKey) || 0;
+
+      // Check cache first
+      if (this.embeddingCache.has(cacheKey) && (now - cachedTime) < this.EMBEDDING_CACHE_TTL) {
+        console.log(`[SemanticSearch] Using cached embedding for: "${text.substring(0, 30)}..."`);
+        return this.embeddingCache.get(cacheKey)!;
+      }
+
       // Use active embedding provider from settings or fall back to default
       const embeddingProvider = this.embeddingSettings.provider || 'openai';
       const embeddingModel = this.embeddingSettings.model;
@@ -353,13 +376,40 @@ export class SemanticSearchService {
         model: embeddingModel
       });
 
-      console.log(`[SemanticSearch] Generated embedding with ${embedding.length} dimensions`);
+      // Cache the result
+      this.embeddingCache.set(cacheKey, embedding);
+      this.embeddingCacheTimestamps.set(cacheKey, now);
+
+      // Clean old cache entries periodically
+      if (this.embeddingCache.size > 1000) {
+        this.cleanEmbeddingCache();
+      }
+
+      console.log(`[SemanticSearch] Generated and cached embedding with ${embedding.length} dimensions`);
       return embedding;
     } catch (error) {
       console.error('[SemanticSearch] Embedding generation failed:', error);
       console.log('[SemanticSearch] Using mock embedding as fallback');
       return this.generateMockEmbedding(text);
     }
+  }
+
+  private cleanEmbeddingCache(): void {
+    const now = Date.now();
+    const keysToDelete: string[] = [];
+
+    for (const [key, timestamp] of this.embeddingCacheTimestamps) {
+      if (now - timestamp > this.EMBEDDING_CACHE_TTL) {
+        keysToDelete.push(key);
+      }
+    }
+
+    for (const key of keysToDelete) {
+      this.embeddingCache.delete(key);
+      this.embeddingCacheTimestamps.delete(key);
+    }
+
+    console.log(`[SemanticSearch] Cleaned ${keysToDelete.length} old embedding cache entries`);
   }
 
   
@@ -647,11 +697,23 @@ export class SemanticSearchService {
             WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.15
             WHEN $5::boolean AND ue.metadata->>'title' ILIKE $3 THEN 0.1
             ELSE 0
-          END as keyword_boost
+          END as keyword_boost,
+          CASE
+            WHEN ue.metadata->>'table' = 'message_embeddings' THEN 4
+            WHEN ue.metadata->>'table' = 'document_embeddings' THEN 2
+            WHEN ue.metadata->>'table' = 'scrape_embeddings' THEN 3
+            ELSE 1
+          END as priority
         FROM unified_embeddings ue
         WHERE ue.embedding IS NOT NULL
           AND (1 - (ue.embedding <=> $1::vector)) >= $2
         ORDER BY
+          CASE
+            WHEN ue.metadata->>'table' = 'message_embeddings' THEN 4
+            WHEN ue.metadata->>'table' = 'document_embeddings' THEN 2
+            WHEN ue.metadata->>'table' = 'scrape_embeddings' THEN 3
+            ELSE 1
+          END ASC,
           (1 - (ue.embedding <=> $1::vector)) +
           CASE
             WHEN $5::boolean AND (ue.content ILIKE $3 OR ue.metadata->>'content' ILIKE $3 OR ue.metadata->>'text' ILIKE $3) THEN 0.15
@@ -681,7 +743,8 @@ export class SemanticSearchService {
           score: Math.round((parseFloat(row.similarity_score) + parseFloat(row.keyword_boost || 0)) * 125),
           relevanceScore: parseFloat(row.similarity_score),
           content: row.excerpt,
-          keywords: keywords
+          keywords: keywords,
+          sourceType: this.getSourceDisplayName(row.source_table)
         };
       });
     } catch (error) {
@@ -843,6 +906,21 @@ export class SemanticSearchService {
         total: 0,
         totalWithEmbeddings: 0
       };
+    }
+  }
+
+  private getSourceDisplayName(sourceTable: string): string {
+    switch (sourceTable) {
+      case 'unified_embeddings':
+        return 'Veritabanı';
+      case 'document_embeddings':
+        return 'Dokümanlar';
+      case 'scrape_embeddings':
+        return 'Web';
+      case 'message_embeddings':
+        return 'Mesajlar';
+      default:
+        return sourceTable;
     }
   }
 
