@@ -122,7 +122,8 @@ export default function EmbeddingsManagerPage() {
     concurrentTables: 1
   });
 
-  const API_BASE = `${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings`;
+  const API_BASE = `${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings-tables`;
+  const API_MIGRATION = `${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings`;
   const performanceIntervalRef = useRef<NodeJS.Timeout>();
 
   // Fetch available tables
@@ -146,7 +147,7 @@ export default function EmbeddingsManagerPage() {
   // Fetch analytics data
   const fetchAnalytics = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${API_BASE}/analytics`);
+      const response = await fetchWithAuth(`${API_MIGRATION}/analytics`);
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);
@@ -214,7 +215,7 @@ export default function EmbeddingsManagerPage() {
   // Check for active migration
   const checkActiveMigration = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${API_BASE}/progress`);
+      const response = await fetchWithAuth(`${API_MIGRATION}/progress`);
       if (response.ok) {
         const data = await response.json();
         if (data.status && data.status !== 'idle') {
@@ -234,7 +235,7 @@ export default function EmbeddingsManagerPage() {
     if (progress?.status === 'processing' || progress?.status === 'paused') {
       const interval = setInterval(async () => {
         try {
-          const response = await fetchWithAuth(`${API_BASE}/progress`);
+          const response = await fetchWithAuth(`${API_MIGRATION}/progress`);
           if (response.ok) {
             const data = await response.json();
             setProgress(data);
@@ -281,7 +282,7 @@ export default function EmbeddingsManagerPage() {
     setIsStartingMigration(true);
 
     try {
-      const response = await fetchWithAuth(`${API_BASE}/generate`, {
+      const response = await fetchWithAuth(`${API_MIGRATION}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -312,7 +313,7 @@ export default function EmbeddingsManagerPage() {
 
   const stopMigration = async () => {
     try {
-      const response = await fetchWithAuth(`${API_BASE}/stop`, { method: 'POST' });
+      const response = await fetchWithAuth(`${API_MIGRATION}/stop`, { method: 'POST' });
       if (response.ok) {
         setProgress(null);
         setSelectedTables([]);
@@ -487,7 +488,7 @@ export default function EmbeddingsManagerPage() {
               isProcessing={progress?.status === 'processing'}
               isPaused={progress?.status === 'paused'}
               onStart={startMigration}
-              onPause={() => fetchWithAuth(`${API_BASE}/pause`, { method: 'POST' })}
+              onPause={() => fetchWithAuth(`${API_MIGRATION}/pause`, { method: 'POST' })}
               onStop={stopMigration}
               onSavePreset={() => {
                 // Save preset logic
