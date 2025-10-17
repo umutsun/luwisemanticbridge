@@ -1388,7 +1388,16 @@ export default function DashboardPage() {
       {/* Quick Links to Demo Pages */}
       <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
         <h3 className="text-lg font-semibold mb-3">Customer Demo Features</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <a href="/dashboard/migrations" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="w-5 h-5 text-blue-500" />
+              <h4 className="font-medium">Data Migrations</h4>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Manage database migrations and embeddings
+            </p>
+          </a>
           <a href="/dashboard/scraper/demo" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-2">
               <Globe className="w-5 h-5 text-green-500" />

@@ -129,7 +129,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v2/settings/?t=${Date.now()}`, {
+      const response = await fetch(`${API_BASE_URL}/api/v2/settings?t=${Date.now()}`, {
         headers,
       });
 
