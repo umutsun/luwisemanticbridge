@@ -126,7 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Development'da focus event'ini devre dışı bırak, sadece production'da aktif et
     const isDevelopment = process.env.NODE_ENV === 'development';
 
-    if (!isDevelopment) {
+    if (!isDevelopment && typeof window !== 'undefined') {
       const handleFocus = () => {
         const currentToken = localStorage.getItem('token');
         const currentUser = localStorage.getItem('user');
@@ -170,9 +170,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
     }
 
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
+    return () => {};
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
