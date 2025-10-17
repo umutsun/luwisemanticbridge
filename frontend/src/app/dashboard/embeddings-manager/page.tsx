@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useApi } from '@/hooks/use-api';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { AdvancedControlPanel } from '@/components/controls/AdvancedControlPanel';
 import { AdvancedTableViewer } from '@/components/tables/AdvancedTableViewer';
 import { RealTimeChart } from '@/components/charts/RealTimeChart';
@@ -391,7 +392,8 @@ export default function EmbeddingsManagerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -801,7 +803,7 @@ export default function EmbeddingsManagerPage() {
           </div>
         )}
       </div>
-    </div>
+    </ProtectedRoute>
   );
 }
 
