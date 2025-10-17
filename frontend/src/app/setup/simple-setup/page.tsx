@@ -91,7 +91,7 @@ export default function SimpleSetupPage() {
 
       if (data.success) {
         setSuccess('Configuration saved successfully!');
-        setTimeout(() => {
+        setTimeout(async () => {
           if (currentStep < 4) {
             setCurrentStep(currentStep + 1);
           } else {
