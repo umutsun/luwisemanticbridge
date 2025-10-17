@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-import { useAuth } from './use-auth';
+import { useAuth } from '@/contexts/AuthProvider';
 import { API_CONFIG, buildApiUrl, DEFAULT_HEADERS } from '@/lib/api-config';
 import { toast } from '@/hooks/use-toast';
 

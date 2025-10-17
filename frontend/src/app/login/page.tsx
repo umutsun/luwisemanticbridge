@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
-import VitrinLoader from '@/components/ui/vitrin-loader';
+import InitializationLoader from '@/components/ui/initialization-loader';
 
 export default function LoginPage() {
   const { config, loading: configLoading } = useConfig();
@@ -78,13 +78,70 @@ export default function LoginPage() {
     return result;
   };
 
+  if (configLoading) {
+    return <InitializationLoader />;
+  }
+
   return (
-    <VitrinLoader
-      title={config?.app?.name || 'Application'}
-      description={config?.app?.description || 'AI-powered intelligent assistant platform'}
-      onLogin={handleLogin}
-      loginError={error}
-      loginLoading={loading}
-    />
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            {config?.app?.name || 'Luwi Semantic Bridge'}
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            {config?.app?.description || 'AI-powered Semantic Search Platform'}
+          </p>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            handleLogin(formData.get('email') as string, formData.get('password') as string);
+          }} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Email
+              </label>
+              <input
+                name="email"
+                type="email"
+                required
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="admin@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Password
+              </label>
+              <input
+                name="password"
+                type="password"
+                required
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                placeholder="••••••••"
+              />
+            </div>
+            {error && (
+              <div className="text-red-600 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+          <div className="mt-4 text-center text-sm text-gray-500 dark:text-gray-400">
+            Demo: admin@example.com / admin
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
