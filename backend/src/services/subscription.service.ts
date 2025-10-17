@@ -19,6 +19,13 @@ export interface UserSubscription {
   end_date: Date;
   status: 'active' | 'cancelled' | 'expired' | 'suspended';
   auto_renew: boolean;
+  // Properties joined from subscription_plans
+  plan_name?: string;
+  features?: any;
+  max_queries_per_month?: number;
+  max_documents?: number;
+  max_tokens_per_month?: number;
+  priority_support?: boolean;
 }
 
 export class SubscriptionService {

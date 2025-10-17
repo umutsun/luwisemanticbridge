@@ -131,14 +131,25 @@ export default function EmbeddingsManagerPage() {
   const fetchAvailableTables = useCallback(async () => {
     setIsLoadingTables(true);
     try {
+      console.log('Fetching tables from:', `${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings-tables/all?t=${Date.now()}`);
       const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL}/api/v2/embeddings-tables/all?t=${Date.now()}`);
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('Tables data:', data);
         setAvailableTables(data.tables || []);
+        if (!data.tables || data.tables.length === 0) {
+          console.warn('No tables received from API');
+        }
       } else {
+        const errorText = await response.text();
+        console.error('Failed to fetch tables. Status:', response.status, 'Error:', errorText);
         setError('Failed to fetch tables.');
       }
     } catch (error) {
+      console.error('Error fetching tables:', error);
       setError('Could not connect to the server to fetch tables.');
     } finally {
       setIsLoadingTables(false);

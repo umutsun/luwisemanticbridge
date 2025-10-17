@@ -1385,9 +1385,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick Links to Demo Pages */}
+      {/* Quick Links to Features */}
       <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-        <h3 className="text-lg font-semibold mb-3">Customer Demo Features</h3>
+        <h3 className="text-lg font-semibold mb-3">Quick Access</h3>
         <div className="grid grid-cols-3 gap-4">
           <a href="/dashboard/migrations" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-2">
@@ -1398,16 +1398,16 @@ export default function DashboardPage() {
               Manage database migrations and embeddings
             </p>
           </a>
-          <a href="/dashboard/scraper/demo" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
+          <a href="/dashboard/scrapes" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-2">
               <Globe className="w-5 h-5 text-green-500" />
-              <h4 className="font-medium">Data Scraper</h4>
+              <h4 className="font-medium">Web Scraper</h4>
             </div>
             <p className="text-sm text-muted-foreground">
               Configure and run web scraping for data collection
             </p>
           </a>
-          <a href="/dashboard/documents/demo" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
+          <a href="/dashboard/documents" className="block p-4 bg-white dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 mb-2">
               <FileText className="w-5 h-5 text-blue-500" />
               <h4 className="font-medium">Document Manager</h4>

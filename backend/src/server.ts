@@ -65,9 +65,7 @@ import {
 import { responseMiddleware } from "./middleware/response.middleware";
 import { errorHandler, notFoundHandler, asyncHandler } from "./middleware/error.middleware";
 import { generalRateLimit, createEmbeddingRateLimit, createUploadRateLimit, createAuthRateLimit } from "./middleware/rate-limit.middleware";
-import systemLogsRoutes, {
-  initializeLogWebSocket as initializeSystemLogs,
-} from "./routes/system.logs.routes";
+import systemLogsRoutes from "./routes/system.logs.routes";
 import frontendLogsRoutes from "./routes/frontend.logs.routes";
 import embeddingsTablesRoutes from "./routes/embeddings-tables.routes";
 import databaseRoutes from "./routes/database.routes";
@@ -174,7 +172,7 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
           ws.on("message", (data) => {
             // Handle incoming chat WebSocket messages
             try {
-              const message = JSON.parse(data);
+              const message = JSON.parse(data.toString('utf8'));
               if (message.type === "ping") {
                 ws.send(JSON.stringify({ type: "pong" }));
               } else if (message.type === "connect") {

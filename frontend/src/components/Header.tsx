@@ -276,9 +276,10 @@ export default function Header() {
     ...(currentUser?.role === 'admin' ? [
       { href: '/dashboard', label: 'Yönetim Paneli', icon: Home },
       { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
-      { href: '/dashboard/embeddings-manager', label: 'Migration', icon: Database },
+      { href: '/dashboard/migrations', label: 'Migration', icon: Database },
       { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
-      { href: '/dashboard/scraper', label: 'Web Scraper', icon: Globe },
+      { href: '/dashboard/scrapes', label: 'Web Scraper', icon: Globe },
+      { href: '/dashboard/chat', label: 'Sohbet Geçmişi', icon: MessageSquare },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
     ] : [])
   ];

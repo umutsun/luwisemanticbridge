@@ -118,7 +118,10 @@ router.post('/logout', authenticateToken, async (req: Request, res: Response) =>
 // Get current user info
 router.get('/me', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const user = await authService.getUserById(req.user?.userId || 0);
+    if (!req.user?.userId) {
+      return res.status(401).json({ error: 'Authentication error: User ID not found in token' });
+    }
+    const user = await authService.getUserById(req.user.userId);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

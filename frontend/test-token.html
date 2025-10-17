@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Token Debug</title>
+</head>
+<body>
+    <h1>Token Debug</h1>
+    <p>Check localStorage for token:</p>
+    <pre id="token"></pre>
+    <pre id="user"></pre>
+
+    <script>
+        const token = localStorage.getItem('token');
+        const user = localStorage.getItem('user');
+
+        document.getElementById('token').textContent = token ? 'Token found: ' + token.substring(0, 100) + '...' : 'No token';
+        document.getElementById('user').textContent = user ? 'User: ' + user : 'No user';
+
+        // Also check cookies
+        console.log('Cookies:', document.cookie);
+    </script>
+</body>
+</html>

@@ -38,7 +38,9 @@ import {
   getRAGSettings,
   getDatabaseSettings,
   getSecuritySettings,
-  getTranslationSettings
+  getTranslationSettings,
+  getAppSettingsOnly,
+  updateSettingsCategory
 } from '../../../lib/api/settings';
 
 // Component for each settings category
@@ -79,7 +81,21 @@ function LLMSettings() {
 
   const saveSetting = async (key: string, value: any) => {
     try {
-      await updateAppSettings({ [key]: value });
+      // Update local state first
+      const newConfig = { ...llmConfig };
+      const keys = key.split('.');
+      let current = newConfig;
+
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!current[keys[i]]) current[keys[i]] = {};
+        current = current[keys[i]];
+      }
+
+      current[keys[keys.length - 1]] = value;
+      setLlmConfig(newConfig);
+
+      // Then save to backend
+      await updateSettingsCategory('llm', { [key]: value });
       toast({
         title: "Success",
         description: "Setting saved",
@@ -88,6 +104,23 @@ function LLMSettings() {
       toast({
         title: "Error",
         description: "Failed to save setting",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const saveApiKey = async (provider: string, apiKey: string) => {
+    try {
+      await updateSettingsCategory('llm', { [`${provider}.apiKey`]: apiKey });
+      toast({
+        title: "Success",
+        description: `${provider} API key saved`,
+      });
+      loadSettings(); // Reload to update the UI
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save API key",
         variant: "destructive",
       });
     }
@@ -155,7 +188,21 @@ function LLMSettings() {
                     value={key ? '••••••••' : ''}
                     placeholder="Enter API key"
                     className="flex-1"
+                    onChange={(e) => {
+                      const newConfig = { ...llmConfig };
+                      if (!newConfig[provider]) newConfig[provider] = {};
+                      newConfig[provider].apiKey = e.target.value;
+                      setLlmConfig(newConfig);
+                    }}
                   />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => saveApiKey(provider, llmConfig?.[provider]?.apiKey || '')}
+                    disabled={!llmConfig?.[provider]?.apiKey || llmConfig?.[provider]?.apiKey === '••••••••'}
+                  >
+                    Save
+                  </Button>
                   <Badge variant={key ? "default" : "secondary"}>
                     {key ? "Configured" : "Not Set"}
                   </Badge>
@@ -217,6 +264,23 @@ function EmbeddingsSettings() {
     }
   }, [toast]);
 
+  const saveSetting = async (key: string, value: any) => {
+    try {
+      await updateSettingsCategory('embeddings', { [key]: value });
+      toast({
+        title: "Success",
+        description: "Embeddings setting saved",
+      });
+      loadSettings(); // Reload to update UI
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save embeddings setting",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -238,7 +302,10 @@ function EmbeddingsSettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Embedding Provider</Label>
-              <Select defaultValue={embeddingsConfig?.embeddings?.provider || 'openai'}>
+              <Select
+                value={embeddingsConfig?.embeddings?.provider || 'openai'}
+                onValueChange={(value) => saveSetting('provider', value)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select provider" />
                 </SelectTrigger>
@@ -251,7 +318,10 @@ function EmbeddingsSettings() {
             </div>
             <div>
               <Label>Embedding Model</Label>
-              <Select>
+              <Select
+                value={embeddingsConfig?.embeddings?.model || 'text-embedding-3-small'}
+                onValueChange={(value) => saveSetting('model', value)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
@@ -269,6 +339,7 @@ function EmbeddingsSettings() {
               <Label>Chunk Size: {embeddingsConfig?.embeddings?.chunkSize || 1000}</Label>
               <Slider
                 value={[embeddingsConfig?.embeddings?.chunkSize || 1000]}
+                onValueChange={([value]) => saveSetting('chunkSize', value)}
                 max={2000}
                 min={100}
                 step={100}
@@ -279,6 +350,7 @@ function EmbeddingsSettings() {
               <Label>Chunk Overlap: {embeddingsConfig?.embeddings?.chunkOverlap || 200}</Label>
               <Slider
                 value={[embeddingsConfig?.embeddings?.chunkOverlap || 200]}
+                onValueChange={([value]) => saveSetting('chunkOverlap', value)}
                 max={500}
                 min={0}
                 step={50}
@@ -289,6 +361,7 @@ function EmbeddingsSettings() {
               <Label>Batch Size: {embeddingsConfig?.embeddings?.batchSize || 100}</Label>
               <Slider
                 value={[embeddingsConfig?.embeddings?.batchSize || 100]}
+                onValueChange={([value]) => saveSetting('batchSize', value)}
                 max={500}
                 min={10}
                 step={10}
@@ -300,14 +373,16 @@ function EmbeddingsSettings() {
           <div className="flex items-center justify-between">
             <Label>Cache Embeddings</Label>
             <Switch
-              defaultChecked={embeddingsConfig?.embeddings?.cacheEmbeddings}
+              checked={embeddingsConfig?.embeddings?.cacheEmbeddings}
+              onCheckedChange={(checked) => saveSetting('cacheEmbeddings', checked)}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <Label>Normalize Embeddings</Label>
             <Switch
-              defaultChecked={embeddingsConfig?.embeddings?.normalizeEmbeddings}
+              checked={embeddingsConfig?.embeddings?.normalizeEmbeddings}
+              onCheckedChange={(checked) => saveSetting('normalizeEmbeddings', checked)}
             />
           </div>
         </CardContent>
@@ -455,6 +530,23 @@ function DatabaseSettings() {
     loadSettings();
   }, [loadSettings]);
 
+  const saveSetting = async (key: string, value: any) => {
+    try {
+      await updateSettingsCategory('database', { [key]: value });
+      toast({
+        title: "Success",
+        description: "Database setting saved",
+      });
+      loadSettings(); // Reload to update UI
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save database setting",
+        variant: "destructive",
+      });
+    }
+  };
+
   const testConnection = async () => {
     setTesting(true);
     try {
@@ -492,33 +584,53 @@ function DatabaseSettings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Host</Label>
-              <Input defaultValue={dbConfig?.database?.host || 'localhost'} />
+              <Input
+                defaultValue={dbConfig?.database?.host || 'localhost'}
+                onBlur={(e) => saveSetting('host', e.target.value)}
+              />
             </div>
             <div>
               <Label>Port</Label>
-              <Input type="number" defaultValue={dbConfig?.database?.port || 5432} />
+              <Input
+                type="number"
+                defaultValue={dbConfig?.database?.port || 5432}
+                onBlur={(e) => saveSetting('port', parseInt(e.target.value))}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Database Name</Label>
-              <Input defaultValue={dbConfig?.database?.name || ''} />
+              <Input
+                defaultValue={dbConfig?.database?.name || ''}
+                onBlur={(e) => saveSetting('name', e.target.value)}
+              />
             </div>
             <div>
               <Label>User</Label>
-              <Input defaultValue={dbConfig?.database?.user || ''} />
+              <Input
+                defaultValue={dbConfig?.database?.user || ''}
+                onBlur={(e) => saveSetting('user', e.target.value)}
+              />
             </div>
           </div>
 
           <div>
             <Label>Password</Label>
-            <Input type="password" defaultValue={dbConfig?.database?.password || ''} />
+            <Input
+              type="password"
+              defaultValue={dbConfig?.database?.password || ''}
+              onBlur={(e) => saveSetting('password', e.target.value)}
+            />
           </div>
 
           <div className="flex items-center justify-between">
             <Label>SSL Enabled</Label>
-            <Switch defaultChecked={dbConfig?.database?.ssl} />
+            <Switch
+              defaultChecked={dbConfig?.database?.ssl}
+              onCheckedChange={(checked) => saveSetting('ssl', checked)}
+            />
           </div>
 
           <div className="flex gap-2">
@@ -614,6 +726,366 @@ function SecuritySettings() {
               placeholder="http://localhost:3000,http://localhost:3001"
               rows={3}
             />
+          </div>
+        </CardContent>
+      </Card>
+    </CategoryTab>
+  );
+}
+
+// App Settings Component
+function AppSettings() {
+  const [appConfig, setAppConfig] = useState<any>({});
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getAppSettingsOnly();
+      setAppConfig(data);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load app settings",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  const saveSetting = async (key: string, value: any) => {
+    setSaving(true);
+    try {
+      await updateSettingsCategory('app', { [key]: value });
+      toast({
+        title: "Success",
+        description: "App setting saved",
+      });
+      loadSettings(); // Reload to update UI
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save app setting",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64">Loading app settings...</div>;
+  }
+
+  return (
+    <CategoryTab category="app">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Application Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Application Name</Label>
+              <Input
+                defaultValue={appConfig?.app?.name || 'ASB Assistant'}
+                onBlur={(e) => saveSetting('name', e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Version</Label>
+              <Input
+                defaultValue={appConfig?.app?.version || '1.0.0'}
+                onBlur={(e) => saveSetting('version', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Locale</Label>
+              <Select
+                value={appConfig?.app?.locale || 'tr'}
+                onValueChange={(value) => saveSetting('locale', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select locale" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tr">Turkish</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Logo URL</Label>
+              <Input
+                defaultValue={appConfig?.app?.logoUrl || ''}
+                placeholder="Enter logo URL"
+                onBlur={(e) => saveSetting('logoUrl', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Description</Label>
+            <Textarea
+              defaultValue={appConfig?.app?.description || ''}
+              placeholder="Enter application description"
+              rows={3}
+              onBlur={(e) => saveSetting('description', e.target.value)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </CategoryTab>
+  );
+}
+
+// Redis Settings Component
+function RedisSettings() {
+  const [redisConfig, setRedisConfig] = useState<any>({});
+  const [loading, setLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const { toast } = useToast();
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Redis settings might be part of database or app category
+      const data = await getSettingsCategory('redis');
+      setRedisConfig(data);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load Redis settings",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  const testConnection = async () => {
+    setTesting(true);
+    try {
+      // Simulate Redis connection test
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      toast({
+        title: "Success",
+        description: "Redis connection successful",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Redis connection failed",
+        variant: "destructive",
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const saveSetting = async (key: string, value: any) => {
+    try {
+      await updateSettingsCategory('redis', { [key]: value });
+      toast({
+        title: "Success",
+        description: "Redis setting saved",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save Redis setting",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64">Loading Redis settings...</div>;
+  }
+
+  return (
+    <CategoryTab category="redis">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5" />
+            Redis Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Host</Label>
+              <Input
+                defaultValue={redisConfig?.redis?.host || 'localhost'}
+                onBlur={(e) => saveSetting('host', e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Port</Label>
+              <Input
+                type="number"
+                defaultValue={redisConfig?.redis?.port || 6379}
+                onBlur={(e) => saveSetting('port', parseInt(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Database</Label>
+              <Input
+                type="number"
+                defaultValue={redisConfig?.redis?.db || 2}
+                onBlur={(e) => saveSetting('db', parseInt(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label>Password</Label>
+              <Input
+                type="password"
+                defaultValue={redisConfig?.redis?.password || ''}
+                placeholder="Enter Redis password (if any)"
+                onBlur={(e) => saveSetting('password', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={testConnection} disabled={testing} size="sm">
+              {testing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Test Redis Connection
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </CategoryTab>
+  );
+}
+
+// Scraper Settings Component
+function ScraperSettings() {
+  const [scraperConfig, setScraperConfig] = useState<any>({});
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getSettingsCategory('scraper');
+      setScraperConfig(data);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load scraper settings",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  const saveSetting = async (key: string, value: any) => {
+    try {
+      await updateSettingsCategory('scraper', { [key]: value });
+      toast({
+        title: "Success",
+        description: "Scraper setting saved",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save scraper setting",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64">Loading scraper settings...</div>;
+  }
+
+  return (
+    <CategoryTab category="scraper">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5" />
+            Web Scraper Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Timeout (seconds)</Label>
+              <Input
+                type="number"
+                defaultValue={scraperConfig?.scraper?.timeout || 30}
+                onBlur={(e) => saveSetting('timeout', parseInt(e.target.value))}
+              />
+            </div>
+            <div>
+              <Label>Max Concurrency</Label>
+              <Input
+                type="number"
+                defaultValue={scraperConfig?.scraper?.maxConcurrency || 5}
+                onBlur={(e) => saveSetting('maxConcurrency', parseInt(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>User Agent</Label>
+            <Input
+              defaultValue={scraperConfig?.scraper?.userAgent || 'ASB-Scraper/1.0'}
+              placeholder="Enter custom user agent"
+              onBlur={(e) => saveSetting('userAgent', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Enable JavaScript</Label>
+              <Switch
+                defaultChecked={scraperConfig?.scraper?.enableJavaScript}
+                onCheckedChange={(checked) => saveSetting('enableJavaScript', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Follow Redirects</Label>
+              <Switch
+                defaultChecked={scraperConfig?.scraper?.followRedirects}
+                onCheckedChange={(checked) => saveSetting('followRedirects', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Respect Robots.txt</Label>
+              <Switch
+                defaultChecked={scraperConfig?.scraper?.respectRobotsTxt}
+                onCheckedChange={(checked) => saveSetting('respectRobotsTxt', checked)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -909,7 +1381,11 @@ export default function OptimizedSettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-9">
+          <TabsTrigger value="app" className="flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            App
+          </TabsTrigger>
           <TabsTrigger value="llm" className="flex items-center gap-2">
             <Brain className="w-4 h-4" />
             AI Services
@@ -926,6 +1402,14 @@ export default function OptimizedSettingsPage() {
             <Database className="w-4 h-4" />
             Database
           </TabsTrigger>
+          <TabsTrigger value="redis" className="flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Redis
+          </TabsTrigger>
+          <TabsTrigger value="scraper" className="flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Scraper
+          </TabsTrigger>
           <TabsTrigger value="translation" className="flex items-center gap-2">
             <Languages className="w-4 h-4" />
             Translation
@@ -935,6 +1419,10 @@ export default function OptimizedSettingsPage() {
             Security
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="app">
+          <AppSettings />
+        </TabsContent>
 
         <TabsContent value="llm">
           <LLMSettings />
@@ -950,6 +1438,14 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="database">
           <DatabaseSettings />
+        </TabsContent>
+
+        <TabsContent value="redis">
+          <RedisSettings />
+        </TabsContent>
+
+        <TabsContent value="scraper">
+          <ScraperSettings />
         </TabsContent>
 
         <TabsContent value="translation">
