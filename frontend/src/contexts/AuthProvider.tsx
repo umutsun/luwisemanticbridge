@@ -85,8 +85,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Check for existing session on mount
   useEffect(() => {
     const initAuth = () => {
-      let storedToken = localStorage.getItem('token');
-      let storedUser = localStorage.getItem('user');
+      // Check multiple token storage keys
+      let storedToken = localStorage.getItem('token') || localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      let storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
 
       const legacyToken = localStorage.getItem('asb_token');
       if (!storedToken && legacyToken) {
@@ -114,7 +115,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (error) {
           console.error('Failed to parse stored user:', error);
           localStorage.removeItem('token');
+          localStorage.removeItem('accessToken');
           localStorage.removeItem('user');
+          sessionStorage.removeItem('accessToken');
+          sessionStorage.removeItem('user');
         }
       }
 
@@ -123,13 +127,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initAuth();
 
-    // Development'da focus event'ini devre dışı bırak, sadece production'da aktif et
-    const isDevelopment = process.env.NODE_ENV === 'development';
-
-    if (!isDevelopment && typeof window !== 'undefined') {
+    // Check focus event in both development and production for proper authentication
+    if (typeof window !== 'undefined') {
       const handleFocus = () => {
-        const currentToken = localStorage.getItem('token');
-        const currentUser = localStorage.getItem('user');
+        // Check multiple token storage locations
+        const currentToken = localStorage.getItem('token') || localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+        const currentUser = localStorage.getItem('user') || sessionStorage.getItem('user');
 
         console.log('[AuthProvider] Focus event - Token:', !!currentToken, 'User:', !!currentUser);
 
@@ -150,9 +153,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setToken(null);
               setUser(null);
               localStorage.removeItem('token');
+              localStorage.removeItem('accessToken');
               localStorage.removeItem('user');
+              sessionStorage.removeItem('accessToken');
+              sessionStorage.removeItem('user');
             } else {
-              console.log('[AuthProvider] Updating auth state from localStorage');
+              console.log('[AuthProvider] Updating auth state from storage');
               setToken(currentToken);
               setUser(parsedUser);
             }
@@ -194,8 +200,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const data = await response.json();
 
+      // Store token in multiple places for compatibility
       setStoredToken(data.accessToken);
+      localStorage.setItem('token', data.accessToken); // Add this for AuthProvider compatibility
       localStorage.setItem('user', JSON.stringify(data.user));
+      sessionStorage.setItem('accessToken', data.accessToken);
+      sessionStorage.setItem('user', JSON.stringify(data.user));
 
       // Also set token in cookie with 30 days expiration
       document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
@@ -215,9 +225,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = () => {
     setStoredToken(null);
+    // Clear all storage locations
+    localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     localStorage.removeItem('asb_user');
     localStorage.removeItem('asb_token');
+    sessionStorage.removeItem('accessToken');
+    sessionStorage.removeItem('user');
 
     // Remove token from cookies
     document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';

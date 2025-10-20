@@ -687,6 +687,182 @@ export class ScraperService {
     
     return results;
   }
+
+  async getPerformanceMetrics(): Promise<any> {
+    try {
+      // Get basic metrics from database
+      const result = await pgPool.query(`
+        SELECT
+          COUNT(*) as total_scrapes,
+          COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as scrapes_24h,
+          COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as scrapes_7d,
+          AVG(content_length) as avg_content_length,
+          MAX(created_at) as last_scrape
+        FROM scraped_data
+      `);
+
+      const metrics = result.rows[0];
+
+      // Get system performance info
+      const memoryUsage = process.memoryUsage();
+
+      return {
+        totalScrapes: parseInt(metrics.total_scrapes || 0),
+        scrapes24h: parseInt(metrics.scrapes_24h || 0),
+        scrapes7d: parseInt(metrics.scrapes_7d || 0),
+        avgContentLength: parseFloat(metrics.avg_content_length || 0),
+        lastScrape: metrics.last_scrape || null,
+        uptime: process.uptime(),
+        memory: {
+          used: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+          total: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+          external: Math.round(memoryUsage.external / 1024 / 1024)
+        },
+        cpu: process.cpuUsage(),
+        performance: {
+          avgResponseTime: 1500, // Mock data
+          successRate: 95.5, // Mock data
+          errorRate: 4.5 // Mock data
+        }
+      };
+    } catch (error) {
+      console.error('Error getting performance metrics:', error);
+      return {
+        totalScrapes: 0,
+        scrapes24h: 0,
+        scrapes7d: 0,
+        avgContentLength: 0,
+        lastScrape: null,
+        uptime: process.uptime(),
+        memory: {
+          used: 0,
+          total: 0,
+          external: 0
+        },
+        cpu: process.cpuUsage(),
+        performance: {
+          avgResponseTime: 0,
+          successRate: 0,
+          errorRate: 0
+        }
+      };
+    }
+  }
+
+  async getBasicStats(): Promise<any> {
+    try {
+      const [totalResult, projectsResult, sitesResult] = await Promise.all([
+        pgPool.query('SELECT COUNT(*) FROM scraped_data'),
+        pgPool.query('SELECT COUNT(*) FROM scraping_projects'),
+        pgPool.query('SELECT COUNT(*) FROM project_sites')
+      ]);
+
+      return {
+        totalItems: parseInt(totalResult.rows[0].count),
+        processedItems: parseInt(totalResult.rows[0].count),
+        totalProjects: parseInt(projectsResult.rows[0].count),
+        totalSites: parseInt(sitesResult.rows[0].count),
+        itemsLast24h: 0 // TODO: Implement this
+      };
+    } catch (error) {
+      console.error('Error getting basic stats:', error);
+      return {
+        totalItems: 0,
+        processedItems: 0,
+        totalProjects: 0,
+        totalSites: 0,
+        itemsLast24h: 0
+      };
+    }
+  }
+
+  async getPerformanceMetrics(): Promise<any> {
+    try {
+      // Get basic metrics from database
+      const result = await pgPool.query(`
+        SELECT
+          COUNT(*) as total_scrapes,
+          COUNT(CASE WHEN created_at > NOW() - INTERVAL '24 hours' THEN 1 END) as scrapes_24h,
+          COUNT(CASE WHEN created_at > NOW() - INTERVAL '7 days' THEN 1 END) as scrapes_7d,
+          AVG(content_length) as avg_content_length,
+          MAX(created_at) as last_scrape
+        FROM scraped_data
+      `);
+
+      const metrics = result.rows[0];
+
+      // Get system performance info
+      const memoryUsage = process.memoryUsage();
+
+      return {
+        totalScrapes: parseInt(metrics.total_scrapes || 0),
+        scrapes24h: parseInt(metrics.scrapes_24h || 0),
+        scrapes7d: parseInt(metrics.scrapes_7d || 0),
+        avgContentLength: parseFloat(metrics.avg_content_length || 0),
+        lastScrape: metrics.last_scrape || null,
+        uptime: process.uptime(),
+        memory: {
+          used: Math.round(memoryUsage.heapUsed / 1024 / 1024),
+          total: Math.round(memoryUsage.heapTotal / 1024 / 1024),
+          external: Math.round(memoryUsage.external / 1024 / 1024)
+        },
+        cpu: process.cpuUsage(),
+        performance: {
+          avgResponseTime: 1500, // Mock data
+          successRate: 95.5, // Mock data
+          errorRate: 4.5 // Mock data
+        }
+      };
+    } catch (error) {
+      console.error('Error getting performance metrics:', error);
+      return {
+        totalScrapes: 0,
+        scrapes24h: 0,
+        scrapes7d: 0,
+        avgContentLength: 0,
+        lastScrape: null,
+        uptime: process.uptime(),
+        memory: {
+          used: 0,
+          total: 0,
+          external: 0
+        },
+        cpu: process.cpuUsage(),
+        performance: {
+          avgResponseTime: 0,
+          successRate: 0,
+          errorRate: 0
+        }
+      };
+    }
+  }
+
+  async getBasicStats(): Promise<any> {
+    try {
+      const [totalResult, projectsResult, sitesResult] = await Promise.all([
+        pgPool.query('SELECT COUNT(*) FROM scraped_data'),
+        pgPool.query('SELECT COUNT(*) FROM scraping_projects'),
+        pgPool.query('SELECT COUNT(*) FROM project_sites')
+      ]);
+
+      return {
+        totalItems: parseInt(totalResult.rows[0].count),
+        processedItems: parseInt(totalResult.rows[0].count),
+        totalProjects: parseInt(projectsResult.rows[0].count),
+        totalSites: parseInt(sitesResult.rows[0].count),
+        itemsLast24h: 0 // TODO: Implement this
+      };
+    } catch (error) {
+      console.error('Error getting basic stats:', error);
+      return {
+        totalItems: 0,
+        processedItems: 0,
+        totalProjects: 0,
+        totalSites: 0,
+        itemsLast24h: 0
+      };
+    }
+  }
 }
 
 export default new ScraperService();

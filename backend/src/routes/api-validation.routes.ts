@@ -1,0 +1,583 @@
+import { Router, Request, Response } from 'express';
+import llmManager from '../services/llm-manager.service';
+import { lsembPool } from '../config/database.config';
+import { OpenAI } from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const router = Router();
+
+// Test API key for specific provider
+router.post('/test/:provider', async (req: Request, res: Response) => {
+  try {
+    const { provider } = req.params;
+    const { apiKey, model } = req.body;
+
+    if (!apiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'API key is required'
+      });
+    }
+
+    const startTime = Date.now();
+    let testResult: any = {};
+
+    switch (provider) {
+      case 'openai':
+        try {
+          console.log(`Testing OpenAI with model: ${model || 'gpt-4o-mini'}`);
+          const openai = new OpenAI({ apiKey });
+
+          // Test with models list first
+          const modelsResponse = await openai.models.list();
+          console.log('OpenAI models list retrieved successfully');
+
+          const testModel = model || 'gpt-4o-mini';
+
+          // Test with a simple chat completion
+          const chatResponse = await openai.chat.completions.create({
+            model: testModel,
+            messages: [{ role: 'user', content: 'Test message' }],
+            max_tokens: 5
+          });
+
+          const responseTime = Date.now() - startTime;
+          console.log('OpenAI chat completion successful:', chatResponse);
+
+          testResult = {
+            success: true,
+            model: testModel,
+            responseTime,
+            usage: {
+              promptTokens: chatResponse.usage?.prompt_tokens || 0,
+              completionTokens: chatResponse.usage?.completion_tokens || 0,
+              totalTokens: chatResponse.usage?.total_tokens || 0
+            },
+            message: 'API connection successful'
+          };
+        } catch (error: any) {
+          console.error('OpenAI API validation error:', error);
+
+          // Provide more specific error messages
+          let errorMessage = error.message || 'OpenAI API validation failed';
+
+          if (error.message?.includes('API key')) {
+            errorMessage = 'Invalid OpenAI API key. Please check your API key.';
+          } else if (error.message?.includes('quota')) {
+            errorMessage = 'OpenAI API quota exceeded. Please check your billing.';
+          } else if (error.message?.includes('model')) {
+            errorMessage = 'OpenAI model not available. Using fallback model.';
+          } else if (error.message?.includes('401')) {
+            errorMessage = 'Invalid OpenAI API key format or authentication failed.';
+          }
+
+          testResult = {
+            success: false,
+            error: errorMessage,
+            type: error.type || 'openai_api_error',
+            details: {
+              code: error.status,
+              status: error.statusText
+            }
+          };
+        }
+        break;
+
+      case 'anthropic':
+        try {
+          const anthropic = new Anthropic({ apiKey });
+          const testModel = model || 'claude-3-5-sonnet-20241022';
+
+          const response = await anthropic.messages.create({
+            model: testModel,
+            max_tokens: 5,
+            messages: [{ role: 'user', content: 'Test message' }]
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          testResult = {
+            success: true,
+            model: testModel,
+            responseTime,
+            usage: {
+              inputTokens: response.usage?.input_tokens || 0,
+              outputTokens: response.usage?.output_tokens || 0
+            },
+            message: 'API connection successful'
+          };
+        } catch (error: any) {
+          testResult = {
+            success: false,
+            error: error.message || 'Anthropic API validation failed',
+            type: error.type || 'unknown'
+          };
+        }
+        break;
+
+      case 'google':
+        try {
+          const genAI = new GoogleGenerativeAI(apiKey);
+
+          // Try different model names in order of preference
+          const modelNames = [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro',
+            'gemini-pro-vision'
+          ];
+
+          const testModel = model || modelNames[0];
+          console.log(`Testing Google AI with model: ${testModel}`);
+
+          const modelInstance = genAI.getGenerativeModel({ model: testModel });
+          const response = await modelInstance.generateContent({
+            contents: [{ parts: [{ text: 'Test message' }] }]
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          // Try to get usage info if available
+          const usage = response.response?.usageMetadata ? {
+            promptTokenCount: response.response.usageMetadata.promptTokenCount || 0,
+            candidatesTokenCount: response.response.usageMetadata.candidatesTokenCount || 0,
+            totalTokenCount: response.response.usageMetadata.totalTokenCount || 0
+          } : {
+            promptTokenCount: 0,
+            candidatesTokenCount: 0,
+            totalTokenCount: 1 // At least 1 token was used
+          };
+
+          testResult = {
+            success: true,
+            model: testModel,
+            responseTime,
+            usage: {
+              inputTokens: usage.promptTokenCount,
+              outputTokens: usage.candidatesTokenCount,
+              totalTokens: usage.totalTokenCount
+            },
+            message: 'API connection successful'
+          };
+        } catch (error: any) {
+          console.error('Google AI API validation error:', error);
+
+          // Provide more specific error messages
+          let errorMessage = error.message || 'Google AI API validation failed';
+
+          if (error.message?.includes('API key')) {
+            errorMessage = 'Invalid Google AI API key. Please check your API key.';
+          } else if (error.message?.includes('quota')) {
+            errorMessage = 'Google AI API quota exceeded. Please check your billing.';
+          } else if (error.message?.includes('model')) {
+            errorMessage = 'Google AI model not available. Using fallback model.';
+          }
+
+          testResult = {
+            success: false,
+            error: errorMessage,
+            type: error.type || 'google_api_error',
+            details: {
+              code: error.status,
+              status: error.statusText
+            }
+          };
+        }
+        break;
+
+      case 'deepseek':
+        try {
+          const deepseek = new OpenAI({
+            apiKey,
+            baseURL: 'https://api.deepseek.com'
+          });
+
+          const testModel = model || 'deepseek-chat';
+
+          const response = await deepseek.chat.completions.create({
+            model: testModel,
+            messages: [{ role: 'user', content: 'Test' }],
+            max_tokens: 5
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          testResult = {
+            success: true,
+            model: testModel,
+            responseTime,
+            usage: {
+              promptTokens: response.usage?.prompt_tokens || 0,
+              completionTokens: response.usage?.completion_tokens || 0,
+              totalTokens: response.usage?.total_tokens || 0
+            },
+            message: 'API connection successful'
+          };
+        } catch (error: any) {
+          testResult = {
+            success: false,
+            error: error.message || 'DeepSeek API validation failed',
+            type: error.type || 'unknown'
+          };
+        }
+        break;
+
+      case 'deepl':
+        try {
+          console.log(`Testing DeepL API with key format: ${apiKey ? apiKey.substring(0, 10) + '...' : 'none'}`);
+
+          // Determine which endpoint to use based on model/plan
+          const isProPlan = model === 'deepl-pro' || false;
+          const deeplEndpoint = isProPlan ?
+            'https://api.deepl.com/v2/translate' :
+            'https://api-free.deepl.com/v2/translate';
+
+          console.log(`Using DeepL endpoint: ${deeplEndpoint}`);
+
+          // Test with usage API first (more reliable for validation)
+          const usageResponse = await fetch(`${deeplEndpoint.replace('/translate', '/usage')}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `DeepL-Auth-Key ${apiKey}`,
+              'Content-Type': 'application/json',
+            }
+          });
+
+          let usageValid = false;
+          if (usageResponse.ok) {
+            const usageData = await usageResponse.json();
+            usageValid = true;
+            console.log('DeepL usage API successful:', usageData);
+          }
+
+          // Also test translation API
+          const response = await fetch(deeplEndpoint, {
+            method: 'POST',
+            headers: {
+              'Authorization': `DeepL-Auth-Key ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: ['Hello'],
+              target_lang: 'ES'
+            })
+          });
+
+          const responseTime = Date.now() - startTime;
+          console.log(`DeepL translation API response status: ${response.status}`);
+
+          if (response.ok) {
+            const data = await response.json();
+            testResult = {
+              success: true,
+              model: model || 'deepl-free',
+              responseTime,
+              usage: {
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 2,
+                usageChecked: usageValid
+              },
+              translatedText: data.translations?.[0]?.text,
+              message: 'API connection successful',
+              endpoint: deeplEndpoint
+            };
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('DeepL API error response:', errorData);
+
+            // Provide more specific error messages
+            let errorMessage = 'DeepL API validation failed';
+            if (response.status === 403) {
+              errorMessage = 'Invalid DeepL API key. Please check your API key and plan type.';
+            } else if (response.status === 429) {
+              errorMessage = 'DeepL API quota exceeded. Please check your usage limits.';
+            } else if (response.status === 401) {
+              errorMessage = 'DeepL API authentication failed. Check your API key format.';
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
+            }
+
+            throw new Error(errorMessage);
+          }
+        } catch (error: any) {
+          console.error('DeepL API validation error:', error);
+          testResult = {
+            success: false,
+            error: error.message || 'DeepL API validation failed',
+            type: error.type || 'deepl_api_error',
+            details: {
+              suggestion: 'Make sure your API key is correct and matches your DeepL plan (Free vs Pro)'
+            }
+          };
+        }
+        break;
+
+      case 'googleTranslate':
+        try {
+          // For Google Translate, we'll test the API with a simple translation
+          const response = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${apiKey}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              q: 'Hello',
+              target: 'es',
+              format: 'text'
+            })
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          if (response.ok) {
+            const data = await response.json();
+            testResult = {
+              success: true,
+              model: 'google-translate',
+              responseTime,
+              usage: {
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 2
+              },
+              translatedText: data.data?.translations?.[0]?.translatedText,
+              message: 'API connection successful'
+            };
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error?.message || 'Google Translate API validation failed');
+          }
+        } catch (error: any) {
+          testResult = {
+            success: false,
+            error: error.message || 'Google Translate API validation failed',
+            type: error.type || 'unknown'
+          };
+        }
+        break;
+
+      case 'huggingface':
+        try {
+          // For HuggingFace, we'll check if the API key can access the API
+          const response = await fetch('https://api-inference.huggingface.co/models/distilbert-base-uncased', {
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
+            body: JSON.stringify({ inputs: 'Test' })
+          });
+
+          const responseTime = Date.now() - startTime;
+
+          if (response.ok) {
+            testResult = {
+              success: true,
+              model: model || 'distilbert-base-uncased',
+              responseTime,
+              message: 'API connection successful'
+            };
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'HuggingFace API validation failed');
+          }
+        } catch (error: any) {
+          testResult = {
+            success: false,
+            error: error.message || 'HuggingFace API validation failed',
+            type: error.type || 'unknown'
+          };
+        }
+        break;
+
+      case 'openrouter':
+        try {
+          console.log(`Testing OpenRouter with model: ${model || 'openai/gpt-4o-mini'}`);
+
+          // OpenRouter uses OpenAI-compatible API format
+          const openrouter = new OpenAI({
+            apiKey,
+            baseURL: 'https://openrouter.ai/api/v1',
+            defaultHeaders: {
+              'HTTP-Referer': 'https://localhost:3000',
+              'X-Title': 'Alice Semantic Bridge API Validation'
+            }
+          });
+
+          const testModel = model || 'openai/gpt-4o-mini';
+
+          // Test with models list first
+          const modelsResponse = await openrouter.models.list();
+          console.log('OpenRouter models list retrieved successfully');
+
+          // Test with a simple chat completion
+          const chatResponse = await openrouter.chat.completions.create({
+            model: testModel,
+            messages: [{ role: 'user', content: 'Test message' }],
+            max_tokens: 5
+          });
+
+          const responseTime = Date.now() - startTime;
+          console.log('OpenRouter chat completion successful:', chatResponse);
+
+          testResult = {
+            success: true,
+            model: testModel,
+            responseTime,
+            usage: {
+              promptTokens: chatResponse.usage?.prompt_tokens || 0,
+              completionTokens: chatResponse.usage?.completion_tokens || 0,
+              totalTokens: chatResponse.usage?.total_tokens || 0
+            },
+            message: 'API connection successful'
+          };
+        } catch (error: any) {
+          console.error('OpenRouter API validation error:', error);
+
+          // Provide more specific error messages
+          let errorMessage = error.message || 'OpenRouter API validation failed';
+
+          if (error.message?.includes('API key')) {
+            errorMessage = 'Invalid OpenRouter API key. Please check your API key.';
+          } else if (error.message?.includes('quota')) {
+            errorMessage = 'OpenRouter API quota exceeded. Please check your billing.';
+          } else if (error.message?.includes('model')) {
+            errorMessage = 'OpenRouter model not available. Using fallback model.';
+          } else if (error.message?.includes('401')) {
+            errorMessage = 'Invalid OpenRouter API key format or authentication failed.';
+          }
+
+          testResult = {
+            success: false,
+            error: errorMessage,
+            type: error.type || 'openrouter_api_error',
+            details: {
+              code: error.status,
+              status: error.statusText
+            }
+          };
+        }
+        break;
+
+      default:
+        return res.status(400).json({
+          success: false,
+          error: `Provider ${provider} not supported`
+        });
+    }
+
+    // Save validation result to database
+    if (testResult.success) {
+      try {
+        await lsembPool.query(
+          'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+          [`${provider}.apiKey`, apiKey]
+        );
+
+        // Save validation status and metadata
+        await lsembPool.query(
+          'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+          [`${provider}.status`, 'active']
+        );
+
+        await lsembPool.query(
+          'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+          [`${provider}.verifiedDate`, new Date().toISOString()]
+        );
+
+        // Save token usage info
+        if (testResult.usage) {
+          await lsembPool.query(
+            'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+            [`lastTestTokens.provider`, provider]
+          );
+          await lsembPool.query(
+            'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+            [`lastTestTokens.model`, testResult.model]
+          );
+          await lsembPool.query(
+            'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+            [`lastTestTokens.total`, testResult.usage.totalTokens || testResult.usage.inputTokens + testResult.usage.outputTokens]
+          );
+          await lsembPool.query(
+            'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+            [`lastTestTokens.testedAt`, new Date().toISOString()]
+          );
+        }
+      } catch (dbError) {
+        console.error('Failed to save API key to database:', dbError);
+      }
+    }
+
+    res.json({
+      success: testResult.success,
+      provider,
+      ...testResult,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error: any) {
+    console.error(`API validation error for ${req.params.provider}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'API validation failed',
+      provider: req.params.provider
+    });
+  }
+});
+
+// Get provider status from LLM Manager
+router.get('/status', async (req: Request, res: Response) => {
+  try {
+    const status = await llmManager.getProviderStatus();
+    res.json({
+      success: true,
+      providers: status,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Error getting provider status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get provider status'
+    });
+  }
+});
+
+// Get available models for a provider
+router.get('/models/:provider', async (req: Request, res: Response) => {
+  try {
+    const { provider } = req.params;
+
+    const models = {
+      openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+      anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+      google: ['gemini-1.5-pro-latest', 'gemini-1.5-flash-latest'],
+      deepseek: ['deepseek-chat', 'deepseek-coder'],
+      deepl: ['deepl-free', 'deepl-pro'],
+      googleTranslate: ['google-translate'],
+      huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
+      openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5']
+    };
+
+    const providerModels = models[provider as keyof typeof models] || [];
+
+    res.json({
+      success: true,
+      provider,
+      models: providerModels
+    });
+  } catch (error: any) {
+    console.error(`Error getting models for ${req.params.provider}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get models'
+    });
+  }
+});
+
+export default router;

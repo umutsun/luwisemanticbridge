@@ -143,6 +143,19 @@ export class SubscriptionService {
   }
 
   async canUserMakeQuery(userId: string): Promise<{ canQuery: boolean; reason: string; remaining: number }> {
+    // Admin users have unlimited access
+    const isAdminResult = await this.pool.query(
+      'SELECT role, email FROM users WHERE id = $1',
+      [userId]
+    );
+
+    console.log(`[SUBSCRIPTION] Checking user ${userId}, role: ${isAdminResult.rows[0]?.role}, email: ${isAdminResult.rows[0]?.email}`);
+
+    if (isAdminResult.rows.length > 0 && isAdminResult.rows[0].role === 'admin') {
+      console.log(`[SUBSCRIPTION] Admin bypass for user ${userId} (${isAdminResult.rows[0].email})`);
+      return { canQuery: true, reason: 'Admin unlimited access', remaining: -1 };
+    }
+
     const subscription = await this.getUserSubscription(userId);
 
     if (!subscription) {

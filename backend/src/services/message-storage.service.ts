@@ -89,7 +89,7 @@ export class MessageStorageService {
 
       // Also generate embedding immediately for important messages
       if (type === 'answer' || type === 'search_result') {
-        const embedding = await generateEmbedding(content);
+        const embedding = await LLMManager.generateEmbedding(content);
 
         // Store in message_embeddings with full context
         const query = `
@@ -199,7 +199,7 @@ export class MessageStorageService {
       // Process messages in batch
       for (const message of batchMessages.messages) {
         if (message.type === 'search_result' || message.type === 'source_context') {
-          const embedding = await generateEmbedding(message.content);
+          const embedding = await LLMManager.generateEmbedding(message.content);
 
           await pool.query(`
             INSERT INTO message_embeddings (session_id, user_id, message_type, content, embedding, metadata)
@@ -377,6 +377,45 @@ export class MessageStorageService {
       await redis.expire(activityKey, 24 * 60 * 60); // 24 hours
     } catch (error) {
       logger.error('Error updating session activity:', error);
+    }
+  }
+
+  /**
+   * Save basic Q&A pair for backward compatibility
+   */
+  static async saveQAPair(
+    sessionId: string,
+    question: string,
+    answer: string,
+    userId: string,
+    metadata: any = {}
+  ): Promise<void> {
+    try {
+      const query = `
+        INSERT INTO messages (conversation_id, user_id, message, role, created_at, metadata)
+        VALUES ($1, $2, $3, $4, NOW(), $5)
+      `;
+
+      await lsembPool.query(query, [
+        sessionId,
+        userId,
+        question,
+        'user',
+        { ...metadata, timestamp: new Date().toISOString() }
+      ]);
+
+      await lsembPool.query(query, [
+        sessionId,
+        userId,
+        answer,
+        'assistant',
+        { ...metadata, timestamp: new Date().toISOString() }
+      ]);
+
+      logger.info(`Basic Q&A pair saved for session: ${sessionId}`);
+    } catch (error) {
+      logger.error('Error saving Q&A pair:', error);
+      throw error;
     }
   }
 

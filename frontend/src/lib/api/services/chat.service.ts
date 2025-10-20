@@ -35,7 +35,7 @@ class ChatService {
   }
 
   async streamMessage(request: ChatRequest, onChunk: (chunk: string) => void): Promise<void> {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/chat/stream`, {
+    const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,24 +52,38 @@ class ChatService {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      
+
       const chunk = decoder.decode(value);
       onChunk(chunk);
     }
   }
 
   async getSessions(): Promise<ChatSession[]> {
-    const response = await apiClient.get<ChatSession[]>('/api/chat/sessions');
+    const response = await apiClient.get<ChatSession[]>('/api/chat/conversations');
     return response.data;
   }
 
   async getSession(sessionId: string): Promise<ChatSession> {
-    const response = await apiClient.get<ChatSession>(`/api/chat/sessions/${sessionId}`);
+    const response = await apiClient.get<ChatSession>(`/api/chat/conversations/${sessionId}`);
     return response.data;
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    await apiClient.delete(`/api/chat/sessions/${sessionId}`);
+    await apiClient.delete(`/api/chat/conversations/${sessionId}`);
+  }
+
+  async updateSessionTitle(sessionId: string, title: string): Promise<void> {
+    await apiClient.put(`/api/chat/conversations/${sessionId}`, { title });
+  }
+
+  async clearSession(sessionId: string): Promise<void> {
+    await apiClient.post(`/api/chat/conversations/${sessionId}/clear`);
+  }
+
+  async getChatSuggestions(context?: string): Promise<any> {
+    const params = context ? `?context=${encodeURIComponent(context)}` : '';
+    const response = await apiClient.get(`/api/chat/suggestions${params}`);
+    return response.data;
   }
 }
 

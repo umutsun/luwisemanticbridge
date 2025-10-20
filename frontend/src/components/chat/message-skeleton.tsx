@@ -5,7 +5,7 @@ import { Search, Brain } from 'lucide-react';
 
 interface MessageSkeletonProps {
   type?: 'searching' | 'generating' | 'default';
-  message?: string;
+  message?: string; // Keeping for backward compatibility but not using
 }
 
 export function MessageSkeleton({ type = 'default', message }: MessageSkeletonProps) {
@@ -22,14 +22,7 @@ export function MessageSkeleton({ type = 'default', message }: MessageSkeletonPr
       </div>
 
       <div className="flex-1 min-w-0 space-y-3">
-        {/* Status message */}
-        {message && (
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            {type === 'searching' && <Search className="w-4 h-4" />}
-            {type === 'generating' && <Brain className="w-4 h-4" />}
-            <span>{message}</span>
-          </div>
-        )}
+        {/* Status message removed - only skeleton animation */}
 
         {/* Response skeleton lines */}
         <div className="space-y-2">

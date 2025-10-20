@@ -38,6 +38,36 @@ export default function InitializationLoader() {
     return () => timeouts.forEach(clearTimeout);
   }, []);
 
+  // Add CSS for cube animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes rotateCube {
+        0% { transform: rotateX(0deg) rotateY(0deg); }
+        100% { transform: rotateX(360deg) rotateY(360deg); }
+      }
+      @keyframes cubeGlow {
+        0% {
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.6),
+                      0 0 20px rgba(99, 102, 241, 0.4),
+                      inset 0 0 10px rgba(99, 102, 241, 0.1);
+        }
+        100% {
+          box-shadow: 0 0 20px rgba(139, 92, 246, 0.8),
+                      0 0 30px rgba(139, 92, 246, 0.6),
+                      inset 0 0 15px rgba(139, 92, 246, 0.2);
+        }
+      }
+      .cube-face {
+        animation: cubeGlow 4s ease-in-out infinite alternate;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
   const updateStep = (steps: InitializationStep[], id: string, status: InitializationStep['status']) => {
     return steps.map(step => step.id === id ? { ...step, status } : step);
   };
@@ -47,13 +77,62 @@ export default function InitializationLoader() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Logo/Title */}
+        {/* Logo/Title - 3D Cube */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-xl mb-4">
-            <Zap className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center mb-6">
+            {/* 3D Cube Container */}
+            <div className="relative w-10 h-10" style={{ perspective: '1000px' }}>
+              <div className="absolute w-full h-full" style={{
+                transformStyle: 'preserve-3d',
+                animation: 'rotateCube 8s linear infinite'
+              }}>
+                {/* Front Face */}
+                <div className="absolute w-full h-full cube-face" style={{
+                  transform: 'translateZ(20px)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  backdropFilter: 'blur(5px)'
+                }} />
+                {/* Back Face */}
+                <div className="absolute w-full h-full cube-face" style={{
+                  transform: 'rotateY(180deg) translateZ(20px)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  backdropFilter: 'blur(5px)'
+                }} />
+                {/* Right Face */}
+                <div className="absolute w-full h-full cube-face" style={{
+                  transform: 'rotateY(90deg) translateZ(20px)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  backdropFilter: 'blur(5px)'
+                }} />
+                {/* Left Face */}
+                <div className="absolute w-full h-full cube-face" style={{
+                  transform: 'rotateY(-90deg) translateZ(20px)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  backdropFilter: 'blur(5px)'
+                }} />
+                {/* Top Face */}
+                <div className="absolute w-full h-full cube-face" style={{
+                  transform: 'rotateX(90deg) translateZ(20px)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  backdropFilter: 'blur(5px)'
+                }} />
+                {/* Bottom Face */}
+                <div className="absolute w-full h-full cube-face" style={{
+                  transform: 'rotateX(-90deg) translateZ(20px)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  backdropFilter: 'blur(5px)'
+                }} />
+              </div>
+            </div>
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">
-            Luwi Semantic Bridge
+            Luwi Semantic Bridge v1.0.0
           </h1>
           <p className="text-gray-400">
             Initializing your AI-powered platform

@@ -137,7 +137,7 @@ export const createUploadRateLimit = {
 export const createAuthRateLimit = {
   middleware: new RateLimiter({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 5, // 5 login attempts per 15 minutes
+    maxRequests: 50, // 50 login attempts per 15 minutes
     message: 'Too many login attempts. Please try again later.'
   }).middleware
 };
@@ -146,7 +146,7 @@ export const createAuthRateLimit = {
 export const generalRateLimit = {
   middleware: new RateLimiter({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 500, // 500 requests per 15 minutes
+    maxRequests: 5000, // 5000 requests per 15 minutes (increased from 500)
     message: 'Too many requests. Please try again later.'
   }).middleware
 };

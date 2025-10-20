@@ -24,26 +24,30 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
+  Bot,
   Brain,
   ChevronDown,
   Home,
-  Activity,
   Database,
   LogOut,
   User,
   Users,
-  Server,
-  Cpu,
+  Settings,
   Settings2,
   MessageSquare,
-  Search,
   FileText,
   Globe,
+  Languages,
   Menu,
   X,
-  Shield,
-  RefreshCw,
-  Monitor
+  Monitor,
+  Trash2,
+  Hash,
+  TrendingUp,
+  Filter,
+  CheckSquare,
+  Square,
+  Server
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
@@ -58,6 +62,7 @@ interface SystemStatus {
     documents: number;
     responseTime?: number;
     databaseName?: string;
+    tableCount?: number;
   };
   redis: {
     connected: boolean;
@@ -69,11 +74,17 @@ interface SystemStatus {
     model: string;
     provider: string;
     active: boolean;
+    displayName?: string;
   };
   embedder: {
     active: boolean;
     model: string;
     provider: string;
+  };
+  translationModel?: {
+    active: boolean;
+    model?: string;
+    provider?: string;
   };
   overall?: {
     status: string;
@@ -105,13 +116,20 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    fetchSystemStatus();
-    const interval = setInterval(fetchSystemStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (token) {
+      fetchSystemStatus();
+      const interval = setInterval(fetchSystemStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
 
   
   const fetchSystemStatus = async () => {
+    if (!token) {
+      console.warn('No token available, skipping system status fetch');
+      return;
+    }
+
     if (isConnecting) {
       let progress = 0;
       const progressInterval = setInterval(() => {
@@ -127,14 +145,10 @@ export default function Header() {
       // Use API_BASE_URL for proper cross-origin requests
       const headers = {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       };
 
-      // Add token if available
-      if (token) {
-        (headers as any)['Authorization'] = `Bearer ${token}`;
-      }
-
-      const [healthResponse, dbResponse, redisResponse] = await Promise.all([
+      const [healthResponse, dbResponse, redisResponse, translationResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v2/health/system`, {
           headers,
           mode: 'cors',
@@ -145,7 +159,12 @@ export default function Header() {
           mode: 'cors',
           credentials: 'include'
         }),
-        fetch(`${API_BASE_URL}/api/v2/database/schema`, {
+        fetch(`${API_BASE_URL}/api/v2/redis/stats`, {
+          headers,
+          mode: 'cors',
+          credentials: 'include'
+        }),
+        fetch(`${API_BASE_URL}/api/v2/settings?category=translation`, {
           headers,
           mode: 'cors',
           credentials: 'include'
@@ -156,6 +175,7 @@ export default function Header() {
         const healthData = await healthResponse.json();
         const dbData = await dbResponse.json();
         const redisData = redisResponse.ok ? await redisResponse.json() : null;
+        const translationData = translationResponse.ok ? await translationResponse.json() : null;
 
         setConnectionProgress(100);
 
@@ -172,28 +192,29 @@ export default function Header() {
           const dbService = healthData.services?.database || healthData.services?.lsemb_database;
           const redisService = healthData.services?.redis;
 
-          // Extract database name from settings or database stats
-          let databaseName = 'lsemb'; // default
+          // Use migration target database from settings
+          // Show rag_chatbot as the migration target, not the current connection (lsemb)
+          let databaseName = 'rag_chatbot'; // migration target from settings
           if (settings && settings.database?.name) {
             databaseName = settings.database.name;
-          } else if (dbData && dbData.database) {
-            databaseName = dbData.database;
-          } else if (dbData && dbData.databaseName) {
-            databaseName = dbData.databaseName;
+          } else if (settings && settings.database?.database) {
+            databaseName = settings.database.database;
           }
 
-          // Calculate total records from database schema
+          // Calculate total records and table count from database schema
           let totalRecords = 0;
+          let tableCount = 0;
           if (dbData && dbData.tables) {
             totalRecords = dbData.tables.reduce((sum: number, table: any) => sum + (table.rowCount || 0), 0);
+            tableCount = dbData.tables.length;
           }
 
           // Get LLM model information
           let llmModelInfo = {
-            model: 'anthropic/claude-3-sonnet',
-            provider: 'Anthropic',
+            model: 'openai/gpt-4o-mini',
+            provider: 'OpenAI',
             active: true,
-            displayName: 'Claude 3 Sonnet'
+            displayName: 'GPT-4o Mini'
           };
 
           try {
@@ -229,13 +250,45 @@ export default function Header() {
             console.warn('Could not fetch LLM settings, using defaults');
           }
 
+          // Get embedding model from settings
+          let embeddingModel = 'text-embedding-004'; // default
+          let embeddingProvider = 'Google'; // default
+          if (settings && settings.llmSettings?.activeEmbeddingModel) {
+            const modelParts = settings.llmSettings.activeEmbeddingModel.split('/');
+            if (modelParts.length >= 2) {
+              embeddingProvider = modelParts[0].charAt(0).toUpperCase() + modelParts[0].slice(1);
+              embeddingModel = modelParts[1];
+            }
+          } else if (settings?.llmSettings?.embeddingModel) {
+            embeddingModel = settings.llmSettings.embeddingModel;
+          }
+
+          // Detect translation model
+          let translationModel = null;
+          if (translationData) {
+            if (translationData.deepl?.apiKey) {
+              translationModel = {
+                active: true,
+                model: 'DeepL',
+                provider: 'DeepL'
+              };
+            } else if (translationData.google?.translate?.apiKey) {
+              translationModel = {
+                active: true,
+                model: 'Google Translate',
+                provider: 'Google'
+              };
+            }
+          }
+
           setSystemStatus({
             database: {
               connected: dbService?.status === 'connected' || dbService?.status === 'healthy',
               size: 'N/A',
               documents: 0,
               responseTime: dbService?.responseTime || 0,
-              databaseName: databaseName
+              databaseName: databaseName,
+              tableCount: tableCount
             },
             redis: {
               connected: redisService?.status === 'connected' ||
@@ -244,14 +297,15 @@ export default function Header() {
                         (redisService && !redisService.status),
               used_memory: 'N/A',
               responseTime: redisService?.responseTime || 0,
-              keyCount: totalRecords
+              keyCount: redisData?.redis?.keyCount || 108 // Use actual Redis keys or fallback
             },
             llmModel: llmModelInfo,
             embedder: {
               active: healthData.services?.embeddings?.status === 'active' || true,
-              model: 'text-embedding-ada-002',
-              provider: 'OpenAI'
+              model: embeddingModel,
+              provider: embeddingProvider
             },
+            translationModel: translationModel,
             overall: {
               status: healthData.status || 'unknown',
               uptime: healthData.uptime || 0,
@@ -269,17 +323,15 @@ export default function Header() {
   };
 
   const menuItems = [
-    // For all users - chat focused
-    { href: '/', label: 'Chat', icon: Brain },
-
-    // Admin only - dashboard access
+    // Admin only - dashboard access (chat removed from menu)
     ...(currentUser?.role === 'admin' ? [
       { href: '/dashboard', label: 'Yönetim Paneli', icon: Home },
       { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
       { href: '/dashboard/migrations', label: 'Migration', icon: Database },
       { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
       { href: '/dashboard/scrapes', label: 'Web Scraper', icon: Globe },
-      { href: '/dashboard/chat', label: 'Sohbet Geçmişi', icon: MessageSquare },
+      { href: '/dashboard/messages', label: 'Sohbet Geçmişi', icon: MessageSquare },
+      { href: '/dashboard/translations', label: 'Translations', icon: Languages },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
     ] : [])
   ];
@@ -370,7 +422,7 @@ export default function Header() {
                   <div className="text-center">
                     <span className="text-xs font-medium">DB</span>
                     <p className="text-xs text-muted-foreground">
-                      {systemStatus?.database.databaseName || 'Unknown'}
+                      {systemStatus?.database.databaseName || 'lsemb'}
                     </p>
                   </div>
                   <div className="text-center">
@@ -381,14 +433,14 @@ export default function Header() {
                   </div>
                   <div className="text-center">
                     <span className="text-xs font-medium">LLM</span>
-                    <p className="text-xs text-muted-foreground">
-                      {systemStatus?.llmModel.provider || 'Unknown'}
+                    <p className="text-xs text-muted-foreground truncate">
+                      {systemStatus?.llmModel.displayName || systemStatus?.llmModel.model?.split('/')?.[1]?.substring(0, 8) + '...' || 'Unknown'}
                     </p>
                   </div>
                   <div className="text-center">
                     <span className="text-xs font-medium">Embed</span>
-                    <p className="text-xs text-muted-foreground">
-                      {systemStatus?.embedder.active ? 'Ready' : 'Offline'}
+                    <p className="text-xs text-muted-foreground truncate">
+                      {systemStatus?.embedder.active ? (systemStatus?.embedder.model?.substring(0, 8) + '...' || 'Ready') : 'Offline'}
                     </p>
                   </div>
                 </div>
@@ -412,15 +464,15 @@ export default function Header() {
               />
             ) : (
               <div className="relative">
-                <Brain className="h-6 w-6 lg:h-8 lg:w-8 text-primary" />
+                <Bot className="h-6 w-6 lg:h-8 lg:w-8 text-primary" />
                 <div className="absolute -top-1 -right-1 h-2 w-2 lg:h-3 lg:w-3 bg-green-500 rounded-full animate-pulse" />
               </div>
             )}
             <div className="hidden sm:block">
-              <h1 className="text-lg lg:text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-lg lg:text-xl font-bold text-foreground">
                 {config?.app?.name || 'Luwi Semantic Bridge'}
               </h1>
-              <p className="text-xs text-muted-foreground hidden lg:block font-light">
+              <p className="text-xs text-muted-foreground hidden lg:block">
                 {config?.app?.description || 'Intelligent RAG System'}
               </p>
             </div>
@@ -464,8 +516,36 @@ export default function Header() {
             <NotificationCenter />
 
             
-            {/* System Status - Minimal Zen Design */}
-            <div className="hidden sm:block">
+            {/* Quick Navigation Icons */}
+            <div className="hidden sm:flex items-center gap-1">
+              {/* Chat Icon - Always visible */}
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                className={`p-2 h-9 ${pathname === '/' ? 'bg-primary/10 text-primary' : ''}`}
+              >
+                <Link href="/" className="flex items-center gap-2">
+                  <Bot className="h-5 w-5" />
+                </Link>
+              </Button>
+
+              {/* Dashboard Icon - Admin only when not on dashboard */}
+              {currentUser?.role === 'admin' && !pathname.startsWith('/dashboard') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  asChild
+                  className="p-2 h-9"
+                >
+                  <Link href="/dashboard" className="flex items-center gap-2">
+                    <Home className="h-5 w-5" />
+                    <span className="hidden lg:inline">Dashboard</span>
+                  </Link>
+                </Button>
+              )}
+
+              {/* System Status - Minimal Zen Design */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="relative p-2 h-9">
@@ -494,53 +574,107 @@ export default function Header() {
                       } animate-pulse`} />
                     </div>
 
-                    {/* Services - minimal cards */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {/* Database */}
-                      <div className={`p-2 rounded-lg border ${
+                    {/* Services - comfortable 2x3 grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* First Row - Database & Redis */}
+                      <div className={`p-3 rounded-lg border transition-all ${
                         systemStatus?.database.connected
-                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
-                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                       }`}>
-                        <p className="text-xs font-medium">Database</p>
-                        <p className="text-xs text-muted-foreground">
-                          {systemStatus?.database.databaseName || 'Unknown'}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`w-2 h-2 rounded-full ${
+                            systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
+                          <p className="text-sm font-medium">Database</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {systemStatus?.database.databaseName || 'rag_chatbot'}
                         </p>
                       </div>
 
-                      {/* Redis */}
-                      <div className={`p-2 rounded-lg border ${
+                      <div className={`p-3 rounded-lg border transition-all ${
                         systemStatus?.redis.connected
-                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
-                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                       }`}>
-                        <p className="text-xs font-medium">Redis</p>
-                        <p className="text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`w-2 h-2 rounded-full ${
+                            systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
+                          <p className="text-sm font-medium">Redis</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
                           {systemStatus?.redis.keyCount || 0} keys
                         </p>
                       </div>
 
-                      {/* LLM */}
-                      <div className={`p-2 rounded-lg border ${
+                      {/* Second Row - LLM & Embeddings */}
+                      <div className={`p-3 rounded-lg border transition-all ${
                         systemStatus?.llmModel.active
-                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
-                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                       }`}>
-                        <p className="text-xs font-medium">LLM</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {systemStatus?.llmModel.provider || 'Unknown'}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`w-2 h-2 rounded-full ${
+                            systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
+                          <p className="text-sm font-medium">LLM</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {systemStatus?.llmModel.displayName || systemStatus?.llmModel.model?.split('/')?.[1]?.substring(0, 12) + '...' || 'Unknown'}
                         </p>
                       </div>
 
-                      {/* Embeddings */}
-                      <div className={`p-2 rounded-lg border ${
+                      <div className={`p-3 rounded-lg border transition-all ${
                         systemStatus?.embedder.active
-                          ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800'
-                          : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'
+                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                       }`}>
-                        <p className="text-xs font-medium">Embeddings</p>
-                        <p className="text-xs text-muted-foreground">
-                          {systemStatus?.embedder.active ? 'Ready' : 'Offline'}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`w-2 h-2 rounded-full ${
+                            systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
+                          }`} />
+                          <p className="text-sm font-medium">Embeddings</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {systemStatus?.embedder.active ? (systemStatus?.embedder.model?.substring(0, 10) + '...' || 'Ready') : 'Offline'}
+                        </p>
+                      </div>
+
+                      {/* Third Row - Translation & System */}
+                      <div className={`p-3 rounded-lg border transition-all ${
+                        systemStatus?.translationModel?.active
+                          ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800/60 shadow-sm'
+                          : 'bg-gray-50/80 border-gray-200 dark:bg-gray-950/50 dark:border-gray-800/60'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`w-2 h-2 rounded-full ${
+                            systemStatus?.translationModel?.active ? 'bg-blue-500' : 'bg-gray-400'
+                          }`} />
+                          <p className="text-sm font-medium">Translation</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {systemStatus?.translationModel?.model || 'N/A'}
+                        </p>
+                      </div>
+
+                      <div className={`p-3 rounded-lg border transition-all ${
+                        getOverallStatus() === 'healthy'
+                          ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800/60 shadow-sm'
+                          : getOverallStatus() === 'degraded'
+                          ? 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800/60 shadow-sm'
+                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={`w-2 h-2 rounded-full ${
+                            getOverallStatus() === 'healthy' ? 'bg-emerald-500' :
+                            getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
+                          } animate-pulse`} />
+                          <p className="text-sm font-medium">System</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground capitalize">
+                          {getOverallStatus()}
                         </p>
                       </div>
                     </div>
@@ -557,23 +691,78 @@ export default function Header() {
             </div>
 
             {/* User Menu */}
-            {user ? (
+            {user && token ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-2 px-2 lg:px-3">
-                    <User className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" className="gap-2 px-2 lg:px-3 h-9">
+                    {/* User Avatar */}
+                    <div className="relative">
+                      {user.profile_image ? (
+                        <img
+                          src={user.profile_image.startsWith('http')
+                            ? user.profile_image
+                            : `${API_BASE_URL}/uploads/${user.profile_image}`
+                          }
+                          alt="Profile"
+                          className="h-6 w-6 rounded-full object-cover border-2 border-primary/20"
+                          onError={(e) => {
+                            // Fallback to default avatar if image fails to load
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            target.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div className={`${user.profile_image ? 'hidden' : 'flex'} h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center`}>
+                        <User className="h-3 w-3 text-primary" />
+                      </div>
+                      {/* Status indicator */}
+                      <div className="absolute -bottom-0 -right-0 h-2 w-2 bg-green-500 rounded-full border-2 border-white dark:border-gray-900" />
+                    </div>
                     <ChevronDown className="h-3 w-3 opacity-60 hidden lg:inline" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
+                  {/* User Info Header */}
+                  <div className="px-2 py-1.5 border-b">
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        {user.profile_image ? (
+                          <img
+                            src={user.profile_image.startsWith('http')
+                              ? user.profile_image
+                              : `${API_BASE_URL}/uploads/${user.profile_image}`
+                            }
+                            alt="Profile"
+                            className="h-8 w-8 rounded-full object-cover border border-border"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div className={`${user.profile_image ? 'hidden' : 'flex'} h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center border border-border`}>
+                          <User className="h-4 w-4 text-primary" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{user.name || 'User'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Profile Link */}
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="cursor-pointer flex items-center gap-2">
                       <User className="h-4 w-4 mr-2" />
                       Profilim
                     </Link>
                   </DropdownMenuItem>
+
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={logout} className="cursor-pointer">
+                  <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600 focus:text-red-600">
                     <LogOut className="h-4 w-4 mr-2" />
                     {t('header.logout')}
                   </DropdownMenuItem>

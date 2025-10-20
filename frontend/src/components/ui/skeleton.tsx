@@ -23,7 +23,7 @@ export function CardSkeleton() {
   )
 }
 
-// Table Skeleton
+// Table Skeleton (for use outside table elements)
 export function TableSkeleton({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
   return (
     <div className="space-y-3">
@@ -42,6 +42,23 @@ export function TableSkeleton({ rows = 5, columns = 4 }: { rows?: number; column
         </div>
       ))}
     </div>
+  )
+}
+
+// Table Body Skeleton (for use inside tbody elements)
+export function TableBodySkeleton({ rows = 5, columns = 7 }: { rows?: number; columns?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <tr key={rowIndex} className="animate-pulse">
+          {Array.from({ length: columns }).map((_, colIndex) => (
+            <td key={colIndex} className="px-3 py-4 border-b">
+              <div className="h-3 bg-muted rounded" style={{ width: `${Math.random() * 40 + 60}%` }} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
   )
 }
 
@@ -162,6 +179,22 @@ export function EmbeddingsManagerSkeleton() {
           <Skeleton className="h-5 w-1/4 mb-4" />
           <TableSkeleton rows={8} columns={5} />
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Upload Area Skeleton
+export function UploadSkeleton() {
+  return (
+    <div className="border-2 border-dashed border-muted rounded-lg p-6 space-y-4">
+      <div className="flex flex-col items-center space-y-3">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-2 w-24" />
+        </div>
+        <Skeleton className="h-8 w-full rounded" />
       </div>
     </div>
   )

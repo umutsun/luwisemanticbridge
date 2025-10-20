@@ -15,7 +15,7 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      "fixed top-16 right-4 left-4 sm:left-auto sm:top-20 z-[100] flex max-h-screen w-full sm:max-w-[420px] flex-col gap-2 p-0",
       className
     )}
     {...props}
@@ -24,15 +24,14 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-2 overflow-hidden rounded-lg border p-4 pr-6 shadow-xl transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full backdrop-blur-sm",
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-3 overflow-hidden rounded-lg border p-4 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-right-full backdrop-blur-sm",
   {
     variants: {
       variant: {
-        default: "border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/90 dark:to-emerald-950/90 text-green-900 dark:text-green-100 dark:border-green-800",
-        destructive:
-          "destructive group border-red-200 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-950/90 dark:to-rose-950/90 text-red-900 dark:text-red-100 dark:border-red-800",
-        warning: "border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/90 dark:to-amber-950/90 text-yellow-900 dark:text-yellow-100 dark:border-yellow-800",
-        info: "border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/90 dark:to-cyan-950/90 text-blue-900 dark:text-blue-100 dark:border-blue-800",
+        default: "border-green-200/60 bg-green-50/80 dark:bg-green-950/20 dark:border-green-800/40 text-green-800 dark:text-green-200",
+        destructive: "border-red-200/60 bg-red-50/80 dark:bg-red-950/20 dark:border-red-800/40 text-red-800 dark:text-red-200",
+        warning: "border-yellow-200/60 bg-yellow-50/80 dark:bg-yellow-950/20 dark:border-yellow-800/40 text-yellow-800 dark:text-yellow-200",
+        info: "border-blue-200/60 bg-blue-50/80 dark:bg-blue-950/20 dark:border-blue-800/40 text-blue-800 dark:text-blue-200",
       },
     },
     defaultVariants: {

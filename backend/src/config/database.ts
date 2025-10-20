@@ -15,9 +15,7 @@ const poolConfig: PoolConfig = {
   // Add retry logic
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  // Add retry on connection errors
-  reconnectAttempts: 3,
-  reconnectIntervalMillis: 2000,
+  // Add retry on connection errors (handled by application logic)
 };
 
 export const pool = new Pool(poolConfig);

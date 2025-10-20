@@ -40,13 +40,18 @@ const ThemeToggle = () => {
 
   useEffect(() => {
     const root = window.document.documentElement;
+    const body = window.document.body;
+
     root.classList.remove('light', 'dark');
+    body.classList.remove('light', 'dark');
 
     if (theme === 'system') {
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       root.classList.add(systemTheme);
+      body.classList.add(systemTheme);
     } else {
       root.classList.add(theme);
+      body.classList.add(theme);
     }
   }, [theme]);
 

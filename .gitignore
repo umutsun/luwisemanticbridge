@@ -347,3 +347,15 @@ backups/
 
 # Log directories (can be recreated)
 logs/ 
+
+# Gemini-generated backup directories
+frontend-backup-*/
+frontend-broken-*/
+frontend-current-broken-*/
+
+# Temporary/test files
+cookies.txt
+new-test-upload.txt
+sample-data.csv
+sample-data.json
+test-upload.txt

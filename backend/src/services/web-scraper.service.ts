@@ -99,7 +99,7 @@ interface ScrapeJob {
   };
 }
 
-export class EnhancedScraperService {
+export class WebScraperService {
   private browser: Browser | null = null;
   private openai: OpenAI | null = null;
   private redis: any = null;
@@ -129,14 +129,14 @@ export class EnhancedScraperService {
         this.openai = new OpenAI({
           apiKey: process.env.OPENAI_API_KEY
         });
-        console.log('✅ OpenAI initialized for enhanced scraping');
+        console.log('✅ OpenAI initialized for intelligent scraping');
       }
 
       // Initialize Redis
       try {
         this.redis = await initializeRedis();
         if (this.redis && this.redis.status === 'ready') {
-          console.log('✅ Redis initialized for enhanced scraper caching');
+          console.log('✅ Redis initialized for intelligent scraper caching');
         } else {
           console.log('⚠️ Redis not available, caching disabled');
           this.cacheEnabled = false;
@@ -146,7 +146,7 @@ export class EnhancedScraperService {
         this.cacheEnabled = false;
       }
     } catch (error) {
-      console.error('❌ Failed to initialize enhanced scraper services:', error);
+      console.error('❌ Failed to initialize intelligent scraper services:', error);
     }
   }
 
@@ -1116,4 +1116,4 @@ export class EnhancedScraperService {
   }
 }
 
-export default new EnhancedScraperService();
+export default new WebScraperService();

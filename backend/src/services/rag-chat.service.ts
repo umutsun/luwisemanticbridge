@@ -221,11 +221,11 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       console.log(`Performing semantic search with pgvector...`);
 
-      // Get search settings from database
-      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '15');
-      const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || await settingsService.getSetting('minResults') || '5');
-      const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3'); // Use batch size for initial load
-      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.014');
+      // Get search settings from database with performance optimizations
+      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '7'); // Reduced from 15
+      const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || await settingsService.getSetting('minResults') || '3'); // Reduced from 5
+      const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '2'); // Reduced from 3
+      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.02'); // Increased threshold for performance
 
       // Use semantic search to find related content
       let allResults = [];
@@ -285,16 +285,18 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // 4. Generate response using LLM Manager
       const llmManager = LLMManager.getInstance();
 
-      // Create a simple context with titles and scores using batch size
-      const simpleContext = searchResults.slice(0, initialDisplayCount).map((r, idx) => {
+      // Create enhanced context with actual content for better response generation
+      const enhancedContext = searchResults.slice(0, initialDisplayCount).map((r, idx) => {
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
-        return `${idx + 1}. %${score} - ${title}`;
+        const content = this.truncateExcerpt(r.excerpt || r.content || '', 300);
+        return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
-      // Generate response using LLM Manager
-      const fullPrompt = `BAĞLAM:\n${simpleContext}\n\nSORU: ${message}`;
+      // Generate response using LLM Manager with enhanced context
+      const fullPrompt = `${systemPrompt}\n\nBAĞLAM BİLGİLERİ:\n${enhancedContext}\n\nSORU: ${message}`;
       console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
+      console.log(`📝 Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
 
       // Get active model from settings
       const activeModel = await settingsService.getSetting('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet';
@@ -525,10 +527,10 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
     const formattedResults = [];
     // Check if parallel LLM processing is enabled
     const enableParallelLLM = await settingsService.getSetting('enable_parallel_llm') === 'true';
-    // Get parallel LLM count from settings (default 5, max 10)
-    const parallelCount = Math.min(
-      parseInt(await settingsService.getSetting('parallel_llm_count') || '5'),
-      10
+    // Get parallel LLM count from settings (default 3, max 5 for performance)
+      const parallelCount = Math.min(
+      parseInt(await settingsService.getSetting('parallel_llm_count') || '3'),
+      5
     );
     const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
     const enableLLMGeneration = true; // ENABLE LLM generation for natural language questions

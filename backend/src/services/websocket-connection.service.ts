@@ -265,6 +265,10 @@ export class WebSocketConnectionService {
     const typingSet = this.typingUsers.get(sessionId);
     return typingSet ? Array.from(typingSet) : [];
   }
+
+  public getIO() {
+    return this.io;
+  }
 }
 
 // Extend MessageStorageService with feedback method

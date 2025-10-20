@@ -13,9 +13,12 @@ export const API_CONFIG = {
     messages: '/api/v2/messages',
 
     // Documents
-    documents: '/documents',
-    upload: '/documents/upload',
+    documents: '/api/v2/documents',
+    upload: '/api/v2/documents/upload',
     history: '/api/v2/history/documents',
+    documentStats: '/api/v2/documents/stats',
+    documentOcr: '/api/v2/documents/ocr',
+    documentEmbeddings: '/api/v2/documents/embeddings',
 
     // Embeddings
     embeddings: '/api/v2/embeddings',

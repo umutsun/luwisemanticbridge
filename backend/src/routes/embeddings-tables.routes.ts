@@ -124,8 +124,6 @@ router.get('/all', async (req, res) => {
 
           if (tableGroups[normalizedTableName]) {
             embeddedCount = tableGroups[normalizedTableName].total;
-            console.log(`Found ${embeddedCount} total embeddings for table ${tableName} from:`,
-              tableGroups[normalizedTableName].sources.map(s => `${s.name}(${s.count})`).join(', '));
           }
         } catch (error) {
           // Silently handle error - don't show "relation does not exist" error

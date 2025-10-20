@@ -110,10 +110,10 @@ export default function NotificationSettings() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="w-[90%] mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Bildirim Ayarları</h1>
+          <h1 className="text-xl font-semibold">Bildirim Ayarları</h1>
           <p className="text-muted-foreground">Bildirim kanallarını ve kurallarını yönetin</p>
         </div>
         <Button>

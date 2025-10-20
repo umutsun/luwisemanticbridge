@@ -6,6 +6,9 @@ import I18nProvider from "@/components/I18nProvider";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ConfigProvider } from "@/contexts/ConfigContext";
 import FrontendLogger from "@/utils/frontend-logger";
+import AppInitialLoader from "@/components/app-initial-loader";
+import ThemeInitializer from "@/components/ThemeInitializer";
+import DynamicTitle from "@/components/DynamicTitle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Luwi Semantic Bridge",
+  title: "Alice Semantic Bridge",
   description: "AI-powered Semantic Search and Knowledge Management System",
 };
 
@@ -35,10 +38,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ThemeInitializer />
         <AuthProvider>
           <ConfigProvider>
             <I18nProvider>
-              {children}
+              <AppInitialLoader>
+                <DynamicTitle />
+                {children}
+              </AppInitialLoader>
             </I18nProvider>
           </ConfigProvider>
         </AuthProvider>

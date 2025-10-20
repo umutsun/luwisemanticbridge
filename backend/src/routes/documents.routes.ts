@@ -134,6 +134,11 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       type: doc.type || 'text',
       size: doc.size || 0,
       hasEmbeddings: doc.has_embeddings,
+      tokens_used: doc.tokens_used || 0,
+      model_used: doc.model_used || null,
+      cost_usd: doc.cost_usd || 0,
+      verified_at: doc.verified_at || null,
+      auto_verified: doc.auto_verified || false,
       metadata: {
         source: doc.file_path,
         created_at: doc.created_at,
@@ -543,12 +548,46 @@ router.post('/:id/embeddings', authenticateToken, async (req: AuthenticatedReque
 
     // Determine document type and create embeddings using contextual processor
     const documentType = doc.metadata?.document_type || 'text';
-    await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
+    const embeddingResult = await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
       doc.id,
       doc.content,
       doc.title,
       documentType
     );
+
+    // Get embedding statistics to save model and token information
+    const embeddingStats = await lsembPool.query(
+      `SELECT
+         model_name,
+         SUM(tokens_used) as total_tokens,
+         COUNT(*) as chunk_count,
+         COALESCE((tokens_used * 0.000002), 0) as total_cost
+       FROM document_embeddings
+       WHERE document_id = $1
+       GROUP BY model_name`,
+      [id]
+    );
+
+    // Update document with model info, tokens used, cost, and verification timestamp
+    if (embeddingStats.rows.length > 0) {
+      const stats = embeddingStats.rows[0];
+      await lsembPool.query(
+        `UPDATE documents
+         SET model_used = $1,
+             tokens_used = $2,
+             cost_usd = $3,
+             verified_at = CURRENT_TIMESTAMP,
+             auto_verified = true,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4`,
+        [
+          stats.model_name || 'text-embedding-ada-002',
+          stats.total_tokens || 0,
+          stats.total_cost || 0.000000,
+          doc.id
+        ]
+      );
+    }
 
     // Get the count of created embeddings
     const newEmbeddings = await lsembPool.query(

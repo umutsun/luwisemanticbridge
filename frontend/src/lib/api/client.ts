@@ -235,5 +235,68 @@ class ApiClient {
 // Create singleton instance
 const apiClient = new ApiClient();
 
+// Authenticated fetch function for simple HTTP requests
+export const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = apiClient.getToken();
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const config: RequestInit = {
+    ...options,
+    headers,
+  };
+
+  try {
+    const response = await fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
+
+    if (response.status === 401) {
+      // Try to refresh token and retry once
+      try {
+        // Note: This assumes a refresh token is stored in localStorage
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          const refreshResponse = await fetch(`${apiClient['client'].defaults.baseURL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+          });
+
+          if (refreshResponse.ok) {
+            const data = await refreshResponse.json();
+            apiClient.setToken(data.accessToken);
+
+            // Retry the original request with new token
+            headers.Authorization = `Bearer ${data.accessToken}`;
+            config.headers = headers;
+
+            return fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
+          }
+        }
+      } catch (refreshError) {
+        // If refresh fails, clear tokens and redirect
+        apiClient.clearToken();
+        localStorage.removeItem('refresh_token');
+        window.location.href = '/login';
+        throw new Error('Session expired. Please login again.');
+      }
+    }
+
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Session expired')) {
+      throw error;
+    }
+    console.error('Authenticated fetch error:', error);
+    throw error;
+  }
+};
+
 export default apiClient;
 export { ApiClient, ApiError };

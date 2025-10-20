@@ -181,7 +181,7 @@ export default function SystemMonitor() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Sistem Monitörü</h1>
+          <h1 className="text-xl font-semibold">Sistem Monitörü</h1>
           <p className="text-muted-foreground">Gerçek zamanlı sistem performansı ve metrikler</p>
         </div>
         <div className="flex items-center gap-4">

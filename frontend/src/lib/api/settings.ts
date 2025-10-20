@@ -157,15 +157,26 @@ export async function getAppSettings(): Promise<AppSettings> {
 // Base category fetch function
 async function fetchSettingsCategory(category: string): Promise<any> {
   try {
-    const response = await apiClient.get(`/api/v2/settings?category=${category}`, {
-      timeout: 3000 // 3 second timeout for category requests
+    // Use direct fetch without authentication for settings
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
+    const response = await fetch(`${baseURL}/api/v2/settings?category=${category}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      }
     });
 
-    if (response.data && response.data.error) {
-      throw new Error(response.data.error || `Failed to load ${category} settings`);
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      throw new Error(responseData.error || `Failed to load ${category} settings (Status: ${response.status})`);
     }
 
-    return response.data || {};
+    if (responseData.error) {
+      throw new Error(responseData.error || `Failed to load ${category} settings`);
+    }
+
+    return responseData || {};
   } catch (error: any) {
     console.warn(`${category} settings endpoint unavailable:`, error.message);
     return {};
@@ -224,13 +235,49 @@ export async function updateAppSettings(settings: Partial<AppSettings>): Promise
 }
 
 export async function updateSettingsCategory(category: string, settings: any): Promise<any> {
-  const response = await apiClient.put(`/api/v2/settings/${category}`, {
-    value: JSON.stringify(settings)
-  });
+  try {
+    console.log(`🔧 Updating ${category} settings:`, settings);
+    // Use direct fetch without authentication for settings
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || `http://localhost:${process.env.NEXT_PUBLIC_API_PORT || '8083'}`;
+    const response = await fetch(`${baseURL}/api/v2/settings/${category}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings)
+    });
 
-  if (response.data.error) {
-    throw new Error(response.data.error || `Failed to update ${category} settings`);
+    const responseData = await response.json();
+    console.log(`✅ ${category} settings response:`, responseData);
+
+    if (!response.ok) {
+      throw new Error(responseData.error || `Failed to update ${category} settings (Status: ${response.status})`);
+    }
+
+    if (responseData.error) {
+      throw new Error(responseData.error || `Failed to update ${category} settings`);
+    }
+
+    return responseData;
+  } catch (error: any) {
+    console.error(`❌ Error updating ${category} settings:`, error);
+
+    // More detailed error information
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('Error response data:', error.response.data);
+      console.error('Error response status:', error.response.status);
+      console.error('Error response headers:', error.response.headers);
+      throw new Error(error.response.data?.error || `Server error: ${error.response.status}`);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('Error request:', error.request);
+      throw new Error('Network error: No response from server');
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('Error message:', error.message);
+      throw new Error(error.message || `Failed to update ${category} settings`);
+    }
   }
-
-  return response.data;
 }

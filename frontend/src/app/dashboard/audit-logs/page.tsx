@@ -193,7 +193,7 @@ export default function AuditLogsPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Audit Logs</h1>
+          <h1 className="text-xl font-semibold">Audit Logs</h1>
           <p className="text-muted-foreground">
             Monitor and track all system activities and user actions
           </p>

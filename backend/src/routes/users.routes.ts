@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { authenticateToken, AuthenticatedRequest, requireAdmin } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -455,6 +456,244 @@ router.get('/stats/overview', verifyAdmin, async (req: Request, res: Response) =
   } catch (error) {
     console.error('Error fetching stats:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
+  }
+});
+
+// Update user subscription (admin only)
+router.put('/:userId/subscription', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { planId } = req.body;
+
+    if (!planId) {
+      return res.status(400).json({ error: 'Plan ID is required' });
+    }
+
+    // Get the plan details
+    const planResult = await pool.query(
+      'SELECT * FROM subscription_plans WHERE id = $1',
+      [planId]
+    );
+
+    if (planResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Plan not found' });
+    }
+
+    const plan = planResult.rows[0];
+
+    // Update user subscription
+    await pool.query(`
+      INSERT INTO user_subscriptions (user_id, plan_id, start_date, end_date, status, monthly_limit)
+      VALUES ($1, $2, NOW(), NOW() + INTERVAL '1 month', 'active', $3)
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        plan_id = EXCLUDED.plan_id,
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
+        status = 'active',
+        monthly_limit = EXCLUDED.monthly_limit
+    `, [userId, planId, plan.monthly_tokens]);
+
+    res.json({
+      message: 'Subscription updated successfully',
+      plan: plan
+    });
+  } catch (error) {
+    console.error('Error updating subscription:', error);
+    res.status(500).json({ error: 'Failed to update subscription' });
+  }
+});
+
+// Get user token usage (admin only)
+router.get('/:userId/token-usage', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    // Get user and subscription details
+    const userResult = await pool.query(`
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        s.plan_id,
+        s.monthly_limit,
+        sp.name as plan_name,
+        s.start_date as subscription_start,
+        s.end_date as subscription_end
+      FROM users u
+      LEFT JOIN user_subscriptions s ON u.id = s.user_id AND s.status = 'active'
+      LEFT JOIN subscription_plans sp ON s.plan_id = sp.id
+      WHERE u.id = $1
+    `, [userId]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Calculate token usage from user activity logs
+    const usageResult = await pool.query(`
+      SELECT
+        COUNT(*) as total_queries,
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
+        DATE_TRUNC('month', created_at) as month
+      FROM user_activity_logs
+      WHERE user_id = $1 AND created_at >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
+      LIMIT 1
+    `, [userId]);
+
+    const currentMonthUsage = usageResult.rows[0] || {
+      total_queries: 0,
+      total_input_tokens: 0,
+      total_output_tokens: 0,
+      total_tokens: 0,
+      month: new Date().toISOString()
+    };
+
+    // Calculate remaining tokens
+    const monthlyLimit = user.monthly_limit || 10000; // Default for free users
+    const usedTokens = currentMonthUsage.total_tokens;
+    const remainingTokens = Math.max(0, monthlyLimit - usedTokens);
+    const usagePercentage = (usedTokens / monthlyLimit) * 100;
+
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        subscription: user.plan_name ? {
+          plan_id: user.plan_id,
+          name: user.plan_name,
+          start_date: user.subscription_start,
+          end_date: user.subscription_end,
+          monthly_limit: user.monthly_limit
+        } : null
+      },
+      token_usage: {
+        total_tokens: usedTokens,
+        input_tokens: currentMonthUsage.total_input_tokens,
+        output_tokens: currentMonthUsage.total_output_tokens,
+        monthly_limit: monthlyLimit,
+        remaining_tokens: remainingTokens,
+        usage_percentage: Math.round(usagePercentage * 100) / 100,
+        current_month: currentMonthUsage.month,
+        total_queries: currentMonthUsage.total_queries
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching token usage:', error);
+    res.status(500).json({ error: 'Failed to fetch token usage' });
+  }
+});
+
+// Get all users with token usage (admin only)
+router.get('/with-usage', authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.name,
+        u.role,
+        u.status,
+        u.last_login,
+        u.created_at,
+        s.plan_id,
+        s.monthly_limit,
+        sp.name as plan_name,
+        s.end_date as subscription_end_date,
+        s.status as subscription_status,
+        -- Calculate current month token usage
+        COALESCE(monthly_usage.total_tokens, 0) as current_month_tokens,
+        COALESCE(monthly_usage.input_tokens, 0) as current_month_input_tokens,
+        COALESCE(monthly_usage.output_tokens, 0) as current_month_output_tokens,
+        COALESCE(monthly_usage.total_queries, 0) as current_month_queries,
+        -- Message statistics
+        COALESCE(message_stats.total_messages, 0) as total_messages,
+        COALESCE(message_stats.total_sessions, 0) as message_sessions,
+        COALESCE(message_stats.avg_messages_per_session, 0) as avg_messages_per_session,
+        COALESCE(message_stats.total_question_tokens, 0) as total_question_tokens,
+        COALESCE(message_stats.total_answer_tokens, 0) as total_answer_tokens,
+        COALESCE(message_stats.last_activity, null) as last_message_activity
+      FROM users u
+      LEFT JOIN user_subscriptions s ON u.id = s.user_id AND s.status = 'active'
+      LEFT JOIN subscription_plans sp ON s.plan_id = sp.id
+      LEFT JOIN (
+        SELECT
+          user_id,
+          COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
+          COALESCE(SUM(input_tokens), 0) as input_tokens,
+          COALESCE(SUM(output_tokens), 0) as output_tokens,
+          COUNT(*) as total_queries
+        FROM user_activity_logs
+        WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
+        GROUP BY user_id
+      ) monthly_usage ON u.id = monthly_usage.user_id
+      LEFT JOIN (
+        SELECT
+          user_id,
+          COUNT(*) as total_messages,
+          COUNT(DISTINCT session_id) as total_sessions,
+          COUNT(*)::float / COUNT(DISTINCT session_id) as avg_messages_per_session,
+          SUM(CASE WHEN message_type = 'question' THEN metadata->>'tokens'::integer ELSE 0 END) as total_question_tokens,
+          SUM(CASE WHEN message_type = 'answer' THEN metadata->>'tokens'::integer ELSE 0 END) as total_answer_tokens,
+          MAX(created_at) as last_activity
+        FROM message_embeddings
+        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+        GROUP BY user_id
+      ) message_stats ON u.id = message_stats.user_id
+      ORDER BY u.created_at DESC
+    `);
+
+    const usersWithUsage = result.rows.map(row => {
+      const monthlyLimit = row.monthly_limit || 10000;
+      const usedTokens = row.current_month_tokens || 0;
+
+      return {
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        role: row.role,
+        status: row.status,
+        last_login: row.last_login,
+        created_at: row.created_at,
+        subscription: row.plan_id ? {
+          plan_id: row.plan_id,
+          name: row.plan_name,
+          status: row.subscription_status,
+          start_date: null, // Would need to add to schema
+          end_date: row.subscription_end_date,
+          monthly_limit: row.monthly_limit
+        } : null,
+        token_usage: {
+          total_tokens: usedTokens,
+          input_tokens: row.current_month_input_tokens || 0,
+          output_tokens: row.current_month_output_tokens || 0,
+          monthly_limit: monthlyLimit,
+          remaining_tokens: Math.max(0, monthlyLimit - usedTokens),
+          usage_percentage: Math.round((usedTokens / monthlyLimit) * 10000) / 100,
+          current_month_queries: row.current_month_queries || 0
+        },
+        message_stats: {
+          total_messages: row.total_messages || 0,
+          total_sessions: row.message_sessions || 0,
+          avg_messages_per_session: Math.round(row.avg_messages_per_session * 100) / 100,
+          total_question_tokens: row.total_question_tokens || 0,
+          total_answer_tokens: row.total_answer_tokens || 0,
+          last_activity: row.last_message_activity
+        }
+      };
+    });
+
+    res.json({ users: usersWithUsage });
+  } catch (error) {
+    console.error('Error fetching users with usage:', error);
+    res.status(500).json({ error: 'Failed to fetch users with usage data' });
   }
 });
 

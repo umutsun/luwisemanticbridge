@@ -69,7 +69,9 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     const categoryQueries = {
       llm: `SELECT key, value FROM settings
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
-                OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'`,
+                OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
+                OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
+                OR key LIKE 'apiStatus.%'`,
 
       embeddings: `SELECT key, value FROM settings
                   WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding.%'`,
@@ -77,8 +79,17 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       rag: `SELECT key, value FROM settings
            WHERE key LIKE 'ragSettings.%' OR key LIKE 'rag.%'`,
 
+      prompts: `SELECT key, value FROM settings
+               WHERE key LIKE 'prompts.%'`,
+
+      chatbot: `SELECT key, value FROM settings
+               WHERE key LIKE 'chatbot.%'`,
+
       database: `SELECT key, value FROM settings
                 WHERE key LIKE 'database.%'`,
+
+      redis: `SELECT key, value FROM settings
+              WHERE key LIKE 'redis.%'`,
 
       security: `SELECT key, value FROM settings
                 WHERE key LIKE 'security.%' OR key LIKE 'jwt.%'`,
@@ -87,7 +98,19 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
            WHERE key LIKE 'app.%'`,
 
       scraper: `SELECT key, value FROM settings
-               WHERE key LIKE 'scraper.%'`
+               WHERE key LIKE 'scraper.%'`,
+
+      translation: `SELECT key, value FROM settings
+                   WHERE key LIKE 'deepl.%' OR key LIKE 'google.translate.%'`,
+
+      prompts: `SELECT key, value FROM settings
+               WHERE key LIKE 'prompts.%'`,
+
+      chatbot: `SELECT key, value FROM settings
+               WHERE key LIKE 'chatbot.%'`,
+
+      redis: `SELECT key, value FROM settings
+              WHERE key LIKE 'redis.%'`
     };
 
     const query = categoryQueries[category as string];
@@ -124,6 +147,39 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
         temperature: 0.7,
         maxTokens: 4096
       };
+    }
+
+    // Build apiStatus object for LLM category
+    if (category === 'llm') {
+      const apiStatus: any = {};
+      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter'];
+
+      providers.forEach(provider => {
+        if (config[provider]) {
+          // Check if provider has validation data
+          if (config[provider].verifiedDate) {
+            // Provider has been validated
+            const status = config[provider].status || 'active';
+            apiStatus[provider] = {
+              status: status,
+              message: `${provider} API validated successfully`,
+              lastChecked: config[provider].verifiedDate,
+              verifiedDate: config[provider].verifiedDate,
+              responseTime: config[provider].avgResponseTime || 0
+            };
+          } else if (config[provider].apiKey) {
+            // Provider has API key but not validated
+            apiStatus[provider] = {
+              status: 'inactive',
+              message: 'API key not validated',
+              lastChecked: null,
+              verifiedDate: null
+            };
+          }
+        }
+      });
+
+      config.apiStatus = apiStatus;
     }
 
     res.json(config);
@@ -225,7 +281,16 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
                WHERE key LIKE 'scraper.%'`,
 
       translation: `SELECT key, value FROM settings
-                   WHERE key LIKE 'deepl.%' OR key LIKE 'google.translate.%'`
+                   WHERE key LIKE 'deepl.%' OR key LIKE 'google.translate.%'`,
+
+      prompts: `SELECT key, value FROM settings
+               WHERE key LIKE 'prompts.%'`,
+
+      chatbot: `SELECT key, value FROM settings
+               WHERE key LIKE 'chatbot.%'`,
+
+      redis: `SELECT key, value FROM settings
+              WHERE key LIKE 'redis.%'`
     };
 
     const query = categoryQueries[categoryName as keyof typeof categoryQueries];
@@ -255,13 +320,13 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
       }
     });
 
-    // Add essential defaults if missing
+    // Add essential defaults if missing (but no API keys from env)
     if (categoryName === 'llm' && !config.openai) {
       config.openai = {
         model: 'gpt-4o-mini',
         temperature: 0.7,
         maxTokens: 4096,
-        apiKey: process.env.OPENAI_API_KEY || ''
+        apiKey: ''  // Must be set in UI/database
       };
     }
 
@@ -283,11 +348,11 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
 
     if (categoryName === 'database' && !config.database) {
       config.database = {
-        host: process.env.POSTGRES_HOST || 'localhost',
-        port: parseInt(process.env.POSTGRES_PORT) || 5432,
-        name: process.env.POSTGRES_DB || 'lsemb',
-        user: process.env.POSTGRES_USER || 'postgres',
-        password: process.env.POSTGRES_PASSWORD || '',
+        host: 'localhost',
+        port: 5432,
+        name: 'lsemb',
+        user: 'postgres',
+        password: '',
         ssl: false,
         maxConnections: 20
       };
@@ -301,7 +366,67 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
   }
 });
 
-// Update specific category
+// Update specific category - direct PUT route
+router.put('/:categoryName', async (req: Request, res: Response) => {
+  try {
+    const { categoryName } = req.params;
+    const settings = req.body;
+
+    // Validate category name
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis'];
+    if (!validCategories.includes(categoryName)) {
+      return res.status(400).json({ error: `Invalid category: ${categoryName}` });
+    }
+
+    const updates = [];
+
+    // Validate and prepare updates - flatten nested objects
+    function flattenObject(obj: any, prefix = '') {
+      for (const [key, value] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          flattenObject(value, fullKey);
+        } else {
+          updates.push({
+            key: fullKey,
+            value: typeof value === 'string' ? value : JSON.stringify(value)
+          });
+        }
+      }
+    }
+
+    flattenObject(settings);
+
+    // Batch update
+    for (const update of updates) {
+      await lsembPool.query(
+        `INSERT INTO settings (key, value)
+         VALUES ($1, $2)
+         ON CONFLICT (key)
+         DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+        [update.key, update.value]
+      );
+    }
+
+    // Clear cache
+    const cleared = settingsCache.clearPattern('settings');
+    console.log(`🗑️ [CACHE] Cleared ${cleared} entries for category ${categoryName}`);
+    console.log(`💾 [DB] Updated ${updates.length} settings for category ${categoryName}:`, updates.map(u => u.key));
+
+    res.json({
+      success: true,
+      message: `${categoryName} settings updated successfully`,
+      updatedKeys: updates.length
+    });
+
+  } catch (error) {
+    console.error(`Error updating ${req.params.categoryName} settings:`, error);
+    res.status(500).json({ error: `Failed to update ${req.params.categoryName} settings` });
+  }
+});
+
+// Update specific category - legacy route
 router.put('/category/:categoryName', async (req: Request, res: Response) => {
   try {
     const { categoryName } = req.params;

@@ -50,6 +50,8 @@ interface Message {
   context?: string[];
   isTyping?: boolean;
   isFromSource?: boolean;
+  isStreaming?: boolean;
+  isError?: boolean;
 }
 
 const getSourceTableName = (sourceTable?: string) => {
@@ -464,6 +466,35 @@ export default function ChatInterface() {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Chat API error:', response.status, errorText);
+
+        // Parse error if possible
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          // If not JSON, use raw text
+          errorData = { error: errorText };
+        }
+
+        // Handle subscription limit error specifically
+        if (response.status === 429 && errorData.code === 'QUERY_LIMIT_EXCEEDED') {
+          const subscriptionMessage = user?.role === 'admin'
+            ? 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır. Ancak teknik bir sorun oluştuğunu görüyoruz.'
+            : 'Üzgünüm, aylık soru limitinizi doldurdunuz. devam etmek için lütfen abonelik paketinizi yükseltin veya bir yönetici ile iletişime geçin.';
+
+          setMessages(prev => prev.map(msg =>
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  content: subscriptionMessage,
+                  isStreaming: false,
+                  isError: true
+                }
+              : msg
+          ));
+          return;
+        }
+
         throw new Error(`Failed to get response: ${response.status} - ${errorText}`);
       }
 
@@ -552,12 +583,29 @@ export default function ChatInterface() {
       }
     } catch (error) {
       console.error('Chat error:', error);
+
+      // Check if it's a subscription error that wasn't handled above
+      const errorMessage = error instanceof Error ? error.message : '';
+
+      let userFriendlyMessage = 'Üzgünüm, şu anda yanıt veremiyorum. Lütfen daha sonra tekrar deneyin.';
+
+      if (errorMessage.includes('429') || errorMessage.includes('QUERY_LIMIT_EXCEEDED')) {
+        userFriendlyMessage = user?.role === 'admin'
+          ? 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır. Ancak teknik bir sorun oluştuğunu görüyoruz. Lütfen sistem yöneticisi ile iletişime geçin.'
+          : 'Üzgünüm, aylık soru limitinizi doldurdunuz. devam etmek için lütfen abonelik paketinizi yükseltin veya bir yönetici ile iletişime geçin.';
+      } else if (errorMessage.includes('401') || errorMessage.includes('TOKEN')) {
+        userFriendlyMessage = 'Oturumunuzun süresi dolmuş. Lütfen tekrar giriş yapın.';
+      } else if (errorMessage.includes('403') || errorMessage.includes('SUBSCRIPTION')) {
+        userFriendlyMessage = 'Bu özelliği kullanmak için aktif bir abonelik gereklidir. Lütfen abonelik paketinizi yükseltin.';
+      }
+
       setMessages(prev => prev.map(msg =>
         msg.id === messageId
           ? {
               ...msg,
-              content: 'Üzgünüm, şu anda yanıt veremiyorum. Lütfen daha sonra tekrar deneyin.',
-              isStreaming: false
+              content: userFriendlyMessage,
+              isStreaming: false,
+              isError: true
             }
           : msg
       ));
@@ -771,11 +819,6 @@ export default function ChatInterface() {
                   className="my-8"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="col-span-full text-center mb-4">
-                      <h2 className="text-lg font-semibold text-muted-foreground">
-                        Öneriler hazırlanıyor...
-                      </h2>
-                    </div>
                     {[1, 2, 3, 4].map((i) => (
                       <div key={i} className="p-4 bg-muted/50 rounded-lg">
                         <Skeleton className="h-4 w-full mb-2" />
@@ -853,35 +896,27 @@ export default function ChatInterface() {
                           ? message.isFromSource
                             ? 'bg-yellow-100 text-black border-yellow-400 dark:bg-yellow-900 dark:text-yellow-100 dark:border-yellow-600'
                             : 'bg-black text-white dark:bg-gray-900 dark:text-gray-100'
-                          : 'bg-card'
+                          : message.isError
+                            ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
+                            : 'bg-card'
                       }`}>
                         <CardContent className="p-3">
                           {message.isTyping ? (
                             <MessageSkeleton />
                           ) : (
                             <>
-                              <div className="flex items-start gap-2">
-                                {message.role === 'user' && message.isFromSource && (
-                                  <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                                )}
-                                <p className="text-sm whitespace-pre-wrap flex-1">
-                                  {message.content}
-                                  {message.isStreaming && (
-                                    <span className="inline-block ml-1">
-                                      <motion.span
-                                        animate={{ opacity: [1, 0] }}
-                                        transition={{
-                                          duration: 1,
-                                          repeat: Infinity,
-                                          ease: "easeInOut"
-                                        }}
-                                      >
-                                        ▊
-                                      </motion.span>
-                                    </span>
+                              {message.isStreaming ? (
+                                <MessageSkeleton type="generating" />
+                              ) : (
+                                <div className="flex items-start gap-2">
+                                  {message.role === 'user' && message.isFromSource && (
+                                    <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                   )}
-                                </p>
-                              </div>
+                                  <p className="text-sm whitespace-pre-wrap flex-1">
+                                    {message.content}
+                                  </p>
+                                </div>
+                              )}
 
                               {message.sources && message.sources.length > 0 && (
                                 <div className="mt-4 pt-3 border-t border-border/50">

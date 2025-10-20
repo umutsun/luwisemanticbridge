@@ -7,7 +7,61 @@ import { createAuthRateLimit, createUploadRateLimit } from '../middleware/rate-l
 const router = Router();
 const authService = new AuthService();
 
-// Register new user
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Authentication]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: User's username
+ *                 example: johndoe
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User's email address
+ *                 example: john@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 description: User's password (min 8 characters)
+ *                 example: password123
+ *     responses:
+ *       201:
+ *         description: User registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *                 accessToken:
+ *                   type: string
+ *                   description: JWT access token
+ *       400:
+ *         description: Bad request - validation errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Too many requests - rate limit exceeded
+ */
 router.post('/register', createAuthRateLimit.middleware, async (req: Request, res: Response) => {
   try {
     const userData: CreateUserDto = req.body;
@@ -44,7 +98,40 @@ router.post('/register', createAuthRateLimit.middleware, async (req: Request, re
   }
 });
 
-// Login user
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Login user
+ *     tags: [Authentication]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       429:
+ *         description: Too many requests - rate limit exceeded
+ *     cookies:
+ *       refreshToken:
+ *         description: HTTP-only refresh token cookie
+ *         schema:
+ *           type: string
+ */
 router.post('/login', createAuthRateLimit.middleware, async (req: Request, res: Response) => {
   try {
     const loginData: LoginDto = req.body;
@@ -115,7 +202,33 @@ router.post('/logout', authenticateToken, async (req: Request, res: Response) =>
   }
 });
 
-// Get current user info
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     summary: Get current user information
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: User not found
+ */
 router.get('/me', authenticateToken, async (req: Request, res: Response) => {
   try {
     if (!req.user?.userId) {

@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 // Mock dependencies
 jest.mock('../config/database.config', () => ({
   lsembPool: {
-    query: jest.fn(),
+    query: jest.fn().mockResolvedValue({ rows: [] }) as jest.MockedFunction<any>,
   },
 }));
 
@@ -31,7 +31,7 @@ describe('SemanticSearchService', () => {
 
   beforeEach(() => {
     service = new SemanticSearchService();
-    mockPool = require('../config/database.config').lsembPool;
+    mockPool = require('../config/database.config').lsembPool as any;
     jest.clearAllMocks();
   });
 
@@ -81,7 +81,7 @@ describe('SemanticSearchService', () => {
         ],
       };
 
-      mockPool.query.mockResolvedValue(mockResults);
+      (mockPool.query as jest.Mock).mockResolvedValue(mockResults);
 
       const result = await service.hybridSearch('query text', 10);
 
@@ -120,7 +120,7 @@ describe('SemanticSearchService', () => {
         ],
       };
 
-      mockPool.query
+      (mockPool.query as jest.Mock)
         .mockResolvedValueOnce(mockDocument)
         .mockResolvedValueOnce(mockSimilar);
 
@@ -131,7 +131,7 @@ describe('SemanticSearchService', () => {
     });
 
     it('should handle document not found', async () => {
-      mockPool.query.mockResolvedValue({ rows: [] });
+      (mockPool.query as jest.Mock).mockResolvedValue({ rows: [] });
 
       await expect(service.findSimilarDocuments('999')).rejects.toThrow(
         'Document not found'

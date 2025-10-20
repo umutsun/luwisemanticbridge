@@ -18,6 +18,15 @@ jest.mock('pg', () => {
 jest.mock('bcryptjs');
 jest.mock('jsonwebtoken');
 
+// Mock Redis for rate limiting
+jest.mock('ioredis', () => {
+  return jest.fn().mockImplementation(() => ({
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    setex: jest.fn().mockResolvedValue('OK'),
+  }));
+});
+
 const app = express();
 app.use(express.json());
 app.use('/api/auth', authRouter);

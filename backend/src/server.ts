@@ -55,6 +55,7 @@ import adminRoutes from "./routes/admin.routes";
 import llmStatusRoutes from "./routes/llm-status.routes";
 import logsRoutes, { initializeLogWebSocket } from "./routes/logs.routes";
 import translateRoutes from "./routes/translate.routes";
+import translationEmbeddingsRoutes from "./routes/translation-embeddings.routes";
 import {
   preventNoSQLInjection,
   rateLimits,
@@ -73,6 +74,7 @@ import redisRoutes from "./routes/redis.routes";
 import apiTestsRoutes from "./routes/api-tests.routes";
 import setupRoutes from "./routes/setup.routes";
 import deploymentRoutes from "./routes/deployment.routes";
+import apiValidationRoutes from "./routes/api-validation.routes";
 import messageEmbeddingsRoutes from "./routes/message-embeddings.routes";
 import messageAnalyticsRoutes from "./routes/message-analytics.routes";
 import documentProcessingRoutes from "./routes/document-processing.routes";
@@ -80,9 +82,13 @@ import documentProcessingRoutes from "./routes/document-processing.routes";
 import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
 import { MessageCleanupService } from "./services/message-cleanup.service";
+import { setupSwagger } from "./config/swagger";
 
 // Initialize Express app
 const app: Application = express();
+
+// Setup Swagger documentation
+setupSwagger(app);
 const httpServer = createServer(app);
 
 // Parse CORS origins from environment variable - use CORS_ORIGINS from .env.lsemb
@@ -289,8 +295,8 @@ app.use(responseMiddleware);
 // Apply NoSQL injection prevention middleware
 app.use(preventNoSQLInjection);
 
-// Apply enhanced general rate limiting - REACTIVATED
-app.use(generalRateLimit.middleware);
+// Apply enhanced general rate limiting - TEMPORARILY DISABLED FOR DEBUGGING
+// app.use(generalRateLimit.middleware);
 
 // Serve static files from uploads directory
 app.use("/uploads", express.static("uploads"));
@@ -393,6 +399,7 @@ app.use("/api/v2/dashboard", dashboardRoutes);
 app.use("/api/v2/scraper", scraperRoutes);
 app.use("/api/v2/chatbot", chatbotSettingsRoutes);
 app.use("/api/v2/translate", translateRoutes);
+app.use("/api/v2/translation-embeddings", translationEmbeddingsRoutes);
 app.use(historyRoutes);
 app.use("/api/v2/documents", documentsRoutes);
 app.use("/documents", documentsRoutes);
@@ -428,6 +435,7 @@ app.use("/api/v2/redis", redisRoutes);
 app.use("/api/v2/api-tests", apiTestsRoutes);
 app.use("/api/v2/setup", setupRoutes);
 app.use("/api/v2/deployment", deploymentRoutes);
+app.use("/api/v2/api-validation", apiValidationRoutes);
 app.use(messageEmbeddingsRoutes);
 app.use(messageAnalyticsRoutes);
 // app.use('/api/v2/debug', debugRoutes); // Commented out - debugRoutes doesn't exist
@@ -1171,11 +1179,14 @@ const setupChatRoutes = () => {
       "Access-Control-Allow-Headers",
       "Origin, X-Requested-With, Content-Type, Accept, Authorization"
     );
-    res.json([
-      "Hukuki sistem hakkında bilgi verir misiniz?",
-      "Hangi konularda yardımcı olabilirsiniz?",
-      "Mevzuat taraması nasıl yapılır?",
-    ]);
+    res.json({
+      suggestions: [
+        "İhracatta KDV istisnası nasıl uygulanır?",
+        "E-fatura zorunluluğu kimleri kapsar?",
+        "Damga vergisi oranları nedir?",
+        "What is the capital of France?"
+      ]
+    });
   });
 
   console.log("✅ Emergency routes mounted successfully!");
