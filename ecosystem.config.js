@@ -52,8 +52,8 @@ module.exports = {
     // ==========================================
     {
       name: 'lsemb-frontend',
-      script: 'npm',
-      args: 'start',
+      script: 'node',
+      args: '.next/standalone/server.js',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
@@ -62,10 +62,14 @@ module.exports = {
 
       // Environment - .env.lsemb dosyasından okunacak
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        PORT: 3002,
+        HOSTNAME: '0.0.0.0'
       },
       env_production: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        PORT: 3002,
+        HOSTNAME: '0.0.0.0'
       },
 
       // Logging
@@ -125,28 +129,30 @@ module.exports = {
     */
 
     // ==========================================
-    // REVERSE PROXY SERVER
+    // LUWI-DEV WEBSITE (Port 3000)
     // ==========================================
     {
-      name: 'lsemb-proxy',
-      script: './proxy-server.js',
-      cwd: './',
+      name: 'luwi-dev',
+      script: 'server.js',
+      cwd: '/var/www/luwi-dev',
       instances: 1,
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '512M',
 
-      // Environment - .env.lsemb dosyasından okunacak
+      // Environment
       env: {
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+        PORT: 3000
       },
       env_production: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        PORT: 3000
       },
 
       // Logging
-      error_file: './logs/proxy-error.log',
-      out_file: './logs/proxy-out.log',
+      error_file: '/var/www/luwi-dev/logs/error.log',
+      out_file: '/var/www/luwi-dev/logs/out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
 
