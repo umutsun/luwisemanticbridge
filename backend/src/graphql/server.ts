@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { makeExecutableSchema } from '@graphql-tools/schema';
 import { loadFilesSync } from '@graphql-tools/load-files';
 import { mergeTypeDefs, mergeResolvers } from '@graphql-tools/merge';
-import { Express } from 'express';
+import { Application } from 'express';
 import { join } from 'path';
 import { GraphQLContext, createContext } from './context';
 import * as resolvers from './resolvers';
@@ -37,6 +37,7 @@ export function loadSchema() {
     resolvers.baseResolvers,
     resolvers.searchResolvers,
     resolvers.chatResolvers,
+    resolvers.settingsResolvers,
     resolvers.documentResolvers,
     resolvers.scraperResolvers,
   ]);
@@ -51,7 +52,7 @@ export function loadSchema() {
 /**
  * GraphQL Yoga server instance oluştur
  */
-export function createGraphQLServer(app: Express) {
+export function createGraphQLServer(app: Application) {
   const schema = loadSchema();
 
   const yoga = createYoga({
@@ -146,7 +147,7 @@ export function createGraphQLServer(app: Express) {
 /**
  * GraphQL server'ı başlat
  */
-export function startGraphQLServer(app: Express, port: number = 4000) {
+export function startGraphQLServer(app: Application, port: number = 4000) {
   const server = createGraphQLServer(app);
 
   if (typeof server.listen === 'function') {

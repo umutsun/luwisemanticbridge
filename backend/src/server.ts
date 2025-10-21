@@ -84,6 +84,7 @@ import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
 import { MessageCleanupService } from "./services/message-cleanup.service";
 import { setupSwagger } from "./config/swagger";
+import { createGraphQLServer } from "./graphql/server";
 
 // Initialize Express app
 const app: Application = express();
@@ -444,6 +445,16 @@ app.use("/api/v2/system", systemLogsRoutes);
 app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
+
+// GraphQL Server - Initialize after all REST routes
+if (process.env.ENABLE_GRAPHQL !== 'false') {
+  try {
+    createGraphQLServer(app);
+    console.log("✅ GraphQL Server initialized: /graphql");
+  } catch (graphQLError) {
+    console.error("⚠️ GraphQL Server initialization failed:", graphQLError);
+  }
+}
 
 // Base route
 app.get("/api/v2", (req: Request, res: Response) => {

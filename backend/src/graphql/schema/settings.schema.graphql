@@ -1,0 +1,119 @@
+# Settings Schema
+# Sistem konfigürasyonu ve ayarlar için GraphQL tanımları
+
+extend type Query {
+  # Tüm settings'i getir
+  settings(category: String): SettingsResponse!
+
+  # Belirli bir setting getir
+  setting(key: String!): Setting
+
+  # GraphQL ayarlarını getir
+  graphqlSettings: GraphQLSettings!
+
+  # API ayarlarını getir
+  apiSettings: APISettings!
+
+  # Tüm kategorileri listele
+  settingsCategories: [String!]!
+}
+
+extend type Mutation {
+  # Setting güncelle
+  updateSetting(input: UpdateSettingInput!): Setting!
+
+  # Birden fazla setting güncelle
+  updateSettings(input: [UpdateSettingInput!]!): [Setting!]!
+
+  # GraphQL ayarlarını güncelle
+  updateGraphQLSettings(input: UpdateGraphQLSettingsInput!): GraphQLSettings!
+
+  # Setting sil
+  deleteSetting(key: String!): Boolean!
+
+  # Settings kategorisini temizle
+  clearSettingsCategory(category: String!): Boolean!
+}
+
+# Setting item
+type Setting {
+  key: String!
+  value: JSON!
+  category: String!
+  description: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+# Settings response
+type SettingsResponse {
+  items: [Setting!]!
+  category: String
+  total: Int!
+}
+
+# GraphQL özel ayarları
+type GraphQLSettings {
+  enabled: Boolean!
+  endpoint: String!
+  playgroundEnabled: Boolean!
+  maxQueryDepth: Int!
+  maxQueryComplexity: Int!
+  enableSubscriptions: Boolean!
+  enableCaching: Boolean!
+  cacheTTL: Int!
+  enableRateLimiting: Boolean!
+  rateLimit: RateLimitConfig!
+  persistedQueriesEnabled: Boolean!
+  introspectionEnabled: Boolean!
+  debugMode: Boolean!
+}
+
+# Rate limit konfigürasyonu
+type RateLimitConfig {
+  maxRequests: Int!
+  windowMs: Int!
+  keyGenerator: String
+}
+
+# API genel ayarları
+type APISettings {
+  port: Int!
+  environment: String!
+  corsEnabled: Boolean!
+  corsOrigins: [String!]!
+  jwtEnabled: Boolean!
+  apiKeyEnabled: Boolean!
+  https: Boolean!
+  compressionEnabled: Boolean!
+  requestLogging: Boolean!
+  errorLogging: Boolean!
+}
+
+# Input tipler
+input UpdateSettingInput {
+  key: String!
+  value: JSON!
+  category: String!
+  description: String
+}
+
+input UpdateGraphQLSettingsInput {
+  enabled: Boolean
+  maxQueryDepth: Int
+  maxQueryComplexity: Int
+  enableSubscriptions: Boolean
+  enableCaching: Boolean
+  cacheTTL: Int
+  enableRateLimiting: Boolean
+  rateLimit: RateLimitConfigInput
+  persistedQueriesEnabled: Boolean
+  introspectionEnabled: Boolean
+  debugMode: Boolean
+}
+
+input RateLimitConfigInput {
+  maxRequests: Int!
+  windowMs: Int!
+  keyGenerator: String
+}

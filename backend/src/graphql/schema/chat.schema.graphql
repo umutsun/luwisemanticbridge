@@ -1,0 +1,233 @@
+# Chat Service Schema
+# Sohbet ve mesajlaşma için GraphQL tanımları
+
+extend type Query {
+  # Chat oturumunu getir
+  chatSession(id: ID!): ChatSession
+
+  # Kullanıcının oturumlarını listele
+  chatSessions(
+    userId: ID!
+    pagination: PaginationInput
+  ): ChatSessionResponse!
+
+  # Sohbet mesajlarını getir
+  chatMessages(
+    sessionId: ID!
+    pagination: PaginationInput
+  ): ChatMessagesResponse!
+
+  # Tek bir mesajı getir
+  chatMessage(id: ID!): ChatMessage
+
+  # Chat analytics
+  chatAnalytics(
+    startDate: DateTime
+    endDate: DateTime
+  ): ChatAnalytics!
+}
+
+extend type Mutation {
+  # Yeni chat oturumu oluştur
+  createChatSession(input: CreateChatSessionInput!): ChatSession!
+
+  # Sohbete mesaj gönder
+  sendChatMessage(input: SendMessageInput!): ChatMessage!
+
+  # Chat oturumunu güncelle
+  updateChatSession(input: UpdateChatSessionInput!): ChatSession!
+
+  # Chat oturumunu sil
+  deleteChatSession(id: ID!): Boolean!
+
+  # Oturumdaki tüm mesajları sil
+  clearChatMessages(sessionId: ID!): Boolean!
+
+  # Mesaj yeniden oluştur (regenerate)
+  regenerateMessage(messageId: ID!): ChatMessage!
+}
+
+extend type Subscription {
+  # Yeni mesajları gerçek zamanlı al
+  chatMessageAdded(sessionId: ID!): ChatMessage!
+
+  # Yazılıyor göstergesi
+  chatTyping(sessionId: ID!): TypingIndicator!
+
+  # Chat streaming
+  chatStreaming(sessionId: ID!): StreamingMessage!
+}
+
+# Chat oturumu
+type ChatSession {
+  id: ID!
+  userId: ID!
+  title: String!
+  description: String
+  messages: [ChatMessage!]!
+  messageCount: Int!
+  lastMessage: ChatMessage
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  isActive: Boolean!
+  model: String!
+  temperature: Float!
+  systemPrompt: String
+  metadata: JSON
+}
+
+# Chat mesajı
+type ChatMessage {
+  id: ID!
+  sessionId: ID!
+  content: String!
+  role: MessageRole!
+  model: String!
+  tokens: Int
+  sources: [Source!]
+  citations: [Citation!]
+  embeddingId: String
+  feedback: MessageFeedback
+  generatedAt: DateTime!
+  createdAt: DateTime!
+}
+
+# Mesaj rolü
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+# Kaynak referansı
+type Source {
+  id: ID!
+  title: String!
+  content: String!
+  score: Float!
+  url: String
+  page: Int
+}
+
+# Alıntı
+type Citation {
+  text: String!
+  source: String!
+  page: Int
+}
+
+# Mesaj feedback'i
+type MessageFeedback {
+  isHelpful: Boolean
+  rating: Int
+  comment: String
+  userId: ID!
+  timestamp: DateTime!
+}
+
+# Chat oturum response
+type ChatSessionResponse implements PaginatedResponse {
+  items: [ChatSession!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+  hasNext: Boolean!
+  hasPrevious: Boolean!
+}
+
+# Chat mesajları response
+type ChatMessagesResponse implements PaginatedResponse {
+  items: [ChatMessage!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+  hasNext: Boolean!
+  hasPrevious: Boolean!
+}
+
+# Chat analytics
+type ChatAnalytics {
+  totalSessions: Int!
+  activeUsers: Int!
+  averageMessagesPerSession: Float!
+  totalTokensUsed: Int!
+  topModels: [ModelUsage!]!
+  averageResponseTime: Float!
+  sessionTrends: [SessionTrend!]!
+}
+
+# Model kullanım istatistiği
+type ModelUsage {
+  model: String!
+  count: Int!
+  averageTemperature: Float!
+  totalTokens: Int!
+}
+
+# Oturum trendi
+type SessionTrend {
+  date: DateTime!
+  sessionCount: Int!
+  messageCount: Int!
+  avgDuration: Float!
+}
+
+# Yazılıyor göstergesi
+type TypingIndicator {
+  userId: ID!
+  sessionId: ID!
+  timestamp: DateTime!
+}
+
+# Streaming mesaj
+type StreamingMessage {
+  sessionId: ID!
+  chunk: String!
+  timestamp: DateTime!
+}
+
+# Input tipler
+input CreateChatSessionInput {
+  title: String!
+  description: String
+  userId: ID!
+  model: String = "claude-3"
+  temperature: Float = 0.7
+  systemPrompt: String
+  metadata: JSON
+}
+
+input SendMessageInput {
+  sessionId: ID!
+  content: String!
+  sources: [SourceInput!]
+  metadata: JSON
+}
+
+input SourceInput {
+  id: ID!
+  title: String!
+  content: String!
+  score: Float!
+  url: String
+}
+
+input UpdateChatSessionInput {
+  id: ID!
+  title: String
+  description: String
+  model: String
+  temperature: Float
+  systemPrompt: String
+  metadata: JSON
+}
+
+input MessageFeedbackInput {
+  messageId: ID!
+  isHelpful: Boolean!
+  rating: Int
+  comment: String
+  userId: ID!
+}
