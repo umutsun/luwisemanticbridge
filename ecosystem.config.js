@@ -1,7 +1,9 @@
 /**
  * PM2 Ecosystem Configuration
- * Alice Semantic Bridge - Production Ready Setup
+ * Luwi Semantic Bridge - Production Ready Setup
  */
+
+require('dotenv').config({ path: '.env.lsemb' });
 
 module.exports = {
   apps: [
@@ -9,28 +11,21 @@ module.exports = {
     // BACKEND API SERVER
     // ==========================================
     {
-      name: 'asb-backend',
+      name: 'lsemb-backend',
       script: 'node_modules/ts-node/dist/bin.js',
-      args: 'src/server.ts',
+      args: '-r dotenv/config src/server.ts dotenv_config_path=../.env.lsemb',
       cwd: './backend',
       instances: 1,
       exec_mode: 'fork',
-      watch: false, // Production'da false
+      watch: false,
       max_memory_restart: '1G',
 
-      // Environment
+      // Environment - .env.lsemb dosyasından okunacak
       env: {
-        NODE_ENV: 'development',
-        DATABASE_URL: 'postgresql://user:password@YOUR_POSTGRES_IP:5432/asemb',
-        PORT: 8083,
-        API_PORT: 8083,
-        BACKEND_PORT: 8083
+        NODE_ENV: 'development'
       },
       env_production: {
-        NODE_ENV: 'production',
-        PORT: 8083,
-        API_PORT: 8083,
-        BACKEND_PORT: 8083
+        NODE_ENV: 'production'
       },
 
       // Logging
@@ -57,7 +52,7 @@ module.exports = {
     // FRONTEND NEXT.JS SERVER
     // ==========================================
     {
-      name: 'asb-frontend',
+      name: 'lsemb-frontend',
       script: 'npm',
       args: 'start',
       cwd: './frontend',
@@ -66,22 +61,12 @@ module.exports = {
       watch: false,
       max_memory_restart: '1G',
 
-      // Environment
+      // Environment - .env.lsemb dosyasından okunacak
       env: {
-        NODE_ENV: 'development',
-        PORT: 3002,
-        NEXT_PUBLIC_PORT: 3002,
-        NEXT_PUBLIC_API_URL: 'http://localhost:8083',
-        NEXT_PUBLIC_APP_URL: 'http://localhost:3002',
-        NEXT_PUBLIC_WEBSOCKET_URL: 'ws://localhost:8083',
+        NODE_ENV: 'development'
       },
       env_production: {
-        NODE_ENV: 'production',
-        PORT: 3002,
-        NEXT_PUBLIC_PORT: 3002,
-        NEXT_PUBLIC_API_URL: 'http://localhost:8083',
-        NEXT_PUBLIC_APP_URL: 'http://localhost:3002',
-        NEXT_PUBLIC_WEBSOCKET_URL: 'ws://localhost:8083',
+        NODE_ENV: 'production'
       },
 
       // Logging
@@ -144,7 +129,7 @@ module.exports = {
     // REVERSE PROXY SERVER
     // ==========================================
     {
-      name: 'asb-proxy',
+      name: 'lsemb-proxy',
       script: './proxy-server.js',
       cwd: './',
       instances: 1,
@@ -152,12 +137,12 @@ module.exports = {
       watch: false,
       max_memory_restart: '512M',
 
-      // Environment
+      // Environment - .env.lsemb dosyasından okunacak
       env: {
-        NODE_ENV: 'development',
+        NODE_ENV: 'development'
       },
       env_production: {
-        NODE_ENV: 'production',
+        NODE_ENV: 'production'
       },
 
       // Logging
@@ -183,25 +168,14 @@ module.exports = {
   deploy: {
     production: {
       user: 'root',
-      host: ['asemb.luwi.dev'],
+      host: ['91.99.229.96'],
       ref: 'origin/main',
-      repo: 'git@github.com:your-org/alice-semantic-bridge.git',
-      path: '/var/www/alice-semantic-bridge',
-      'post-deploy': 'npm install && npm run build && npm run build:backend && pm2 reload ecosystem.config.js --env production',
+      repo: 'https://github.com/umutsun/asemb.git',
+      path: '/var/www/lsemb',
+      'post-deploy': 'npm install && cd frontend && npm install && npm run build && cd .. && pm2 reload ecosystem.config.js --env production',
       env: {
-        NODE_ENV: 'production',
-      },
-    },
-    staging: {
-      user: 'root',
-      host: ['asemb.luwi.dev'],
-      ref: 'origin/develop',
-      repo: 'git@github.com:your-org/alice-semantic-bridge.git',
-      path: '/var/www/alice-semantic-bridge-staging',
-      'post-deploy': 'npm install && npm run build && npm run build:backend && pm2 reload ecosystem.config.js --env staging',
-      env: {
-        NODE_ENV: 'staging',
-      },
-    },
-  },
+        NODE_ENV: 'production'
+      }
+    }
+  }
 };
