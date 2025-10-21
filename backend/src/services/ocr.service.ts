@@ -1,8 +1,21 @@
 import { createWorker } from 'tesseract.js';
 import path from 'path';
 import fs from 'fs';
-import { convert } from 'pdf-poppler';
 import sharp from 'sharp';
+
+// Lazy loading için pdf-poppler import'unu dinamik yap
+let pdfPoppler: any = null;
+const loadPdfPoppler = async () => {
+  if (!pdfPoppler) {
+    try {
+      pdfPoppler = await import('pdf-poppler');
+    } catch (error) {
+      console.warn('⚠️ pdf-poppler could not be loaded. PDF OCR will not work.', error.message);
+      throw new Error('PDF OCR is not available on this system');
+    }
+  }
+  return pdfPoppler;
+};
 
 export class OCRService {
   private static instance: OCRService;
@@ -27,7 +40,8 @@ export class OCRService {
       fs.mkdirSync(tempDir, { recursive: true });
 
       // Convert PDF to images
-      const images = await convert(filePath, {
+      const poppler = await loadPdfPoppler();
+      const images = await poppler.convert(filePath, {
         format: 'png',
         out_dir: tempDir,
         out_prefix: 'page'
