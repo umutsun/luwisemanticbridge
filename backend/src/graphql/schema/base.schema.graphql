@@ -1,0 +1,77 @@
+# Temel GraphQL Schema Tanımları
+# Alice Semantic Bridge - GraphQL API
+
+scalar DateTime
+scalar JSON
+
+# Temel Query root type
+type Query {
+  # Health check endpoint
+  health: HealthStatus!
+
+  # Versiyom bilgisi
+  version: String!
+}
+
+# Temel Mutation root type
+type Mutation {
+  # Placeholder - sonra genişletilecek
+  _empty: String
+}
+
+# Temel Subscription root type
+type Subscription {
+  # Placeholder - sonra genişletilecek
+  _empty: String
+}
+
+# Sağlık durumu tipi
+type HealthStatus {
+  status: String!
+  timestamp: DateTime!
+  services: ServiceStatus!
+}
+
+# Servis durumları
+type ServiceStatus {
+  database: Boolean!
+  redis: Boolean!
+  elasticsearch: Boolean
+  embeddings: Boolean!
+}
+
+# Sayfalama için temel input
+input PaginationInput {
+  page: Int = 1
+  limit: Int = 20
+  offset: Int = 0
+}
+
+# Sıralama için temel input
+input SortInput {
+  field: String!
+  order: SortOrder!
+}
+
+# Sıralama yönü
+enum SortOrder {
+  ASC
+  DESC
+}
+
+# Genel hata tipi
+type Error {
+  message: String!
+  code: String
+  field: String
+}
+
+# Sayfalı response için temel interface
+interface PaginatedResponse {
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+  hasNext: Boolean!
+  hasPrevious: Boolean!
+}

@@ -1,0 +1,213 @@
+# Semantic Search Schema
+# Semantik arama ve vektör sorguları için GraphQL tanımları
+
+extend type Query {
+  # Semantik arama yap
+  semanticSearch(input: SemanticSearchInput!): SemanticSearchResponse!
+
+  # Belge ID'si ile tek bir sonuç getir
+  searchResult(id: ID!): SearchResult
+
+  # Tüm search history'yi getir
+  searchHistory(
+    userId: ID
+    pagination: PaginationInput
+  ): SearchHistoryResponse!
+
+  # Search analytics
+  searchAnalytics(
+    startDate: DateTime
+    endDate: DateTime
+  ): SearchAnalytics!
+}
+
+extend type Mutation {
+  # Yeni arama kaydet
+  saveSearch(input: SaveSearchInput!): SearchResult!
+
+  # Arama sonucunu güncelle (relevance feedback)
+  updateSearchRelevance(input: UpdateRelevanceInput!): SearchResult!
+
+  # Arama geçmişini temizle
+  clearSearchHistory(userId: ID!): Boolean!
+}
+
+extend type Subscription {
+  # Gerçek zamanlı arama sonuçları
+  searchResultsUpdated(query: String!): SearchResult!
+
+  # Embedding progress tracking
+  embeddingProgress(documentId: ID!): EmbeddingProgress!
+}
+
+# Semantik arama input tipi
+input SemanticSearchInput {
+  query: String!
+  limit: Int = 10
+  threshold: Float = 0.7
+  filters: SearchFilters
+  includeMetadata: Boolean = true
+  includeEmbeddings: Boolean = false
+  searchType: SearchType = HYBRID
+}
+
+# Arama filtreleri
+input SearchFilters {
+  documentTypes: [String!]
+  dateRange: DateRangeInput
+  tags: [String!]
+  sources: [String!]
+  minScore: Float
+  maxScore: Float
+}
+
+# Tarih aralığı input
+input DateRangeInput {
+  start: DateTime!
+  end: DateTime!
+}
+
+# Arama tipi enum
+enum SearchType {
+  VECTOR      # Sadece vektör benzerliği
+  KEYWORD     # Sadece keyword matching
+  HYBRID      # Vektör + keyword kombinasyonu
+  FUZZY       # Fuzzy matching
+}
+
+# Semantik arama response
+type SemanticSearchResponse {
+  results: [SearchResult!]!
+  total: Int!
+  queryTime: Float!
+  queryVector: [Float!]
+  suggestions: [String!]
+  relatedQueries: [String!]
+}
+
+# Tekil arama sonucu
+type SearchResult {
+  id: ID!
+  content: String!
+  title: String
+  score: Float!
+  source: String!
+  documentId: String
+  metadata: JSON
+  highlights: [Highlight!]
+  embedding: Embedding
+  timestamp: DateTime!
+  relevanceFeedback: RelevanceFeedback
+}
+
+# Metin vurgulamaları
+type Highlight {
+  text: String!
+  startOffset: Int!
+  endOffset: Int!
+  score: Float
+}
+
+# Embedding bilgisi
+type Embedding {
+  id: ID!
+  vector: [Float!]!
+  model: String!
+  dimensions: Int!
+  createdAt: DateTime!
+}
+
+# Relevance feedback
+type RelevanceFeedback {
+  isRelevant: Boolean
+  rating: Float
+  userId: ID
+  timestamp: DateTime
+  comment: String
+}
+
+# Arama geçmişi response
+type SearchHistoryResponse implements PaginatedResponse {
+  items: [SearchHistoryItem!]!
+  total: Int!
+  page: Int!
+  limit: Int!
+  totalPages: Int!
+  hasNext: Boolean!
+  hasPrevious: Boolean!
+}
+
+# Arama geçmişi item
+type SearchHistoryItem {
+  id: ID!
+  query: String!
+  resultCount: Int!
+  clickedResults: [ID!]
+  userId: ID!
+  timestamp: DateTime!
+  duration: Float!
+}
+
+# Search analytics
+type SearchAnalytics {
+  totalSearches: Int!
+  uniqueUsers: Int!
+  averageResultCount: Float!
+  averageQueryTime: Float!
+  topQueries: [QueryStat!]!
+  noResultQueries: [String!]!
+  searchTrends: [SearchTrend!]!
+}
+
+# Query istatistiği
+type QueryStat {
+  query: String!
+  count: Int!
+  averageScore: Float!
+  clickRate: Float!
+}
+
+# Arama trendi
+type SearchTrend {
+  date: DateTime!
+  searchCount: Int!
+  userCount: Int!
+}
+
+# Embedding progress tracking
+type EmbeddingProgress {
+  documentId: ID!
+  status: EmbeddingStatus!
+  progress: Float!
+  processedChunks: Int!
+  totalChunks: Int!
+  currentChunk: String
+  estimatedTime: Int
+  error: String
+}
+
+# Embedding durumu
+enum EmbeddingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+# Arama kaydetme input
+input SaveSearchInput {
+  query: String!
+  results: [ID!]!
+  userId: ID!
+  metadata: JSON
+}
+
+# Relevance güncelleme input
+input UpdateRelevanceInput {
+  searchResultId: ID!
+  isRelevant: Boolean!
+  rating: Float
+  comment: String
+  userId: ID!
+}
