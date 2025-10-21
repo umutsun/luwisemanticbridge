@@ -53,7 +53,7 @@ module.exports = {
     {
       name: 'lsemb-frontend',
       script: 'node',
-      args: '.next/standalone/server.js',
+      args: '.next/standalone/frontend/server.js',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
