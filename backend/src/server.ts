@@ -447,7 +447,8 @@ app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
 
 // GraphQL Server - Initialize after all REST routes
-if (process.env.ENABLE_GRAPHQL !== 'false') {
+// DISABLED: GraphQL dependencies missing, will be fixed later
+if (false && process.env.ENABLE_GRAPHQL !== 'false') {
   try {
     createGraphQLServer(app);
     console.log("✅ GraphQL Server initialized: /graphql");
