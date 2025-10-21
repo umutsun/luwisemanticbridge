@@ -36,7 +36,6 @@ export default function LoginPage() {
 
   const handleLogin = async (email: string, password: string) => {
     setLoading(true);
-    setError(null);
 
     const result = await login(email, password);
 
@@ -63,8 +62,7 @@ export default function LoginPage() {
         }
       }, 1000);
     } else {
-      setError(result.error || 'Login failed');
-      // Show error toast
+      // Show error toast only (no form error display)
       toast({
         title: "Giriş başarısız",
         description: result.error || 'Giriş başarısız oldu',
@@ -194,11 +192,6 @@ export default function LoginPage() {
                 placeholder="•••••••••"
               />
             </div>
-            {error && (
-              <div className="text-red-400 text-sm bg-red-900/20 p-3 rounded-lg border border-red-800/30">
-                {error}
-              </div>
-            )}
             <button
               type="submit"
               disabled={loading}
