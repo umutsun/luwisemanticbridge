@@ -24,32 +24,13 @@ export default function LoginPage() {
     }
   }, [config]);
 
+  // DISABLED: check-admin endpoint not available
   // Check if admin user exists and redirect to deployment setup if needed
   // Only do this check on initial app load, not during normal login flow
   useEffect(() => {
-    const checkDeploymentStatus = async () => {
-      if (!configLoading && mounted) {
-        try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/deployment/check-admin`);
-          const data = await response.json();
-
-          // Only redirect to setup if no admin user exists AND environment is not configured
-          if (!data.adminExists && (!data.envConfigured || !data.databaseConnected)) {
-            router.push('/setup/deploy');
-            return;
-          }
-
-          // If admin exists but we're somehow on login page without being logged in,
-          // continue with normal login flow
-        } catch (error) {
-          console.error('Failed to check deployment status:', error);
-          // If we can't check status, proceed with normal login
-        }
-      }
-    };
-
-    checkDeploymentStatus();
-  }, [configLoading, mounted, router]);
+    // Deployment check disabled for now
+    // Users will proceed to normal login flow
+  }, []);
 
   const { login } = useAuth();
 
