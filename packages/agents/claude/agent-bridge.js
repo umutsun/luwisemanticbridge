@@ -19,7 +19,7 @@ class ClaudeAgent {
     // z.ai (GLM-4.5) configuration
     this.zaiConfig = {
       apiKey: process.env.ZAI_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN,
-      baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://open.bigmodel.cn/api/anthropic',
+      baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
       model: 'glm-4.5'
     };
   }

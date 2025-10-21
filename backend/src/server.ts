@@ -78,6 +78,7 @@ import apiValidationRoutes from "./routes/api-validation.routes";
 import messageEmbeddingsRoutes from "./routes/message-embeddings.routes";
 import messageAnalyticsRoutes from "./routes/message-analytics.routes";
 import documentProcessingRoutes from "./routes/document-processing.routes";
+import ocrRoutes from "./routes/ocr.routes";
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
@@ -442,6 +443,7 @@ app.use(messageAnalyticsRoutes);
 app.use("/api/v2/system", systemLogsRoutes);
 app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
+app.use("/api/v2/ocr", ocrRoutes);
 
 // Base route
 app.get("/api/v2", (req: Request, res: Response) => {

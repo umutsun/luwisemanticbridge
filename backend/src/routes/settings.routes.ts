@@ -103,6 +103,9 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       translation: `SELECT key, value FROM settings
                    WHERE key LIKE 'deepl.%' OR key LIKE 'google.translate.%'`,
 
+      ocr: `SELECT key, value FROM settings
+           WHERE key LIKE 'ocr.%' OR key LIKE 'ocrSettings.%'`,
+
       prompts: `SELECT key, value FROM settings
                WHERE key LIKE 'prompts.%'`,
 
@@ -283,6 +286,9 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
       translation: `SELECT key, value FROM settings
                    WHERE key LIKE 'deepl.%' OR key LIKE 'google.translate.%'`,
 
+      ocr: `SELECT key, value FROM settings
+           WHERE key LIKE 'ocr.%' OR key LIKE 'ocrSettings.%'`,
+
       prompts: `SELECT key, value FROM settings
                WHERE key LIKE 'prompts.%'`,
 
@@ -373,7 +379,7 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     const settings = req.body;
 
     // Validate category name
-    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis'];
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis', 'ocr'];
     if (!validCategories.includes(categoryName)) {
       return res.status(400).json({ error: `Invalid category: ${categoryName}` });
     }
@@ -433,7 +439,7 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
     const settings = req.body;
 
     // Validate category name
-    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation'];
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'ocr'];
     if (!validCategories.includes(categoryName)) {
       return res.status(400).json({ error: `Invalid category: ${categoryName}` });
     }

@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import {
   RefreshCw,
   CheckCircle,
+  XCircle,
   DollarSign,
   TrendingUp,
   Save,
@@ -127,12 +128,18 @@ function LLMSettings() {
       // Initialize with database values or defaults
       const defaultConfig = {
         provider: data?.llmSettings?.activeChatModel?.split('/')?.[0] || 'anthropic',
-        model: data?.llmSettings?.activeChatModel || 'claude-3-sonnet',
+        model: data?.llmSettings?.activeChatModel?.split('/')?.[1] || 'claude-3-sonnet',
         temperature: data?.llmSettings?.temperature || 0.7,
         maxTokens: data?.llmSettings?.maxTokens || 4096,
-        embeddingProvider: data?.llmSettings?.embeddingProvider || 'openai',
-        embeddingModel: data?.llmSettings?.embeddingModel || 'text-embedding-3-small',
-        translationProvider: data?.translationProvider || 'google',
+        embeddingProvider: data?.llmSettings?.activeEmbeddingModel?.split('/')?.[0] || data?.llmSettings?.embeddingProvider || 'google',
+        embeddingModel: data?.llmSettings?.activeEmbeddingModel?.split('/')?.[1] || data?.llmSettings?.embeddingModel || 'text-embedding-004',
+        translationProvider: data?.llmSettings?.translationProvider || data?.translationProvider || 'google',
+        ocrProvider: data?.ocrSettings?.activeProvider || data?.ocrProvider || 'gemini-vision',
+        ocrSettings: {
+          activeProvider: data?.ocrSettings?.activeProvider || 'gemini-vision',
+          fallbackEnabled: data?.ocrSettings?.fallbackEnabled !== false,
+          cacheEnabled: data?.ocrSettings?.cacheEnabled !== false
+        },
         // Load API keys from database with model selection
         openai: {
           ...data?.openai,
@@ -178,12 +185,14 @@ function LLMSettings() {
       setLlmConfig(defaultConfig);
 
       // Include translation API keys in tempConfig
+      // IMPORTANT: Merge with existing google config instead of replacing it
       const configWithTranslation = {
         ...defaultConfig,
         deepl: {
           apiKey: translationData?.deepl?.apiKey || ''
         },
         google: {
+          ...defaultConfig.google, // Keep existing LLM google config
           translate: {
             apiKey: translationData?.google?.translate?.apiKey || ''
           }
@@ -258,12 +267,27 @@ function LLMSettings() {
     setSaving(true);
     try {
       // Separate LLM and translation settings
+      // IMPORTANT: Update activeChatModel format (provider/model) from provider and model fields
+      const activeChatModel = tempConfig?.provider && tempConfig?.model
+        ? `${tempConfig.provider}/${tempConfig.model}`
+        : tempConfig?.llmSettings?.activeChatModel || 'deepseek/deepseek-chat';
+
       const llmSettingsToSave = {
         ...tempConfig,
+        llmSettings: {
+          ...tempConfig?.llmSettings,
+          activeChatModel: activeChatModel,
+          embeddingProvider: tempConfig?.embeddingProvider,
+          embeddingModel: tempConfig?.embeddingModel,
+          activeEmbeddingModel: `${tempConfig?.embeddingProvider}/${tempConfig?.embeddingModel}`,
+          translationProvider: tempConfig?.translationProvider
+        },
         tokenInfo: tokenInfo,
         apiStatus: apiStatus,
         modelTokenUsage: modelTokenUsage
       };
+
+      console.log('🔧 Active Chat Model to save:', activeChatModel);
 
       // Extract translation settings to save separately
       const translationSettingsToSave = {
@@ -300,10 +324,17 @@ function LLMSettings() {
       }
 
       // Update validated keys based on current API status to trigger badge updates
+      // Keep existing validated providers - don't clear them on save
       const currentlyValidatedProviders = Object.keys(apiStatus).filter(
-        provider => apiStatus[provider].status === 'success'
+        provider => apiStatus[provider].status === 'success' || apiStatus[provider].status === 'active'
       );
-      setValidatedKeys(new Set(currentlyValidatedProviders));
+
+      // Merge with existing validated keys instead of replacing
+      setValidatedKeys(prev => {
+        const merged = new Set([...prev, ...currentlyValidatedProviders]);
+        console.log('🔧 Updated validated keys after save:', Array.from(merged));
+        return merged;
+      });
 
       toast({
         title: "Success",
@@ -497,16 +528,8 @@ function LLMSettings() {
       setTempConfig(updatedConfig);
       setLlmConfig(updatedConfig);
 
-      // Save all data to database
-      await updateSettingsCategory('llm', {
-        [`${provider}.apiKey`]: apiKey,
-        [`${provider}.modelsTested`]: models,
-        [`${provider}.verifiedDate`]: verifiedDate,
-        [`${provider}.modelResults`]: modelTestResults,
-        tokenInfo: { ...tokenInfo, [provider]: tokenInfoData },
-        apiStatus: { ...apiStatus, [provider]: { ...apiStatus[provider], verifiedDate } },
-        modelTokenUsage: modelTokenUsage
-      });
+      // Determine provider type first
+      const isTranslationProvider = provider === 'deepl' || provider === 'googleTranslate';
 
       // Auto-save validation results
       const validationData = {
@@ -517,17 +540,53 @@ function LLMSettings() {
         [`${provider}.avgResponseTime`]: avgResponseTime
       };
 
-      // Save to state and database
-      const settingsToSave = {
-        ...tempConfig,
-        tokenInfo: tokenInfo,
-        apiStatus: { ...apiStatus, [provider]: { status: 'success', responseTime: avgResponseTime, verifiedDate } },
-        modelTokenUsage: modelTokenUsage,
-        ...validationData
-      };
+      // Save to appropriate category based on provider type
+      if (isTranslationProvider) {
+        // For translation providers, save to 'translation' category
+        await updateSettingsCategory('translation', {
+          [provider]: {
+            apiKey: apiKey,
+            verifiedDate: verifiedDate,
+            modelsTested: models,
+            modelResults: modelTestResults
+          },
+          apiStatus: {
+            ...apiStatus,
+            [provider]: {
+              status: 'active',
+              message: `${successfulModels.length}/${models.length} models validated successfully`,
+              lastChecked: verifiedDate,
+              verifiedDate: verifiedDate,
+              responseTime: Math.round(avgResponseTime)
+            }
+          }
+        });
+        setTranslationConfig(prev => ({
+          ...prev,
+          [provider]: { apiKey: apiKey }
+        }));
+      } else {
+        // For LLM providers, save to 'llm' category
+        const settingsToSave = {
+          ...tempConfig,
+          tokenInfo: tokenInfo,
+          apiStatus: { ...apiStatus, [provider]: { status: 'active', responseTime: avgResponseTime, verifiedDate, message: `${successfulModels.length}/${models.length} models validated successfully` } },
+          modelTokenUsage: modelTokenUsage,
+          ...validationData
+        };
 
-      await updateSettingsCategory('llm', settingsToSave);
-      setLlmConfig(settingsToSave);
+        await updateSettingsCategory('llm', {
+          [`${provider}.apiKey`]: apiKey,
+          [`${provider}.modelsTested`]: models,
+          [`${provider}.verifiedDate`]: verifiedDate,
+          [`${provider}.modelResults`]: modelTestResults,
+          tokenInfo: { ...tokenInfo, [provider]: tokenInfoData },
+          apiStatus: { ...apiStatus, [provider]: { status: 'active', verifiedDate, responseTime: avgResponseTime, message: `${successfulModels.length}/${models.length} models validated successfully` } },
+          modelTokenUsage: modelTokenUsage
+        });
+
+        setLlmConfig(settingsToSave);
+      }
 
       toast({
         title: "Success",
@@ -572,7 +631,7 @@ function LLMSettings() {
   const getModelsForProvider = (provider: string) => {
     const models: Record<string, string[]> = {
       openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo'],
-      google: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro', 'gemini-pro-vision'],
+      google: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
       anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
       deepseek: ['deepseek-coder', 'deepseek-chat'],
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
@@ -662,34 +721,29 @@ function LLMSettings() {
       deepseek: { key: llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
       huggingface: { key: llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
       openrouter: { key: llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
+      deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
     }).filter(([provider]) => isProviderValidated(provider));
   };
 
   const getValidatedTranslationProviders = () => {
-    const providers = [];
-    // Add DeepL if API key exists
-    if (translationConfig?.deepl?.apiKey && translationConfig.deepl.apiKey !== '••••••••') {
-      providers.push({ value: 'deepl', label: 'DeepL' });
-    }
-    // Add Google Translate if API key exists
-    if (translationConfig?.google?.translate?.apiKey && translationConfig.google.translate.apiKey !== '••••••••') {
-      providers.push({ value: 'googleTranslate', label: 'Google Translate' });
-    }
-    return providers;
+    // Get all validated providers for translation
+    const validatedProviders = getValidatedProviders();
+
+    return validatedProviders.map(([provider, data]) => ({
+      value: provider,
+      label: data.name
+    }));
   };
 
   return (
     <>
       <div className="grid grid-cols-2 gap-6">
-        {/* Left Column - API Configuration with Status Indicators */}
+        {/* Left Column - Provider API Keys */}
         <Card>
           <CardHeader>
-            <CardTitle>API Configuration</CardTitle>
+            <CardTitle>API Provider Configuration</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="mb-4">
-              <h3 className="text-lg font-medium mb-2">LLM Providers</h3>
-            </div>
             {Object.entries({
               openai: { key: llmConfig?.openai?.apiKey, name: 'OpenAI' },
               google: { key: llmConfig?.google?.apiKey, name: 'Google AI' },
@@ -697,6 +751,7 @@ function LLMSettings() {
               deepseek: { key: llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
               huggingface: { key: llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
               openrouter: { key: llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
+              deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
             }).map(([provider, data]) => {
               const providerStatus = getProviderStatus(provider);
               const isValidated = isProviderValidated(provider);
@@ -707,21 +762,19 @@ function LLMSettings() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Label className="capitalize font-medium">{data.name}</Label>
-                      {verifiedDate && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="w-3 h-3" />
-                          <span>{verifiedDate instanceof Date ? verifiedDate.toLocaleDateString() : 'Invalid Date'}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {providerStatus.status === 'error' && (
-                        <Badge variant="destructive" className="text-xs">
-                          ✗
-                        </Badge>
+                      {providerStatus.status === 'active' && verifiedDate && (
+                        <span className="text-xs text-muted-foreground">
+                          ✓ {verifiedDate.toLocaleDateString('tr-TR')}
+                        </span>
                       )}
                     </div>
                   </div>
+                  {/* Show error message only if validation failed */}
+                  {providerStatus.status === 'error' && providerStatus.message && (
+                    <div className="text-xs text-destructive mt-1">
+                      {providerStatus.message}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <Input
@@ -731,9 +784,29 @@ function LLMSettings() {
                         className="flex-1 pr-20"
                         onChange={(e) => {
                           const newConfig = { ...tempConfig };
-                          if (!newConfig[provider]) newConfig[provider] = {};
-                          newConfig[provider].apiKey = e.target.value;
+
+                          // Handle DeepL separately
+                          if (provider === 'deepl') {
+                            if (!newConfig.deepl) newConfig.deepl = {};
+                            newConfig.deepl.apiKey = e.target.value;
+                          } else {
+                            if (!newConfig[provider]) newConfig[provider] = {};
+                            newConfig[provider].apiKey = e.target.value;
+                          }
+
                           setTempConfig(newConfig);
+
+                          // Reset validation status when API key is changed
+                          setApiStatus(prev => {
+                            const updated = { ...prev };
+                            delete updated[provider];
+                            return updated;
+                          });
+                          setValidatedKeys(prev => {
+                            const updated = new Set(prev);
+                            updated.delete(provider);
+                            return updated;
+                          });
                         }}
                       />
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -752,14 +825,32 @@ function LLMSettings() {
                     </div>
                     <Button
                       size="sm"
-                      variant={isValidated ? "default" : "outline"}
-                      onClick={() => validateAllModelsForProvider(provider, tempConfig?.[provider]?.apiKey || '')}
-                      disabled={!tempConfig?.[provider]?.apiKey || tempConfig?.[provider]?.apiKey === '' || validating === provider}
+                      variant="outline"
+                      onClick={() => {
+                        const apiKey = provider === 'deepl'
+                          ? tempConfig?.deepl?.apiKey
+                          : tempConfig?.[provider]?.apiKey;
+                        validateAllModelsForProvider(provider, apiKey || '');
+                      }}
+                      disabled={
+                        (provider === 'deepl' && !tempConfig?.deepl?.apiKey) ||
+                        (provider !== 'deepl' && (!tempConfig?.[provider]?.apiKey || tempConfig?.[provider]?.apiKey === '')) ||
+                        validating === provider
+                      }
+                      className={
+                        providerStatus.status === 'active'
+                          ? 'border-green-600 bg-green-50 hover:bg-green-100'
+                          : providerStatus.status === 'error'
+                          ? 'border-red-600 bg-red-50 hover:bg-red-100'
+                          : ''
+                      }
                     >
                       {validating === provider ? (
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : isValidated ? (
+                      ) : providerStatus.status === 'active' ? (
                         <CheckCircle className="w-4 h-4 text-green-600" />
+                      ) : providerStatus.status === 'error' ? (
+                        <XCircle className="w-4 h-4 text-red-600" />
                       ) : (
                         <Shield className="w-4 h-4" />
                       )}
@@ -769,98 +860,9 @@ function LLMSettings() {
               );
             })}
 
-            {/* Translation API Keys */}
-            <div className="mt-8 pt-8 border-t">
-              <h3 className="text-lg font-medium mb-2">Translation Providers</h3>
-              {Object.entries({
-                deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
-                googleTranslate: { key: tempConfig?.google?.translate?.apiKey || translationConfig?.google?.translate?.apiKey, name: 'Google Translate' }
-              }).map(([provider, data]) => {
-                const providerStatus = getProviderStatus(provider);
-                const isValidated = isProviderValidated(provider);
-                const verifiedDate = apiStatus[provider]?.verifiedDate ? new Date(apiStatus[provider].verifiedDate) : null;
-
-                return (
-                  <div key={provider} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor={`${provider}-api-key`} className="capitalize font-medium">{data.name}</Label>
-                        {verifiedDate && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            <span>{verifiedDate instanceof Date ? verifiedDate.toLocaleDateString() : 'Invalid Date'}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {providerStatus.status === 'error' && (
-                          <Badge variant="destructive" className="text-xs">
-                            ✗
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <Input
-                          id={`${provider}-api-key`}
-                          type={visibleKeys[provider] ? "text" : "password"}
-                          value={data.key === '••••••••' ? '' : (data.key || '')}
-                          placeholder="Enter API key"
-                          className="flex-1 pr-20"
-                          onChange={(e) => {
-                            console.log(`🔑 Updating ${provider} API key:`, e.target.value.substring(0, 10) + '...');
-                            const newConfig = { ...tempConfig };
-                            if (provider === 'deepl') {
-                              if (!newConfig.deepl) newConfig.deepl = {};
-                              newConfig.deepl.apiKey = e.target.value;
-                            } else if (provider === 'googleTranslate') {
-                              if (!newConfig.google) newConfig.google = {};
-                              if (!newConfig.google.translate) newConfig.google.translate = {};
-                              newConfig.google.translate.apiKey = e.target.value;
-                            }
-                            setTempConfig(newConfig);
-                            console.log('📝 Updated tempConfig for translation:', newConfig);
-                          }}
-                        />
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                          <button
-                            type="button"
-                            className="p-1 hover:bg-muted rounded"
-                            onClick={() => setVisibleKeys(prev => ({ ...prev, [provider]: !prev[provider] }))}
-                          >
-                            {visibleKeys[provider] ? (
-                              <EyeOff className="w-4 h-4 text-muted-foreground" />
-                            ) : (
-                              <Eye className="w-4 h-4 text-muted-foreground" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant={isValidated ? "default" : "outline"}
-                        onClick={() => validateAllModelsForProvider(provider,
-                          provider === 'deepl' ? tempConfig?.deepl?.apiKey : tempConfig?.google?.translate?.apiKey || '')}
-                        disabled={
-                          (provider === 'deepl' && !tempConfig?.deepl?.apiKey) ||
-                          (provider === 'googleTranslate' && !tempConfig?.google?.translate?.apiKey) ||
-                          validating === provider
-                        }
-                      >
-                        {validating === provider ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : isValidated ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Shield className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <p className="text-xs text-muted-foreground mt-6 pt-6 border-t">
+              Her provider için API key girin ve yeşil onay butonu görene kadar test edin.
+            </p>
           </CardContent>
         </Card>
 
@@ -880,8 +882,17 @@ function LLMSettings() {
                     value={tempConfig?.provider || 'openai'}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
-                        const updatedConfig = { ...tempConfig, provider: value };
+                        // Update provider and activeChatModel
+                        const updatedConfig = {
+                          ...tempConfig,
+                          provider: value,
+                          llmSettings: {
+                            ...tempConfig?.llmSettings,
+                            activeChatModel: `${value}/${tempConfig?.model || getDefaultModelForProvider(value)}`
+                          }
+                        };
                         updateTempConfig('provider', value);
+                        setTempConfig(updatedConfig);
                         // Auto-save when provider changes
                         try {
                           await updateSettingsCategory('llm', updatedConfig);
@@ -920,8 +931,17 @@ function LLMSettings() {
                   <Select
                     value={tempConfig?.model || getDefaultModelForProvider(tempConfig?.provider || 'openai')}
                     onValueChange={async (value) => {
-                      const updatedConfig = { ...tempConfig, model: value };
+                      // Update model and activeChatModel
+                      const updatedConfig = {
+                        ...tempConfig,
+                        model: value,
+                        llmSettings: {
+                          ...tempConfig?.llmSettings,
+                          activeChatModel: `${tempConfig?.provider || 'openai'}/${value}`
+                        }
+                      };
                       updateTempConfig('model', value);
+                      setTempConfig(updatedConfig);
                       // Auto-save when model changes
                       try {
                         await updateSettingsCategory('llm', updatedConfig);
@@ -959,8 +979,18 @@ function LLMSettings() {
                     value={tempConfig?.embeddingProvider || 'openai'}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
-                        const updatedConfig = { ...tempConfig, embeddingProvider: value };
+                        // Update embedding provider in llmSettings
+                        const updatedConfig = {
+                          ...tempConfig,
+                          embeddingProvider: value,
+                          llmSettings: {
+                            ...tempConfig?.llmSettings,
+                            embeddingProvider: value,
+                            activeEmbeddingModel: `${value}/${tempConfig?.embeddingModel || getDefaultEmbeddingModelForProvider(value)}`
+                          }
+                        };
                         updateTempConfig('embeddingProvider', value);
+                        setTempConfig(updatedConfig);
                         // Auto-save when provider changes
                         try {
                           await updateSettingsCategory('llm', updatedConfig);
@@ -999,8 +1029,18 @@ function LLMSettings() {
                   <Select
                     value={tempConfig?.embeddingModel || getDefaultEmbeddingModelForProvider(tempConfig?.embeddingProvider || 'openai')}
                     onValueChange={async (value) => {
-                      const updatedConfig = { ...tempConfig, embeddingModel: value };
+                      // Update embedding model in llmSettings
+                      const updatedConfig = {
+                        ...tempConfig,
+                        embeddingModel: value,
+                        llmSettings: {
+                          ...tempConfig?.llmSettings,
+                          embeddingModel: value,
+                          activeEmbeddingModel: `${tempConfig?.embeddingProvider || 'openai'}/${value}`
+                        }
+                      };
                       updateTempConfig('embeddingModel', value);
+                      setTempConfig(updatedConfig);
                       // Auto-save when model changes
                       try {
                         await updateSettingsCategory('llm', updatedConfig);
@@ -1036,8 +1076,17 @@ function LLMSettings() {
                 <Select
                   value={tempConfig?.translationProvider || 'google'}
                   onValueChange={async (value) => {
-                    const updatedConfig = { ...tempConfig, translationProvider: value };
+                    // Update translation provider in llmSettings
+                    const updatedConfig = {
+                      ...tempConfig,
+                      translationProvider: value,
+                      llmSettings: {
+                        ...tempConfig?.llmSettings,
+                        translationProvider: value
+                      }
+                    };
                     updateTempConfig('translationProvider', value);
+                    setTempConfig(updatedConfig);
                     // Auto-save when provider changes
                     try {
                       await updateSettingsCategory('llm', updatedConfig);
@@ -1066,6 +1115,59 @@ function LLMSettings() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Active OCR Provider Selection */}
+              <div>
+                <Label>OCR Provider</Label>
+                <div className="mt-2">
+                  <Select
+                    value={tempConfig?.ocrProvider || 'gemini-vision'}
+                    onValueChange={async (value) => {
+                      const updatedConfig = {
+                        ...tempConfig,
+                        ocrProvider: value,
+                        ocrSettings: {
+                          ...tempConfig?.ocrSettings,
+                          activeProvider: value
+                        }
+                      };
+                      updateTempConfig('ocrProvider', value);
+                      setTempConfig(updatedConfig);
+                      // Auto-save when provider changes
+                      try {
+                        await updateSettingsCategory('ocr', {
+                          activeProvider: value,
+                          fallbackEnabled: tempConfig?.ocrSettings?.fallbackEnabled !== false,
+                          cacheEnabled: tempConfig?.ocrSettings?.cacheEnabled !== false
+                        });
+                        toast({
+                          title: "Başarılı",
+                          description: "OCR provider güncellendi",
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Hata",
+                          description: "OCR provider güncellenemedi",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="OCR provider seçin" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gemini-vision">Gemini Vision</SelectItem>
+                      <SelectItem value="openai-vision">OpenAI Vision</SelectItem>
+                      <SelectItem value="deepseek-vision">DeepSeek Vision</SelectItem>
+                      <SelectItem value="tesseract">Tesseract (Ücretsiz)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tüm OCR işlemleri seçilen provider ile yapılacak
+                </p>
               </div>
 
               {/* Provider Usage Summary */}

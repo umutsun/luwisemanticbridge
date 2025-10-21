@@ -47,6 +47,55 @@ router.get('/health', async (req: Request, res: Response) => {
   }
 });
 
+// Get Redis stats (for dashboard)
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    if (!redis) {
+      return res.status(503).json({
+        status: 'error',
+        message: 'Redis client not initialized'
+      });
+    }
+
+    const info = await redis.info();
+    const memoryInfo = await redis.info('memory');
+    const statsInfo = await redis.info('stats');
+
+    // Parse memory info
+    const usedMemoryHuman = memoryInfo.split('\r\n').find(line => line.startsWith('used_memory_human:'))?.split(':')[1] || '0B';
+    const maxMemoryHuman = memoryInfo.split('\r\n').find(line => line.startsWith('maxmemory_human:'))?.split(':')[1] || 'unlimited';
+
+    // Parse stats
+    const totalConnections = statsInfo.split('\r\n').find(line => line.startsWith('total_connections_received:'))?.split(':')[1] || '0';
+    const totalCommands = statsInfo.split('\r\n').find(line => line.startsWith('total_commands_processed:'))?.split(':')[1] || '0';
+
+    // Get keyspace info
+    const dbSize = await redis.dbsize();
+
+    res.json({
+      status: 'success',
+      stats: {
+        usedMemory: usedMemoryHuman,
+        maxMemory: maxMemoryHuman,
+        totalConnections: parseInt(totalConnections),
+        totalCommands: parseInt(totalCommands),
+        totalKeys: dbSize,
+        connected: true
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Redis stats error:', error);
+    res.status(503).json({
+      status: 'error',
+      message: error.message,
+      stats: {
+        connected: false
+      }
+    });
+  }
+});
+
 // Get Redis info
 router.get('/info', async (req: Request, res: Response) => {
   try {

@@ -60,7 +60,7 @@ import { ModernTabs, ModernTabsList } from "@/components/ui/modern-tabs";
 import { cn } from "@/lib/utils";
 import "@/styles/animations.css";
 import { apiConfig, fetchWithAuth } from "@/lib/api/config";
-import { SiteAnalyzerModal } from "@/components/site-analyzer-modal";
+import SiteAnalyzerModal from "@/components/site-analyzer-modal";
 
 interface Project {
   id: string;

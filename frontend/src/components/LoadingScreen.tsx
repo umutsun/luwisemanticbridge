@@ -8,7 +8,10 @@ interface LoadingScreenProps {
 }
 
 export function LoadingScreen({ message = 'Loading...', error }: LoadingScreenProps) {
-  if (error) {
+  // Check if error is a backend connection issue
+  const isBackendConnectionError = error?.includes('Backend') || error?.includes('bağlantısı');
+
+  if (error && !isBackendConnectionError) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
@@ -19,19 +22,19 @@ export function LoadingScreen({ message = 'Loading...', error }: LoadingScreenPr
               </svg>
             </div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Database Connection Error</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Bağlantı Hatası</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Application requires ASEMB database connection to start.
-              Please check your database configuration.
+              <strong>Not:</strong> Uygulama veritabanı bağlantısı gerektirir.
+              Lütfen veritabanı yapılandırmanızı kontrol edin.
             </p>
           </div>
           <button
             onClick={() => window.location.reload()}
             className="mt-6 w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Retry Connection
+            Yeniden Dene
           </button>
         </div>
       </div>
@@ -39,11 +42,11 @@ export function LoadingScreen({ message = 'Loading...', error }: LoadingScreenPr
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-2xl p-8 text-center border border-gray-100">
         <div className="mb-6">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto">
-            <svg className="animate-spin w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto shadow-lg">
+            <svg className="animate-spin w-10 h-10 text-white" fill="none" viewBox="0 0 24 24">
               <circle
                 className="opacity-25"
                 cx="12"
@@ -60,13 +63,31 @@ export function LoadingScreen({ message = 'Loading...', error }: LoadingScreenPr
             </svg>
           </div>
         </div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">ASEMB System</h2>
-        <p className="text-gray-600 mb-4">{message}</p>
-        <div className="space-y-2 text-sm text-gray-500">
-          <p>Connecting to ASEMB database...</p>
-          <p>Loading application settings...</p>
-          <p>Initializing services...</p>
+        <h2 className="text-2xl font-bold text-gray-900 mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          Alice Semantic Bridge
+        </h2>
+        <p className="text-gray-600 mb-6 font-medium">{message || 'Sistem başlatılıyor...'}</p>
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center justify-center gap-2 text-gray-500">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+            <p>Backend bağlantısı kuruluyor...</p>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-gray-500">
+            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse delay-75"></div>
+            <p>Veritabanı bağlantısı kontrol ediliyor...</p>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-gray-500">
+            <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse delay-150"></div>
+            <p>Uygulama ayarları yükleniyor...</p>
+          </div>
         </div>
+        {isBackendConnectionError && (
+          <div className="mt-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-sm text-amber-800">
+              <strong>⏳ Bekliyor:</strong> Backend servisi başlatılıyor. Otomatik olarak bağlanılacak...
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

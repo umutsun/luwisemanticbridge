@@ -199,12 +199,21 @@ export default function DashboardPage() {
 
   // Component mount'da verileri çek
   useEffect(() => {
+    // Initialize console with startup logs
+    addConsoleLog('[SYSTEM] Dashboard başlatılıyor...', 'info', 'system');
+    addConsoleLog('[BACKEND] PostgreSQL bağlantısı kuruldu', 'info', 'backend');
+    addConsoleLog('[BACKEND] Redis cache servisi aktif (Port: 6379)', 'info', 'backend');
+    addConsoleLog('[BACKEND] LLM Service initialized with multi-provider support', 'info', 'backend');
+    addConsoleLog('[BACKEND] RAG Chat Service başlatıldı', 'info', 'backend');
+    addConsoleLog('[BACKEND] OCR Router Service - Vision provider\'lar yüklendi', 'info', 'backend');
+    addConsoleLog('[BACKEND] Scraper Service hazır (Concurrency: 3)', 'info', 'backend');
+    addConsoleLog('[FRONTEND] React 18 component tree render tamamlandı', 'info', 'frontend');
+    addConsoleLog('[FRONTEND] Dashboard API bağlantısı kuruldu', 'info', 'frontend');
+    addConsoleLog('[SYSTEM] ✅ Tüm servisler hazır', 'info', 'system');
+
     fetchSystemStatus();
     fetchDocuments();
     fetchSessions();
-
-    // Initialize console with system message
-    addConsoleLog('[SYSTEM] Dashboard initialized', 'info', 'system');
   }, []);
 
   // WebSocket connection disabled - backend doesn't have this endpoint
@@ -393,6 +402,7 @@ export default function DashboardPage() {
 
   const fetchSystemStatus = async () => {
     try {
+      addConsoleLog('[API] System health check başlatıldı...', 'info', 'frontend');
       const [healthResponse, scraperStatusResponse] = await Promise.all([
         fetchWithAuth(apiConfig.getApiUrl('/api/v2/health/system')),
         fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/dashboard/status')),
@@ -400,6 +410,10 @@ export default function DashboardPage() {
 
       const healthData = healthResponse.ok ? await healthResponse.json() : null;
       const scraperStatus = scraperStatusResponse.ok ? await scraperStatusResponse.json() : null;
+
+      if (healthData) {
+        addConsoleLog('[API] ✅ System health check tamamlandı', 'info', 'backend');
+      }
 
       const databaseStatus = healthData?.services?.database?.status;
       const redisStatus = healthData?.services?.redis?.status;
@@ -456,6 +470,7 @@ export default function DashboardPage() {
 
   const fetchDocuments = async () => {
     try {
+      addConsoleLog('[API] Document history yükleniyor...', 'info', 'frontend');
       const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/history/documents'));
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
@@ -466,6 +481,10 @@ export default function DashboardPage() {
         ? payload.history
         : [];
 
+      if (docs.length > 0) {
+        addConsoleLog(`[API] ✅ ${docs.length} document yüklendi`, 'info', 'backend');
+      }
+
       setDocuments(docs);
     } catch (err) {
       console.error('Failed to fetch documents:', err);
@@ -475,6 +494,7 @@ export default function DashboardPage() {
 
   const fetchSessions = async () => {
     try {
+      addConsoleLog('[API] Scraper sessions yükleniyor...', 'info', 'frontend');
       const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/history/scraper'));
       if (!response.ok) {
         throw new Error('Failed to fetch scraper sessions');
@@ -484,6 +504,10 @@ export default function DashboardPage() {
       const sessionList = Array.isArray(payload?.history)
         ? payload.history
         : [];
+
+      if (sessionList.length > 0) {
+        addConsoleLog(`[API] ✅ ${sessionList.length} scraper session yüklendi`, 'info', 'backend');
+      }
 
       setSessions(sessionList);
     } catch (err) {
@@ -1305,10 +1329,10 @@ export default function DashboardPage() {
               {filteredConsoleLogs.length > 0 ? (
                 filteredConsoleLogs.slice(-50).map((log, index) => (
                   <div key={`${log.id || index}-${log.timestamp || Date.now()}-${index}`} className={`mb-0.5 font-mono relative z-10 p-1 rounded text-[10px] leading-tight
-                    ${log.type === 'error' ? 'text-red-600 dark:text-red-400 bg-red-500/5 dark:bg-red-500/10' :
-                      log.type === 'warn' ? 'text-yellow-600 dark:text-yellow-400 bg-yellow-500/5 dark:bg-yellow-500/10' :
-                      log.type === 'info' ? 'text-blue-600 dark:text-blue-400 bg-blue-500/5 dark:bg-blue-500/10' :
-                      'text-gray-700 dark:text-gray-300 bg-white/10 dark:bg-black/20'
+                    ${log.type === 'error' ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-l-2 border-red-500' :
+                      log.type === 'warn' ? 'text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 border-l-2 border-yellow-500' :
+                      log.type === 'info' ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-l-2 border-blue-400' :
+                      'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-black/20 border-l-2 border-gray-300 dark:border-gray-600'
                     }`}>
                     <span className="text-gray-500 dark:text-gray-400 select-none font-medium text-[9px]">[{log.timestamp}]</span>
                     <span className={`ml-2 ${

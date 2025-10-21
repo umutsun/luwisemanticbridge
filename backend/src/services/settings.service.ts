@@ -381,4 +381,248 @@ export class SettingsService {
       return {};
     }
   }
+
+  // Get LLM provider configurations
+  async getLLMProviders(): Promise<any> {
+    const cacheKey = 'llm_providers';
+
+    // Check cache first
+    const cached = this.getCache(cacheKey);
+    if (cached) {
+      logger.debug('Returning cached LLM providers');
+      return cached;
+    }
+
+    try {
+      // Check if database is available
+      if (!lsembPool) {
+        logger.warn('Database not available for getLLMProviders, returning defaults');
+        return this.getDefaultLLMProviders();
+      }
+
+      const client = await lsembPool.connect();
+
+      try {
+        // Get all LLM provider settings from database
+        const result = await client.query(`
+          SELECT key, value FROM settings
+          WHERE key LIKE 'llm_%' OR key LIKE '%_api_key' OR key LIKE '%_model'
+          OR key LIKE 'openai_%' OR key LIKE 'anthropic_%' OR key LIKE 'google_%'
+          OR key LIKE 'deepseek_%' OR key LIKE 'huggingface_%' OR key LIKE 'openrouter_%'
+        `);
+
+        const providers: any = {
+          openai: {},
+          anthropic: {},
+          google: {},
+          deepseek: {},
+          huggingface: {},
+          openrouter: {},
+          llmSettings: {}
+        };
+
+        // Parse settings into provider structure
+        for (const row of result.rows) {
+          const key = row.key;
+          const value = row.value;
+
+          if (key.startsWith('openai_')) {
+            const fieldName = key.replace('openai_', '');
+            providers.openai[fieldName] = value;
+          } else if (key.startsWith('anthropic_')) {
+            const fieldName = key.replace('anthropic_', '');
+            providers.anthropic[fieldName] = value;
+          } else if (key.startsWith('google_')) {
+            const fieldName = key.replace('google_', '');
+            providers.google[fieldName] = value;
+          } else if (key.startsWith('deepseek_')) {
+            const fieldName = key.replace('deepseek_', '');
+            providers.deepseek[fieldName] = value;
+          } else if (key.startsWith('huggingface_')) {
+            const fieldName = key.replace('huggingface_', '');
+            providers.huggingface[fieldName] = value;
+          } else if (key.startsWith('openrouter_')) {
+            const fieldName = key.replace('openrouter_', '');
+            providers.openrouter[fieldName] = value;
+          } else if (key.startsWith('llm_')) {
+            const fieldName = key.replace('llm_', '');
+            providers.llmSettings[fieldName] = value;
+          }
+        }
+
+        // Cache the result
+        this.setCache(cacheKey, providers);
+        logger.debug('LLM providers cached successfully');
+
+        return providers;
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      logger.error('Failed to get LLM providers from database:', error);
+      return this.getDefaultLLMProviders();
+    }
+  }
+
+  // Get default LLM provider configurations
+  private getDefaultLLMProviders(): any {
+    return {
+      openai: {
+        apiKey: process.env.OPENAI_API_KEY || '',
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        embeddingModel: process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small'
+      },
+      anthropic: {
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+        model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022'
+      },
+      google: {
+        apiKey: process.env.GOOGLE_API_KEY || '',
+        projectId: process.env.GOOGLE_PROJECT_ID || ''
+      },
+      deepseek: {
+        apiKey: process.env.DEEPSEEK_API_KEY || '',
+        model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+        baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com'
+      },
+      huggingface: {
+        apiKey: process.env.HUGGINGFACE_API_KEY || ''
+      },
+      openrouter: {
+        apiKey: process.env.OPENROUTER_API_KEY || ''
+      },
+      llmSettings: {
+        activeChatModel: process.env.LLM_ACTIVE_CHAT_MODEL || 'deepseek/deepseek-chat',
+        activeEmbeddingModel: process.env.LLM_ACTIVE_EMBEDDING_MODEL || 'google/text-embedding-004'
+      }
+    };
+  }
+
+  /**
+   * OCR ayarlarını al
+   */
+  async getOCRSettings(): Promise<{
+    activeProvider: string;
+    fallbackEnabled: boolean;
+    fallbackProvider: string;
+    cacheEnabled: boolean;
+    cacheTTL: number;
+    providers: {
+      openai: { apiKey: string };
+      gemini: { apiKey: string };
+      replicate: { apiKey: string };
+    };
+  }> {
+    try {
+      const settings = await this.getAllSettings();
+
+      return {
+        activeProvider: settings.ocr_active_provider || 'auto',
+        fallbackEnabled: settings.ocr_fallback_enabled !== false,
+        fallbackProvider: settings.ocr_fallback_provider || 'tesseract',
+        cacheEnabled: settings.ocr_cache_enabled !== false,
+        cacheTTL: settings.ocr_cache_ttl || 7 * 24 * 60 * 60, // 7 gün
+        providers: {
+          openai: {
+            apiKey: settings.openai_api_key || ''
+          },
+          gemini: {
+            apiKey: settings.gemini_api_key || ''
+          },
+          replicate: {
+            apiKey: settings.replicate_api_key || ''
+          }
+        }
+      };
+    } catch (error) {
+      logger.error('OCR ayarları alınamadı:', error);
+      return {
+        activeProvider: 'auto',
+        fallbackEnabled: true,
+        fallbackProvider: 'tesseract',
+        cacheEnabled: true,
+        cacheTTL: 7 * 24 * 60 * 60,
+        providers: {
+          openai: { apiKey: '' },
+          gemini: { apiKey: '' },
+          replicate: { apiKey: '' }
+        }
+      };
+    }
+  }
+
+  /**
+   * OCR ayarlarını kaydet
+   */
+  async saveOCRSettings(settings: {
+    activeProvider?: string;
+    fallbackEnabled?: boolean;
+    fallbackProvider?: string;
+    cacheEnabled?: boolean;
+    cacheTTL?: number;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const client = await lsembPool.connect();
+
+      try {
+        await client.query('BEGIN');
+
+        // Her ayarı ayrı ayrı kaydet
+        if (settings.activeProvider !== undefined) {
+          await client.query(`
+            INSERT INTO settings (key, value, category, description)
+            VALUES ('ocr_active_provider', $1::jsonb, 'ocr', 'Active OCR provider')
+            ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+          `, [JSON.stringify(settings.activeProvider)]);
+        }
+
+        if (settings.fallbackEnabled !== undefined) {
+          await client.query(`
+            INSERT INTO settings (key, value, category, description)
+            VALUES ('ocr_fallback_enabled', $1::jsonb, 'ocr', 'OCR fallback enabled')
+            ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+          `, [JSON.stringify(settings.fallbackEnabled)]);
+        }
+
+        if (settings.fallbackProvider !== undefined) {
+          await client.query(`
+            INSERT INTO settings (key, value, category, description)
+            VALUES ('ocr_fallback_provider', $1::jsonb, 'ocr', 'Fallback OCR provider')
+            ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+          `, [JSON.stringify(settings.fallbackProvider)]);
+        }
+
+        if (settings.cacheEnabled !== undefined) {
+          await client.query(`
+            INSERT INTO settings (key, value, category, description)
+            VALUES ('ocr_cache_enabled', $1::jsonb, 'ocr', 'OCR cache enabled')
+            ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+          `, [JSON.stringify(settings.cacheEnabled)]);
+        }
+
+        if (settings.cacheTTL !== undefined) {
+          await client.query(`
+            INSERT INTO settings (key, value, category, description)
+            VALUES ('ocr_cache_ttl', $1::jsonb, 'ocr', 'OCR cache TTL in seconds')
+            ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+          `, [JSON.stringify(settings.cacheTTL)]);
+        }
+
+        await client.query('COMMIT');
+
+        // Clear cache
+        this.clearCache('all_settings');
+
+        return { success: true };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error: any) {
+      logger.error('OCR ayarları kaydedilemedi:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }

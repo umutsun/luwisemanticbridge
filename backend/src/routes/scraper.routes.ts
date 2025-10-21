@@ -204,7 +204,7 @@ router.post('/init-tables', async (req: Request, res: Response) => {
 
 // AI-Powered Site Analysis with real-time progress - MUST come before basic analyze to avoid route conflicts
 router.post('/sites/analyze-enhanced', async (req: Request, res: Response) => {
-  console.log('🚀 AI ANALYSIS ENDPOINT HIT!', req.body);
+  console.log('AI ANALYSIS ENDPOINT HIT!', req.body);
   try {
     const { url, siteId } = req.body;
     if (!url) {
@@ -212,75 +212,52 @@ router.post('/sites/analyze-enhanced', async (req: Request, res: Response) => {
     }
 
     // Set up Server-Sent Events for real-time progress
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'X-Content-Type-Options': 'nosniff'
-    });
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
 
     const progressCallback = (progress: any) => {
-      res.write(`data: ${JSON.stringify(progress)}\n\n`);
+      try {
+        res.write(`data: ${JSON.stringify(progress)}\n\n`);
+      } catch (err) {
+        console.error('Error writing progress:', err);
+      }
     };
 
     try {
       // Use real AI-powered analysis with site analyzer service
       console.log('Starting real AI site analysis for:', url);
 
-      try {
-        // Perform real analysis with AI-powered selectors and robots.txt compliance
-        const analysis = await siteAnalyzerService.analyzeSite(url, (progress) => {
-          progressCallback?.(progress);
-        });
+      // Perform real analysis with AI-powered selectors and robots.txt compliance
+      const analysis = await siteAnalyzerService.analyzeSite(url, (progress) => {
+        progressCallback(progress);
+      });
 
-        // Send final success result
-        progressCallback?.({
-          step: 'completed',
-          progress: 100,
-          message: 'Analysis completed successfully',
-          timestamp: new Date(),
-          analysis
-        });
-
-        console.log('✅ Real AI analysis completed for:', url);
-        res.write(`data: ${JSON.stringify({
-          type: 'completed',
-          step: 'completed',
-          progress: 100,
-          message: 'Analysis completed successfully',
-          analysis
-        })}\n\n`);
-
-      } catch (error) {
-        console.error('❌ Real AI analysis failed:', error);
-
-        // Send error to client
-        progressCallback?.({
-          step: 'error',
-          progress: 0,
-          message: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          timestamp: new Date()
-        });
-
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          step: 'error',
-          progress: 0,
-          error: error instanceof Error ? error.message : 'Analysis failed'
-        })}\n\n`);
-      }
+      // Send final success result
+      console.log('Real AI analysis completed for:', url);
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
+        step: 'completed',
+        progress: 100,
+        message: 'Analysis completed successfully',
+        analysis
+      })}\n\n`);
 
     } catch (error) {
-      console.error('AI analysis error:', error);
+      console.error('Real AI analysis failed:', error);
+
+      // Send error to client
       res.write(`data: ${JSON.stringify({
         type: 'error',
+        step: 'error',
+        progress: 0,
         error: error instanceof Error ? error.message : 'Analysis failed'
       })}\n\n`);
     }
 
+    // End the stream
     res.end();
 
   } catch (error) {
@@ -290,6 +267,8 @@ router.post('/sites/analyze-enhanced', async (req: Request, res: Response) => {
         success: false,
         error: 'Failed to analyze site'
       });
+    } else {
+      res.end();
     }
   }
 });

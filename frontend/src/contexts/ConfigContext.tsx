@@ -229,11 +229,26 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
 
       setConfig(transformedConfig);
       setError(null);
+      setLoading(false); // Backend başarıyla yüklendi, loading'i kapat
     } catch (err) {
       console.error('Error fetching config:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load configuration');
-    } finally {
-      setLoading(false);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load configuration';
+
+      // Check if it's a connection error (backend not ready)
+      if (errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) {
+        console.log('⏳ Backend not ready yet, will retry...');
+        setError('Backend bağlantısı bekleniyor...');
+        // Loading state'i TRUE tutuyoruz - backend hazır olana kadar initial screen gösterilecek
+
+        // Retry after 2 seconds
+        setTimeout(() => {
+          console.log('🔄 Retrying backend connection...');
+          fetchConfig(authToken);
+        }, 2000);
+      } else {
+        setError(errorMessage);
+        setLoading(false);
+      }
     }
   };
 
