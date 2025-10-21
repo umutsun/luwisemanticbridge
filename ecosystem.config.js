@@ -3,8 +3,6 @@
  * Luwi Semantic Bridge - Production Ready Setup
  */
 
-require('dotenv').config({ path: '.env.lsemb' });
-
 module.exports = {
   apps: [
     // ==========================================
