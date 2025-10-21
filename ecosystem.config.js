@@ -64,12 +64,14 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: 3002,
-        HOSTNAME: '0.0.0.0'
+        HOSTNAME: '0.0.0.0',
+        NEXT_PUBLIC_API_URL: 'http://localhost:8083'
       },
       env_production: {
         NODE_ENV: 'production',
         PORT: 3002,
-        HOSTNAME: '0.0.0.0'
+        HOSTNAME: '0.0.0.0',
+        NEXT_PUBLIC_API_URL: 'https://lsemb.luwi.dev'
       },
 
       // Logging
