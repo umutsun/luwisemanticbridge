@@ -18,6 +18,11 @@ export class AuthService {
   private saltRounds = 12;
 
   constructor() {
+    // Check if DATABASE_URL is defined
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL environment variable is not defined");
+    }
+
     this.pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl:
