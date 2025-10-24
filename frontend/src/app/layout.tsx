@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alice Semantic Bridge",
-  description: "AI-powered Semantic Search and Knowledge Management System",
+  title: "Luwi Semantic Bridge",
+  description: "Intelligent RAG & Context Engine",
 };
 
 export default function RootLayout({

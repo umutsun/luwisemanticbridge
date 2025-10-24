@@ -5,15 +5,31 @@ import { usePathname } from 'next/navigation';
 // Page title mapping - Turkish titles for display
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
-  '/dashboard/documents': 'Doküman Yönetimi',
+  '/dashboard/documents': 'Documents',
   '/dashboard/migrations': 'Migrations',
-  '/dashboard/messages': 'Mesaj Analizleri',
+  '/dashboard/messages': 'Messages',
   '/dashboard/scraper': 'Advanced Scraper',
-  '/dashboard/users': 'User Management',
+  '/dashboard/users': 'Users',
   '/dashboard/settings': 'Settings',
   '/dashboard/audit-logs': 'Audit Logs',
-  '/dashboard/notifications': 'Bildirim Ayarları',
-  '/dashboard/system-monitor': 'Sistem Monitörü',
+  '/dashboard/notifications': 'Notifications',
+  '/dashboard/system-monitor': 'System Monitor',
+  '/dashboard/activity': 'Activity',
+  '/dashboard/analytics': 'Analytics',
+  '/dashboard/audit-settings': 'Audit Settings',
+  '/dashboard/cache': 'Cache',
+  '/dashboard/chatbot-settings': 'Chatbot Settings',
+  '/dashboard/database-config': 'Database Config',
+  '/dashboard/embedder': 'Embedder',
+  '/dashboard/migration-tools': 'Migration Tools',
+  '/dashboard/migrations/embeddings': 'Embedding Migration',
+  '/dashboard/query': 'Query Builder',
+  '/dashboard/rbac': 'RBAC',
+  '/dashboard/scrapes': 'Web Scrapes',
+  '/dashboard/search': 'Search',
+  '/dashboard/services': 'Services',
+  '/dashboard/translations': 'Translations',
+  '/dashboard/workflows': 'Workflows',
   '/scraper': 'Advanced Scraper'
 };
 
@@ -22,12 +38,17 @@ const PAGE_TITLES: Record<string, string> = {
  * @param pathname - Current URL pathname
  */
 export function getPageTitle(pathname: string): string {
-  // Find the longest matching route
-  const matchedRoute = Object.keys(PAGE_TITLES).find(route =>
-    pathname === route || pathname.startsWith(route + '/')
-  );
+  // Find the longest matching route (exact match first, then prefix)
+  const exactMatch = Object.keys(PAGE_TITLES).find(route => pathname === route);
+  if (exactMatch) return PAGE_TITLES[exactMatch];
 
-  return PAGE_TITLES[matchedRoute || '/dashboard'] || 'Dashboard';
+  // Find longest prefix match
+  const sortedRoutes = Object.keys(PAGE_TITLES)
+    .filter(route => pathname.startsWith(route + '/'))
+    .sort((a, b) => b.length - a.length); // Sort by length descending
+
+  const matchedRoute = sortedRoutes[0];
+  return PAGE_TITLES[matchedRoute] || PAGE_TITLES['/dashboard'] || 'Dashboard';
 }
 
 /**
@@ -37,9 +58,23 @@ export function getPageTitle(pathname: string): string {
 export function usePageTitle(): string {
   const pathname = usePathname();
 
-  const matchedRoute = Object.keys(PAGE_TITLES).find(route =>
-    pathname === route || pathname.startsWith(route + '/')
-  );
+  // Find the longest matching route (exact match first, then prefix)
+  const exactMatch = Object.keys(PAGE_TITLES).find(route => pathname === route);
+  if (exactMatch) {
+    const title = PAGE_TITLES[exactMatch];
+    console.log('[usePageTitle] pathname:', pathname, 'exact match:', exactMatch, 'title:', title);
+    return title;
+  }
 
-  return PAGE_TITLES[matchedRoute || '/dashboard'] || 'Dashboard';
+  // Find longest prefix match
+  const sortedRoutes = Object.keys(PAGE_TITLES)
+    .filter(route => pathname.startsWith(route + '/'))
+    .sort((a, b) => b.length - a.length); // Sort by length descending
+
+  const matchedRoute = sortedRoutes[0];
+  const title = PAGE_TITLES[matchedRoute] || PAGE_TITLES['/dashboard'] || 'Dashboard';
+
+  console.log('[usePageTitle] pathname:', pathname, 'matchedRoute:', matchedRoute, 'title:', title);
+
+  return title;
 }

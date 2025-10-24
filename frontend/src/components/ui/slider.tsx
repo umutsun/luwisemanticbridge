@@ -20,7 +20,7 @@ const Slider = React.forwardRef<
   };
 
   const rangeStyles = {
-    default: "bg-primary",
+    default: "bg-gray-900 dark:bg-gray-100",
     success: "bg-green-500",
     warning: "bg-yellow-500",
     error: "bg-red-500"
@@ -57,8 +57,8 @@ const Slider = React.forwardRef<
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         className={cn(
-          "block rounded-full bg-background border shadow-lg transition-all duration-200 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-          "border-primary/20 hover:border-primary/40",
+          "block rounded-full bg-background border shadow-lg transition-all duration-200 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/50 dark:focus-visible:ring-gray-100/50 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+          "border-gray-300 dark:border-gray-700 hover:border-gray-900 dark:hover:border-gray-100",
           sizeStyles[size].thumb
         )}
       />

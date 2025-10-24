@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton, StatsCardSkeleton, ListSkeleton, ChartSkeleton } from "@/components/ui/skeleton";
-// Icons removed - using text-based design
+import { ConfirmTooltip } from "@/components/ui/confirm-tooltip";
 import { useAuth } from "@/contexts/AuthProvider";
 import { fetchWithAuth } from "@/lib/auth-fetch";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
@@ -80,6 +80,7 @@ interface SessionMessage {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
 export default function MessagesPage() {
+
   const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -306,8 +307,7 @@ export default function MessagesPage() {
   const handleBatchEmbedResponses = async () => {
     if (!selectedSession || sessionMessages.length === 0) return;
 
-    if (confirm(`Bu oturumdaki ${sessionMessages.length} yanıt için toplu embedding işlemi başlatılsın mı?`)) {
-      try {
+    try {
         const response = await fetchWithAuth(`/api/v2/messages/embeddings/batch/session/${selectedSession.session_id}`, {
           method: 'POST',
           headers: {
@@ -316,21 +316,19 @@ export default function MessagesPage() {
           }
         });
 
-        if (response.ok) {
-          alert('Toplu embedding işlemi başlatıldı!');
-          loadSessionDetails(selectedSession.session_id);
-        }
-      } catch (error) {
-        console.error('Error in batch embedding:', error);
+      if (response.ok) {
+        alert('Toplu embedding işlemi başlatıldı!');
+        loadSessionDetails(selectedSession.session_id);
       }
+    } catch (error) {
+      console.error('Error in batch embedding:', error);
     }
   };
 
   const handleBatchEmbedSelected = async () => {
     if (selectedMessages.length === 0) return;
 
-    if (confirm(`Seçilen ${selectedMessages.length} mesaj için embedding işlemi başlatılsın mı?`)) {
-      try {
+    try {
         const response = await fetchWithAuth('/api/v2/messages/embeddings/batch', {
           method: 'POST',
           headers: {
@@ -342,23 +340,20 @@ export default function MessagesPage() {
           })
         });
 
-        if (response.ok) {
-          alert('Seçilen mesajlar için embedding işlemi başlatıldı!');
-          setSelectedMessages([]);
-          setShowBatchActions(false);
-          if (selectedSession) {
-            loadSessionDetails(selectedSession.session_id);
-          }
+      if (response.ok) {
+        alert('Seçilen mesajlar için embedding işlemi başlatıldı!');
+        setSelectedMessages([]);
+        setShowBatchActions(false);
+        if (selectedSession) {
+          loadSessionDetails(selectedSession.session_id);
         }
-      } catch (error) {
-        console.error('Error in selected batch embedding:', error);
       }
+    } catch (error) {
+      console.error('Error in selected batch embedding:', error);
     }
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    if (!confirm('Bu oturumu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
-
     try {
       const response = await fetchWithAuth(`/api/v2/messages/sessions/${sessionId}`, {
         method: 'DELETE',
@@ -383,8 +378,7 @@ export default function MessagesPage() {
   const handleDeleteSelectedSessions = async () => {
     if (selectedSessions.length === 0) return;
 
-    if (confirm(`Seçilen ${selectedSessions.length} oturumu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
-      try {
+    try {
         const response = await fetchWithAuth('/api/v2/messages/sessions/batch', {
           method: 'DELETE',
           headers: {
@@ -396,14 +390,13 @@ export default function MessagesPage() {
           })
         });
 
-        if (response.ok) {
-          alert('Seçilen oturumlar başarıyla silindi!');
-          setSelectedSessions([]);
-          loadSessions();
-        }
-      } catch (error) {
-        console.error('Error deleting selected sessions:', error);
+      if (response.ok) {
+        alert('Seçilen oturumlar başarıyla silindi!');
+        setSelectedSessions([]);
+        loadSessions();
       }
+    } catch (error) {
+      console.error('Error deleting selected sessions:', error);
     }
   };
 

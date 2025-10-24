@@ -79,7 +79,7 @@ export default function DataChat() {
     {
       id: '1',
       role: 'system',
-      content: 'Merhaba! Ben Alice Semantic Bridge AI asistanınız. Verileriniz hakkında sorularınızı yanıtlamaya hazırım. Size nasıl yardımcı olabilirim?',
+      content: 'Merhaba! Ben Luwi Semantic Bridge AI asistanınız. Verileriniz hakkında sorularınızı yanıtlamaya hazırım. Size nasıl yardımcı olabilirim?',
       timestamp: new Date()
     }
   ]);

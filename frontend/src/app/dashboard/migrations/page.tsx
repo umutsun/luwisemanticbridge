@@ -92,6 +92,7 @@ interface ChartDataPoint {
 }
 
 export default function EmbeddingsManagerPage() {
+
   const [progress, setProgress] = useState<EmbeddingProgress | null>(null);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [availableTables, setAvailableTables] = useState<TableInfo[]>([]);
@@ -106,6 +107,8 @@ export default function EmbeddingsManagerPage() {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [showContentModal, setShowContentModal] = useState(false);
   const [totalTokensUsed, setTotalTokensUsed] = useState<number>(0);
+  const [embeddingProvider, setEmbeddingProvider] = useState<string>('openai');
+  const [embeddingModel, setEmbeddingModel] = useState<string>('text-embedding-ada-002');
   const { toast } = useToast();
 
   // Settings state
@@ -120,7 +123,7 @@ export default function EmbeddingsManagerPage() {
   });
 
   const API_BASE = config.api.baseUrl;
-  const API_MIGRATION = `${config.api.baseUrl}/api/v2/embeddings`;
+  const API_MIGRATION = `${config.api.baseUrl}/api/v2/migration`;
   const performanceIntervalRef = useRef<NodeJS.Timeout>();
 
   // Constants for intervals
@@ -135,15 +138,46 @@ export default function EmbeddingsManagerPage() {
     setIsLoadingTables(true);
     setError('');
     try {
-      console.log('Fetching tables from:', `${config.api.baseUrl}/api/v2/embeddings-tables/all?t=${Date.now()}`);
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings-tables/all?t=${Date.now()}`);
+      console.log('Fetching tables from:', `${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}`);
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}`);
 
       if (response.ok) {
         const data = await response.json();
         console.log('Tables data received:', data);
         console.log('Table details:', data.tables);
-        console.log('Tokens used per table:', data.tables.map(t => ({name: t.name, tokensUsed: t.tokensUsed})));
-        setAvailableTables(data.tables || []);
+
+        // Transform API response to match frontend expectations
+        const transformedTables = (data.tables || []).map(table => {
+          // Create display name from table name
+          const displayName = table.name
+            .replace(/_/g, ' ')  // Replace underscores with spaces
+            .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize first letter
+
+          return {
+            name: table.name,
+            displayName: displayName,
+            totalRecords: table.count || 0,
+            embeddedRecords: table.embedded || 0,
+            tokensUsed: 0 // Will be updated during migration
+          };
+        });
+
+        console.log('Transformed tables:', transformedTables);
+        setAvailableTables(transformedTables);
+
+        // Set token usage from API response
+        if (data.tokenUsage) {
+          setTotalTokensUsed(data.tokenUsage.total_tokens || 0);
+        }
+
+        // Set embedding provider and model from API response
+        if (data.embeddingProvider) {
+          setEmbeddingProvider(data.embeddingProvider);
+        }
+        if (data.embeddingModel) {
+          setEmbeddingModel(data.embeddingModel);
+        }
+
         if (!data.tables || data.tables.length === 0) {
           setError('No tables found. Please check database connection.');
         }
@@ -217,7 +251,7 @@ export default function EmbeddingsManagerPage() {
   // Fetch total tokens used
   const fetchTokenStats = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings-tables/token-stats`);
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats`);
       if (response.ok) {
         const data = await response.json();
         console.log('Token stats received:', data);
@@ -404,30 +438,47 @@ export default function EmbeddingsManagerPage() {
             ))
           ) : (
             <>
-              <Card>
+              {/* Total Records - Yellow Pastel */}
+              <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 border-yellow-200 dark:border-yellow-800">
                 <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground mb-1">Total Records</div>
-                  <div className="text-2xl font-bold">{totalRecords.toLocaleString()}</div>
+                  <div className="text-sm text-yellow-700 dark:text-yellow-300 font-medium mb-1">Total Records</div>
+                  <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">{totalRecords.toLocaleString()}</div>
                 </CardContent>
               </Card>
-              <Card>
+
+              {/* Embedded Records - Green Pastel */}
+              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
                 <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground mb-1">Embedded Records</div>
-                  <div className="text-2xl font-bold text-green-600">{totalEmbedded.toLocaleString()}</div>
+                  <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">Embedded Records</div>
+                  <div className="text-2xl font-bold text-green-900 dark:text-green-100">{totalEmbedded.toLocaleString()}</div>
                 </CardContent>
               </Card>
-              <Card>
+
+              {/* Embedding Progress - Pink Pastel */}
+              <Card className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-950/20 dark:to-rose-950/20 border-pink-200 dark:border-pink-800">
                 <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground mb-1">Embedding Progress</div>
-                  <div className="text-2xl font-bold">{overallProgress.toFixed(1)}%</div>
+                  <div className="text-sm text-pink-700 dark:text-pink-300 font-medium mb-1">Embedding Progress</div>
+                  <div className="text-2xl font-bold text-pink-900 dark:text-pink-100">{overallProgress.toFixed(1)}%</div>
+                  <div className="text-xs text-pink-600 dark:text-pink-400 mt-1">
+                    <span className="font-mono">{(totalRecords - totalEmbedded).toLocaleString()}</span>
+                    <span className="opacity-75 ml-1">pending</span>
+                  </div>
                 </CardContent>
               </Card>
-              <Card>
+
+              {/* Total Tokens - Gray Background with Black Text */}
+              <Card className="bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700">
                 <CardContent className="p-4">
-                  <div className="text-sm text-muted-foreground mb-1">Total Tokens Used</div>
-                  <div className="text-2xl font-bold text-blue-600">
+                  <div className="text-sm text-gray-700 dark:text-gray-300 font-medium mb-1">Total Tokens Used</div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                     {totalTokensUsed.toLocaleString()}
                   </div>
+                  {embeddingProvider === 'openai' && totalTokensUsed > 0 && (
+                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      <span className="font-mono">~${((totalTokensUsed / 1000) * 0.0001).toFixed(4)}</span>
+                      <span className="opacity-75 ml-1">estimated cost</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </>
@@ -443,19 +494,25 @@ export default function EmbeddingsManagerPage() {
                 <CardTitle className="text-lg">Migration Settings</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Embedding Provider</label>
-                  <select
-                    value={settings.provider}
-                    onChange={(e) => setSettings({...settings, provider: e.target.value as any})}
-                    className="w-full mt-1 p-2 border rounded"
-                    disabled={progress?.status === 'processing'}
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="google">Gemini</option>
-                    <option value="anthropic">Claude</option>
-                    <option value="huggingface">HuggingFace</option>
-                  </select>
+                {/* Embedding Model - Read from DB Settings */}
+                <div className="p-4 bg-gray-900 dark:bg-gray-950 border border-gray-700 dark:border-gray-800 rounded-lg">
+                  <div className="text-xs font-semibold text-gray-100 uppercase tracking-wider mb-3">
+                    Embedding Model
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">Provider:</span>
+                      <span className="text-sm font-mono font-semibold text-gray-100">
+                        {embeddingProvider}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">Model:</span>
+                      <span className="text-xs font-mono text-gray-100 truncate">
+                        {embeddingModel}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -463,7 +520,7 @@ export default function EmbeddingsManagerPage() {
                   <input
                     type="range"
                     min="10"
-                    max="1000"
+                    max="200"
                     step="10"
                     value={settings.batchSize}
                     onChange={(e) => setSettings({...settings, batchSize: parseInt(e.target.value)})}
@@ -472,7 +529,7 @@ export default function EmbeddingsManagerPage() {
                   />
                   <div className="flex justify-between text-xs text-gray-500 mt-1">
                     <span>10</span>
-                    <span>1000</span>
+                    <span>200</span>
                   </div>
                 </div>
 

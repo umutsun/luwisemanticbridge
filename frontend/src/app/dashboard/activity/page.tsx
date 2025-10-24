@@ -132,6 +132,7 @@ export default function ActivityPage() {
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedType, setSelectedType] = useState('all');

@@ -64,7 +64,7 @@ export function LoadingScreen({ message = 'Loading...', error }: LoadingScreenPr
           </div>
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Alice Semantic Bridge
+          Luwi Semantic Bridge
         </h2>
         <p className="text-gray-600 mb-6 font-medium">{message || 'Sistem başlatılıyor...'}</p>
         <div className="space-y-3 text-sm">

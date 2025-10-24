@@ -19,6 +19,7 @@ export const WEBSOCKET_CONFIG = {
     DOCUMENT_PROCESSING_STATUS: 'document:processing:status',
     DOCUMENT_EMBEDDING_UPDATE: 'document:embedding:update',
     DOCUMENT_LIST_UPDATE: 'document:list:update',
+    DOCUMENT_TRANSFORM_PROGRESS: 'document:transform:progress',
 
     // Scraper jobs
     SCRAPER_JOB_STATUS: 'scraper:job:status',

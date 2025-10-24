@@ -59,6 +59,15 @@ const nextConfig = {
         source: '/api/v2/:path*',
         destination: `${backendUrl}/api/v2/:path*`,
       },
+      // Rewrite Swagger API docs
+      {
+        source: '/api-docs',
+        destination: `${backendUrl}/api-docs`,
+      },
+      {
+        source: '/api-docs.json',
+        destination: `${backendUrl}/api-docs.json`,
+      },
       // Rewrite specific legacy endpoints
       {
         source: '/api/health/system',

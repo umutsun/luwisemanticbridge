@@ -60,7 +60,7 @@ export default function NotificationCenter({
         id: '1',
         type: 'info',
         title: 'Sistem Hazır',
-        message: 'Alice Semantic Bridge başarıyla başlatıldı',
+        message: 'Luwi Semantic Bridge başarıyla başlatıldı',
         timestamp: new Date(Date.now() - 300000).toISOString(),
         read: false,
         source: 'System'

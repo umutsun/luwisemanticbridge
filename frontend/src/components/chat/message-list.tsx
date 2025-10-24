@@ -21,11 +21,12 @@ interface ChatbotSettings {
 
 export function MessageList({ messages, isLoading }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  // CRITICAL: NO hardcoded defaults - load from database only
   const [settings, setSettings] = useState<ChatbotSettings>({
-    title: 'LSEM Hukuki Asistan',
-    welcomeMessage: 'Türk hukuku hakkında soru sorun, belgeler arasında arama yapın ve hukuki danışmanlık alın.',
-    placeholder: 'Hukuki sorunuzu yazın...',
-    primaryColor: '#3B82F6',
+    title: '',
+    welcomeMessage: '',
+    placeholder: '',
+    primaryColor: '',
     suggestions: '[]'
   });
   const [suggestions, setSuggestions] = useState<any[]>([]);

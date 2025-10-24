@@ -77,7 +77,7 @@ export default function InitializationScreen() {
             >
               <Brain className="w-full h-full text-primary" />
             </motion.div>
-            <h1 className="text-2xl font-bold mb-2">Alice Semantic Bridge</h1>
+            <h1 className="text-2xl font-bold mb-2">Luwi Semantic Bridge</h1>
             <p className="text-muted-foreground text-sm">
               Sistem başlatılıyor, lütfen bekleyin...
             </p>

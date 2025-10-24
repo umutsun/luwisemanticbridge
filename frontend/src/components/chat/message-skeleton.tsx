@@ -1,7 +1,6 @@
 'use client';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Brain } from 'lucide-react';
 
 interface MessageSkeletonProps {
   type?: 'searching' | 'generating' | 'default';
@@ -11,16 +10,6 @@ interface MessageSkeletonProps {
 export function MessageSkeleton({ type = 'default', message }: MessageSkeletonProps) {
   return (
     <div className="flex gap-3 p-4 animate-in fade-in-0 duration-200 max-w-full overflow-hidden">
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-        {type === 'searching' ? (
-          <Search className="w-4 h-4 text-white animate-pulse" />
-        ) : type === 'generating' ? (
-          <Brain className="w-4 h-4 text-white animate-pulse" />
-        ) : (
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-        )}
-      </div>
-
       <div className="flex-1 min-w-0 space-y-3">
         {/* Status message removed - only skeleton animation */}
 

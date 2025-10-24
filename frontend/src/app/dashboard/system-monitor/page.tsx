@@ -95,6 +95,7 @@ interface ServiceStatus {
 }
 
 export default function SystemMonitor() {
+
   const [metrics, setMetrics] = useState<SystemMetrics[]>([]);
   const [performance, setPerformance] = useState<PerformanceData | null>(null);
   const [services, setServices] = useState<ServiceStatus[]>([]);

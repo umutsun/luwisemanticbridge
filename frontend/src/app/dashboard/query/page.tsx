@@ -41,6 +41,7 @@ interface QueryResult {
 }
 
 export default function UnifiedQueryPage() {
+
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);

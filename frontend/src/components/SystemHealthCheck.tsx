@@ -73,7 +73,7 @@ export default function SystemHealthCheck({
             Sistem Bağlantı Hatası
           </h1>
           <p className="text-gray-600 mb-6">
-            Alice Semantic Bridge başlatılamıyor. Lütfen sistem bağlantılarını kontrol edin.
+            Luwi Semantic Bridge başlatılamıyor. Lütfen sistem bağlantılarını kontrol edin.
           </p>
         </div>
 

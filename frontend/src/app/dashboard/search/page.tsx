@@ -39,6 +39,7 @@ interface SearchResult {
 }
 
 export default function SemanticSearchPage() {
+
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);

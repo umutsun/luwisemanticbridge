@@ -82,25 +82,44 @@ const getKeywordColor = (keyword: string): string => {
 export default function ChatInterface() {
   const { token, user, logout } = useAuth();
 
-  // Chatbot settings state
+  // Chatbot settings state - NO hardcoded defaults, will load from database
   const [chatbotSettings, setChatbotSettings] = useState({
-    title: 'LSEM Hukuki Asistan',
-    subtitle: 'Yapay Zeka Asistanınız',
+    title: '',
+    subtitle: '',
     logoUrl: '',
-    welcomeMessage: 'Merhaba! Ben Luwi Semantic Bridge AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
-    placeholder: 'Sorunuzu yazın...',
-    primaryColor: '#3B82F6',
-    activeChatModel: 'deepseek/deepseek-chat'
+    placeholder: '',
+    primaryColor: '',
+    activeChatModel: ''
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Fetch popular questions from backend
+  // Cache for suggestions (10 minutes)
+  const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
+  const SUGGESTIONS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+  // Fetch popular questions from backend with cache
   const fetchSuggestedQuestions = async () => {
+    // Check cache first
+    if (suggestionsCache.current) {
+      const age = Date.now() - suggestionsCache.current.timestamp;
+      if (age < SUGGESTIONS_CACHE_TTL) {
+        console.log('📋 Using cached suggestions');
+        return suggestionsCache.current.data;
+      }
+    }
+
     try {
+      console.log('🔄 Fetching fresh suggestions...');
       const response = await fetch(getEndpoint('chat', 'suggestions'));
       if (response.ok) {
         const data = await response.json();
-        return data.suggestions || [];
+        const suggestions = data.suggestions || [];
+        // Update cache
+        suggestionsCache.current = {
+          data: suggestions,
+          timestamp: Date.now()
+        };
+        return suggestions;
       }
     } catch (error) {
       console.error('Failed to fetch suggestions:', error);
@@ -108,14 +127,8 @@ export default function ChatInterface() {
     return [];
   };
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Merhaba! Ben Luwi Semantic BridgeAI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim. Nasıl yardımcı olabilirim?',
-      timestamp: new Date(),
-    }
-  ]);
+  // Start with empty messages - no welcome message
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -128,6 +141,24 @@ export default function ChatInterface() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<Array<{provider: string, model: string, displayName: string, description: string}>>([]);
   const [currentModel, setCurrentModel] = useState<string>('Claude');
+
+  // RAG and LLM Settings from backend
+  const [ragSettings, setRagSettings] = useState({
+    minResults: 7,
+    maxResults: 20,
+    similarityThreshold: 0.02
+  });
+  const [llmSettings, setLlmSettings] = useState({
+    temperature: 0.7,
+    maxTokens: 2048
+  });
+  const [activePrompt, setActivePrompt] = useState({
+    content: '',
+    temperature: 0.7,
+    maxTokens: 2048,
+    tone: 'professional'
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -138,6 +169,13 @@ export default function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Update page title when chatbot settings are loaded
+  useEffect(() => {
+    if (settingsLoaded && chatbotSettings.title) {
+      document.title = chatbotSettings.title;
+    }
+  }, [settingsLoaded, chatbotSettings.title]);
 
   // Client-side'da olduğumuzu işaretle ve soruları yükle
   useEffect(() => {
@@ -150,31 +188,91 @@ export default function ChatInterface() {
       setIsSuggestionsLoading(false);
     });
 
-    // Fetch chatbot settings and active model
+    // Fetch chatbot settings, RAG settings, LLM settings, and active prompt
     Promise.all([
       fetch('/api/v2/chatbot/settings'),
-      fetch('/api/v2/settings/')
+      fetch('/api/v2/settings?category=llm'),
+      fetch('/api/v2/settings?category=rag'),
+      fetch('/api/v2/settings?category=prompts')
     ])
-      .then(async ([chatbotRes, settingsRes]) => {
+      .then(async ([chatbotRes, llmRes, ragRes, promptsRes]) => {
         const chatbotData = chatbotRes.ok ? await chatbotRes.json() : {};
-        const settingsData = settingsRes.ok ? await settingsRes.json() : {};
+        const llmData = llmRes.ok ? await llmRes.json() : {};
+        const ragData = ragRes.ok ? await ragRes.json() : {};
+        const promptsData = promptsRes.ok ? await promptsRes.json() : {};
 
-        setChatbotSettings({
-          title: chatbotData.title || 'LSEM Hukuki Asistan',
-          subtitle: chatbotData.subtitle || 'Yapay Zeka Asistanınız',
+        // Merge all settings
+        const settingsData = {
+          llmSettings: llmData.llmSettings || {},
+          ragSettings: ragData.ragSettings || {},
+          prompts: promptsData.prompts || {}
+        };
+
+        // Find active prompt
+        const activePromptId = Object.keys(settingsData.prompts).find(key =>
+          key.endsWith('.active') && settingsData.prompts[key] === true || settingsData.prompts[key] === 'true'
+        );
+        const promptId = activePromptId ? activePromptId.split('.')[1] : null;
+
+        let activePromptData = {};
+        if (promptId) {
+          activePromptData = {
+            content: settingsData.prompts[`${promptId}.content`] || '',
+            temperature: parseFloat(settingsData.prompts[`${promptId}.temperature`] || '0.7'),
+            maxTokens: parseInt(settingsData.prompts[`${promptId}.maxTokens`] || '2048'),
+            conversationTone: settingsData.prompts[`${promptId}.conversationTone`] || 'professional'
+          };
+        }
+
+        // CRITICAL: NO fallback defaults - use ONLY what's in database
+        const config = {
+          title: chatbotData.title || '',
+          subtitle: chatbotData.subtitle || '',
           logoUrl: chatbotData.logoUrl || '',
-          welcomeMessage: chatbotData.welcomeMessage || 'Merhaba! Ben AI asistanınız. Veritabanımızdaki bilgiler doğrultusunda size yardımcı olabilirim.',
-          placeholder: chatbotData.placeholder || 'Sorunuzu yazın...',
-          primaryColor: chatbotData.primaryColor || '#3B82F6',
-          activeChatModel: settingsData.llmSettings?.activeChatModel || 'deepseek/deepseek-chat'
-        });
-        setSettingsLoaded(true);
+          placeholder: chatbotData.placeholder || '',  // NO fallback
+          primaryColor: chatbotData.primaryColor || '',  // NO fallback
+          activeChatModel: settingsData.llmSettings?.activeChatModel || ''  // NO fallback - must be configured
+        };
 
-        // Update initial message with dynamic welcome message
-        setMessages(prev => [{
-          ...prev[0],
-          content: chatbotData.welcomeMessage || prev[0].content
-        }]);
+        // Extract RAG settings
+        const rag = {
+          minResults: settingsData.ragSettings?.minResults || 7,
+          maxResults: settingsData.ragSettings?.maxResults || 20,
+          similarityThreshold: settingsData.ragSettings?.similarityThreshold || 0.02
+        };
+
+        // Extract LLM settings
+        const llm = {
+          temperature: settingsData.llmSettings?.temperature || 0.7,
+          maxTokens: settingsData.llmSettings?.maxTokens || 2048
+        };
+
+        // Get active prompt (already extracted above)
+        const prompt = promptId ? {
+          content: activePromptData.content || '',
+          temperature: activePromptData.temperature || llm.temperature,
+          maxTokens: activePromptData.maxTokens || llm.maxTokens,
+          tone: activePromptData.conversationTone || 'professional'
+        } : {
+          content: '',
+          temperature: llm.temperature,
+          maxTokens: llm.maxTokens,
+          tone: 'professional'
+        };
+
+        console.log('🤖 Chatbot initialized with full config:', {
+          title: config.title,
+          activeChatModel: config.activeChatModel,
+          ragSettings: rag,
+          llmSettings: llm,
+          activePrompt: { hasContent: !!prompt.content, temperature: prompt.temperature, tone: prompt.tone }
+        });
+
+        setChatbotSettings(config);
+        setRagSettings(rag);
+        setLlmSettings(llm);
+        setActivePrompt(prompt);
+        setSettingsLoaded(true);
       })
       .catch(err => {
         console.error('Failed to fetch chatbot settings:', err);
@@ -449,6 +547,19 @@ export default function ChatInterface() {
     setIsStreaming(true);
 
     try {
+      // Use active prompt settings if available, otherwise fall back to LLM settings
+      const temperature = activePrompt.content ? activePrompt.temperature : llmSettings.temperature;
+      const maxTokens = activePrompt.content ? activePrompt.maxTokens : llmSettings.maxTokens;
+      const systemPrompt = activePrompt.content || undefined;
+
+      console.log('📤 Sending chat request with settings:', {
+        model: chatbotSettings.activeChatModel,
+        temperature,
+        maxTokens,
+        hasSystemPrompt: !!systemPrompt,
+        promptLength: systemPrompt?.length || 0
+      });
+
       const response = await fetch(getEndpoint('chat', 'send'), {
         method: 'POST',
         headers: {
@@ -457,6 +568,10 @@ export default function ChatInterface() {
         },
         body: JSON.stringify({
           message: messageContent,
+          model: chatbotSettings.activeChatModel,  // CRITICAL: Send model to backend!
+          temperature,
+          maxTokens,
+          systemPrompt,
           enableSemanticAnalysis: true,
           trackUserInsights: true,
           stream: true
@@ -541,6 +656,9 @@ export default function ChatInterface() {
             },
             body: JSON.stringify({
               message: messageContent,
+              temperature,
+              maxTokens,
+              systemPrompt,
               enableSemanticAnalysis: true,
               trackUserInsights: true,
               stream: false
@@ -548,16 +666,28 @@ export default function ChatInterface() {
           });
           if (finalResponse.ok) {
             finalData = await finalResponse.json();
+            console.log('📦 Final data received:', {
+              hasSources: !!finalData.sources,
+              sourcesCount: finalData.sources?.length || 0,
+              sources: finalData.sources?.map((s: any) => ({
+                title: s.title?.substring(0, 30),
+                contentLength: s.content?.length || 0,
+                excerptLength: s.excerpt?.length || 0
+              }))
+            });
           }
         } catch (e) {
           console.error('Failed to get final data:', e);
         }
 
-        // Finalize message
+        // Finalize message - KEEP the accumulated content and ADD sources
+        console.log('Setting sources on message:', finalData.sources?.length || 0, 'sources');
+        console.log('Accumulated content length:', accumulatedContent.length);
         setMessages(prev => prev.map(msg =>
           msg.id === messageId
             ? {
                 ...msg,
+                content: accumulatedContent || finalData.response || msg.content, // Keep accumulated content
                 isStreaming: false,
                 sources: finalData.sources,
                 relatedTopics: finalData.relatedTopics,
@@ -684,6 +814,14 @@ export default function ChatInterface() {
                       <span className="inline-block w-32 h-6 bg-muted animate-pulse rounded"></span>
                     )}
                   </h1>
+                  {/* Active Model Display */}
+                  {settingsLoaded && chatbotSettings.activeChatModel && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[9px] font-medium text-muted-foreground leading-tight">
+                        {chatbotSettings.activeChatModel.split('/')?.[1] || chatbotSettings.activeChatModel}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -807,11 +945,11 @@ export default function ChatInterface() {
         </header>
 
         {/* Main Chat Area */}
-        <div className="pt-20 pb-32 max-w-4xl mx-auto px-4">
+        <div className="pt-20 pb-32 max-w-4xl mx-auto px-5">
           <ScrollArea className="h-[calc(100vh-12rem)]">
             <div className="space-y-4 py-4">
               {/* Suggestions skeleton loader */}
-              {isClient && showSuggestions && messages.length === 1 && isSuggestionsLoading && (
+              {isClient && showSuggestions && messages.length === 0 && isSuggestionsLoading && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -830,11 +968,12 @@ export default function ChatInterface() {
               )}
 
               {/* Suggestions for new conversations */}
-              {isClient && showSuggestions && messages.length === 1 && !isSuggestionsLoading && suggestedQuestions.length > 0 && (
+              {isClient && showSuggestions && messages.length === 0 && !isSuggestionsLoading && suggestedQuestions.length > 0 && (
                 <motion.div
-                  initial={{ opacity: 0 }}
+                  key="suggestions-container"
+                  initial={settingsLoaded ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
+                  transition={{ duration: settingsLoaded ? 0 : 0.3 }}
                   className="my-8"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -848,10 +987,10 @@ export default function ChatInterface() {
                     </div>
                     {suggestedQuestions.map((question, index) => (
                       <motion.button
-                        key={index}
-                        initial={{ opacity: 0, scale: 0.9 }}
+                        key={`suggestion-${question.substring(0, 20)}-${index}`}
+                        initial={settingsLoaded ? false : { opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: index * 0.1 }}
+                        transition={{ delay: settingsLoaded ? 0 : index * 0.1 }}
                         onClick={() => handleSuggestionClick(question)}
                         className="text-left p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
                       >
@@ -922,7 +1061,7 @@ export default function ChatInterface() {
                                 <div className="mt-4 pt-3 border-t border-border/50">
                                   {(() => {
                                     const sortedSources = (message.sources || []).sort((a, b) => (b.score || 0) - (a.score || 0));
-                                    const visibleCount = visibleSourcesCount[message.id] || 7;
+                                    const visibleCount = visibleSourcesCount[message.id] || ragSettings.minResults;
                                     const visibleSources = sortedSources.slice(0, visibleCount);
                                     const hasMore = sortedSources.length > visibleCount;
 
@@ -1045,7 +1184,7 @@ export default function ChatInterface() {
                                               onClick={() => {
                                                 setVisibleSourcesCount(prev => ({
                                                   ...prev,
-                                                  [message.id]: Math.min(visibleCount + 7, sortedSources.length)
+                                                  [message.id]: Math.min(visibleCount + ragSettings.minResults, sortedSources.length)
                                                 }));
                                               }}
                                             >

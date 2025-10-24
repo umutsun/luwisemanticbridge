@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Database, Save, TestTube, RefreshCw, Shield, Server, Upload, Download, FileText, Settings, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
 
 interface DatabaseConfig {
   host: string;
@@ -45,6 +46,7 @@ interface Backup {
 }
 
 export default function DatabaseConfigPage() {
+
   const [config, setConfig] = useState<DatabaseConfig>({
     host: 'localhost',
     port: 5432,
@@ -278,10 +280,6 @@ export default function DatabaseConfigPage() {
   };
 
   const restoreBackup = async (backupId: string) => {
-    if (!confirm('Bu backup\'ı geri yüklemek mevcut verilerin üzerine yazacaktır. Devam etmek istiyor musunuz?')) {
-      return;
-    }
-
     try {
       setBackups(prev => prev.map(b =>
         b.id === backupId ? { ...b, status: 'restoring' } : b
@@ -677,13 +675,18 @@ export default function DatabaseConfigPage() {
                         </Badge>
                         {backup.status === 'completed' && (
                           <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => restoreBackup(backup.id)}
+                            <ConfirmTooltip
+                              onConfirm={() => restoreBackup(backup.id)}
+                              message="Backup geri yüklensin mi?"
+                              side="top"
                             >
-                              Geri Yükle
-                            </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                              >
+                                Geri Yükle
+                              </Button>
+                            </ConfirmTooltip>
                             <Button size="sm" variant="outline">
                               <Download className="h-4 w-4" />
                             </Button>

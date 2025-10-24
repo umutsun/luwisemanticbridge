@@ -42,6 +42,7 @@ interface Suggestion {
 }
 
 export default function ChatbotSettingsPage() {
+
   const [settings, setSettings] = useState<ChatbotSettings>({
     title: '',
     welcomeMessage: '',

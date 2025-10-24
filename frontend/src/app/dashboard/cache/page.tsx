@@ -9,9 +9,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Database, 
-  RefreshCw, 
+import {
+  Database,
+  RefreshCw,
   Trash2,
   Key,
   Activity,
@@ -23,6 +23,7 @@ import {
   Clock,
   BarChart3
 } from 'lucide-react';
+import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
 
 interface CacheStats {
   connected: boolean;
@@ -49,6 +50,7 @@ interface CacheKey {
 }
 
 export default function RedisCachePage() {
+
   const [stats, setStats] = useState<CacheStats>({
     connected: true,
     memory: { used: 0, peak: 0, total: 0 },
@@ -93,9 +95,7 @@ export default function RedisCachePage() {
   };
 
   const handleFlushCache = async () => {
-    if (!confirm('Tüm cache temizlenecek. Emin misiniz?')) return;
-
-    try {
+    try{
       await fetch('http://localhost:3001/api/v2/cache/flush', { method: 'POST' });
       await fetchStats();
       await fetchKeys();
@@ -163,10 +163,16 @@ export default function RedisCachePage() {
               </>
             )}
           </Badge>
-          <Button onClick={handleFlushCache} variant="destructive" size="sm">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Cache Temizle
-          </Button>
+          <ConfirmTooltip
+            onConfirm={handleFlushCache}
+            message="Tüm cache temizlensin mi?"
+            side="bottom"
+          >
+            <Button variant="destructive" size="sm">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Cache Temizle
+            </Button>
+          </ConfirmTooltip>
         </div>
       </div>
 

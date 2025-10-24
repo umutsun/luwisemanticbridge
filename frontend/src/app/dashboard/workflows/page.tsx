@@ -67,6 +67,7 @@ interface WorkflowTemplate {
 }
 
 export default function WorkflowsPage() {
+
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [n8nWorkflows, setN8nWorkflows] = useState<any[]>([]);
   const [executions, setExecutions] = useState<any[]>([]);

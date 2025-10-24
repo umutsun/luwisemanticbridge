@@ -41,6 +41,7 @@ export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [filters, setFilters] = useState({
     search: '',
     category: 'all',

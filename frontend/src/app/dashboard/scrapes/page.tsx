@@ -40,6 +40,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { TableSkeleton, CardSkeleton, FormSkeleton } from '@/components/ui/skeleton';
+import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
 import SiteAnalyzerModal from '@/components/site-analyzer-modal';
 
 // Site Card Skeleton Component
@@ -145,6 +146,7 @@ interface FilterOptions {
 }
 
 export default function ScrapesPage() {
+
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [sites, setSites] = useState<Site[]>([]);
@@ -595,8 +597,6 @@ export default function ScrapesPage() {
   };
 
   const handleDeleteJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to delete this job?')) return;
-
     try {
       const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/scraper/jobs/${jobId}`, {
         method: 'DELETE'
@@ -1266,13 +1266,18 @@ export default function ScrapesPage() {
                                   <Play className="h-3 w-3" />
                                 </Button>
                               )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeleteJob(job.id)}
+                              <ConfirmTooltip
+                                onConfirm={() => handleDeleteJob(job.id)}
+                                message="Delete this job?"
+                                side="top"
                               >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </ConfirmTooltip>
                             </div>
                           </div>
                         </CardContent>

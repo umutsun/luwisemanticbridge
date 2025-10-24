@@ -370,9 +370,15 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchLlmSettings = async () => {
       try {
-        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/settings?category=llm'));
+        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=llm'));
         if (response.ok) {
           const data = await response.json();
+          console.log('📊 [DASHBOARD] LLM settings loaded from API:', {
+            hasLlmSettings: !!data.llmSettings,
+            activeChatModel: data.llmSettings?.activeChatModel || data.activeChatModel || 'NOT FOUND',
+            dataKeys: Object.keys(data),
+            llmSettingsKeys: data.llmSettings ? Object.keys(data.llmSettings) : []
+          });
           setLlmSettings(data.llmSettings || data);
         }
       } catch (error) {
@@ -387,7 +393,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchDatabaseSettings = async () => {
       try {
-        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/settings?category=database'));
+        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=database'));
         if (response.ok) {
           const data = await response.json();
           setDatabaseSettings(data.database || data);
@@ -1434,34 +1440,34 @@ export default function DashboardPage() {
             <CardContent className="pt-0">
               <div className="space-y-4">
                 {/* Database Information */}
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">Database</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-sm">
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">Database</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
                     {databaseSettings?.name || 'rag_chatbot'}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     {databaseSettings?.host}:{databaseSettings?.port}
                   </div>
                 </div>
 
                 {/* LLM Model */}
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">LLM Model</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-sm">
-                    {llmSettings?.activeChatModel || 'gpt-4o-mini'}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">LLM Model</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
+                    {llmSettings?.activeChatModel || <span className="text-orange-500">Not Configured</span>}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     Active Provider
                   </div>
                 </div>
 
                 {/* Embedding Model */}
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-1">Embedding Model</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-sm">
-                    {llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || 'text-embedding-004'}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">Embedding Model</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
+                    {llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || <span className="text-orange-500">Not Configured</span>}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     Vector Generation
                   </div>
                 </div>

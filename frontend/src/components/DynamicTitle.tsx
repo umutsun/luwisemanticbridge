@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useConfig } from '@/contexts/ConfigContext';
 import { usePageTitle } from '@/lib/page-titles';
 
@@ -14,7 +15,7 @@ export default function DynamicTitle({
   defaultTitle
 }: DynamicTitleProps) {
   const { config } = useConfig();
-  const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
 
   // Get dynamic page title based on current route
   const dynamicPageTitle = usePageTitle();
@@ -23,16 +24,36 @@ export default function DynamicTitle({
   const finalPageTitle = propPageTitle || dynamicPageTitle;
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    if (!finalPageTitle) {
+      console.warn('[DynamicTitle] No page title found!');
+      return;
+    }
 
-  useEffect(() => {
-    if (!mounted) return;
+    // Wait for config to load before setting title
+    const appName = config?.app?.name || 'Luwi Semantic Bridge';
 
-    const appName = config?.app?.name || 'Alice Semantic Bridge';
-    const finalTitle = `${finalPageTitle} - ${appName}`;
+    // Skip if config hasn't loaded yet (avoid showing "Page Name - undefined")
+    if (!config?.app?.name && !appName) {
+      console.log('[DynamicTitle] Waiting for config to load...');
+      return;
+    }
 
-    // Update document title
+    // For chatbot page (root or /chat), only show chatbot title without app name
+    const isChatbotPage = pathname === '/' || pathname === '/chat' || pathname?.startsWith('/chat/');
+    const chatbotTitle = config?.chatbot?.title || 'Chatbot';
+
+    const finalTitle = isChatbotPage ? chatbotTitle : `${finalPageTitle} - ${appName}`;
+
+    console.log('[DynamicTitle] Setting title:', {
+      finalTitle,
+      appName,
+      pageTitle: finalPageTitle,
+      configAppName: config?.app?.name,
+      propPageTitle,
+      dynamicPageTitle
+    });
+
+    // Update document title IMMEDIATELY
     document.title = finalTitle;
 
     // Also update the meta title if it exists
@@ -46,7 +67,13 @@ export default function DynamicTitle({
     if (ogTitle) {
       ogTitle.setAttribute('content', finalTitle);
     }
-  }, [config, finalPageTitle, mounted]);
+
+    // Also update twitter:title
+    const twitterTitle = document.querySelector('meta[name="twitter:title"]');
+    if (twitterTitle) {
+      twitterTitle.setAttribute('content', finalTitle);
+    }
+  }, [config?.app?.name, finalPageTitle, pathname, config?.chatbot?.title]);
 
   // Return null as this component only modifies the document title
   return null;

@@ -97,6 +97,7 @@ export default function AnalyticsDashboard() {
   const [selectedView, setSelectedView] = useState<'2d' | '3d' | 'network'>('network');
   const [activeTab, setActiveTab] = useState('overview');
   const [timeRange, setTimeRange] = useState('7d');
+
   
   // Fetch analytics data
   const fetchAnalytics = async () => {

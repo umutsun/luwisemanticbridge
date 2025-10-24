@@ -68,6 +68,7 @@ interface EmbeddingJob {
 }
 
 export default function TranslationsPage() {
+
   const [activeTab, setActiveTab] = useState('translate');
   const { toast } = useToast();
 

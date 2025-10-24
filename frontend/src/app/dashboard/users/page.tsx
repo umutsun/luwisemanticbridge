@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
+import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
 import { apiConfig } from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
 
@@ -63,6 +64,7 @@ interface SubscriptionPlan {
 }
 
 export default function UsersPage() {
+
   const [users, setUsers] = useState<User[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -444,9 +446,7 @@ export default function UsersPage() {
 
   // Delete subscription plan
   const handleDeletePlan = (planId: string) => {
-    if (confirm('Are you sure you want to delete this subscription plan? Users with this plan will need to be reassigned.')) {
-      setPlans(prev => prev.filter(p => p.id !== planId));
-    }
+    setPlans(prev => prev.filter(p => p.id !== planId));
   };
 
   // Add feature to plan
@@ -606,15 +606,20 @@ export default function UsersPage() {
                         >
                           ⚙
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50"
-                          onClick={() => handleDeletePlan(plan.id)}
-                          title="Delete Plan"
+                        <ConfirmTooltip
+                          onConfirm={() => handleDeletePlan(plan.id)}
+                          message="Delete this plan?"
+                          side="top"
                         >
-                          ×
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50"
+                            title="Delete Plan"
+                          >
+                            ×
+                          </Button>
+                        </ConfirmTooltip>
                       </div>
                     </div>
 

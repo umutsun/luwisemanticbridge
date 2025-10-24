@@ -7,12 +7,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Database, 
-  Upload, 
-  Download, 
-  RefreshCw, 
-  CheckCircle, 
+import {
+  Database,
+  Upload,
+  Download,
+  RefreshCw,
+  CheckCircle,
   XCircle,
   Zap,
   FileText,
@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Clock
 } from 'lucide-react';
+import { ProgressCircle } from '@/components/ui/progress-circle';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -65,6 +66,7 @@ interface EmbeddingProgress {
 }
 
 export default function MigrationToolsPage() {
+
   const [activeTab, setActiveTab] = useState('database');
   const [isLoading, setIsLoading] = useState(false);
   const [stats, setStats] = useState<MigrationStats | null>(null);
@@ -367,18 +369,27 @@ export default function MigrationToolsPage() {
       {progress && isLoading && (
         <Card className="mb-6 border-blue-200 bg-blue-50/50">
           <CardContent className="pt-6">
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm font-medium">
-                <span className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 animate-pulse" />
-                  {progress.status}
-                </span>
-                <span>{progress.current} / {progress.total}</span>
+            <div className="grid grid-cols-[180px_1fr] gap-6">
+              {/* Progress Circle */}
+              <div className="flex flex-col items-center justify-center">
+                <ProgressCircle
+                  progress={progress.percentage || 0}
+                  showPulse={true}
+                  size={150}
+                />
+                <div className="text-center mt-2">
+                  <div className="text-sm font-medium flex items-center gap-1 justify-center">
+                    <Activity className="h-3 w-3" />
+                    {progress.status}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {progress.current} / {progress.total}
+                  </div>
+                </div>
               </div>
-              
-              <Progress value={progress.percentage} className="h-3" />
-              
-              <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground content-center">
                 {progress.currentTable && (
                   <div>
                     <span className="font-medium">Tablo:</span> {progress.currentTable}
@@ -400,7 +411,7 @@ export default function MigrationToolsPage() {
                   </>
                 )}
               </div>
-              
+            </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 <span>Tahmini süre: {Math.ceil((progress.total - progress.current) / 10)} saniye</span>

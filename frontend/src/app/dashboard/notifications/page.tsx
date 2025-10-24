@@ -52,6 +52,7 @@ interface NotificationChannel {
 }
 
 export default function NotificationSettings() {
+
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [slackEnabled, setSlackEnabled] = useState(false);
   const [webhookEnabled, setWebhookEnabled] = useState(true);

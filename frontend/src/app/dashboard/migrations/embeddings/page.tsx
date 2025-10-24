@@ -15,8 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { 
-  Brain, 
+import {
+  Brain,
   Database,
   Play,
   Pause,
@@ -34,6 +34,7 @@ import {
   FileText,
   Hash
 } from 'lucide-react';
+import { ProgressCircle } from '@/components/ui/progress-circle';
 
 interface TableInfo {
   name: string;
@@ -74,6 +75,7 @@ interface MigrationHistory {
 }
 
 export default function EmbeddingsPage() {
+
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [batchSize, setBatchSize] = useState(10);
@@ -131,7 +133,7 @@ export default function EmbeddingsPage() {
 
   const fetchTables = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/embeddings/tables');
+      const response = await fetch('http://localhost:8083/api/v2/migration/stats');
       const data = await response.json();
       setTables(data.tables || []);
     } catch (error) {
@@ -141,9 +143,9 @@ export default function EmbeddingsPage() {
 
   const fetchMigrationProgress = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/embeddings/progress');
+      const response = await fetch('http://localhost:8083/api/v2/migration/progress');
       const data = await response.json();
-      setMigrationProgress(data.progress);
+      setMigrationProgress(data);
     } catch (error) {
       console.error('Failed to fetch progress:', error);
     }
@@ -151,9 +153,9 @@ export default function EmbeddingsPage() {
 
   const fetchMigrationHistory = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/embeddings/history');
+      const response = await fetch('http://localhost:8083/api/v2/migration/history');
       const data = await response.json();
-      setMigrationHistory(data.history || []);
+      setMigrationHistory(data || []);
     } catch (error) {
       console.error('Failed to fetch history:', error);
     }
@@ -167,18 +169,25 @@ export default function EmbeddingsPage() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8083/api/v2/embeddings/migrate', {
+      const response = await fetch('http://localhost:8083/api/v2/migration/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tables: selectedTables,
+          sourceTable: selectedTables[0], // Backend expects single table
           batchSize
         })
       });
 
       if (response.ok) {
-        fetchMigrationProgress();
-        fetchMigrationHistory();
+        const data = await response.json();
+        // Store migration ID for later use
+        if (data.migrationId) {
+          setMigrationProgress({ ...migrationProgress, id: data.migrationId, status: 'starting' });
+        }
+        // Start polling for progress
+        const interval = setInterval(fetchMigrationProgress, 2000);
+        // Clear interval after 30 minutes
+        setTimeout(() => clearInterval(interval), 30 * 60 * 1000);
       }
     } catch (error) {
       console.error('Failed to start migration:', error);
@@ -188,8 +197,12 @@ export default function EmbeddingsPage() {
   };
 
   const pauseMigration = async () => {
+    if (!migrationProgress?.id) return;
+
     try {
-      await fetch('http://localhost:8083/api/v2/embeddings/pause', { method: 'POST' });
+      await fetch(`http://localhost:8083/api/v2/migration/pause/${migrationProgress.id}`, {
+        method: 'POST'
+      });
       fetchMigrationProgress();
     } catch (error) {
       console.error('Failed to pause migration:', error);
@@ -197,11 +210,29 @@ export default function EmbeddingsPage() {
   };
 
   const resumeMigration = async () => {
+    if (!migrationProgress?.id) return;
+
     try {
-      await fetch('http://localhost:8083/api/v2/embeddings/resume', { method: 'POST' });
+      await fetch(`http://localhost:8083/api/v2/migration/resume/${migrationProgress.id}`, {
+        method: 'POST'
+      });
       fetchMigrationProgress();
     } catch (error) {
       console.error('Failed to resume migration:', error);
+    }
+  };
+
+  const stopMigration = async () => {
+    if (!migrationProgress?.id) return;
+
+    try {
+      await fetch(`http://localhost:8083/api/v2/migration/stop/${migrationProgress.id}`, {
+        method: 'POST'
+      });
+      fetchMigrationProgress();
+      fetchMigrationHistory();
+    } catch (error) {
+      console.error('Failed to stop migration:', error);
     }
   };
 
@@ -377,7 +408,7 @@ export default function EmbeddingsPage() {
                     Devam Et
                   </Button>
                 )}
-                <Button variant="destructive" size="sm">
+                <Button onClick={stopMigration} variant="destructive" size="sm">
                   <StopCircle className="h-4 w-4 mr-2" />
                   İptal
                 </Button>
@@ -385,34 +416,44 @@ export default function EmbeddingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span>Tablo: {migrationProgress.currentTable}</span>
-                <span>{migrationProgress.current} / {migrationProgress.total}</span>
+            <div className="grid grid-cols-[200px_1fr] gap-6">
+              {/* Progress Circle */}
+              <div className="flex flex-col items-center justify-center">
+                <ProgressCircle
+                  progress={migrationProgress.percentage || 0}
+                  showPulse={migrationProgress.status === 'processing'}
+                  size={160}
+                />
+                <div className="text-center mt-3">
+                  <div className="text-sm font-medium">Tablo: {migrationProgress.currentTable}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {migrationProgress.current} / {migrationProgress.total} kayıt
+                  </div>
+                </div>
               </div>
-              <Progress value={migrationProgress.percentage} className="h-2" />
-            </div>
-            
-            <div className="grid grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Token Kullanımı:</span>
-                <p className="font-semibold">{formatTokens(migrationProgress.tokensUsed)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Tahmini Maliyet:</span>
-                <p className="font-semibold">{formatCost(migrationProgress.estimatedCost)}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Kalan Süre:</span>
-                <p className="font-semibold">{migrationProgress.estimatedTimeRemaining || 'Hesaplanıyor...'}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Hız:</span>
-                <p className="font-semibold">
-                  {migrationProgress.startTime 
-                    ? `${Math.round(migrationProgress.current / ((Date.now() - migrationProgress.startTime) / 1000))} kayıt/sn`
-                    : '-'}
-                </p>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 gap-4 text-sm content-center">
+                <div>
+                  <span className="text-muted-foreground">Token Kullanımı:</span>
+                  <p className="font-semibold">{formatTokens(migrationProgress.tokensUsed)}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Tahmini Maliyet:</span>
+                  <p className="font-semibold">{formatCost(migrationProgress.estimatedCost)}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Kalan Süre:</span>
+                  <p className="font-semibold">{migrationProgress.estimatedTimeRemaining || 'Hesaplanıyor...'}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Hız:</span>
+                  <p className="font-semibold">
+                    {migrationProgress.startTime
+                      ? `${Math.round(migrationProgress.current / ((Date.now() - migrationProgress.startTime) / 1000))} kayıt/sn`
+                      : '-'}
+                  </p>
+                </div>
               </div>
             </div>
             

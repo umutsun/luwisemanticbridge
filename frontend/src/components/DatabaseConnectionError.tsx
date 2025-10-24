@@ -127,7 +127,7 @@ export default function DatabaseConnectionError() {
                     transition={{ delay: 0.3 }}
                     className="text-sm text-muted-foreground"
                   >
-                    Alice Semantic Bridge hazırlanıyor
+                    Luwi Semantic Bridge hazırlanıyor
                   </motion.p>
                 </div>
 

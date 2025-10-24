@@ -111,8 +111,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
 
-      // Hardcoded URL to fix fetch issues
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      // Get API URL from environment variables (.env.lsemb)
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 
       if (authToken) {
         setStoredToken(authToken);
@@ -141,15 +141,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
       // Transform backend settings to match Config interface
       const transformedConfig = {
         app: {
-          name: data.app?.name || 'Alice Semantic Bridge',
-          description: data.app?.description || 'AI-Powered Knowledge Management System',
+          name: data.app?.name || 'Luwi Semantic Bridge',
+          description: data.app?.description || 'Intelligent RAG & Context Engine',
           version: data.app?.version || '1.0.0',
           locale: data.app?.locale || 'tr'
         },
         database: data.database || {
           host: 'localhost',
           port: 5432,
-          name: 'alice_semantic_bridge',
+          name: 'rag_chatbot',
           user: 'postgres',
           password: 'postgres',
           ssl: false,
@@ -254,8 +254,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_
 
   const updateConfig = async (newConfig: Config) => {
     try {
-      // Hardcoded URL to fix fetch issues
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      // Get API URL from environment variables (.env.lsemb)
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
         method: 'PUT',
         headers: {

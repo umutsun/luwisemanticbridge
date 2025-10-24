@@ -184,8 +184,12 @@ export default function Header() {
           let settings = null;
           try {
             settings = await getAppSettings();
+            console.log('[SystemStatus] Settings loaded:', {
+              activeChatModel: settings?.llmSettings?.activeChatModel,
+              activeEmbeddingModel: settings?.llmSettings?.activeEmbeddingModel
+            });
           } catch (error) {
-            console.warn('Could not fetch app settings');
+            console.warn('[SystemStatus] Could not fetch app settings:', error);
           }
 
           // Build comprehensive system status from both endpoints

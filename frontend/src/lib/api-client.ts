@@ -1,5 +1,5 @@
 /**
- * High-Performance API Client for Alice Semantic Bridge
+ * High-Performance API Client for Luwi Semantic Bridge
  * Target: <200ms response time with caching, retries, and performance monitoring
  */
 

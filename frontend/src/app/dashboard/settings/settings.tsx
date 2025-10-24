@@ -79,6 +79,7 @@ function LLMSettings() {
   const [showModal, setShowModal] = useState(false);
   const [modalProvider, setModalProvider] = useState<string>('');
   const [modalResults, setModalResults] = useState<any[]>([]);
+  const [swaggerActive, setSwaggerActive] = useState<boolean>(false);
   const { toast } = useToast();
 
   // Model-specific pricing per 1M tokens (USD)
@@ -189,11 +190,13 @@ function LLMSettings() {
       const configWithTranslation = {
         ...defaultConfig,
         deepl: {
+          ...translationData?.deepl, // Preserve all DeepL properties including verifiedDate, modelResults, etc.
           apiKey: translationData?.deepl?.apiKey || ''
         },
         google: {
           ...defaultConfig.google, // Keep existing LLM google config
           translate: {
+            ...translationData?.google?.translate, // Preserve all Google Translate properties
             apiKey: translationData?.google?.translate?.apiKey || ''
           }
         }
@@ -215,7 +218,7 @@ function LLMSettings() {
 
       // Initialize validated keys for providers that have API keys
       const existingValidatedKeys = new Set<string>();
-      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter'];
+      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter', 'deepl'];
 
       providers.forEach(provider => {
         const hasApiKey = defaultConfig?.[provider]?.apiKey && defaultConfig[provider].apiKey !== '••••••••';
@@ -259,8 +262,65 @@ function LLMSettings() {
     }
   }, []);
 
+  const checkSwaggerStatus = async () => {
+    try {
+      const response = await fetch('/api-docs.json');
+      setSwaggerActive(response.ok);
+    } catch (error) {
+      setSwaggerActive(false);
+    }
+  };
+
   useEffect(() => {
     loadSettings();
+    checkSwaggerStatus();
+
+    // Periodically check for LLM status updates (fallback errors)
+    const llmStatusInterval = setInterval(async () => {
+      try {
+        const settingsService = await import('@/lib/api/settings');
+        const llmSettings = await settingsService.getLLMSettings();
+
+        // Check if active model has error status
+        const activeModel = llmSettings?.llmSettings?.activeChatModel;
+        if (activeModel) {
+          const [provider] = activeModel.split('/');
+          const llmStatusKey = `llmStatus.${provider}.status`;
+          const errorKey = `llmStatus.${provider}.error`;
+
+          // Fetch from settings service
+          const statusResponse = await fetch(`/api/v2/settings?category=llm`);
+          if (statusResponse.ok) {
+            const data = await statusResponse.json();
+            const status = data?.llmStatus?.[provider]?.status;
+            const error = data?.llmStatus?.[provider]?.error;
+
+            if (status === 'error') {
+              // Update API status to show error
+              setApiStatus(prev => ({
+                ...prev,
+                [provider]: {
+                  status: 'error',
+                  message: error || 'Failed to initialize - check API key',
+                  lastChecked: new Date()
+                }
+              }));
+
+              // Remove from validated keys
+              setValidatedKeys(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(provider);
+                return newSet;
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check LLM status:', error);
+      }
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(llmStatusInterval);
   }, [loadSettings]);
 
   const saveAllSettings = async () => {
@@ -287,7 +347,11 @@ function LLMSettings() {
         modelTokenUsage: modelTokenUsage
       };
 
-      console.log('🔧 Active Chat Model to save:', activeChatModel);
+      console.log('\n💾 [SETTINGS SAVE] Starting save process...');
+      console.log('🔧 [SETTINGS SAVE] Active Chat Model:', activeChatModel);
+      console.log('🔧 [SETTINGS SAVE] OCR Provider:', tempConfig?.ocrProvider);
+      console.log('🔧 [SETTINGS SAVE] DeepL API Key:', tempConfig?.deepl?.apiKey ? '✅ Set' : '❌ Not set');
+      console.log('🔧 [SETTINGS SAVE] Google Translate Key:', tempConfig?.google?.translate?.apiKey ? '✅ Set' : '❌ Not set');
 
       // Extract translation settings to save separately
       const translationSettingsToSave = {
@@ -303,23 +367,23 @@ function LLMSettings() {
 
       // Save LLM settings
       try {
-        console.log('🔧 Saving LLM settings...');
+        console.log('📤 [SETTINGS SAVE] Sending LLM settings to API...');
         await updateSettingsCategory('llm', llmSettingsToSave);
-        console.log('✅ LLM settings saved successfully');
+        console.log('✅ [SETTINGS SAVE] LLM settings saved successfully');
         setLlmConfig(tempConfig);
       } catch (llmError) {
-        console.error('❌ LLM settings save error:', llmError);
+        console.error('❌ [SETTINGS SAVE] LLM settings save error:', llmError);
         throw new Error(`Failed to save LLM settings: ${llmError instanceof Error ? llmError.message : 'Unknown error'}`);
       }
 
       // Save translation settings separately
       try {
-        console.log('🔧 Saving translation settings...');
+        console.log('📤 [SETTINGS SAVE] Sending translation settings to API...');
         await updateSettingsCategory('translation', translationSettingsToSave);
-        console.log('✅ Translation settings saved successfully');
+        console.log('✅ [SETTINGS SAVE] Translation settings saved successfully');
         setTranslationConfig(translationSettingsToSave);
       } catch (translationError) {
-        console.error('❌ Translation settings save error:', translationError);
+        console.error('❌ [SETTINGS SAVE] Translation settings save error:', translationError);
         throw new Error(`Failed to save translation settings: ${translationError instanceof Error ? translationError.message : 'Unknown error'}`);
       }
 
@@ -629,21 +693,40 @@ function LLMSettings() {
   }
 
   const getModelsForProvider = (provider: string) => {
-    const models: Record<string, string[]> = {
+    // Get verified models from API check results
+    const providerData = tempConfig?.[provider];
+    const modelResults = providerData?.modelResults;
+
+    if (modelResults && Array.isArray(modelResults)) {
+      // Return only successfully tested models
+      const successfulModels = modelResults
+        .filter((result: any) => result.success === true)
+        .map((result: any) => result.model);
+
+      if (successfulModels.length > 0) {
+        console.log(`✅ [${provider}] Verified models:`, successfulModels);
+        return successfulModels;
+      }
+    }
+
+    // Fallback: if no test results, return default models
+    const defaultModels: Record<string, string[]> = {
       openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-3.5-turbo'],
-      google: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
-      anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-      deepseek: ['deepseek-coder', 'deepseek-chat'],
+      google: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+      anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
+      deepseek: ['deepseek-chat', 'deepseek-coder'],
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
       openrouter: ['openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-3-5-sonnet-20241022', 'meta-llama/llama-3-70b']
     };
-    return models[provider] || [];
+
+    console.log(`⚠️ [${provider}] No verified models, using defaults`);
+    return defaultModels[provider] || [];
   };
 
   const getDefaultModelForProvider = (provider: string) => {
     const defaults: Record<string, string> = {
       openai: 'gpt-4o-mini',
-      google: 'gemini-1.5-flash',
+      google: 'gemini-2.0-flash-exp',
       anthropic: 'claude-3-5-sonnet-20241022',
       deepseek: 'deepseek-chat',
       huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
@@ -652,7 +735,176 @@ function LLMSettings() {
     return defaults[provider] || 'gpt-4o-mini';
   };
 
+  // Get model pricing info (per 1M tokens)
+  const getModelPricing = (provider: string, modelName: string) => {
+    const pricing: Record<string, Record<string, { input: number; output: number }>> = {
+      anthropic: {
+        'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
+        'claude-3-opus-20240229': { input: 15, output: 75 },
+        'claude-3-sonnet-20240229': { input: 3, output: 15 },
+        'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
+      },
+      openai: {
+        'gpt-4o': { input: 2.5, output: 10 },
+        'gpt-4o-mini': { input: 0.15, output: 0.6 },
+        'gpt-4': { input: 30, output: 60 },
+        'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+      },
+      google: {
+        'gemini-1.5-flash': { input: 0.075, output: 0.3 },
+        'gemini-1.5-pro': { input: 1.25, output: 5 },
+        'gemini-2.0-flash-exp': { input: 0, output: 0 },
+      },
+      deepseek: {
+        'deepseek-chat': { input: 0.14, output: 0.28 },
+        'deepseek-coder': { input: 0.14, output: 0.28 },
+      }
+    };
+    return pricing[provider]?.[modelName] || null;
+  };
+
+  const getModelDetails = (provider: string, modelName: string) => {
+    const providerData = tempConfig?.[provider];
+    const modelResults = providerData?.modelResults;
+
+    if (modelResults && Array.isArray(modelResults)) {
+      const result = modelResults.find((r: any) => r.model === modelName);
+      if (result && result.success) {
+        const inputTokens = result.usage?.inputTokens || result.usage?.promptTokens || 0;
+        const outputTokens = result.usage?.outputTokens || result.usage?.completionTokens || result.usage?.candidatesTokenCount || 0;
+        const totalTokens = result.usage?.totalTokens || (inputTokens + outputTokens);
+        const responseTime = result.responseTime ? `${result.responseTime}ms` : '';
+
+        // Cost comes from API check result (calculated on backend)
+        const cost = result.cost !== undefined ? result.cost : null;
+
+        // Get pricing info for display
+        const pricing = getModelPricing(provider, modelName);
+
+        return {
+          tokens: totalTokens,
+          responseTime,
+          cost,
+          pricing
+        };
+      }
+    }
+    return null;
+  };
+
+  // Get provider verification status for display in SelectItems
+  const getProviderVerificationStatus = (provider: string) => {
+    const providerData = tempConfig?.[provider];
+    if (!providerData) return null;
+
+    const verifiedDate = providerData.verifiedDate;
+    const modelResults = providerData.modelResults;
+    const successfulModels = modelResults?.filter((r: any) => r.success).length || 0;
+
+    if (verifiedDate) {
+      return {
+        verifiedDate: new Date(verifiedDate).toLocaleDateString(),
+        modelCount: successfulModels
+      };
+    }
+    return null;
+  };
+
+  // Get translation provider verification status
+  const getTranslationProviderStatus = (provider: 'deepl' | 'google') => {
+    if (provider === 'deepl') {
+      const verifiedDate = tempConfig?.deepl?.verifiedDate;
+      if (verifiedDate) {
+        return {
+          verifiedDate: new Date(verifiedDate).toLocaleDateString(),
+          provider: 'DeepL'
+        };
+      }
+    } else if (provider === 'google') {
+      const verifiedDate = tempConfig?.google?.translate?.verifiedDate;
+      if (verifiedDate) {
+        return {
+          verifiedDate: new Date(verifiedDate).toLocaleDateString(),
+          provider: 'Google Translate'
+        };
+      }
+    }
+    return null;
+  };
+
+  // Get OCR provider verification status
+  const getOCRProviderStatus = (ocrProvider: string) => {
+    // Map OCR provider names to backend provider names
+    const providerMap: Record<string, string> = {
+      'gemini-vision': 'google',
+      'openai-vision': 'openai',
+      'deepseek-vision': 'deepseek',
+      'tesseract': 'tesseract'
+    };
+
+    const backendProvider = providerMap[ocrProvider];
+    if (!backendProvider || ocrProvider === 'tesseract') return null;
+
+    const providerData = tempConfig?.[backendProvider];
+    if (!providerData) return null;
+
+    const verifiedDate = providerData.verifiedDate;
+    if (verifiedDate) {
+      return {
+        verifiedDate: new Date(verifiedDate).toLocaleDateString()
+      };
+    }
+    return null;
+  };
+
+  // Get embedding model details from API check results
+  const getEmbeddingModelDetails = (provider: string, modelName: string) => {
+    const providerData = tempConfig?.[provider];
+    const modelResults = providerData?.modelResults;
+
+    if (modelResults && Array.isArray(modelResults)) {
+      // For embedding models, check if the model was tested
+      const result = modelResults.find((r: any) => {
+        // Match embedding model name patterns
+        return r.model === modelName ||
+               r.model?.includes(modelName) ||
+               modelName?.includes(r.model);
+      });
+
+      if (result && result.success) {
+        const inputTokens = result.usage?.inputTokens || result.usage?.promptTokens || 0;
+        const outputTokens = result.usage?.outputTokens || result.usage?.completionTokens || 0;
+        const totalTokens = result.usage?.totalTokens || (inputTokens + outputTokens);
+        const responseTime = result.responseTime ? `${result.responseTime}ms` : '';
+
+        return {
+          tokens: totalTokens,
+          responseTime,
+          verifiedDate: providerData.verifiedDate ? new Date(providerData.verifiedDate).toLocaleDateString() : null
+        };
+      }
+    }
+    return null;
+  };
+
   const getEmbeddingModelsForProvider = (provider: string) => {
+    // First, try to get verified models from API check results
+    const providerData = tempConfig?.[provider];
+    const modelResults = providerData?.modelResults;
+
+    if (modelResults && Array.isArray(modelResults)) {
+      const successfulModels = modelResults
+        .filter((result: any) => result.success === true)
+        .map((result: any) => result.model);
+
+      if (successfulModels.length > 0) {
+        console.log(`✅ [Embedding ${provider}] Using verified models:`, successfulModels);
+        return successfulModels;
+      }
+    }
+
+    // Fallback to hardcoded defaults if no API check results
+    console.log(`⚠️ [Embedding ${provider}] No verified models, using defaults`);
     const models: Record<string, string[]> = {
       openai: [
         'text-embedding-3-small',
@@ -738,13 +990,14 @@ function LLMSettings() {
   return (
     <>
       <div className="grid grid-cols-2 gap-6">
-        {/* Left Column - Provider API Keys */}
-        <Card>
-          <CardHeader>
-            <CardTitle>API Provider Configuration</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {Object.entries({
+        {/* Left Column - Provider API Keys & Swagger */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>API Provider Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {Object.entries({
               openai: { key: llmConfig?.openai?.apiKey, name: 'OpenAI' },
               google: { key: llmConfig?.google?.apiKey, name: 'Google AI' },
               anthropic: { key: llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
@@ -764,7 +1017,7 @@ function LLMSettings() {
                       <Label className="capitalize font-medium">{data.name}</Label>
                       {providerStatus.status === 'active' && verifiedDate && (
                         <span className="text-xs text-muted-foreground">
-                          ✓ {verifiedDate.toLocaleDateString('tr-TR')}
+                          {verifiedDate.toLocaleDateString('tr-TR')}
                         </span>
                       )}
                     </div>
@@ -866,6 +1119,69 @@ function LLMSettings() {
           </CardContent>
         </Card>
 
+        {/* Swagger API Documentation */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>API Documentation</CardTitle>
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${swaggerActive ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-muted-foreground">
+                  {swaggerActive ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Explore and test your API endpoints using the interactive Swagger documentation.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => window.open('/api-docs', '_blank')}
+                  disabled={!swaggerActive}
+                  className="w-full justify-start"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10zm1-17h-2v8h2V5zm0 10h-2v2h2v-2z"/>
+                  </svg>
+                  Open Swagger UI
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open('/api-docs.json', '_blank')}
+                  disabled={!swaggerActive}
+                  className="w-full justify-start"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download OpenAPI Spec
+                </Button>
+              </div>
+              {!swaggerActive && (
+                <div className="text-sm text-destructive mt-2">
+                  Swagger documentation is not available. Please check your backend configuration.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
         {/* Right Column - Active Service Providers (Stacked) */}
         <div className="space-y-6">
           {/* Active Provider Selections */}
@@ -923,7 +1239,7 @@ function LLMSettings() {
                     <SelectContent>
                       {getValidatedProviders().map(([provider, data]) => (
                         <SelectItem key={provider} value={provider}>
-                          {data.name} ✓
+                          {data.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -963,9 +1279,28 @@ function LLMSettings() {
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getModelsForProvider(tempConfig?.provider || 'openai').map(model => (
-                        <SelectItem key={model} value={model}>{model}</SelectItem>
-                      ))}
+                      {getModelsForProvider(tempConfig?.provider || 'openai').map(model => {
+                        const details = getModelDetails(tempConfig?.provider || 'openai', model);
+                        return (
+                          <SelectItem key={model} value={model}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{model}</span>
+                              {details && (
+                                <span className="text-xs text-gray-500">
+                                  {details.tokens} tokens · {details.responseTime}
+                                  {details.pricing && (
+                                    details.pricing.input === 0 && details.pricing.output === 0 ? (
+                                      <> · <span className="text-green-600 font-medium">Free</span></>
+                                    ) : (
+                                      <> · <span className="text-blue-600">${details.pricing.input}/${details.pricing.output}</span> per 1M</>
+                                    )
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -976,7 +1311,8 @@ function LLMSettings() {
                 <Label>Embedding Provider</Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
-                    value={tempConfig?.embeddingProvider || 'openai'}
+                    disabled={false}
+                    value={tempConfig?.embeddingProvider || 'google'}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
                         // Update embedding provider in llmSettings
@@ -1021,7 +1357,7 @@ function LLMSettings() {
                     <SelectContent>
                       {getValidatedProviders().map(([provider, data]) => (
                         <SelectItem key={provider} value={provider}>
-                          {data.name} ✓
+                          {data.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1062,9 +1398,21 @@ function LLMSettings() {
                       <SelectValue placeholder="Select embedding model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getEmbeddingModelsForProvider(tempConfig?.embeddingProvider || 'openai').map(model => (
-                        <SelectItem key={model} value={model}>{model}</SelectItem>
-                      ))}
+                      {getEmbeddingModelsForProvider(tempConfig?.embeddingProvider || 'openai').map(model => {
+                        const details = getEmbeddingModelDetails(tempConfig?.embeddingProvider || 'openai', model);
+                        return (
+                          <SelectItem key={model} value={model}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{model}</span>
+                              {details && (
+                                <span className="text-xs text-gray-500">
+                                  {details.verifiedDate} · {details.tokens} tokens · {details.responseTime}
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1073,8 +1421,9 @@ function LLMSettings() {
               {/* Active Translation Provider Selection */}
               <div>
                 <Label>Translation Provider</Label>
-                <Select
-                  value={tempConfig?.translationProvider || 'google'}
+                <div className="mt-2">
+                  <Select
+                    value={tempConfig?.translationProvider || 'google'}
                   onValueChange={async (value) => {
                     // Update translation provider in llmSettings
                     const updatedConfig = {
@@ -1108,13 +1457,24 @@ function LLMSettings() {
                     <SelectValue placeholder="Select translation provider" />
                   </SelectTrigger>
                   <SelectContent>
-                    {getValidatedTranslationProviders().map(provider => (
-                      <SelectItem key={provider.value} value={provider.value}>
-                        {provider.label} ✓
-                      </SelectItem>
-                    ))}
+                    {getValidatedTranslationProviders().map(provider => {
+                      const status = getTranslationProviderStatus(provider.value as 'deepl' | 'google');
+                      return (
+                        <SelectItem key={provider.value} value={provider.value}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{provider.label}</span>
+                            {status && (
+                              <span className="text-xs text-gray-500">
+                                {status.verifiedDate}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
+                </div>
               </div>
 
               {/* Active OCR Provider Selection */}
@@ -1158,16 +1518,54 @@ function LLMSettings() {
                       <SelectValue placeholder="OCR provider seçin" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="gemini-vision">Gemini Vision</SelectItem>
-                      <SelectItem value="openai-vision">OpenAI Vision</SelectItem>
-                      <SelectItem value="deepseek-vision">DeepSeek Vision</SelectItem>
-                      <SelectItem value="tesseract">Tesseract (Ücretsiz)</SelectItem>
+                      <SelectItem value="gemini-vision">
+                        <div className="flex flex-col">
+                          <span className="font-medium">Gemini Vision</span>
+                          {(() => {
+                            const status = getOCRProviderStatus('gemini-vision');
+                            return status && (
+                              <span className="text-xs text-gray-500">
+                                {status.verifiedDate}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="openai-vision">
+                        <div className="flex flex-col">
+                          <span className="font-medium">OpenAI Vision</span>
+                          {(() => {
+                            const status = getOCRProviderStatus('openai-vision');
+                            return status && (
+                              <span className="text-xs text-gray-500">
+                                {status.verifiedDate}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="deepseek-vision">
+                        <div className="flex flex-col">
+                          <span className="font-medium">DeepSeek Vision</span>
+                          {(() => {
+                            const status = getOCRProviderStatus('deepseek-vision');
+                            return status && (
+                              <span className="text-xs text-gray-500">
+                                {status.verifiedDate}
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="tesseract">
+                        <div className="flex flex-col">
+                          <span className="font-medium">Tesseract</span>
+                          <span className="text-xs text-green-600">Ücretsiz</span>
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Tüm OCR işlemleri seçilen provider ile yapılacak
-                </p>
               </div>
 
               {/* Provider Usage Summary */}
@@ -1257,7 +1655,7 @@ function LLMSettings() {
 }
 
 
-// Optimized RAG & Chatbot Settings Component
+// Optimized Chatbot Settings Component
 function RAGSettings() {
   const [ragConfig, setRagConfig] = useState<any>({});
   const [tempRAGConfig, setTempRAGConfig] = useState<any>({});
@@ -1270,12 +1668,41 @@ function RAGSettings() {
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const [ragData, chatbotData] = await Promise.all([
+      const [ragData, chatbotResponse] = await Promise.all([
         getRAGSettings(),
-        getSettingsCategory('chatbot')
+        fetch('/api/v2/chatbot/settings').then(res => res.json())
       ]);
       setRagConfig(ragData);
       setTempRAGConfig(ragData);
+
+      console.log('📥 [RAG SETTINGS LOAD] Chatbot response from API:', {
+        title: chatbotResponse.title,
+        subtitle: chatbotResponse.subtitle,
+        logoUrl: chatbotResponse.logoUrl ? '✅ Set' : '❌ Not set',
+        welcomeMessage: chatbotResponse.welcomeMessage?.substring(0, 50) + '...'
+      });
+
+      // Transform chatbot API response to match expected structure
+      const chatbotData = {
+        chatbot: {
+          title: chatbotResponse.title,
+          logoUrl: chatbotResponse.logoUrl,
+          openingMessage: chatbotResponse.welcomeMessage,
+          subtitle: chatbotResponse.subtitle,
+          placeholder: chatbotResponse.placeholder,
+          primaryColor: chatbotResponse.primaryColor,
+          suggestionQuestions: chatbotResponse.suggestionQuestions,
+          enableSuggestions: chatbotResponse.enableSuggestions,
+          autoGenerateSuggestions: chatbotResponse.autoGenerateSuggestions,
+          maxResponseLength: chatbotResponse.maxResponseLength,
+          maxQuestionLength: chatbotResponse.maxQuestionLength,
+          questionTemplate: chatbotResponse.questionTemplate,
+          autoGenerateQuestions: chatbotResponse.autoGenerateQuestions
+        }
+      };
+
+      console.log('📥 [RAG SETTINGS LOAD] Transformed chatbot data:', chatbotData);
+
       setChatbotConfig(chatbotData);
       setTempChatbotConfig(chatbotData);
     } catch (error) {
@@ -1290,12 +1717,60 @@ function RAGSettings() {
   }, [loadSettings]);
 
   const saveAllSettings = async () => {
+    console.log('🔘 [RAG SETTINGS] Save button clicked!');
+    console.log('📊 [RAG SETTINGS] Current tempChatbotConfig:', tempChatbotConfig);
+    console.log('📊 [RAG SETTINGS] Current tempRAGConfig:', tempRAGConfig);
     setSaving(true);
     try {
-      await Promise.all([
-        updateSettingsCategory('rag', tempRAGConfig),
-        updateSettingsCategory('chatbot', tempChatbotConfig)
-      ]);
+      console.log('\n💾 [RAG SETTINGS SAVE] Starting save process...');
+
+      // Save RAG settings
+      await updateSettingsCategory('rag', tempRAGConfig);
+      console.log('✅ [RAG SETTINGS SAVE] RAG settings saved');
+
+      // Save chatbot settings using the correct endpoint
+      // Note: maxResults/minResults are in RAG settings, not chatbot settings
+      const chatbotPayload = {
+        title: tempChatbotConfig?.chatbot?.title,
+        logoUrl: tempChatbotConfig?.chatbot?.logoUrl,
+        welcomeMessage: tempChatbotConfig?.chatbot?.welcomeMessage,  // FIXED: Use welcomeMessage not openingMessage
+        subtitle: tempChatbotConfig?.chatbot?.subtitle,
+        placeholder: tempChatbotConfig?.chatbot?.placeholder,
+        primaryColor: tempChatbotConfig?.chatbot?.primaryColor,
+        useKeywordSuggestions: tempChatbotConfig?.chatbot?.useKeywordSuggestions ?? false,
+        suggestionKeywords: tempChatbotConfig?.chatbot?.suggestionKeywords || '',
+        suggestionQuestions: tempChatbotConfig?.chatbot?.suggestionQuestions,
+        enableSuggestions: tempChatbotConfig?.chatbot?.enableSuggestions,
+        autoGenerateSuggestions: tempChatbotConfig?.chatbot?.autoGenerateSuggestions,
+        maxResponseLength: tempChatbotConfig?.chatbot?.maxResponseLength,
+        maxQuestionLength: tempChatbotConfig?.chatbot?.maxQuestionLength,
+        questionTemplate: tempChatbotConfig?.chatbot?.questionTemplate,
+        autoGenerateQuestions: tempChatbotConfig?.chatbot?.autoGenerateQuestions
+      };
+
+      console.log('📤 [RAG SETTINGS SAVE] Saving chatbot settings:', {
+        title: chatbotPayload.title,
+        subtitle: chatbotPayload.subtitle,
+        logoUrl: chatbotPayload.logoUrl ? '✅ Set' : '❌ Not set',
+        suggestionQuestions: chatbotPayload.suggestionQuestions?.length || 0,
+        maxResponseLength: chatbotPayload.maxResponseLength,
+        maxQuestionLength: chatbotPayload.maxQuestionLength
+      });
+
+      const chatbotResponse = await fetch('/api/v2/chatbot/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chatbotPayload)
+      });
+
+      if (!chatbotResponse.ok) {
+        throw new Error('Failed to save chatbot settings');
+      }
+
+      console.log('✅ [RAG SETTINGS SAVE] Chatbot settings saved successfully');
+
       setRagConfig(tempRAGConfig);
       setChatbotConfig(tempChatbotConfig);
       toast({
@@ -1324,13 +1799,16 @@ function RAGSettings() {
   };
 
   const updateChatbotSetting = (key: string, value: any) => {
-    setTempChatbotConfig({
+    console.log(`📝 [RAG SETTINGS] Updating chatbot setting: ${key} =`, value);
+    const newConfig = {
       ...tempChatbotConfig,
       chatbot: {
         ...tempChatbotConfig.chatbot,
         [key]: value
       }
-    });
+    };
+    console.log(`📝 [RAG SETTINGS] New tempChatbotConfig:`, newConfig);
+    setTempChatbotConfig(newConfig);
   };
 
   if (loading) {
@@ -1346,24 +1824,14 @@ function RAGSettings() {
             <CardTitle>RAG Configuration</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label>System Prompt</Label>
-              <Textarea
-                value={tempRAGConfig?.ragSettings?.systemPrompt || ragConfig?.ragSettings?.systemPrompt || 'Use the provided context to answer the question accurately. If the context does not contain enough information, say so clearly.'}
-                placeholder="Enter RAG system prompt"
-                rows={4}
-                onChange={(e) => updateRAGSetting('systemPrompt', e.target.value)}
-                className="mt-2"
-              />
-            </div>
-
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Search Parameters</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>Similarity Threshold: {tempRAGConfig?.ragSettings?.similarityThreshold || ragConfig?.ragSettings?.similarityThreshold || 0.05}</Label>
+                  <Label>Similarity Threshold: {tempRAGConfig?.ragSettings?.similarityThreshold || ragConfig?.ragSettings?.similarityThreshold || 0.02}</Label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score for search results (0-1). Lower = more results, but less relevant.</p>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.similarityThreshold || ragConfig?.ragSettings?.similarityThreshold || 0.05]}
+                    value={[tempRAGConfig?.ragSettings?.similarityThreshold || ragConfig?.ragSettings?.similarityThreshold || 0.02]}
                     max={1}
                     min={0}
                     step={0.01}
@@ -1373,18 +1841,8 @@ function RAGSettings() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults || ragConfig?.ragSettings?.maxResults || 10}</Label>
-                    <Slider
-                      value={[tempRAGConfig?.ragSettings?.maxResults || ragConfig?.ragSettings?.maxResults || 10]}
-                      max={50}
-                      min={1}
-                      step={1}
-                      className="mt-2"
-                      onValueChange={([value]) => updateRAGSetting('maxResults', value)}
-                    />
-                  </div>
-                  <div>
                     <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults || ragConfig?.ragSettings?.minResults || 5}</Label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Initial number of sources to display</p>
                     <Slider
                       value={[tempRAGConfig?.ragSettings?.minResults || ragConfig?.ragSettings?.minResults || 5]}
                       max={20}
@@ -1392,6 +1850,18 @@ function RAGSettings() {
                       step={1}
                       className="mt-2"
                       onValueChange={([value]) => updateRAGSetting('minResults', value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults || ragConfig?.ragSettings?.maxResults || 20}</Label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sources to fetch from database (shows 7 initially, rest available via "Load More")</p>
+                    <Slider
+                      value={[tempRAGConfig?.ragSettings?.maxResults || ragConfig?.ragSettings?.maxResults || 20]}
+                      max={50}
+                      min={7}
+                      step={1}
+                      className="mt-2"
+                      onValueChange={([value]) => updateRAGSetting('maxResults', value)}
                     />
                   </div>
                 </div>
@@ -1492,41 +1962,96 @@ function RAGSettings() {
         {/* Chatbot Configuration - Right Column */}
         <Card>
           <CardHeader>
-            <CardTitle>RAG & Chatbot Settings</CardTitle>
+            <CardTitle>Chat Settings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Branding */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Branding</h3>
+
+              <div className="space-y-2">
+                <Label htmlFor="chatbotTitle">Title</Label>
+                <Input
+                  id="chatbotTitle"
+                  value={tempChatbotConfig?.chatbot?.title || chatbotConfig?.chatbot?.title || ''}
+                  onChange={(e) => updateChatbotSetting('title', e.target.value)}
+                  placeholder="Enter title"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Appears in the chat header
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chatbotLogo">Logo URL</Label>
+                <Input
+                  id="chatbotLogo"
+                  value={tempChatbotConfig?.chatbot?.logoUrl || chatbotConfig?.chatbot?.logoUrl || ''}
+                  onChange={(e) => updateChatbotSetting('logoUrl', e.target.value)}
+                  placeholder="Enter logo URL"
+                />
+                <p className="text-xs text-muted-foreground">
+                  URL to your logo image
+                </p>
+              </div>
+            </div>
+
             {/* Opening Messages */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Opening Messages</h3>
 
               <div className="space-y-2">
-                <Label htmlFor="openingMessage">Default Opening Message</Label>
+                <Label htmlFor="welcomeMessage">Welcome Message</Label>
                 <Textarea
-                  id="openingMessage"
-                  value={tempChatbotConfig?.chatbot?.openingMessage || "Merhaba! Size nasıl yardımcı olabilirim?"}
-                  onChange={(e) => updateChatbotSetting('openingMessage', e.target.value)}
-                  placeholder="Enter the default opening message..."
+                  id="welcomeMessage"
+                  value={tempChatbotConfig?.chatbot?.welcomeMessage || chatbotConfig?.chatbot?.welcomeMessage || ''}
+                  onChange={(e) => updateChatbotSetting('welcomeMessage', e.target.value)}
+                  placeholder="Merhaba! Size nasıl yardımcı olabilirim?"
                   rows={3}
                 />
                 <p className="text-xs text-muted-foreground">
-                  This message will be shown when users start a new conversation
+                  First message shown when chat loads
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="suggestionQuestions">Suggested Questions</Label>
-                <Textarea
-                  id="suggestionQuestions"
-                  value={tempChatbotConfig?.chatbot?.suggestionQuestions?.join('\n') || ""}
-                  onChange={(e) => {
-                    const questions = e.target.value.split('\n').filter(q => q.trim());
-                    updateChatbotSetting('suggestionQuestions', questions);
-                  }}
-                  placeholder="Enter suggested questions, one per line..."
-                  rows={4}
+                <Label htmlFor="placeholder">Input Placeholder Text</Label>
+                <Input
+                  id="placeholder"
+                  value={tempChatbotConfig?.chatbot?.placeholder || chatbotConfig?.chatbot?.placeholder || ''}
+                  onChange={(e) => updateChatbotSetting('placeholder', e.target.value)}
+                  placeholder="Sorunuzu yazın..."
                 />
                 <p className="text-xs text-muted-foreground">
-                  These questions will be shown as clickable suggestions to users
+                  Placeholder text in the chat input field
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <Label>Use Keyword-Based Suggestions</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Enable to use keywords below for generating suggestions.
+                    When disabled, shows popular questions from database.
+                  </p>
+                </div>
+                <Switch
+                  checked={tempChatbotConfig?.chatbot?.useKeywordSuggestions ?? false}
+                  onCheckedChange={(checked) => updateChatbotSetting('useKeywordSuggestions', checked)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="suggestionKeywords">Suggestion Keywords</Label>
+                <Input
+                  id="suggestionKeywords"
+                  value={tempChatbotConfig?.chatbot?.suggestionKeywords || chatbotConfig?.chatbot?.suggestionKeywords || ""}
+                  onChange={(e) => updateChatbotSetting('suggestionKeywords', e.target.value)}
+                  placeholder="hukuk, sözleşme, dava, mahkeme, avukat..."
+                  disabled={!(tempChatbotConfig?.chatbot?.useKeywordSuggestions ?? false)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter keywords separated by commas. System will find suggestions based on these keywords.
                 </p>
               </div>
 
@@ -1534,12 +2059,25 @@ function RAGSettings() {
                 <div className="flex-1">
                   <Label>Enable Question Suggestions</Label>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Show suggested questions based on context
+                    Show suggested questions in chat interface
                   </p>
                 </div>
                 <Switch
                   checked={tempChatbotConfig?.chatbot?.enableSuggestions ?? true}
                   onCheckedChange={(checked) => updateChatbotSetting('enableSuggestions', checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between opacity-50 pointer-events-none">
+                <div className="flex-1">
+                  <Label>Auto-Generate Suggestions (Deprecated)</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This option is now controlled by "Use Keyword-Based Suggestions" switch above.
+                  </p>
+                </div>
+                <Switch
+                  checked={tempChatbotConfig?.chatbot?.autoGenerateSuggestions ?? true}
+                  onCheckedChange={(checked) => updateChatbotSetting('autoGenerateSuggestions', checked)}
                 />
               </div>
             </div>
@@ -1549,6 +2087,28 @@ function RAGSettings() {
               <h3 className="text-lg font-medium">Response Generation</h3>
 
               <div className="space-y-6">
+                {/* Conversation Tone */}
+                <div>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    Choose the tone for AI responses
+                  </p>
+                  <Select
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select tone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="professional">Professional - Formal and business-like</SelectItem>
+                      <SelectItem value="friendly">Friendly - Warm and approachable</SelectItem>
+                      <SelectItem value="casual">Casual - Relaxed and conversational</SelectItem>
+                      <SelectItem value="technical">Technical - Detailed and precise</SelectItem>
+                      <SelectItem value="empathetic">Empathetic - Understanding and supportive</SelectItem>
+                      <SelectItem value="concise">Concise - Brief and to the point</SelectItem>
+                      <SelectItem value="educational">Educational - Clear and instructive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <Label>Max Response Length</Label>
@@ -1628,34 +2188,7 @@ function RAGSettings() {
               </div>
             </div>
 
-            {/* Response Configuration */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Response Configuration</h3>
-              <div className="space-y-6">
-                <div>
-                  <Label>Max Records to Fetch: {chatbotConfig?.chatbot?.maxRecords || 10}</Label>
-                  <Slider
-                    value={[tempChatbotConfig?.chatbot?.maxRecords || chatbotConfig?.chatbot?.maxRecords || 10]}
-                    max={100}
-                    min={1}
-                    step={1}
-                    className="mt-3"
-                    onValueChange={([value]) => updateChatbotSetting('maxRecords', value)}
-                  />
-                </div>
-                <div>
-                  <Label>Max Message History: {chatbotConfig?.chatbot?.maxHistory || 50}</Label>
-                  <Slider
-                    value={[tempChatbotConfig?.chatbot?.maxHistory || chatbotConfig?.chatbot?.maxHistory || 50]}
-                    max={200}
-                    min={10}
-                    step={10}
-                    className="mt-3"
-                    onValueChange={([value]) => updateChatbotSetting('maxHistory', value)}
-                  />
-                </div>
-              </div>
-            </div>
+            {/* Note: Max/Min Results are configured in RAG Settings tab */}
           </CardContent>
         </Card>
 
@@ -1765,7 +2298,24 @@ function DatabaseSettings() {
   const testConnection = async (type: 'database' | 'redis') => {
     setTesting(type);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const config = type === 'database' ? tempDBConfig : tempRedisConfig;
+      const response = await fetch(`/api/config/database/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type,
+          config: config
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Connection test failed');
+      }
+
       toast({
         title: "Success",
         description: `${type === 'database' ? 'Database' : 'Redis'} connection successful`,
@@ -1773,7 +2323,7 @@ function DatabaseSettings() {
     } catch (error) {
       toast({
         title: "Error",
-        description: `${type === 'database' ? 'Database' : 'Redis'} connection failed`,
+        description: error instanceof Error ? error.message : `${type === 'database' ? 'Database' : 'Redis'} connection failed`,
         variant: "destructive",
       });
     } finally {
@@ -1983,16 +2533,21 @@ function SecuritySettings() {
   const saveAllSettings = async () => {
     setSaving(true);
     try {
-      await updateSettingsCategory('security', tempConfig);
+      // Save both security and advanced settings
+      await Promise.all([
+        updateSettingsCategory('security', tempConfig.security || {}),
+        updateSettingsCategory('advanced', tempConfig.advanced || {}),
+        updateSettingsCategory('storage', tempConfig.storage || {})
+      ]);
       setSecurityConfig(tempConfig);
       toast({
         title: "Success",
-        description: "Security settings saved successfully",
+        description: "Security and advanced settings saved successfully",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save security settings",
+        description: "Failed to save settings",
         variant: "destructive",
       });
     } finally {
@@ -2071,22 +2626,142 @@ function SecuritySettings() {
               })}
             />
           </div>
+        </CardContent>
+      </Card>
 
-
-          <div className="flex justify-end pt-4">
-            <Button onClick={saveAllSettings} disabled={saving}>
-              {saving ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save'
-              )}
-            </Button>
+      <Card>
+        <CardHeader>
+          <CardTitle>File Storage Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Documents Folder Path</Label>
+              <Input
+                value={tempConfig?.storage?.docsPath ?? securityConfig?.storage?.docsPath ?? './docs'}
+                placeholder="./docs (default)"
+                onChange={(e) => setTempConfig({
+                  ...tempConfig,
+                  storage: {
+                    ...tempConfig.storage,
+                    docsPath: e.target.value
+                  }
+                })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Path where uploaded documents are stored
+              </p>
+            </div>
+            <div>
+              <Label>Logs Folder Path</Label>
+              <Input
+                value={tempConfig?.storage?.logsPath ?? securityConfig?.storage?.logsPath ?? './logs'}
+                placeholder="./logs"
+                onChange={(e) => setTempConfig({
+                  ...tempConfig,
+                  storage: {
+                    ...tempConfig.storage,
+                    logsPath: e.target.value
+                  }
+                })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Path where system logs are stored
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Upload Limits</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Configure maximum file sizes for uploads (requires backend restart)
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label>JSON Payload Limit (MB)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="500"
+                value={tempConfig?.advanced?.upload_json_limit_mb ?? securityConfig?.advanced?.upload_json_limit_mb ?? 100}
+                onChange={(e) => setTempConfig({
+                  ...tempConfig,
+                  advanced: {
+                    ...tempConfig.advanced,
+                    upload_json_limit_mb: parseInt(e.target.value)
+                  }
+                })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                For API requests with large CSV data
+              </p>
+            </div>
+            <div>
+              <Label>File Upload Limit (MB)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="500"
+                value={tempConfig?.advanced?.upload_file_limit_mb ?? securityConfig?.advanced?.upload_file_limit_mb ?? 100}
+                onChange={(e) => setTempConfig({
+                  ...tempConfig,
+                  advanced: {
+                    ...tempConfig.advanced,
+                    upload_file_limit_mb: parseInt(e.target.value)
+                  }
+                })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Maximum size for document uploads
+              </p>
+            </div>
+            <div>
+              <Label>Text Limit (MB)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="50"
+                value={tempConfig?.advanced?.upload_text_limit_mb ?? securityConfig?.advanced?.upload_text_limit_mb ?? 1}
+                onChange={(e) => setTempConfig({
+                  ...tempConfig,
+                  advanced: {
+                    ...tempConfig.advanced,
+                    upload_text_limit_mb: parseInt(e.target.value)
+                  }
+                })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                For text-only payloads
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-3">
+            <p className="text-xs text-yellow-800 dark:text-yellow-200">
+              ⚠️ <strong>Note:</strong> Changes to upload limits require backend restart to take effect.
+              Current limits are loaded on server startup.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end pt-4">
+        <Button onClick={saveAllSettings} disabled={saving}>
+          {saving ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            'Save'
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -2412,6 +3087,7 @@ function PromptsSettings() {
       systemPrompt: 'You are a helpful AI assistant.',
       temperature: 0.7,
       maxTokens: 2048,
+      conversationTone: 'professional',
       isActive: false
     };
     setTempConfig({
@@ -2589,6 +3265,27 @@ function PromptsSettings() {
                 </div>
               </div>
 
+              <div>
+                <Label>Conversation Tone</Label>
+                <Select
+                  value={activePrompt.conversationTone || 'professional'}
+                  onValueChange={(value) => updatePrompt(activePrompt.id, 'conversationTone', value)}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Select tone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="friendly">Friendly</SelectItem>
+                    <SelectItem value="casual">Casual</SelectItem>
+                    <SelectItem value="technical">Technical</SelectItem>
+                    <SelectItem value="empathetic">Empathetic</SelectItem>
+                    <SelectItem value="concise">Concise</SelectItem>
+                    <SelectItem value="educational">Educational</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -2717,8 +3414,11 @@ function TranslationSettings() {
     return <Spinner size="lg" />;
   }
 
+  // Check both API key existence and verification status
   const deepLConfigured = !!tempConfig?.deepl?.apiKey;
+  const deepLVerified = apiStatus?.deepl?.status === 'active' || apiStatus?.deepl?.status === 'success';
   const googleTranslateConfigured = !!tempConfig?.google?.translate?.apiKey;
+  const googleTranslateVerified = apiStatus?.googleTranslate?.status === 'active' || apiStatus?.googleTranslate?.status === 'success';
 
   return (
     <div className="space-y-6">
@@ -2740,9 +3440,19 @@ function TranslationSettings() {
           <div className="space-y-4">
             <h3 className="text-lg font-medium flex items-center gap-2">
               DeepL API
-              <Badge variant={deepLConfigured ? "default" : "secondary"}>
-                {deepLConfigured ? "Configured" : "Not Set"}
-              </Badge>
+              {deepLVerified ? (
+                <Badge variant="default" className="bg-green-500">
+                  ✓ Verified
+                </Badge>
+              ) : deepLConfigured ? (
+                <Badge variant="secondary">
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  Not Set
+                </Badge>
+              )}
             </h3>
 
             <div className="grid gap-4">
@@ -2798,9 +3508,19 @@ function TranslationSettings() {
           <div className="space-y-4">
             <h3 className="text-lg font-medium flex items-center gap-2">
               Google Translate API
-              <Badge variant={googleTranslateConfigured ? "default" : "secondary"}>
-                {googleTranslateConfigured ? "Configured" : "Not Set"}
-              </Badge>
+              {googleTranslateVerified ? (
+                <Badge variant="default" className="bg-green-500">
+                  ✓ Verified
+                </Badge>
+              ) : googleTranslateConfigured ? (
+                <Badge variant="secondary">
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="secondary">
+                  Not Set
+                </Badge>
+              )}
             </h3>
 
             <div className="grid gap-4">
@@ -2870,7 +3590,19 @@ function TranslationSettings() {
 
 // Main Optimized Settings Component
 export default function OptimizedSettingsPage() {
-  const [activeTab, setActiveTab] = useState('llm');
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const initialTab = searchParams.get('tab') || 'llm';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', value);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
 
   return (
     <div className="w-full max-w-[90%] mx-auto p-6">
@@ -2881,12 +3613,12 @@ export default function OptimizedSettingsPage() {
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid w-full grid-cols-7 h-14">
           <TabsTrigger value="app" className="h-12 px-4">
             <span className="text-sm">App</span>
           </TabsTrigger>
-          <TabsTrigger value="llm" className="h-12 px-4">
+          <TabsTrigger value="api" className="h-12 px-4">
             <span className="text-sm">API</span>
           </TabsTrigger>
           <TabsTrigger value="rag" className="h-12 px-4">
@@ -2910,7 +3642,7 @@ export default function OptimizedSettingsPage() {
           <AppSettings />
         </TabsContent>
 
-        <TabsContent value="llm">
+        <TabsContent value="api">
           <LLMSettings />
         </TabsContent>
 
