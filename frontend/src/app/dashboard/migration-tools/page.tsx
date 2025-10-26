@@ -416,7 +416,6 @@ export default function MigrationToolsPage() {
                 <Clock className="h-3 w-3" />
                 <span>Tahmini süre: {Math.ceil((progress.total - progress.current) / 10)} saniye</span>
               </div>
-            </div>
           </CardContent>
         </Card>
       )}
