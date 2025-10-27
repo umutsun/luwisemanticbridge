@@ -53,7 +53,7 @@ module.exports = {
     {
       name: 'lsemb-frontend',
       script: 'node',
-      args: '.next/standalone/frontend/server.js',
+      args: '.next/standalone/server.js',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
@@ -132,8 +132,9 @@ module.exports = {
     */
 
     // ==========================================
-    // LUWI-DEV WEBSITE (Port 3000)
+    // LUWI-DEV WEBSITE (Port 3000) - DISABLED
     // ==========================================
+    /*
     {
       name: 'luwi-dev',
       script: 'server.js',
@@ -168,6 +169,7 @@ module.exports = {
       // Performance
       node_args: '--max-old-space-size=512',
     },
+    */
   ],
 
   // ==========================================
