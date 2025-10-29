@@ -336,6 +336,7 @@ export default function Header() {
       { href: '/dashboard/scrapes', label: 'Web Scraper', icon: Globe },
       { href: '/dashboard/messages', label: 'Sohbet Geçmişi', icon: MessageSquare },
       { href: '/dashboard/translations', label: 'Translations', icon: Languages },
+      { href: '/dashboard/integrations', label: 'Integrations', icon: CircuitBoard },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
     ] : [])
   ];

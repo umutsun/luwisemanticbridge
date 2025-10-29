@@ -453,6 +453,7 @@ app.use("/api/v2/system", systemLogsRoutes);
 app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
+app.use("/api/v2/integrations", require("./routes/integrations.routes").default);
 
 // GraphQL server
 try {

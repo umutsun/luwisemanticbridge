@@ -23,7 +23,10 @@
     "prepare": "husky install",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "docker:logs": "docker-compose logs -f",
+    "python:install": "cd python-services && python -m venv venv && venv\\Scripts\\pip install -r requirements.txt",
+    "python:start": "cd python-services && venv\\Scripts\\python main.py",
+    "python:dev": "cd python-services && python main.py"
   },
   "keywords": [
     "semantic-search",
