@@ -5,9 +5,11 @@ import { URL } from 'url';
 import { pgPool } from '../server';
 import OpenAI from 'openai';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
+import { pythonService, CrawlOptions as PythonCrawlOptions } from './python-integration.service';
+import { logger } from '../utils/logger';
 
 interface ScrapeOptions {
-  mode?: 'static' | 'dynamic' | 'auto';
+  mode?: 'static' | 'dynamic' | 'auto' | 'ai';  // Added 'ai' mode for Python Crawl4AI
   maxDepth?: number;
   maxPages?: number;
   followLinks?: boolean;
@@ -23,6 +25,11 @@ interface ScrapeOptions {
   customSelectors?: string[]; // Custom CSS selectors to extract content
   prioritySelectors?: string[]; // High priority selectors (checked first)
   extractMode?: 'all' | 'first' | 'best'; // How to handle multiple matching selectors
+  // AI-specific options
+  extractionPrompt?: string;  // LLM extraction prompt for AI mode
+  aiModel?: string;  // AI model to use (gpt-4, claude, etc.)
+  aiProvider?: string;  // AI provider (openai, anthropic, etc.)
+  usePythonService?: boolean;  // Force use of Python service
 }
 
 interface ScrapeResult {
@@ -154,11 +161,29 @@ export class ScraperService {
   }
 
   private async scrapePage(url: string, options: ScrapeOptions): Promise<ScrapeResult> {
-    const { mode = 'auto', waitForSelector } = options;
-    
-    // Determine scraping mode
+    const { mode = 'auto', waitForSelector, usePythonService } = options;
+
+    // Try AI-powered scraping first if requested or mode is 'ai'
+    if (mode === 'ai' || usePythonService) {
+      try {
+        return await this.scrapeWithAI(url, options);
+      } catch (error) {
+        logger.warn(`AI scraping failed for ${url}, falling back to traditional methods:`, error);
+      }
+    }
+
+    // Check if Python service is available for better scraping
+    if (await pythonService.isPythonServiceAvailable() && mode === 'auto') {
+      try {
+        return await this.scrapeWithAI(url, options);
+      } catch (error) {
+        logger.info('Python service failed, using Node.js scraper');
+      }
+    }
+
+    // Fallback to traditional scraping
     const useDynamic = this.shouldUseDynamic(url, mode);
-    
+
     if (useDynamic) {
       return await this.scrapeDynamic(url, options);
     } else {
@@ -478,6 +503,59 @@ export class ScraperService {
     }
     
     return embedding;
+  }
+
+  private async scrapeWithAI(url: string, options: ScrapeOptions): Promise<ScrapeResult> {
+    try {
+      // Convert options to Python service format
+      const pythonOptions: PythonCrawlOptions = {
+        mode: options.extractionPrompt ? 'llm' : 'auto',
+        extractionPrompt: options.extractionPrompt,
+        model: options.aiModel || 'gpt-4',
+        provider: options.aiProvider || 'openai',
+        maxDepth: options.maxDepth || 1,
+        followLinks: options.followLinks || false,
+        contentType: 'all',
+        jsCode: undefined,
+        waitFor: options.waitForSelector,
+        screenshot: false,
+        timeout: 30
+      };
+
+      // Call Python Crawl4AI service
+      const result = await pythonService.crawlWithAI(url, pythonOptions);
+
+      // Convert Python result to our format
+      const scrapedResult: ScrapeResult = {
+        url: result.url,
+        title: result.title || '',
+        content: result.content || result.markdown || '',
+        description: result.metadata?.description,
+        keywords: result.metadata?.keywords,
+        author: result.metadata?.author,
+        publishDate: result.metadata?.published_date,
+        images: result.images,
+        links: result.links,
+        metadata: result.metadata,
+        chunks: undefined,
+        embeddings: undefined
+      };
+
+      // Split content into chunks if needed
+      if (options.generateEmbeddings && scrapedResult.content) {
+        const textSplitter = new RecursiveCharacterTextSplitter({
+          chunkSize: 1000,
+          chunkOverlap: 200,
+        });
+        scrapedResult.chunks = await textSplitter.splitText(scrapedResult.content);
+      }
+
+      return scrapedResult;
+
+    } catch (error) {
+      logger.error(`AI scraping failed for ${url}:`, error);
+      throw error;
+    }
   }
 
   private async autoScroll(page: Page): Promise<void> {

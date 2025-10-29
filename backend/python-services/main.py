@@ -1,0 +1,136 @@
+"""
+LSEMB Python Microservices
+Main FastAPI Application
+"""
+
+import os
+import sys
+from pathlib import Path
+from typing import Optional
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import uvicorn
+from loguru import logger
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logger.remove()
+logger.add(
+    sys.stdout,
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
+
+# Import routers (will create these next)
+from routers import crawl_router, pgai_router, health_router
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events"""
+    logger.info("🚀 Starting LSEMB Python Services...")
+
+    # Initialize services
+    from services.database import init_db
+    from services.redis_client import init_redis
+
+    try:
+        await init_db()
+        await init_redis()
+        logger.info("✅ All services initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize services: {e}")
+        raise
+
+    yield
+
+    # Cleanup
+    logger.info("🔄 Shutting down LSEMB Python Services...")
+    from services.database import close_db
+    from services.redis_client import close_redis
+
+    await close_db()
+    await close_redis()
+    logger.info("👋 Shutdown complete")
+
+# Create FastAPI app
+app = FastAPI(
+    title="LSEMB Python Services",
+    description="Python microservices for advanced AI capabilities",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8083").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security dependency
+async def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """Verify internal API key for service-to-service communication"""
+    if os.getenv("ENVIRONMENT") == "production":
+        expected_key = os.getenv("INTERNAL_API_KEY")
+        if not x_api_key or x_api_key != expected_key:
+            raise HTTPException(status_code=401, detail="Invalid API Key")
+    return True
+
+# Include routers
+app.include_router(health_router.router, tags=["health"])
+app.include_router(
+    crawl_router.router,
+    prefix="/api/python/crawl",
+    tags=["crawl4ai"],
+    dependencies=[Depends(verify_api_key)]
+)
+app.include_router(
+    pgai_router.router,
+    prefix="/api/python/pgai",
+    tags=["pgai"],
+    dependencies=[Depends(verify_api_key)]
+)
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "detail": str(exc)}
+    )
+
+# Root endpoint
+@app.get("/")
+async def root():
+    return {
+        "service": "LSEMB Python Services",
+        "status": "running",
+        "version": "1.0.0",
+        "endpoints": {
+            "health": "/health",
+            "crawl": "/api/python/crawl",
+            "pgai": "/api/python/pgai",
+            "docs": "/docs"
+        }
+    }
+
+if __name__ == "__main__":
+    port = int(os.getenv("PYTHON_API_PORT", 8001))
+    host = os.getenv("PYTHON_API_HOST", "0.0.0.0")
+
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=os.getenv("ENVIRONMENT") == "development",
+        log_level=os.getenv("LOG_LEVEL", "info").lower()
+    )
