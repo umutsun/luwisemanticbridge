@@ -170,13 +170,23 @@ let migrationProgress: any = {
   totalBatches: 0,
   workerCount: 2, // Store worker count for persistence
   tableProgress: {}, // Track progress per table
-  tables: [] // Store list of tables being processed
+  tables: [], // Store list of tables being processed
+  duplicatesSkipped: 0,  // NEW: Track duplicate content skipped
+  duplicateDetails: []    // NEW: Store details of skipped duplicates
 };
 
 // Helper function to generate cache key for text
 function getEmbeddingCacheKey(text: string): string {
   const hash = crypto.createHash('md5').update(text).digest('hex');
   return `embedding:${hash}`;
+}
+
+// Helper function to generate content hash for duplicate detection
+function generateContentHash(text: string): string {
+  // Normalize: lowercase, trim, compress whitespace
+  const normalized = text.toLowerCase().trim().replace(/\s+/g, ' ');
+  // Generate SHA-256 hash
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 // Update heartbeat for active process
@@ -2297,6 +2307,65 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
   // Update heartbeat to show activity
   migrationProgress.lastHeartbeat = Date.now();
 
+  // Get canonical table name dynamically
+  const canonicalName = getDisplayName(table);
+
+  // ═══════════════════════════════════════════════════════
+  // ✅ DUPLICATE PREVENTION: Content Hash Check
+  // ═══════════════════════════════════════════════════════
+  const contentHash = generateContentHash(text);
+
+  try {
+    // Check if this exact content already exists in unified_embeddings
+    const duplicateCheck = await targetPool.query(
+      `SELECT id, source_table, source_id, source_name, created_at
+       FROM unified_embeddings
+       WHERE content_hash = $1
+       LIMIT 1`,
+      [contentHash]
+    );
+
+    if (duplicateCheck.rows.length > 0) {
+      const existing = duplicateCheck.rows[0];
+
+      console.log(`⚠️  DUPLICATE SKIPPED: ${table} ID=${id}`);
+      console.log(`    → Already exists as: ${existing.source_table} ID=${existing.source_id}`);
+      console.log(`    → Content hash: ${contentHash.substring(0, 16)}...`);
+      console.log(`    → Original created: ${existing.created_at}`);
+
+      // Track duplicate statistics
+      if (!migrationProgress.duplicatesSkipped) {
+        migrationProgress.duplicatesSkipped = 0;
+        migrationProgress.duplicateDetails = [];
+      }
+      migrationProgress.duplicatesSkipped++;
+
+      // Store details (keep last 100 for monitoring)
+      if (migrationProgress.duplicateDetails.length < 100) {
+        migrationProgress.duplicateDetails.push({
+          skippedTable: table,
+          skippedId: id,
+          existingTable: existing.source_table,
+          existingId: existing.source_id,
+          contentHash: contentHash.substring(0, 16),
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Save progress to Redis
+      await saveProgressToRedis();
+
+      // Skip this record - don't insert, don't throw
+      return;
+    }
+  } catch (hashCheckErr) {
+    console.error(`❌ Error checking content hash for ${table} ID=${id}:`, hashCheckErr);
+    // Continue with insertion if hash check fails (fail-safe)
+  }
+  // ═══════════════════════════════════════════════════════
+  // End of duplicate check
+  // ═══════════════════════════════════════════════════════
+
   // Update progress counters (only newlyEmbedded - current is updated in batch processing)
   migrationProgress.newlyEmbedded = (migrationProgress.newlyEmbedded || 0) + 1;
 
@@ -2308,9 +2377,6 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
     migrationProgress.tableProgress[table] = { embedded: 0, total: 0 };
   }
   migrationProgress.tableProgress[table].embedded = (migrationProgress.tableProgress[table].embedded || 0) + 1;
-
-  // Get canonical table name dynamically
-  const canonicalName = getDisplayName(table);
 
   try {
     console.log(`💾 Saving embedding for ${table} ID ${id} with model ${model}`);
@@ -2326,12 +2392,13 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
 
     let result;
     try {
-      // Try to insert first (most common case)
+      // Try to insert first (most common case) - NOW WITH content_hash
       result = await targetPool.query(
         `INSERT INTO unified_embeddings (
           source_type, source_name, source_table, source_id,
-          content, embedding, metadata, tokens_used, model_used
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          content, embedding, metadata, tokens_used, model_used,
+          content_hash
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id`,
         [
           'database',
@@ -2340,9 +2407,10 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
           numericId,
           text,
           `[${embedding.join(',')}]`,
-          JSON.stringify({ table, id }),
+          JSON.stringify({ table, id, content_hash: contentHash }),
           150,
-          model
+          model,
+          contentHash  // $10: NEW content_hash parameter
         ]
       );
       console.log('✅ Saved embedding for', table, 'ID:', id, 'returned ID:', result.rows[0].id, 'Canonical name:', canonicalName);
@@ -2354,14 +2422,16 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
           `UPDATE unified_embeddings SET
             embedding = $1,
             content = $2,
-            tokens_used = $3,
-            model_used = $4,
+            content_hash = $3,
+            tokens_used = $4,
+            model_used = $5,
             updated_at = NOW()
-          WHERE source_table = $5 AND source_id = $6
+          WHERE source_table = $6 AND source_id = $7
           RETURNING id`,
           [
             `[${embedding.join(',')}]`,
             text,
+            contentHash,  // NEW: Update content_hash on update
             150,
             model,
             canonicalName,

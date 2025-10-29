@@ -17,12 +17,23 @@ class SettingsServiceImpl implements SettingsService {
 
   async getSetting(key: string): Promise<string | null> {
     try {
-      const result = await this.pool.query(
+      // Try new settings table first
+      const newResult = await this.pool.query(
+        'SELECT value FROM settings WHERE key = $1',
+        [key]
+      );
+
+      if (newResult.rows[0]?.value) {
+        return newResult.rows[0].value;
+      }
+
+      // Fallback to old chatbot_settings table for backward compatibility
+      const oldResult = await this.pool.query(
         'SELECT setting_value FROM chatbot_settings WHERE setting_key = $1',
         [key]
       );
 
-      return result.rows[0]?.setting_value || null;
+      return oldResult.rows[0]?.setting_value || null;
     } catch (error) {
       console.error('Error fetching setting:', error);
       return null;
@@ -136,46 +147,85 @@ export class RAGChatService {
   /**
    * Get system prompt from database
    */
+  private async getConversationTone(promptId?: string): Promise<string> {
+    try {
+      if (promptId) {
+        // Try to get tone from specific prompt
+        const result = await pool.query(
+          "SELECT value FROM settings WHERE key = $1",
+          [`prompts.${promptId}.conversationTone`]
+        );
+
+        if (result.rows.length > 0 && result.rows[0].value) {
+          return result.rows[0].value;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch conversation tone:', error);
+    }
+    return 'professional';
+  }
+
+  private getToneInstruction(tone: string): string {
+    const toneInstructions = {
+      professional: 'TONE: Profesyonel, resmi ve iş dünyasına uygun bir dil kullan. Saygılı ve net ifadeler tercih et.',
+      friendly: 'TONE: Sıcak, samimi ve arkadaşça bir üslup kullan. Kullanıcıyı rahat hissettir.',
+      casual: 'TONE: Rahat, günlük ve sohbet tarzında yanıt ver. Samimi ama saygılı ol.',
+      technical: 'TONE: Detaylı, kesin ve teknik açıklamalar yap. Terminolojiyi doğru kullan.',
+      empathetic: 'TONE: Anlayışlı, destekleyici ve empatik bir yaklaşım sergile.',
+      concise: 'TONE: Kısa, öz ve net yanıtlar ver. Gereksiz detaya girme.',
+      educational: 'TONE: Açıklayıcı, öğretici ve anlaşılır bir dil kullan. Adım adım anlat.'
+    };
+    return toneInstructions[tone.toLowerCase() as keyof typeof toneInstructions] || toneInstructions.professional;
+  }
+
   private async getSystemPrompt(): Promise<string> {
     try {
-      const result = await pool.query(
+      // First try to get active prompt from settings table
+      const activePromptResult = await pool.query(
+        "SELECT key, value FROM settings WHERE key LIKE 'prompts.%.active' AND value = 'true' LIMIT 1"
+      );
+
+      if (activePromptResult.rows.length > 0) {
+        // Extract prompt ID from the key (e.g., 'prompts.abc123.active' -> 'abc123')
+        const activeKey = activePromptResult.rows[0].key;
+        const promptId = activeKey.split('.')[1];
+
+        // Get conversation tone for this prompt
+        const tone = await this.getConversationTone(promptId);
+        const toneInstruction = this.getToneInstruction(tone);
+
+        // Get the actual prompt content
+        const promptResult = await pool.query(
+          "SELECT value FROM settings WHERE key = $1",
+          [`prompts.${promptId}.content`]
+        );
+
+        if (promptResult.rows.length > 0) {
+          const content = typeof promptResult.rows[0].value === 'string'
+            ? promptResult.rows[0].value
+            : promptResult.rows[0].value;
+          console.log(`✅ Using active prompt: ${promptId} with ${tone} tone`);
+          return `${toneInstruction}\n\n${content}`;
+        }
+      }
+
+      // Fallback: Try old chatbot_settings table
+      const oldResult = await pool.query(
         "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'system_prompt'"
       );
 
-      if (result.rows[0]?.setting_value) {
-        return result.rows[0].setting_value;
+      if (oldResult.rows[0]?.setting_value) {
+        console.log('⚠️ Using system prompt from old chatbot_settings table');
+        return oldResult.rows[0].setting_value;
       }
     } catch (error) {
       console.warn('Failed to fetch system prompt from database:', error);
     }
 
-    // Default system prompt
-    return `Sen Türkiye vergi ve mali mevzuat konusunda uzman bir asistansın.
-
-GÖREV:
-- Aşağıdaki bağlamda verilen bilgilere dayanarak ANLAMLI ve AKICI bir metin oluştur
-- Cevabını 2-3 paragraf halinde organize et:
-  • İlk paragraf: Konunun genel çerçevesi ve temel bilgiler
-  • İkinci paragraf: Detaylar, örnekler ve uygulamalar
-  • Üçüncü paragraf (gerekirse): Önemli noktalar, istisnalar veya dikkat edilmesi gerekenler
-
-- DİL ve ÜSLUP:
-  • Profesyonel ama anlaşılır bir dil kullan
-  • Teknik terimleri açıklayarak kullan
-  • Madde madde sıralama yerine akıcı paragraflar oluştur
-  • "Buna göre", "Bu kapsamda", "Öte yandan" gibi bağlaçlarla metni akıcı hale getir
-  • KAYNAK BELİRTME: Metin içinde kaynak numarası belirtme (Kaynak 1, Kaynak 2 gibi yazma)
-
-- KAYNAK YETERSİZLİĞİ DURUMU:
-  • Eğer bağlamda direkt cevap bulamazsan ama ilgili kaynaklar varsa: "Bu konuda direkt bilgi bulamadım ama şunlar ilgili olabilir:" diye BAŞLA
-  • İlk 3-5 en yüksek skorlu kaynağı kendi cümlelerinle ÖZETLE (sadece kaynakları listeleme!)
-  • Özeti şu şekilde yap: "Bulduğum ilgili bilgiler arasında: [kaynak1 özeti]. Ayrıca: [kaynak2 özeti]. Konuyla ilgili olarak şunlar da dikkat çekici: [kaynak3 özeti]"
-  • Skorları yüksek olan kaynaklara daha çok ağırlık ver
-  • Sadece tamamen alakasız veya boş sonuçlar geldiğinde "Bu konuda veritabanımda bilgi bulunmuyor" de
-
-- Tahmin yapma, sadece verilen bağlamdaki bilgileri kullan
-
-Bağlam (en ilgiliden başlayarak sıralı):`;
+    // Generic default system prompt (multi-language, not domain-specific)
+    console.log('⚠️ No active prompt found, using generic default');
+    return `You are a helpful AI assistant. Answer questions based on the provided context information. Structure your response in clear paragraphs.`;
   }
 
   /**
@@ -202,6 +252,7 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       // Get system prompt from database or use default
       const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
+      console.log(`📝 System Prompt loaded (length: ${systemPrompt?.length || 0} chars)`);
 
       // 2. Search for relevant documents using configured source
       // Check environment variable first, then database setting
@@ -221,11 +272,47 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       console.log(`Performing semantic search with pgvector...`);
 
-      // Get search settings from database with performance optimizations
-      const maxResults = parseInt(await settingsService.getSetting('ragSettings.maxResults') || await settingsService.getSetting('maxResults') || '7'); // Reduced from 15
-      const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || await settingsService.getSetting('minResults') || '3'); // Reduced from 5
-      const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '2'); // Reduced from 3
-      const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || await settingsService.getSetting('similarityThreshold') || await settingsService.getSetting('semantic_search_threshold') || '0.02'); // Increased threshold for performance
+      // PERFORMANCE OPTIMIZATION: Batch fetch all settings in ONE query
+      const settingsKeys = [
+        'ragSettings.maxResults', 'maxResults',
+        'ragSettings.minResults', 'minResults',
+        'parallel_llm_batch_size',
+        'enable_parallel_llm',
+        'parallel_llm_count',
+        'ragSettings.similarityThreshold', 'similarityThreshold', 'semantic_search_threshold',
+        'response_language',
+        'llmSettings.activeChatModel'
+      ];
+
+      const settingsResult = await pool.query(
+        `SELECT key, value FROM settings WHERE key = ANY($1)`,
+        [settingsKeys]
+      );
+
+      const settingsMap = new Map(settingsResult.rows.map(r => [r.key, r.value]));
+
+      // Get search settings with fallbacks
+      const maxResults = parseInt(
+        settingsMap.get('ragSettings.maxResults') ||
+        settingsMap.get('maxResults') ||
+        '7'
+      );
+      const minResults = parseInt(
+        settingsMap.get('ragSettings.minResults') ||
+        settingsMap.get('minResults') ||
+        '3'
+      );
+      const batchSize = parseInt(settingsMap.get('parallel_llm_batch_size') || '2');
+      const minThreshold = parseFloat(
+        settingsMap.get('ragSettings.similarityThreshold') ||
+        settingsMap.get('similarityThreshold') ||
+        settingsMap.get('semantic_search_threshold') ||
+        '0.02'
+      );
+      const responseLanguage = settingsMap.get('response_language') || 'tr';
+      const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
+
+      console.log(`⚙️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}`);
 
       // Use semantic search to find related content
       let allResults = [];
@@ -293,22 +380,51 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
-      // Generate response using LLM Manager with enhanced context
-      const fullPrompt = `${systemPrompt}\n\nBAĞLAM BİLGİLERİ:\n${enhancedContext}\n\nSORU: ${message}`;
+      // If no relevant context found, return a helpful message instead of hallucinating
+      if (!enhancedContext || enhancedContext.trim().length === 0 || searchResults.length === 0) {
+        const noResultsMessage = responseLanguage === 'en'
+          ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
+          : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
+
+        console.log(`⚠️ No relevant context found for query: "${message}"`);
+
+        return {
+          response: noResultsMessage,
+          sources: [],
+          relatedTopics: [],
+          conversationId: convId,
+          provider: 'system',
+          model: 'no-context',
+          providerDisplayName: 'System',
+          language: options.language || 'tr',
+          fallbackUsed: false,
+          originalModel: activeModel || 'none',
+          actualProvider: 'system'
+        };
+      }
+
+      // Generate user message with context (NOT including system prompt - it goes separately)
+      const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
+      const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
+
+      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}`;
       console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(`📝 Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
+      console.log(`📝 System prompt length: ${systemPrompt?.length || 0} chars`);
+      console.log(`🌐 Response language: ${responseLanguage}`);
 
-      // Get active model from settings
-      const activeModel = await settingsService.getSetting('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet';
+      // Extract provider from active model
       const providerFromModel = this.extractProviderFromModel(activeModel);
+      console.log(`🤖 Active Chat Model: ${activeModel} (provider: ${providerFromModel})`);
 
+      // PERFORMANCE: Pass extracted provider directly (already normalized by extractProviderFromModel)
       const response = await llmManager.generateChatResponse(
-        fullPrompt,
+        userPrompt,  // User message with context (no system prompt here)
         {
           temperature: options.temperature,
           maxTokens: options.maxTokens,
-          systemPrompt: systemPrompt,
-          preferredProvider: providerFromModel  // Pass the active model as preferred
+          systemPrompt: systemPrompt,  // System prompt sent separately to LLM API
+          preferredProvider: providerFromModel  // Pass normalized provider name (claude/openai/gemini/deepseek)
         }
       );
 
@@ -332,7 +448,12 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       }
 
       // 6. Format sources for frontend with natural language summaries
-      const formattedSources = await this.formatSources(searchResults);
+      // PERFORMANCE: Pass settings to avoid re-querying database
+      const formattedSources = await this.formatSources(searchResults, {
+        enableParallelLLM: settingsMap.get('enable_parallel_llm') === 'true',
+        parallelCount: Math.min(parseInt(settingsMap.get('parallel_llm_count') || '3'), 5),
+        batchSize: batchSize
+      });
 
       // 7. Get additional related topics (excluding already shown ones) - DISABLED FOR PERFORMANCE
       // const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
@@ -359,6 +480,12 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
 
       return providerNames[language]?.[provider] || provider;
     };
+
+    // Log sources content for debugging
+    console.log(`📦 Returning ${formattedSources.length} sources to frontend`);
+    formattedSources.forEach((source, idx) => {
+      console.log(`  Source ${idx + 1}: title="${source.title?.substring(0, 30)}...", content length=${source.content?.length || 0}, excerpt length=${source.excerpt?.length || 0}`);
+    });
 
     return {
         response: response.content,
@@ -523,17 +650,23 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
    * Format sources for better UI display
    * Optimized with enhanced parallel LLM processing
    */
-  private async formatSources(searchResults: any[]): Promise<any[]> {
+  private async formatSources(
+    searchResults: any[],
+    settings?: {
+      enableParallelLLM?: boolean;
+      parallelCount?: number;
+      batchSize?: number;
+    }
+  ): Promise<any[]> {
     const formattedResults = [];
-    // Check if parallel LLM processing is enabled
-    const enableParallelLLM = await settingsService.getSetting('enable_parallel_llm') === 'true';
-    // Get parallel LLM count from settings (default 3, max 5 for performance)
-      const parallelCount = Math.min(
+    // PERFORMANCE: Use passed settings or fetch if not provided
+    const enableParallelLLM = settings?.enableParallelLLM ?? (await settingsService.getSetting('enable_parallel_llm') === 'true');
+    const parallelCount = settings?.parallelCount ?? Math.min(
       parseInt(await settingsService.getSetting('parallel_llm_count') || '3'),
       5
     );
-    const batchSize = parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
-    const enableLLMGeneration = true; // ENABLE LLM generation for natural language questions
+    const batchSize = settings?.batchSize ?? parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
+    const enableLLMGeneration = false; // DISABLE LLM generation for performance (saves ~47s per request)
 
     console.log(`🚀 Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for performance)`);
 
@@ -602,7 +735,10 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
         const category = this.categorizeSource(r);
         // Score already calculated in search results
         const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
-        console.log(`Source ${idx}: score=${r.score}, similarity_score=${r.similarity_score}, calculated=${score}`);
+        // Only log in debug mode
+        if (process.env.DEBUG_RAG === 'true') {
+          console.log(`Source ${idx}: score=${r.score}, similarity_score=${r.similarity_score}, calculated=${score}`);
+        }
 
         // Build proper citation
         let citation = `[Source ${idx + 1}]`;
@@ -637,11 +773,14 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
             const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
             processedContent = llmResult.processedContent;
             generatedQuestion = llmResult.generatedQuestion;
+            console.log(`✅ LLM generated content (length: ${processedContent?.length || 0}): ${processedContent?.substring(0, 50)}...`);
             console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
           } catch (error) {
-            console.warn('LLM content generation failed, using fallback:', error);
+            console.error(`❌ LLM content generation FAILED for source ${idx + 1}:`, error);
+            console.warn('Using fallback content instead');
           }
         }
+        // Log removed - too spammy (19 logs per request)
 
         formattedResults.push({
           id: r.id,
@@ -753,6 +892,10 @@ Bağlam (en ilgiliden başlayarak sıralı):`;
       // Clean the excerpt first
       const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
 
+      // Get active system prompt from database
+      const activeSystemPrompt = await this.getSystemPrompt();
+      console.log(`📝 Using active system prompt for source summary (length: ${activeSystemPrompt?.length || 0})`);
+
       // Get language setting from database
       const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
 
@@ -781,12 +924,12 @@ Başlık: ${title}
 İçerik: ${cleanExcerpt}
 `;
 
-      // Use the LLM Manager
+      // Use the LLM Manager with active system prompt
       try {
         const response = await this.llmManager.generateChatResponse(prompt, {
           temperature: 0.3,
           maxTokens: 500,
-          systemPrompt: ''
+          systemPrompt: activeSystemPrompt || ''
         });
 
         if (response && response.content) {
@@ -1555,8 +1698,9 @@ Başlık: ${title}
         const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
         processedContent = llmResult.processedContent;
         generatedQuestion = llmResult.generatedQuestion;
+        console.log(`✅ Parallel LLM generated content (length: ${processedContent?.length || 0})`);
       } catch (error) {
-        console.warn(`LLM processing failed for source ${idx + 1}:`, error);
+        console.error(`❌ Parallel LLM processing FAILED for source ${idx + 1}:`, error);
         // Continue with fallback content
       }
     }

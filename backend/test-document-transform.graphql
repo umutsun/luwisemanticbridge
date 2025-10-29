@@ -1,0 +1,253 @@
+# Document Transform GraphQL Queries & Mutations
+# Complete workflow for CSV/JSON → PostgreSQL table transformation
+
+# ==================================================
+# STEP 1: List all documents
+# ==================================================
+query ListDocuments {
+  documents(limit: 20, offset: 0) {
+    items {
+      id
+      filename
+      fileType
+      fileSize
+      rowCount
+      columnHeaders
+      dataQualityScore
+      transformStatus
+      transformProgress
+      targetTableName
+      createdAt
+    }
+    total
+    hasMore
+  }
+}
+
+# ==================================================
+# STEP 2: Get document preview (last 10 rows)
+# ==================================================
+query GetDocumentPreview {
+  documentPreview(documentId: "1") {
+    documentId
+    filename
+    fileType
+    rowCount
+    columnHeaders
+    sampleRows
+    dataQuality {
+      score
+      issues {
+        severity
+        field
+        description
+        suggestion
+      }
+      warnings
+    }
+    suggestedTableName
+    isValid
+  }
+}
+
+# ==================================================
+# STEP 3: Transform documents to source_db (Batch)
+# ==================================================
+mutation TransformDocuments {
+  transformDocumentsToSourceDb(
+    documentIds: ["1", "2", "3"]
+    sourceDbId: "source_database"
+    tableName: "products_from_csv"
+    batchSize: 100
+    createNewTable: true
+  ) {
+    jobId
+    message
+    documentsProcessed
+  }
+}
+
+# ==================================================
+# STEP 4: Check transformation progress
+# ==================================================
+query CheckTransformProgress {
+  transformProgress(jobId: "transform_1234567890_abcdef") {
+    jobId
+    documentId
+    status
+    progress
+    rowsProcessed
+    totalRows
+    currentDocument
+    errors
+    startedAt
+    completedAt
+  }
+}
+
+# ==================================================
+# STEP 5: Get specific document details
+# ==================================================
+query GetDocument {
+  document(id: "1") {
+    id
+    filename
+    fileType
+    rowCount
+    columnHeaders
+    dataQualityScore
+    transformStatus
+    transformProgress
+    targetTableName
+    sourceDbId
+    transformErrors
+    transformedAt
+    createdAt
+  }
+}
+
+# ==================================================
+# STEP 6: Update document metadata
+# ==================================================
+mutation UpdateDocumentMetadata {
+  updateDocumentMetadata(
+    id: "1"
+    targetTableName: "custom_products_table"
+    sourceDbId: "source_database"
+  ) {
+    id
+    filename
+    targetTableName
+    sourceDbId
+    updatedAt
+  }
+}
+
+# ==================================================
+# STEP 7: Delete document
+# ==================================================
+mutation DeleteDocument {
+  deleteDocument(id: "1")
+}
+
+# ==================================================
+# STEP 8: Filter documents by status
+# ==================================================
+query FilterDocumentsByStatus {
+  documents(status: COMPLETED, limit: 10) {
+    items {
+      id
+      filename
+      transformStatus
+      targetTableName
+      transformedAt
+    }
+    total
+  }
+}
+
+# ==================================================
+# STEP 9: Filter documents by file type
+# ==================================================
+query FilterDocumentsByFileType {
+  documents(fileType: "csv", limit: 10) {
+    items {
+      id
+      filename
+      fileType
+      rowCount
+      dataQualityScore
+    }
+    total
+  }
+}
+
+# ==================================================
+# SUBSCRIPTION: Real-time progress updates
+# ==================================================
+subscription WatchTransformProgress {
+  transformProgressUpdates(jobId: "transform_1234567890_abcdef") {
+    jobId
+    documentId
+    status
+    progress
+    rowsProcessed
+    totalRows
+    errors
+  }
+}
+
+# ==================================================
+# SUBSCRIPTION: Document status changes
+# ==================================================
+subscription WatchDocumentStatus {
+  documentStatusUpdates(documentId: "1") {
+    id
+    filename
+    transformStatus
+    transformProgress
+    transformedAt
+  }
+}
+
+# ==================================================
+# COMPLETE WORKFLOW EXAMPLE
+# ==================================================
+
+# 1. Upload document (via REST API or file upload)
+#    POST /api/v2/documents/upload
+#    Content-Type: multipart/form-data
+#    file: products.csv
+
+# 2. List documents to find uploaded file
+query Step1_ListDocuments {
+  documents(limit: 1, fileType: "csv") {
+    items {
+      id
+      filename
+      rowCount
+    }
+  }
+}
+
+# 3. Preview document to verify data
+query Step2_PreviewDocument($docId: ID!) {
+  documentPreview(documentId: $docId) {
+    filename
+    rowCount
+    columnHeaders
+    sampleRows
+    suggestedTableName
+    isValid
+  }
+}
+
+# 4. If preview looks good, transform to source_db
+mutation Step3_TransformToSourceDb($docIds: [ID!]!) {
+  transformDocumentsToSourceDb(
+    documentIds: $docIds
+    sourceDbId: "source_database"
+    batchSize: 100
+  ) {
+    jobId
+    message
+  }
+}
+
+# 5. Monitor progress
+query Step4_MonitorProgress($jobId: String!) {
+  transformProgress(jobId: $jobId) {
+    documentId
+    status
+    progress
+    rowsProcessed
+    totalRows
+  }
+}
+
+# Variables for complete workflow:
+# {
+#   "docId": "1",
+#   "docIds": ["1"],
+#   "jobId": "transform_1234567890_abcdef"
+# }

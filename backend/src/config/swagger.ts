@@ -258,8 +258,15 @@ const options = {
     ]
   },
   apis: [
-    './src/routes/*.ts', // Path to the API docs
-    './src/routes/**/*.ts' // Also search subdirectories
+    './src/routes/*.ts', // TypeScript source files for development
+    './src/routes/**/*.ts',
+    './dist/routes/*.js', // Compiled JavaScript files for production
+    './dist/routes/**/*.js',
+    // Also support direct paths
+    `${__dirname}/../routes/*.ts`,
+    `${__dirname}/../routes/**/*.ts`,
+    `${__dirname}/../../dist/routes/*.js`,
+    `${__dirname}/../../dist/routes/**/*.js`
   ]
 };
 

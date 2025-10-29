@@ -7,6 +7,41 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
 
+// Model pricing per 1M tokens (input/output) in USD
+const MODEL_PRICING: Record<string, Record<string, { input: number; output: number }>> = {
+  anthropic: {
+    'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
+    'claude-3-opus-20240229': { input: 15, output: 75 },
+    'claude-3-sonnet-20240229': { input: 3, output: 15 },
+    'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
+  },
+  openai: {
+    'gpt-4o': { input: 2.5, output: 10 },
+    'gpt-4o-mini': { input: 0.15, output: 0.6 },
+    'gpt-4': { input: 30, output: 60 },
+    'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+  },
+  google: {
+    'gemini-1.5-flash': { input: 0.075, output: 0.3 },
+    'gemini-1.5-pro': { input: 1.25, output: 5 },
+    'gemini-2.0-flash-exp': { input: 0, output: 0 }, // Free during preview
+  },
+  deepseek: {
+    'deepseek-chat': { input: 0.14, output: 0.28 },
+    'deepseek-coder': { input: 0.14, output: 0.28 },
+  }
+};
+
+// Calculate cost based on token usage and model pricing
+function calculateCost(provider: string, model: string, inputTokens: number, outputTokens: number): number {
+  const pricing = MODEL_PRICING[provider]?.[model];
+  if (!pricing) return 0;
+
+  const inputCost = (inputTokens / 1000000) * pricing.input;
+  const outputCost = (outputTokens / 1000000) * pricing.output;
+  return inputCost + outputCost;
+}
+
 // Test API key for specific provider
 router.post('/test/:provider', async (req: Request, res: Response) => {
   try {
@@ -45,15 +80,20 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
           const responseTime = Date.now() - startTime;
           console.log('OpenAI chat completion successful:', chatResponse);
 
+          const inputTokens = chatResponse.usage?.prompt_tokens || 0;
+          const outputTokens = chatResponse.usage?.completion_tokens || 0;
+          const cost = calculateCost('openai', testModel, inputTokens, outputTokens);
+
           testResult = {
             success: true,
             model: testModel,
             responseTime,
             usage: {
-              promptTokens: chatResponse.usage?.prompt_tokens || 0,
-              completionTokens: chatResponse.usage?.completion_tokens || 0,
+              promptTokens: inputTokens,
+              completionTokens: outputTokens,
               totalTokens: chatResponse.usage?.total_tokens || 0
             },
+            cost,
             message: 'API connection successful'
           };
         } catch (error: any) {
@@ -96,15 +136,19 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
           });
 
           const responseTime = Date.now() - startTime;
+          const inputTokens = response.usage?.input_tokens || 0;
+          const outputTokens = response.usage?.output_tokens || 0;
+          const cost = calculateCost('anthropic', testModel, inputTokens, outputTokens);
 
           testResult = {
             success: true,
             model: testModel,
             responseTime,
             usage: {
-              inputTokens: response.usage?.input_tokens || 0,
-              outputTokens: response.usage?.output_tokens || 0
+              inputTokens,
+              outputTokens
             },
+            cost,
             message: 'API connection successful'
           };
         } catch (error: any) {
@@ -152,6 +196,8 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
             totalTokenCount: 1 // At least 1 token was used
           };
 
+          const cost = calculateCost('google', testModel, usage.promptTokenCount, usage.candidatesTokenCount);
+
           testResult = {
             success: true,
             model: testModel,
@@ -161,6 +207,7 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
               outputTokens: usage.candidatesTokenCount,
               totalTokens: usage.totalTokenCount
             },
+            cost,
             message: 'API connection successful'
           };
         } catch (error: any) {
@@ -206,15 +253,20 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
 
           const responseTime = Date.now() - startTime;
 
+          const inputTokens = response.usage?.prompt_tokens || 0;
+          const outputTokens = response.usage?.completion_tokens || 0;
+          const cost = calculateCost('deepseek', testModel, inputTokens, outputTokens);
+
           testResult = {
             success: true,
             model: testModel,
             responseTime,
             usage: {
-              promptTokens: response.usage?.prompt_tokens || 0,
-              completionTokens: response.usage?.completion_tokens || 0,
+              promptTokens: inputTokens,
+              completionTokens: outputTokens,
               totalTokens: response.usage?.total_tokens || 0
             },
+            cost,
             message: 'API connection successful'
           };
         } catch (error: any) {

@@ -7,16 +7,7 @@ export { baseResolvers } from './base.resolvers';
 export { searchResolvers } from './search.resolvers';
 export { chatResolvers } from './chat.resolvers';
 export { settingsResolvers } from './settings.resolvers';
-
-// Placeholder resolver'lar - sonra implement edilecek
-export const documentResolvers = {
-  Query: {},
-  Mutation: {},
-  Subscription: {},
-};
-
-export const scraperResolvers = {
-  Query: {},
-  Mutation: {},
-  Subscription: {},
-};
+export { documentResolvers } from './document.resolvers';
+export { scraperResolvers } from './scraper.resolvers';
+export { dataPipelineResolvers } from './data-pipeline.resolvers';
+export { documentTransformResolvers } from './document-transform.resolvers';

@@ -2,6 +2,8 @@ import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
 import { lsembPool } from '../config/database.config';
 import { LLMManager } from './llm-manager.service';
+import Redis from 'ioredis';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -14,7 +16,7 @@ interface EmbeddingSettings {
 }
 
 export class SemanticSearchService {
-  private pool = pool;
+  private pool = lsembPool;  // lsembPool kullan
   private customerPool: Pool;
   private embeddingSettings: EmbeddingSettings = {
     provider: 'openai',
@@ -39,10 +41,14 @@ export class SemanticSearchService {
     await this.loadRAGSettings();
   }
 
-  // Embedding cache for performance
+  // Embedding cache for performance (L1 cache)
   private embeddingCache: Map<string, number[]> = new Map();
   private readonly EMBEDDING_CACHE_TTL = 300000; // 5 minutes
   private embeddingCacheTimestamps: Map<string, number> = new Map();
+
+  // Redis cache for search results (L2 cache)
+  private redis?: Redis;
+  private readonly SEARCH_CACHE_TTL = 600; // 10 minutes
 
   constructor() {
     this.customerPool = new Pool({
@@ -56,6 +62,14 @@ export class SemanticSearchService {
     this.loadEmbeddingSettings().catch(error => {
       console.error('[SemanticSearch] Failed to load embedding settings:', error);
     });
+  }
+
+  /**
+   * Set Redis instance for L2 caching (optional)
+   */
+  setRedis(redis: Redis): void {
+    this.redis = redis;
+    console.log('[SemanticSearch] Redis L2 cache enabled');
   }
 
   private parseBooleanSetting(value: any): boolean | undefined {
@@ -274,13 +288,14 @@ export class SemanticSearchService {
       }, {});
 
       // Determine provider and model from settings
-      let provider = settings.embedding_provider || settings.embeddingsprovider || 'google';
-      let model = settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
+      let providerFromSettings = settings.embedding_provider || settings.embeddingsprovider || 'google';
+      let modelFromSettings = settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
 
       // Normalize provider name
-      provider = this.normalizeProvider(provider);
+      let provider = this.normalizeProvider(providerFromSettings);
 
       // Set default model based on provider
+      let model = modelFromSettings;
       if (!model || model === 'text-embedding-004') {
         model = this.getDefaultEmbeddingModel(provider);
       }
@@ -295,17 +310,10 @@ export class SemanticSearchService {
       this.lastEmbeddingSettingsRefresh = Date.now();
       this.syncEmbeddingConfigWithLLM();
 
-      // FORCE GOOGLE EMBEDDINGS for vector compatibility (768 dimensions)
-      if (this.embeddingSettings.provider !== 'google') {
-        console.log('🔄 FORCING Google embeddings for vector compatibility (768 dims)');
-        this.embeddingSettings.provider = 'google';
-        this.embeddingSettings.model = 'text-embedding-004';
-        this.syncEmbeddingConfigWithLLM();
-      }
-
       console.log('[SemanticSearch] Embedding settings loaded', {
         provider: this.embeddingSettings.provider,
         model: this.embeddingSettings.model,
+        fullModel: `${this.embeddingSettings.provider}/${this.embeddingSettings.model}`,
         hasGoogleKey: !!this.embeddingSettings.googleApiKey,
         hasOpenAIKey: !!this.embeddingSettings.openaiApiKey
       });
@@ -944,6 +952,143 @@ export class SemanticSearchService {
     } catch (error) {
       console.error('[SemanticSearch] Get sample documents error:', error);
       return [];
+    }
+  }
+
+  // ============================================
+  // REDIS L2 CACHE METHODS (Performance Optimization)
+  // ============================================
+
+  /**
+   * Generate deterministic cache key for search query
+   */
+  private generateSearchCacheKey(query: string, limit: number, threshold: number): string {
+    const normalized = {
+      query: query.trim().toLowerCase(),
+      limit,
+      threshold: parseFloat(threshold.toFixed(3)),
+    };
+    return crypto
+      .createHash('md5')
+      .update(JSON.stringify(normalized))
+      .digest('hex');
+  }
+
+  /**
+   * Get search results from Redis cache (L2)
+   */
+  private async getSearchFromCache(cacheKey: string): Promise<any[] | null> {
+    if (!this.redis) return null;
+
+    try {
+      const cached = await this.redis.get(`search:result:${cacheKey}`);
+      if (cached) {
+        // Increment hit count for analytics
+        await this.redis.hincrby('search:cache:stats', 'hits', 1);
+        return JSON.parse(cached);
+      }
+
+      await this.redis.hincrby('search:cache:stats', 'misses', 1);
+      return null;
+    } catch (error) {
+      console.error('[Cache] Get error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Cache search results in Redis (L2)
+   */
+  private async cacheSearchResults(cacheKey: string, results: any[]): Promise<void> {
+    if (!this.redis || results.length === 0) return;
+
+    try {
+      await this.redis.setex(
+        `search:result:${cacheKey}`,
+        this.SEARCH_CACHE_TTL,
+        JSON.stringify(results)
+      );
+    } catch (error) {
+      console.error('[Cache] Set error:', error);
+    }
+  }
+
+  /**
+   * Track search analytics in Redis
+   */
+  private async trackSearchAnalytics(query: string, responseTime: number): Promise<void> {
+    if (!this.redis) return;
+
+    try {
+      const date = new Date().toISOString().split('T')[0];
+
+      // Increment total search count
+      await this.redis.hincrby(`search:stats:${date}`, 'total', 1);
+
+      // Track popular queries
+      await this.redis.zincrby('search:popular:24h', 1, query);
+      await this.redis.expire('search:popular:24h', 86400);
+
+      // Track response times
+      await this.redis.lpush(`search:times:${date}`, responseTime);
+      await this.redis.ltrim(`search:times:${date}`, 0, 999);
+      await this.redis.expire(`search:times:${date}`, 86400);
+    } catch (error) {
+      console.error('[Analytics] Track error:', error);
+    }
+  }
+
+  /**
+   * Get popular searches from Redis
+   */
+  async getPopularSearches(limit: number = 10, timeframe: string = '24h'): Promise<Array<{ query: string; count: number }>> {
+    if (!this.redis) return [];
+
+    try {
+      const results = await this.redis.zrevrange(
+        `search:popular:${timeframe}`,
+        0,
+        limit - 1,
+        'WITHSCORES'
+      );
+
+      const popular: Array<{ query: string; count: number }> = [];
+      for (let i = 0; i < results.length; i += 2) {
+        popular.push({
+          query: results[i],
+          count: parseInt(results[i + 1]),
+        });
+      }
+
+      return popular;
+    } catch (error) {
+      console.error('[Popular] Get error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get cache statistics
+   */
+  async getCacheStatistics(): Promise<{ hits: number; misses: number; hitRate: number }> {
+    if (!this.redis) {
+      return { hits: 0, misses: 0, hitRate: 0 };
+    }
+
+    try {
+      const stats = await this.redis.hgetall('search:cache:stats');
+      const hits = parseInt(stats.hits || '0');
+      const misses = parseInt(stats.misses || '0');
+      const total = hits + misses;
+
+      return {
+        hits,
+        misses,
+        hitRate: total > 0 ? (hits / total) * 100 : 0,
+      };
+    } catch (error) {
+      console.error('[CacheStats] Error:', error);
+      return { hits: 0, misses: 0, hitRate: 0 };
     }
   }
 }

@@ -4,16 +4,15 @@
  */
 
 import DataLoader from 'dataloader';
-import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
 
 /**
  * DataLoader tipleri
  */
 export interface DataLoaders {
-  searchResultLoader: DataLoader<string, any>;
   documentLoader: DataLoader<string, any>;
   userLoader: DataLoader<string, any>;
-  embeddingLoader: DataLoader<string, number[]>;
+  embeddingLoader: DataLoader<string, any>;
   chatMessageLoader: DataLoader<string, any>;
 }
 
@@ -21,45 +20,30 @@ export interface DataLoaders {
  * DataLoader'ları oluştur
  * Her request için yeni instance oluşturulur
  */
-export function createDataLoaders(prisma: PrismaClient): DataLoaders {
+export function createDataLoaders(pool: Pool): DataLoaders {
   return {
-    /**
-     * Search result loader
-     * Batch olarak search result'ları yükler
-     */
-    searchResultLoader: new DataLoader(async (ids: readonly string[]) => {
-      const results = await prisma.searchResult.findMany({
-        where: {
-          id: { in: [...ids] },
-        },
-        include: {
-          embedding: true,
-          relevanceFeedback: true,
-        },
-      });
-
-      // ID'lere göre sırala
-      const resultMap = new Map(results.map((r) => [r.id, r]));
-      return ids.map((id) => resultMap.get(id) || null);
-    }),
-
     /**
      * Document loader
      * Batch olarak dokümanları yükler
      */
     documentLoader: new DataLoader(async (ids: readonly string[]) => {
-      const documents = await prisma.document.findMany({
-        where: {
-          id: { in: [...ids] },
-        },
-        include: {
-          embeddings: true,
-          metadata: true,
-        },
-      });
+      try {
+        const result = await pool.query(
+          `SELECT id, title, content, source, metadata, created_at, updated_at,
+                  transform_status, transform_progress, target_table_name,
+                  transformed_at, last_transform_row_count, column_count,
+                  row_count, column_headers, original_filename, upload_count
+           FROM documents
+           WHERE id = ANY($1)`,
+          [ids]
+        );
 
-      const docMap = new Map(documents.map((d) => [d.id, d]));
-      return ids.map((id) => docMap.get(id) || null);
+        const docMap = new Map(result.rows.map((d) => [d.id, d]));
+        return ids.map((id) => docMap.get(id) || null);
+      } catch (error) {
+        console.error('[DataLoader] Document load error:', error);
+        return ids.map(() => null);
+      }
     }),
 
     /**
@@ -67,62 +51,48 @@ export function createDataLoaders(prisma: PrismaClient): DataLoaders {
      * Batch olarak kullanıcıları yükler
      */
     userLoader: new DataLoader(async (ids: readonly string[]) => {
-      const users = await prisma.user.findMany({
-        where: {
-          id: { in: [...ids] },
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          createdAt: true,
-        },
-      });
+      try {
+        const result = await pool.query(
+          `SELECT id, email, name, role, created_at
+           FROM users
+           WHERE id = ANY($1)`,
+          [ids]
+        );
 
-      const userMap = new Map(users.map((u) => [u.id, u]));
-      return ids.map((id) => userMap.get(id) || null);
+        const userMap = new Map(result.rows.map((u) => [u.id, u]));
+        return ids.map((id) => userMap.get(id) || null);
+      } catch (error) {
+        console.error('[DataLoader] User load error:', error);
+        return ids.map(() => null);
+      }
     }),
 
     /**
      * Embedding loader
-     * Text'ten embedding vektörü oluşturur (cached)
+     * Batch olarak embedding'leri yükler
      */
-    embeddingLoader: new DataLoader(async (texts: readonly string[]) => {
-      const embeddings = await Promise.all(
-        texts.map(async (text) => {
-          // Önce cache'e bak
-          const cached = await prisma.embeddingCache.findUnique({
-            where: { text },
-          });
+    embeddingLoader: new DataLoader(async (documentIds: readonly string[]) => {
+      try {
+        const result = await pool.query(
+          `SELECT document_id, embedding, metadata
+           FROM embeddings
+           WHERE document_id = ANY($1)`,
+          [documentIds]
+        );
 
-          if (cached) {
-            return cached.vector;
-          }
+        // Group by document_id
+        const embeddingMap = new Map<string, any[]>();
+        result.rows.forEach((row) => {
+          const list = embeddingMap.get(row.document_id) || [];
+          list.push(row);
+          embeddingMap.set(row.document_id, list);
+        });
 
-          // Cache'de yoksa yeni oluştur
-          try {
-            // TODO: Embedding service'i çağır
-            const vector = new Array(1536).fill(0).map(() => Math.random());
-
-            // Cache'e kaydet
-            await prisma.embeddingCache.create({
-              data: {
-                text,
-                vector,
-                model: 'text-embedding-ada-002',
-              },
-            });
-
-            return vector;
-          } catch (error) {
-            console.error('Embedding error:', error);
-            return null;
-          }
-        })
-      );
-
-      return embeddings;
+        return documentIds.map((id) => embeddingMap.get(id) || []);
+      } catch (error) {
+        console.error('[DataLoader] Embedding load error:', error);
+        return documentIds.map(() => []);
+      }
     }),
 
     /**
@@ -130,18 +100,20 @@ export function createDataLoaders(prisma: PrismaClient): DataLoaders {
      * Batch olarak chat mesajlarını yükler
      */
     chatMessageLoader: new DataLoader(async (ids: readonly string[]) => {
-      const messages = await prisma.chatMessage.findMany({
-        where: {
-          id: { in: [...ids] },
-        },
-        include: {
-          session: true,
-          user: true,
-        },
-      });
+      try {
+        const result = await pool.query(
+          `SELECT id, conversation_id, content, role, user_id, created_at
+           FROM chat_messages
+           WHERE id = ANY($1)`,
+          [ids]
+        );
 
-      const messageMap = new Map(messages.map((m) => [m.id, m]));
-      return ids.map((id) => messageMap.get(id) || null);
+        const messageMap = new Map(result.rows.map((m) => [m.id, m]));
+        return ids.map((id) => messageMap.get(id) || null);
+      } catch (error) {
+        console.error('[DataLoader] Chat message load error:', error);
+        return ids.map(() => null);
+      }
     }),
   };
 }

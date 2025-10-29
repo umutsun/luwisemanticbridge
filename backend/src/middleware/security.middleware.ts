@@ -141,12 +141,66 @@ export const rateLimits = {
   )
 };
 
-// Request payload size limits
-export const payloadSizeLimits = {
-  json: '10mb', // General JSON payload
-  upload: '50mb', // File uploads
+// Request payload size limits (default values, can be overridden by settings)
+export let payloadSizeLimits = {
+  json: '100mb', // General JSON payload (increased for large CSV uploads - 15K+ rows)
+  upload: '100mb', // File uploads (supports large CSVs up to 100MB)
   text: '1mb' // Text-only payloads
 };
+
+// Update payload limits from database settings
+export async function updatePayloadLimitsFromSettings(pool: any) {
+  try {
+    const result = await pool.query(`
+      SELECT key, value
+      FROM settings
+      WHERE category = 'advanced'
+        AND key IN ('upload_json_limit_mb', 'upload_file_limit_mb', 'upload_text_limit_mb')
+    `);
+
+    const settings: Record<string, string> = {};
+    result.rows.forEach((row: any) => {
+      settings[row.key] = row.value;
+    });
+
+    if (settings.upload_json_limit_mb) {
+      payloadSizeLimits.json = `${settings.upload_json_limit_mb}mb`;
+    }
+    if (settings.upload_file_limit_mb) {
+      payloadSizeLimits.upload = `${settings.upload_file_limit_mb}mb`;
+    }
+    if (settings.upload_text_limit_mb) {
+      payloadSizeLimits.text = `${settings.upload_text_limit_mb}mb`;
+    }
+
+    console.log('[Security] Payload limits updated from settings:', payloadSizeLimits);
+  } catch (error) {
+    console.error('[Security] Failed to load payload limits from settings:', error);
+    // Continue with default values
+  }
+}
+
+// Get current file upload limit in bytes (for Multer)
+export function getUploadLimitBytes(): number {
+  const limitStr = payloadSizeLimits.upload;
+  const match = limitStr.match(/^(\d+)(mb|kb|gb)?$/i);
+
+  if (!match) return 100 * 1024 * 1024; // Default 100MB
+
+  const value = parseInt(match[1], 10);
+  const unit = (match[2] || 'mb').toLowerCase();
+
+  switch (unit) {
+    case 'gb':
+      return value * 1024 * 1024 * 1024;
+    case 'mb':
+      return value * 1024 * 1024;
+    case 'kb':
+      return value * 1024;
+    default:
+      return value;
+  }
+}
 
 // Input validation utilities
 export const validateInput = {

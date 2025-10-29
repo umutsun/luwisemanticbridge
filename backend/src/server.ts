@@ -84,6 +84,7 @@ import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
 import { MessageCleanupService } from "./services/message-cleanup.service";
 import { setupSwagger } from "./config/swagger";
+// GraphQL enabled
 import { createGraphQLServer } from "./graphql/server";
 
 // Initialize Express app
@@ -103,13 +104,7 @@ const corsOrigins = (
   .map((origin) => origin.trim());
 
 // Initialize Socket.io if WebSocket is enabled
-console.log("🔌 WebSocket Configuration:", {
-  ENABLED: SERVER.WEBSOCKET.ENABLED,
-  PORT: SERVER.WEBSOCKET.PORT,
-  PATH: SERVER.WEBSOCKET.PATH,
-  CORS_ORIGINS: corsOrigins,
-  ENV_ENABLED: process.env.ENABLE_WEBSOCKET,
-});
+console.log(`🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'} | Port: ${SERVER.WEBSOCKET.PORT}`);
 
 const io = SERVER.WEBSOCKET.ENABLED
   ? new SocketServer(httpServer, {
@@ -219,6 +214,9 @@ const redis = new Redis({
   password: process.env.REDIS_PASSWORD || undefined,
 });
 
+// Make Redis available to routes via app.locals
+app.locals.redis = redis;
+
 // Initialize Console Log Service
 import { initializeConsoleLogService } from "./services/console-log.service";
 let consoleLogService: any = null;
@@ -291,11 +289,21 @@ app.use(
 app.use(express.json({ limit: payloadSizeLimits.json }));
 app.use(express.urlencoded({ extended: true, limit: payloadSizeLimits.json }));
 
-// Apply response formatting middleware first
-app.use(responseMiddleware);
+// Apply response formatting middleware first (skip for GraphQL)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/graphql')) {
+    return next(); // Skip responseMiddleware for GraphQL
+  }
+  responseMiddleware(req, res, next);
+});
 
-// Apply NoSQL injection prevention middleware
-app.use(preventNoSQLInjection);
+// Apply NoSQL injection prevention middleware (skip for GraphQL)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/graphql')) {
+    return next(); // Skip preventNoSQLInjection for GraphQL
+  }
+  preventNoSQLInjection(req, res, next);
+});
 
 // Apply enhanced general rate limiting - TEMPORARILY DISABLED FOR DEBUGGING
 // app.use(generalRateLimit.middleware);
@@ -446,15 +454,12 @@ app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
 
-// GraphQL Server - Initialize after all REST routes
-// DISABLED: GraphQL dependencies missing, will be fixed later
-if (false && process.env.ENABLE_GRAPHQL !== 'false') {
-  try {
-    createGraphQLServer(app);
-    console.log("✅ GraphQL Server initialized: /graphql");
-  } catch (graphQLError) {
-    console.error("⚠️ GraphQL Server initialization failed:", graphQLError);
-  }
+// GraphQL server
+try {
+  createGraphQLServer(app);
+  console.log("✅ GraphQL server initialized at /graphql");
+} catch (gqlError: any) {
+  console.error("❌ GraphQL server failed:", gqlError.message);
 }
 
 // Base route
@@ -687,41 +692,18 @@ import { loadProgressFromRedis as loadV2ProgressFromRedis } from "./routes/embed
 const PORT = SERVER.PORT;
 
 async function startServer() {
-  console.log("\n🚀 ===============================================");
-  console.log(`   LUWI SEMANTIC BRIDGE BACKEND v2.0.0`);
-  console.log("==============================================");
-  console.log(`📍 Port: ${PORT}`);
-  console.log(`🔧 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(
-    `🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? "Enabled" : "Disabled"}`
-  );
-  if (SERVER.WEBSOCKET.ENABLED) {
-    console.log(`   • Socket.IO Path: ${SERVER.WEBSOCKET.PATH}`);
-    console.log(
-      `   • Notifications Path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`
-    );
-  }
-  console.log("==============================================\n");
+  console.log(`\n🚀 LUWI Backend v2.0.0 | Port: ${PORT} | ${process.env.NODE_ENV || "development"}`);
 
   // Database connection variables
   let dbConnectionAttempts = 0;
   const maxDbRetries = 5;
   const dbRetryDelay = 5000; // 5 seconds
 
-  console.log("\n📊 [1/4] DATABASE CONNECTION");
-  console.log("--------------------------");
-
   // Retry database connection with backoff
   while (dbConnectionAttempts < maxDbRetries) {
     try {
-      console.log(`🔄 Connecting to PostgreSQL...`);
-      console.log(
-        `   Host: ${process.env.POSTGRES_HOST || "localhost"}:${process.env.POSTGRES_PORT || "5432"}`
-      );
-      console.log(`   Database: ${process.env.POSTGRES_DB || "lsemb"}`);
-
       await lsembPool.query("SELECT 1");
-      console.log("✅ PostgreSQL: Connected");
+      console.log(`✅ PostgreSQL: ${process.env.POSTGRES_HOST}:${process.env.POSTGRES_PORT}/${process.env.POSTGRES_DB}`);
       break; // Success, exit retry loop
     } catch (dbError: any) {
       dbConnectionAttempts++;
@@ -756,6 +738,13 @@ async function startServer() {
       console.log("🔄 Initializing tables...");
       await initializeLsembDatabase();
       console.log("✅ Tables: Ready");
+
+      // Load payload limits from settings
+      console.log("🔄 Loading upload limits from settings...");
+      const { updatePayloadLimitsFromSettings, getUploadLimitBytes } = await import('./middleware/security.middleware');
+      await updatePayloadLimitsFromSettings(lsembPool);
+      const uploadLimitMB = (getUploadLimitBytes() / (1024 * 1024)).toFixed(0);
+      console.log(`✅ Upload limits: Configured (Max file size: ${uploadLimitMB}MB)`);
 
       // Create default admin user if not exists
       const authService = new AuthService();
@@ -1100,12 +1089,14 @@ const startHttpServer = () => {
   }
 };
 
-// 🚀 Emergency Chat Routes - Quick Fix
+// 🚀 Emergency Chat Routes - DISABLED (using chatbot-settings.routes.ts instead)
 const setupChatRoutes = () => {
-  console.log("🔄 Setting up emergency /api/v2/chatbot routes...");
-  console.log("🔄 Setting up emergency /api/v2/chatbot routes...");
+  console.log("🔄 Emergency routes disabled - using regular routes");
+};
 
-  // 1. Settings
+/* EMERGENCY ROUTES DISABLED - using chatbot-settings.routes.ts instead
+const setupChatRoutesOLD = () => {
+  // 1. Settings - DISABLED
   app.get("/api/v2/chatbot/settings", async (req, res) => {
     try {
       console.log("✅ /api/v2/chatbot/settings called");
@@ -1203,8 +1194,9 @@ const setupChatRoutes = () => {
     });
   });
 
-  console.log("✅ Emergency routes mounted successfully!");
+  console.log("✅ Emergency routes disabled - using regular chatbot routes");
 };
+*/
 
 // Setup emergency routes first - will be called after function declaration
 setupChatRoutes();
@@ -1292,3 +1284,4 @@ export {
   chatConnections,
 };
 // Trigger restart
+

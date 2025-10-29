@@ -36,6 +36,34 @@ function cacheMiddleware(req: Request, res: Response, next: any) {
   next();
 }
 
+/**
+ * @swagger
+ * /settings:
+ *   get:
+ *     summary: Get application settings
+ *     description: Retrieve settings by category or get all settings
+ *     tags: [Settings]
+ *     parameters:
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *           enum: [llm, embeddings, rag, prompts, chatbot, database, redis, security, app, scraper, translation, ocr]
+ *         description: Settings category to retrieve
+ *     responses:
+ *       200:
+ *         description: Settings retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SettingsObject'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // Optimized category getter - returns ONLY the requested category
 router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
   try {
@@ -71,7 +99,8 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
                 OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
                 OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
-                OR key LIKE 'apiStatus.%'`,
+                OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
+                OR key LIKE 'ocrSettings.%' OR key LIKE 'ocrProvider%'`,
 
       embeddings: `SELECT key, value FROM settings
                   WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding.%'`,
@@ -143,34 +172,50 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       }
     });
 
-    // Add only essential defaults if missing
-    if (category === 'llm' && !config.openai) {
-      config.openai = {
-        model: 'gpt-4o-mini',
-        temperature: 0.7,
-        maxTokens: 4096
-      };
-    }
+    // NO hardcoded defaults - only return what's in database
+    // User must configure settings in Settings UI
 
-    // Build apiStatus object for LLM category
+    // Build apiStatus object for LLM category (includes translation providers)
     if (category === 'llm') {
       const apiStatus: any = {};
-      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter'];
+      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter', 'deepl'];
 
       providers.forEach(provider => {
-        if (config[provider]) {
-          // Check if provider has validation data
-          if (config[provider].verifiedDate) {
+        // IMPORTANT: Check both provider config AND apiStatus for validation data
+        const providerConfig = config[provider];
+        const providerApiStatus = config.apiStatus?.[provider];
+
+        // DEBUG: Log DeepL specifically
+        if (provider === 'deepl' && process.env.DEBUG_SETTINGS === 'true') {
+          console.log('🔍 [DeepL Debug]', {
+            hasProviderConfig: !!providerConfig,
+            hasApiStatus: !!providerApiStatus,
+            verifiedDate: providerConfig?.verifiedDate || providerApiStatus?.verifiedDate,
+            status: providerConfig?.status || providerApiStatus?.status,
+            apiKey: providerConfig?.apiKey ? 'EXISTS' : 'MISSING'
+          });
+        }
+
+        if (providerConfig || providerApiStatus) {
+          // Check if provider has validation data (either in provider config or apiStatus)
+          const verifiedDate = providerConfig?.verifiedDate || providerApiStatus?.verifiedDate;
+          const status = providerConfig?.status || providerApiStatus?.status || 'active';
+
+          if (verifiedDate) {
             // Provider has been validated
-            const status = config[provider].status || 'active';
             apiStatus[provider] = {
               status: status,
-              message: `${provider} API validated successfully`,
-              lastChecked: config[provider].verifiedDate,
-              verifiedDate: config[provider].verifiedDate,
-              responseTime: config[provider].avgResponseTime || 0
+              message: providerApiStatus?.message || `${provider} API validated successfully`,
+              lastChecked: providerApiStatus?.lastChecked || verifiedDate,
+              verifiedDate: verifiedDate,
+              responseTime: providerConfig?.avgResponseTime || providerApiStatus?.responseTime || 0
             };
-          } else if (config[provider].apiKey) {
+
+            // DEBUG: Log successful validation
+            if (provider === 'deepl') {
+              console.log('✅ [DeepL] Validated status created:', apiStatus[provider]);
+            }
+          } else if (providerConfig?.apiKey) {
             // Provider has API key but not validated
             apiStatus[provider] = {
               status: 'inactive',
@@ -178,11 +223,70 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
               lastChecked: null,
               verifiedDate: null
             };
+
+            // DEBUG: Log inactive status
+            if (provider === 'deepl') {
+              console.log('⚠️ [DeepL] Inactive status created (has API key but not validated)');
+            }
+          }
+        } else {
+          // DEBUG: Log when provider is skipped
+          if (provider === 'deepl') {
+            console.log('❌ [DeepL] Skipped - no config and no apiStatus');
           }
         }
       });
 
       config.apiStatus = apiStatus;
+
+      // Add embedding settings to LLM category for dashboard display
+      const embeddingResult = await lsembPool.query(
+        `SELECT key, value FROM settings WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding_provider' OR key LIKE 'embedding_model'`
+      );
+
+      embeddingResult.rows.forEach(row => {
+        const [section, ...keyParts] = row.key.split('.');
+        const key = keyParts.join('.') || row.key;
+
+        if (section === 'embeddings' || row.key.startsWith('embedding_')) {
+          if (!config.llmSettings) config.llmSettings = {};
+
+          // Map to expected field names
+          if (key === 'provider' || row.key === 'embedding_provider') {
+            config.llmSettings.embeddingProvider = row.value;
+          } else if (key === 'model' || row.key === 'embedding_model') {
+            config.llmSettings.embeddingModel = row.value;
+          }
+        }
+      });
+
+      // Construct activeEmbeddingModel from provider and model
+      if (config.llmSettings?.embeddingProvider && config.llmSettings?.embeddingModel) {
+        config.llmSettings.activeEmbeddingModel = `${config.llmSettings.embeddingProvider}/${config.llmSettings.embeddingModel}`;
+      }
+
+      // IMPORTANT: Ensure activeChatModel is in llmSettings
+      // Query already fetches llmSettings.activeChatModel, just need to ensure it's in the right place
+      if (!config.llmSettings) {
+        config.llmSettings = {};
+      }
+
+      // If activeChatModel is in result but not in llmSettings, copy it
+      result.rows.forEach(row => {
+        if (row.key === 'llmSettings.activeChatModel') {
+          config.llmSettings.activeChatModel = row.value;
+        }
+      });
+
+      // CRITICAL: NO dynamic defaults - return what's in database OR null
+      // Frontend/User MUST configure the model in Settings UI
+      if (!config.llmSettings.activeChatModel) {
+        console.warn('⚠️ [Settings] No activeChatModel found in database! User must configure a model.');
+        config.llmSettings.activeChatModel = null;  // Explicitly return null, not a default
+      }
+
+      // Log active models
+      console.log(`📊 [Settings] Chat: ${config.llmSettings?.activeChatModel || 'NOT SET'} | Embedding: ${config.llmSettings?.activeEmbeddingModel || 'NOT SET'}`);
     }
 
     res.json(config);
@@ -193,6 +297,47 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * @swagger
+ * /settings:
+ *   post:
+ *     summary: Update application settings
+ *     description: Update one or more settings (key-value pairs)
+ *     tags: [Settings]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: true
+ *             example:
+ *               "llmSettings.activeChatModel": "anthropic/claude-3-5-sonnet"
+ *               "llmSettings.temperature": 0.7
+ *     responses:
+ *       200:
+ *         description: Settings updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Settings updated successfully
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 // Optimized settings update with validation and cache invalidation
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -235,6 +380,11 @@ router.post('/', async (req: Request, res: Response) => {
     const cleared = settingsCache.clearPattern('settings');
     console.log(`🗑️ [CACHE] Cleared ${cleared} entries`);
 
+    // CRITICAL: Reload LLM Manager settings to pick up changes immediately
+    const llmManager = (await import('../services/llm-manager.service')).LLMManager.getInstance();
+    await llmManager.reloadSettings();
+    console.log('🔄 [LLM Manager] Settings reloaded after update');
+
     res.json({ success: true, message: 'Settings updated successfully' });
 
   } catch (error) {
@@ -263,7 +413,9 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
       llm: `SELECT key, value FROM settings
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
                 OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
-                OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%'`,
+                OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
+                OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
+                OR key LIKE 'ocrSettings.%' OR key LIKE 'ocrProvider%'`,
 
       embeddings: `SELECT key, value FROM settings
                   WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding.%'`,
@@ -394,9 +546,10 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           flattenObject(value, fullKey);
         } else {
+          const updateValue = typeof value === 'string' ? value : JSON.stringify(value);
           updates.push({
             key: fullKey,
-            value: typeof value === 'string' ? value : JSON.stringify(value)
+            value: updateValue
           });
         }
       }
@@ -416,9 +569,16 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     }
 
     // Clear cache
-    const cleared = settingsCache.clearPattern('settings');
-    console.log(`🗑️ [CACHE] Cleared ${cleared} entries for category ${categoryName}`);
-    console.log(`💾 [DB] Updated ${updates.length} settings for category ${categoryName}:`, updates.map(u => u.key));
+    settingsCache.clearPattern('settings');
+
+    // Reload LLM Manager if llm settings were updated
+    if (categoryName === 'llm') {
+      const { default: llmManager } = await import('../services/llm-manager.service');
+      await llmManager.reloadSettings();
+      console.log(`🔄 [Settings] LLM Manager reloaded`);
+    }
+
+    console.log(`✅ [Settings] ${categoryName}: ${updates.length} keys updated`);
 
     res.json({
       success: true,
@@ -427,7 +587,7 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error(`Error updating ${req.params.categoryName} settings:`, error);
+    console.error(`❌ [SETTINGS UPDATE] Error updating ${req.params.categoryName} settings:`, error);
     res.status(500).json({ error: `Failed to update ${req.params.categoryName} settings` });
   }
 });

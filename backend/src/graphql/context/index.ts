@@ -4,17 +4,11 @@
  */
 
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { Redis } from 'ioredis';
+import { Pool } from 'pg';
+import Redis from 'ioredis';
 import { createDataLoaders, DataLoaders } from '../dataloaders';
-import { AuthService } from '../../services/auth.service';
-import { SemanticSearchService } from '../../services/semanticSearch.service';
-import { ChatService } from '../../services/chat.service';
-import { DocumentService } from '../../services/document.service';
-import { ScraperService } from '../../services/scraper.service';
-import { EmbeddingService } from '../../services/embedding.service';
-import prisma from '../../config/database';
-import { getRedisClient } from '../../config/redis';
+import { lsembPool } from '../../config/database.config';
+import { initializeRedis } from '../../config/redis';
 
 /**
  * GraphQL Context tipi
@@ -25,55 +19,31 @@ export interface GraphQLContext {
   res: Response;
 
   // Database
-  prisma: PrismaClient;
+  pool: Pool;
   redis: Redis;
-
-  // Services
-  services: {
-    auth: AuthService;
-    search: SemanticSearchService;
-    chat: ChatService;
-    document: DocumentService;
-    scraper: ScraperService;
-    embedding: EmbeddingService;
-  };
+  prisma?: any; // Optional Prisma client (not currently used)
 
   // DataLoaders (N+1 prevention)
   dataloaders: DataLoaders;
+
+  // Services
+  services?: {
+    embedding?: {
+      checkHealth: () => Promise<boolean>;
+    };
+  };
 
   // User info (authentication'dan sonra eklenir)
   user?: {
     id: string;
     email: string;
     role: string;
-    permissions: string[];
+    permissions?: string[];
   };
 
   // Request metadata
   requestId: string;
   startTime: number;
-}
-
-/**
- * Service instance'ları (singleton)
- */
-let serviceInstances: GraphQLContext['services'] | null = null;
-
-/**
- * Service'leri initialize et
- */
-function initializeServices(): GraphQLContext['services'] {
-  if (!serviceInstances) {
-    serviceInstances = {
-      auth: new AuthService(),
-      search: new SemanticSearchService(),
-      chat: new ChatService(),
-      document: new DocumentService(),
-      scraper: new ScraperService(),
-      embedding: new EmbeddingService(),
-    };
-  }
-  return serviceInstances;
 }
 
 /**
@@ -90,21 +60,17 @@ export async function createContext({
   const requestId = `gql-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   // Redis client'ı al
-  const redis = await getRedisClient();
-
-  // Services'i initialize et
-  const services = initializeServices();
+  const redis = await initializeRedis();
 
   // DataLoader'ları oluştur (her request için yeni instance)
-  const dataloaders = createDataLoaders(prisma);
+  const dataloaders = createDataLoaders(lsembPool);
 
   // Base context
   const context: GraphQLContext = {
     req,
     res,
-    prisma,
+    pool: lsembPool,  // lsembPool kullan
     redis,
-    services,
     dataloaders,
     requestId,
     startTime: Date.now(),
@@ -114,12 +80,13 @@ export async function createContext({
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (token) {
-      const user = await services.auth.verifyToken(token);
+      // Basit JWT parse (production'da jwt.verify kullan)
+      const user = await verifyJWTToken(token);
       if (user) {
         context.user = {
-          id: user.id,
+          id: user.id || user.userId,
           email: user.email,
-          role: user.role,
+          role: user.role || 'user',
           permissions: user.permissions || [],
         };
       }
@@ -127,10 +94,27 @@ export async function createContext({
   } catch (error) {
     // Token geçersizse sessizce devam et
     // Protected resolver'lar kendi kontrollerini yapacak
-    console.debug('Token verification failed:', error);
+    console.debug('[GraphQL] Token verification failed:', error);
   }
 
   return context;
+}
+
+/**
+ * JWT Token doğrulama
+ */
+async function verifyJWTToken(token: string): Promise<any | null> {
+  try {
+    // JWT doğrulaması için jsonwebtoken kullan
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    return decoded;
+  } catch (error) {
+    console.debug('[GraphQL] JWT verification error:', error);
+    return null;
+  }
 }
 
 /**
@@ -157,6 +141,32 @@ export function hasPermission(
 export function hasRole(context: GraphQLContext, role: string): boolean {
   if (!context.user) return false;
   return context.user.role === role;
+}
+
+/**
+ * Admin checker
+ */
+export function isAdmin(context: GraphQLContext): boolean {
+  return hasRole(context, 'admin');
+}
+
+/**
+ * Require authentication guard
+ */
+export function requireAuth(context: GraphQLContext): void {
+  if (!isAuthenticated(context)) {
+    throw new Error('Bu işlem için giriş yapmalısınız');
+  }
+}
+
+/**
+ * Require admin guard
+ */
+export function requireAdmin(context: GraphQLContext): void {
+  requireAuth(context);
+  if (!isAdmin(context)) {
+    throw new Error('Bu işlem için admin yetkisi gereklidir');
+  }
 }
 
 export default createContext;

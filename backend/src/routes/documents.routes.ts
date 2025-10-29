@@ -8,32 +8,79 @@ import contextualDocumentProcessor from '../services/contextual-document-process
 import { ocrService } from '../services/ocr.service';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { createUploadRateLimit } from '../middleware/rate-limit.middleware';
+import { getUploadLimitBytes } from '../middleware/security.middleware';
 
 const router = Router();
+
+// Get upload directory from environment or settings
+const getUploadDirectory = (): string => {
+  // Priority: ENV variable > settings config > default
+  const uploadDir = process.env.DOCUMENTS_PATH || process.env.UPLOAD_DIR || './docs';
+
+  // Normalize path (convert forward slashes to OS-specific)
+  const normalizedPath = uploadDir.replace(/\//g, path.sep);
+
+  // If relative path, resolve from project root (parent of backend folder)
+  let fullPath: string;
+  if (path.isAbsolute(normalizedPath)) {
+    fullPath = normalizedPath;
+  } else {
+    // Go up one level from backend to project root
+    fullPath = path.join(process.cwd(), '..', normalizedPath);
+  }
+
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
+    console.log(`📁 Created documents directory: ${fullPath}`);
+  }
+
+  console.log(`📂 Using documents directory: ${fullPath}`);
+  return fullPath;
+};
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(process.cwd(), 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    try {
+      const uploadDir = getUploadDirectory();
+      cb(null, uploadDir);
+    } catch (error) {
+      cb(error as Error, '');
     }
-    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    // Use original filename directly (overwrite if exists)
+    // This allows duplicate uploads to replace the existing file
+    const uploadDir = getUploadDirectory();
+    const targetPath = path.join(uploadDir, file.originalname);
+
+    // Check if file exists
+    if (fs.existsSync(targetPath)) {
+      console.log(`📝 Overwriting existing file: ${file.originalname}`);
+      // Delete old file before upload
+      try {
+        fs.unlinkSync(targetPath);
+        console.log(`🗑️ Deleted old file: ${file.originalname}`);
+      } catch (err) {
+        console.error(`⚠️ Failed to delete old file:`, err);
+      }
+    }
+
+    // Use original filename as-is
+    cb(null, file.originalname);
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  limits: {
+    fileSize: getUploadLimitBytes() // Dynamic limit from settings (default 100MB)
+  },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /txt|pdf|json|md|csv|doc|docx|xls|xlsx/;
+    const allowedTypes = /txt|pdf|json|md|csv|doc|docx|xls|xlsx|markdown/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (extname) {
       return cb(null, true);
     } else {
@@ -131,7 +178,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       id: doc.id.toString(),
       title: doc.title,
       content: doc.content || '',
-      type: doc.type || 'text',
+      type: doc.file_type || 'text',
       size: doc.size || 0,
       hasEmbeddings: doc.has_embeddings,
       tokens_used: doc.tokens_used || 0,
@@ -139,6 +186,17 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       cost_usd: doc.cost_usd || 0,
       verified_at: doc.verified_at || null,
       auto_verified: doc.auto_verified || false,
+      // Transform metadata (NEW)
+      transform_status: doc.transform_status || 'pending',
+      transform_progress: doc.transform_progress || 0,
+      target_table_name: doc.target_table_name || null,
+      transformed_at: doc.transformed_at || null,
+      last_transform_row_count: doc.last_transform_row_count || null,
+      column_count: doc.column_count || null,
+      row_count: doc.row_count || null,
+      column_headers: doc.column_headers || [],
+      original_filename: doc.original_filename || doc.title,
+      upload_count: doc.upload_count || 1,
       metadata: {
         source: doc.file_path,
         created_at: doc.created_at,
@@ -168,23 +226,44 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const { originalname, size, mimetype, path: filePath } = req.file;
+    const { originalname, size, mimetype, path: filePath, filename } = req.file;
+    const skipDb = req.query.skipDb === 'true';
 
-    // Check for duplicate by filename and size (skip if force flag is set)
-    if (!req.query.force) {
-      const duplicateCheck = await lsembPool.query(
-        'SELECT id, title FROM documents WHERE title = $1 AND size = $2',
-        [originalname, size]
-      );
+    console.log(`📤 File uploaded: ${originalname} -> ${filename}`);
+    console.log(`📂 Saved to: ${filePath}`);
+    console.log(`🔧 Skip DB: ${skipDb}`);
 
-      if (duplicateCheck.rows.length > 0) {
-        // Clean up uploaded file
-        fs.unlinkSync(filePath);
-        return res.status(409).json({
-          error: 'Duplicate document',
-          message: 'A document with the same name and size already exists',
-          duplicateId: duplicateCheck.rows[0].id
-        });
+    // If skipDb is true, just return success without saving to database
+    if (skipDb) {
+      console.log(`✅ Physical upload only - not saving to database`);
+      return res.json({
+        success: true,
+        message: 'File uploaded to physical storage only',
+        file: {
+          filename: originalname,
+          size: size,
+          path: filePath
+        }
+      });
+    }
+
+    // Check for existing document with same original filename
+    const existingCheck = await lsembPool.query(
+      'SELECT id, title, file_path FROM documents WHERE title = $1',
+      [originalname]
+    );
+
+    if (existingCheck.rows.length > 0) {
+      console.log(`📝 Found existing document with same filename, will update it`);
+      // Delete old physical file if it's different from new one
+      const oldFilePath = existingCheck.rows[0].file_path;
+      if (oldFilePath && oldFilePath !== filePath && fs.existsSync(oldFilePath)) {
+        try {
+          fs.unlinkSync(oldFilePath);
+          console.log(`🗑️ Deleted old physical file: ${oldFilePath}`);
+        } catch (err) {
+          console.warn(`⚠️ Could not delete old file: ${oldFilePath}`, err);
+        }
       }
     }
 
@@ -209,41 +288,40 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
       }
     }
 
-    // Check for content-based duplicate using first 500 characters (skip if force flag is set)
-    if (!req.query.force) {
-      const contentPreview = processedDoc.content.substring(0, 500);
-      const contentDuplicateCheck = await lsembPool.query(
-        'SELECT id, title FROM documents WHERE LEFT(content, 500) = $1',
-        [contentPreview]
-      );
-
-      if (contentDuplicateCheck.rows.length > 0) {
-        // Clean up uploaded file
-        fs.unlinkSync(filePath);
-        return res.status(409).json({
-          error: 'Duplicate content detected',
-          message: 'A document with similar content already exists',
-          duplicateId: contentDuplicateCheck.rows[0].id,
-          duplicateTitle: contentDuplicateCheck.rows[0].title
-        });
-      }
-    }
-
-    // Determine file type
+    // Determine file type - prioritize processedDoc metadata
     const ext = path.extname(originalname).toLowerCase().replace('.', '');
-    const fileType = ext || 'text';
+    const fileType = processedDoc.metadata?.type || ext || 'text';
 
     // Generate content hash for additional duplicate checking
     const crypto = require('crypto');
     const contentHash = crypto.createHash('md5').update(processedDoc.content).digest('hex');
 
-    // Save to database
+    // UPSERT to database - overwrite if same filename exists
+    // Use filename as unique key (original filename)
     const result = await lsembPool.query(
-      `INSERT INTO documents (title, content, type, size, file_path, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO documents (
+        filename, title, content, file_type, size, file_path, metadata,
+        original_filename, upload_count, created_at, updated_at
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, NOW(), NOW())
+       ON CONFLICT (filename)
+       DO UPDATE SET
+         content = EXCLUDED.content,
+         file_type = EXCLUDED.file_type,
+         size = EXCLUDED.size,
+         file_path = EXCLUDED.file_path,
+         metadata = EXCLUDED.metadata,
+         original_filename = EXCLUDED.original_filename,
+         updated_at = NOW(),
+         -- Increment upload count
+         upload_count = COALESCE(documents.upload_count, 0) + 1,
+         -- Reset transform status on re-upload
+         transform_status = 'pending',
+         transform_progress = 0
        RETURNING *`,
       [
-        originalname,
+        originalname, // filename
+        originalname, // title
         processedDoc.content.substring(0, 100000), // Limit content to 100KB
         fileType,
         size,
@@ -255,7 +333,8 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
           uploadDate: new Date(),
           chunks: processedDoc.chunks.length,
           contentHash: contentHash
-        })
+        }),
+        originalname // original_filename
       ]
     );
 
@@ -361,7 +440,10 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
         COUNT(*) as total,
         SUM(size) as total_size,
         COUNT(CASE WHEN metadata->>'embeddings' = 'true' THEN 1 END) as with_embeddings,
-        COUNT(DISTINCT type) as unique_types
+        COUNT(DISTINCT type) as unique_types,
+        COUNT(CASE WHEN transform_status = 'completed' THEN 1 END) as transformed_count,
+        COUNT(CASE WHEN transform_status = 'pending' THEN 1 END) as pending_transform,
+        COUNT(CASE WHEN transform_status = 'failed' THEN 1 END) as failed_transform
       FROM documents
     `);
 
@@ -384,6 +466,442 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
   }
 });
 
+// List physical files in upload directory - REQUIRES AUTHENTICATION
+// NOTE: This route MUST come before /:id to avoid route matching issues
+router.get('/physical-files', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    console.log('📂 Physical files endpoint called');
+    const uploadDir = getUploadDirectory();
+    console.log('📁 Upload directory:', uploadDir);
+
+    // Check if directory exists
+    if (!fs.existsSync(uploadDir)) {
+      console.error('❌ Upload directory does not exist:', uploadDir);
+      return res.status(404).json({
+        error: 'Upload directory not found',
+        path: uploadDir
+      });
+    }
+
+    // Read all files from upload directory
+    const files = fs.readdirSync(uploadDir);
+    console.log(`📄 Found ${files.length} files in directory`);
+
+    // Get database file paths to compare (optional - continue if DB is down)
+    let dbFilePaths: Set<string> = new Set();
+    let dbAvailable = false;
+
+    try {
+      if (lsembPool) {
+        const dbFilesResult = await lsembPool.query('SELECT file_path FROM documents WHERE file_path IS NOT NULL');
+        dbFilePaths = new Set(dbFilesResult.rows.map(row => row.file_path));
+        dbAvailable = true;
+        console.log(`💾 Found ${dbFilePaths.size} files in database`);
+      }
+    } catch (dbError: any) {
+      console.warn('⚠️ Database not available - showing all files as "not in DB"');
+      console.warn('   Error:', dbError.code || dbError.message);
+    }
+
+    // Process each file
+    const physicalFiles = files.map(filename => {
+      const filePath = path.join(uploadDir, filename);
+      const stats = fs.statSync(filePath);
+
+      // Check if file is in database
+      const inDatabase = dbFilePaths.has(filePath);
+
+      // Extract original filename from timestamp-originalname.ext format
+      let displayName = filename;
+      if (filename.match(/^\d+-/)) {
+        // Remove timestamp prefix (e.g., "1234567890-ozelgeler.csv" -> "ozelgeler.csv")
+        displayName = filename.replace(/^\d+-/, '');
+      }
+
+      return {
+        filename,
+        displayName, // Original name for display
+        path: filePath,
+        size: stats.size,
+        modified: stats.mtime,
+        created: stats.birthtime,
+        inDatabase,
+        ext: path.extname(filename).toLowerCase().replace('.', '') || 'unknown'
+      };
+    }).filter(file => {
+      // Only return actual files (not directories)
+      try {
+        return fs.statSync(file.path).isFile();
+      } catch {
+        return false;
+      }
+    }).sort((a, b) => {
+      // Sort by modified date DESC (newest first)
+      return b.modified.getTime() - a.modified.getTime();
+    });
+
+    res.json({
+      success: true,
+      uploadDirectory: uploadDir,
+      totalFiles: physicalFiles.length,
+      inDatabase: physicalFiles.filter(f => f.inDatabase).length,
+      notInDatabase: physicalFiles.filter(f => !f.inDatabase).length,
+      files: physicalFiles,
+      dbAvailable: dbAvailable,
+      warning: !dbAvailable ? 'Database not available - all files shown as not in database' : undefined
+    });
+  } catch (error: any) {
+    console.error('❌ Error listing physical files:', error);
+    res.status(500).json({
+      error: 'Failed to list physical files',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Add physical file to database - REQUIRES AUTHENTICATION
+router.post('/physical-files/add', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { filePath } = req.body;
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+
+    // Check if file already in database
+    const existingFile = await lsembPool.query(
+      'SELECT id FROM documents WHERE file_path = $1',
+      [filePath]
+    );
+
+    if (existingFile.rows.length > 0) {
+      return res.status(409).json({
+        error: 'File already in database',
+        documentId: existingFile.rows[0].id
+      });
+    }
+
+    const filename = path.basename(filePath);
+    const stats = fs.statSync(filePath);
+    const ext = path.extname(filename).toLowerCase().replace('.', '') || 'text';
+    const mimetype = `application/${ext}`;
+
+    // Process file
+    let processedDoc;
+    try {
+      processedDoc = await contextualDocumentProcessor.processFile(filePath, filename, mimetype);
+    } catch (err) {
+      console.error('Error processing file:', err);
+      // Fallback to simple text reading
+      processedDoc = {
+        title: filename,
+        content: fs.readFileSync(filePath, 'utf-8').substring(0, 100000),
+        chunks: [],
+        metadata: { error: 'Processing failed, stored as text' }
+      };
+    }
+
+    // Generate content hash
+    const crypto = require('crypto');
+    const contentHash = crypto.createHash('md5').update(processedDoc.content).digest('hex');
+
+    // Save to database
+    const result = await lsembPool.query(
+      `INSERT INTO documents (title, content, type, size, file_path, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        filename,
+        processedDoc.content.substring(0, 100000),
+        ext,
+        stats.size,
+        filePath,
+        JSON.stringify({
+          ...processedDoc.metadata,
+          originalName: filename,
+          mimeType: mimetype,
+          uploadDate: new Date(),
+          chunks: processedDoc.chunks.length,
+          contentHash: contentHash,
+          addedFrom: 'physical-files'
+        })
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'File added to database',
+      document: {
+        id: result.rows[0].id.toString(),
+        title: result.rows[0].title,
+        type: result.rows[0].type,
+        size: result.rows[0].size
+      }
+    });
+  } catch (error: any) {
+    console.error('Error adding physical file to database:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to add file to database'
+    });
+  }
+});
+
+// Delete physical file (from disk and database) - REQUIRES AUTHENTICATION
+router.delete('/physical-files', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { filePath, deleteFromDatabase = true } = req.body;
+
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+
+    const results = {
+      fileDeleted: false,
+      databaseDeleted: false,
+      errors: [] as string[]
+    };
+
+    // Delete from database if requested
+    if (deleteFromDatabase) {
+      try {
+        const dbResult = await lsembPool.query(
+          'DELETE FROM documents WHERE file_path = $1 RETURNING id',
+          [filePath]
+        );
+        results.databaseDeleted = dbResult.rowCount > 0;
+      } catch (err) {
+        results.errors.push(`Database deletion failed: ${err.message}`);
+      }
+    }
+
+    // Delete physical file
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        results.fileDeleted = true;
+      } else {
+        results.errors.push('File does not exist on disk');
+      }
+    } catch (err) {
+      results.errors.push(`File deletion failed: ${err.message}`);
+    }
+
+    res.json({
+      success: results.fileDeleted || results.databaseDeleted,
+      message: 'Physical file deletion completed',
+      results
+    });
+  } catch (error: any) {
+    console.error('Error deleting physical file:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to delete physical file'
+    });
+  }
+});
+
+// Preview physical file content - REQUIRES AUTHENTICATION
+// NOTE: This route MUST come before /:id to avoid route matching issues
+router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { filename } = req.params;
+    const uploadDir = getUploadDirectory();
+    const filePath = path.join(uploadDir, filename);
+
+    console.log(`📖 Preview request for: ${filename}`);
+    console.log(`📂 Looking in: ${filePath}`);
+
+    // Security check - ensure file is within upload directory
+    const normalizedFilePath = path.normalize(filePath);
+    const normalizedUploadDir = path.normalize(uploadDir);
+
+    if (!normalizedFilePath.startsWith(normalizedUploadDir)) {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'Cannot access files outside upload directory'
+      });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: `File ${filename} does not exist`
+      });
+    }
+
+    const stats = fs.statSync(filePath);
+    const ext = path.extname(filename).toLowerCase().replace('.', '');
+
+    // Read file content based on type
+    let content = '';
+    let preview = '';
+    let metadata: any = {};
+
+    if (['.csv', '.txt', '.json', '.log', '.md'].includes(path.extname(filename).toLowerCase())) {
+      // Text-based files - read directly
+      content = fs.readFileSync(filePath, 'utf-8');
+
+      // For CSV files, parse and provide stats
+      if (ext === 'csv') {
+        const lines = content.split('\n').filter(line => line.trim());
+
+        // Proper CSV parsing function that handles quoted fields
+        const parseCSVLine = (line: string): string[] => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          let i = 0;
+
+          while (i < line.length) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"') {
+              if (!inQuotes) {
+                // Start of quoted field
+                inQuotes = true;
+              } else if (nextChar === '"') {
+                // Escaped quote inside quoted field
+                current += '"';
+                i++; // Skip next quote
+              } else {
+                // End of quoted field
+                inQuotes = false;
+              }
+            } else if (char === ',' && !inQuotes) {
+              // Field delimiter outside quotes
+              result.push(current);
+              current = '';
+            } else {
+              // Regular character
+              current += char;
+            }
+            i++;
+          }
+
+          // Add last field
+          result.push(current);
+
+          // Clean up fields - remove leading/trailing quotes and whitespace
+          return result.map(field => {
+            field = field.trim();
+            // Remove surrounding quotes if present
+            if (field.startsWith('"') && field.endsWith('"')) {
+              field = field.slice(1, -1);
+            }
+            return field;
+          });
+        };
+
+        const headers = lines[0] ? parseCSVLine(lines[0]) : [];
+
+        console.log('📊 CSV Parse Debug:', {
+          filename,
+          headerCount: headers.length,
+          headers: headers.slice(0, 10),
+          firstLineRaw: lines[0]?.substring(0, 200)
+        });
+
+        metadata.csvStats = {
+          totalRows: lines.length - 1, // Exclude header
+          totalColumns: headers.length,
+          headers: headers,
+          numericColumns: [],
+          columnTypes: headers.map(h => ({ name: h, type: 'text' }))
+        };
+
+        // Analyze column types from first 10 rows
+        if (lines.length > 1) {
+          const sampleSize = Math.min(10, lines.length - 1);
+          const columnIsNumeric = new Array(headers.length).fill(true);
+
+          for (let i = 1; i <= sampleSize; i++) {
+            const values = parseCSVLine(lines[i]);
+            values.forEach((val, idx) => {
+              if (columnIsNumeric[idx] && val && isNaN(Number(val))) {
+                columnIsNumeric[idx] = false;
+              }
+            });
+          }
+
+          metadata.csvStats.numericColumns = headers.filter((_, idx) => columnIsNumeric[idx]);
+          metadata.csvStats.columnTypes = headers.map((name, idx) => ({
+            name,
+            type: columnIsNumeric[idx] ? 'numeric' : 'text'
+          }));
+        }
+
+        preview = lines.slice(0, 11).join('\n'); // Header + 10 rows
+      } else if (ext === 'json') {
+        // For JSON, provide structure stats
+        try {
+          const jsonData = JSON.parse(content);
+          metadata.jsonStats = {
+            depth: getJsonDepth(jsonData),
+            objectCount: countObjects(jsonData),
+            arrayCount: countArrays(jsonData)
+          };
+        } catch (e) {
+          console.error('Failed to parse JSON for stats:', e);
+        }
+        preview = content.substring(0, 1000); // First 1000 chars
+      } else {
+        preview = content.substring(0, 1000);
+      }
+    } else {
+      // Binary or unsupported files
+      content = '[Binary file - preview not available]';
+      preview = content;
+    }
+
+    res.json({
+      success: true,
+      filename: filename,
+      path: filePath,
+      size: stats.size,
+      type: ext || 'unknown',
+      modified: stats.mtime,
+      created: stats.birthtime,
+      content: content,
+      preview: preview,
+      metadata: metadata
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error previewing file:', error);
+    res.status(500).json({
+      error: 'Failed to preview file',
+      details: error.message
+    });
+  }
+});
+
+// Helper functions for JSON stats
+function getJsonDepth(obj: any, currentDepth = 0): number {
+  if (obj === null || typeof obj !== 'object') return currentDepth;
+  const depths = Object.values(obj).map(val => getJsonDepth(val, currentDepth + 1));
+  return depths.length > 0 ? Math.max(...depths) : currentDepth;
+}
+
+function countObjects(obj: any): number {
+  if (typeof obj !== 'object' || obj === null) return 0;
+  let count = Array.isArray(obj) ? 0 : 1;
+  Object.values(obj).forEach(val => {
+    count += countObjects(val);
+  });
+  return count;
+}
+
+function countArrays(obj: any): number {
+  if (typeof obj !== 'object' || obj === null) return 0;
+  let count = Array.isArray(obj) ? 1 : 0;
+  Object.values(obj).forEach(val => {
+    count += countArrays(val);
+  });
+  return count;
+}
+
 // Get single document - REQUIRES AUTHENTICATION
 router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -404,8 +922,19 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
         id: doc.id.toString(),
         title: doc.title,
         content: doc.content,
-        type: doc.type,
+        type: doc.file_type || 'text',
         size: doc.size,
+        // Transform metadata (NEW)
+        transform_status: doc.transform_status || 'pending',
+        transform_progress: doc.transform_progress || 0,
+        target_table_name: doc.target_table_name || null,
+        transformed_at: doc.transformed_at || null,
+        last_transform_row_count: doc.last_transform_row_count || null,
+        column_count: doc.column_count || null,
+        row_count: doc.row_count || null,
+        column_headers: doc.column_headers || [],
+        original_filename: doc.original_filename || doc.title,
+        upload_count: doc.upload_count || 1,
         metadata: {
           source: doc.file_path,
           created_at: doc.created_at,
@@ -924,6 +1453,71 @@ router.get('/ocr/languages', authenticateToken, async (req: AuthenticatedRequest
   } catch (error) {
     console.error('Error getting OCR languages:', error);
     res.status(500).json({ error: 'Failed to get supported languages' });
+  }
+});
+
+/**
+ * GET /api/documents/table-creation/progress/:jobId
+ * Get table creation progress from Redis
+ */
+router.get('/table-creation/progress/:jobId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { jobId } = req.params;
+
+    // Get progress from Redis
+    const redis = req.app.locals.redis;
+    if (!redis) {
+      return res.status(503).json({ error: 'Redis not available' });
+    }
+
+    const progressKey = `table_creation:${jobId}`;
+    const progressData = await redis.get(progressKey);
+
+    if (!progressData) {
+      return res.status(404).json({ error: 'Progress data not found' });
+    }
+
+    const progress = JSON.parse(progressData);
+    res.json({ progress });
+  } catch (error) {
+    console.error('Error getting table creation progress:', error);
+    res.status(500).json({ error: 'Failed to get progress' });
+  }
+});
+
+/**
+ * POST /api/documents/table-creation/cancel/:jobId
+ * Pause table creation job (can be resumed later)
+ */
+router.post('/table-creation/cancel/:jobId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { jobId } = req.params;
+
+    // Get progress from Redis
+    const redis = req.app.locals.redis;
+    if (!redis) {
+      return res.status(503).json({ error: 'Redis not available' });
+    }
+
+    const progressKey = `table_creation:${jobId}`;
+    const progressData = await redis.get(progressKey);
+
+    if (!progressData) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const progress = JSON.parse(progressData);
+
+    // Mark as cancelled (paused)
+    progress.status = 'CANCELLED';
+    progress.completedAt = new Date();
+    await redis.setex(progressKey, 3600, JSON.stringify(progress));
+
+    console.log(`[TableCreation] Job ${jobId} paused by user`);
+    res.json({ message: 'Job paused successfully' });
+  } catch (error) {
+    console.error('Error pausing table creation job:', error);
+    res.status(500).json({ error: 'Failed to pause job' });
   }
 });
 

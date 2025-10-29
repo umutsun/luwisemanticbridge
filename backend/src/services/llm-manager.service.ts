@@ -20,8 +20,8 @@ export interface LLMProvider {
 export class LLMManager {
   private static instance: LLMManager;
   private providers: Map<string, LLMProvider> = new Map();
-  private defaultProvider: string = 'gemini';  // Use Gemini as default since it has embeddings support
-  private actualModel: string = 'claude-3-5-sonnet-20241022';
+  private defaultProvider: string = '';  // NO hardcoded default - MUST come from database
+  private actualModel: string = '';  // NO hardcoded default - MUST come from database
   private fallbackOrder: string[] = [];
   private lastSettingsCheck: number = 0;
   private readonly SETTINGS_CACHE_TTL = 30000; // 30 seconds
@@ -35,8 +35,8 @@ export class LLMManager {
     maxTokens: 4096
   };
   private embeddingConfig: { provider: string; model: string } = {
-    provider: 'google',  // Use Google to avoid OpenAI API key issues
-    model: 'text-embedding-004'
+    provider: '',  // NO hardcoded default - MUST come from database
+    model: ''  // NO hardcoded default - MUST come from database
   };
   private lastLoggedConfig: { provider?: string; model?: string } = {};
 
@@ -71,7 +71,7 @@ export class LLMManager {
     this.providers.set('claude', {
       name: 'claude',
       apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY || '',
-      model: 'claude-3-5-sonnet-20241022',  // Correct Claude model name
+      model: '',  // NO default - will be set from database
       isInitialized: false,
       supportsEmbeddings: false
     });
@@ -79,7 +79,7 @@ export class LLMManager {
     this.providers.set('openai', {
       name: 'openai',
       apiKey: process.env.OPENAI_API_KEY || '',
-      model: 'gpt-4o-mini',  // Correct OpenAI model name
+      model: '',  // NO default - will be set from database
       isInitialized: false,
       supportsEmbeddings: true,
       embeddingModel: 'text-embedding-3-large'
@@ -88,7 +88,7 @@ export class LLMManager {
     this.providers.set('gemini', {
       name: 'gemini',
       apiKey: process.env.GEMINI_API_KEY || '',
-      model: 'gemini-1.5-flash-latest',  // Use valid Gemini model name
+      model: '',  // NO default - will be set from database
       isInitialized: false,
       supportsEmbeddings: true,
       embeddingModel: 'text-embedding-004'
@@ -97,7 +97,7 @@ export class LLMManager {
     this.providers.set('deepseek', {
       name: 'deepseek',
       apiKey: process.env.DEEPSEEK_API_KEY || '',
-      model: 'deepseek-chat',  // DeepSeek chat model
+      model: '',  // NO default - will be set from database
       isInitialized: false,
       supportsEmbeddings: false  // DeepSeek doesn't support embeddings
     });
@@ -146,15 +146,23 @@ export class LLMManager {
         settings[row.key] = row.value;
       });
 
-      // Update default provider - RESPECT DATABASE SETTINGS
-      const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'] || 'anthropic/claude-3-5-sonnet-20241022';
+      // Update default provider - RESPECT DATABASE SETTINGS ONLY
+      const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'];
+
+      if (!activeModel) {
+        console.error('❌ CRITICAL: No activeChatModel found in database! User must configure a model in Settings.');
+        console.error('   Database query returned:', Object.keys(settings));
+        // Don't set any defaults - force user to configure
+        return;
+      }
+
       const extractedProvider = this.extractProviderFromModel(activeModel);
 
       console.log(`🔧 Settings from DB - Active model: ${activeModel}, Extracted provider: ${extractedProvider}`);
 
-      // IMPORTANT: Only change provider if it's different from current
+      // IMPORTANT: Always use database value
       if (this.defaultProvider !== extractedProvider) {
-        console.log(`🔄 Switching default provider from ${this.defaultProvider} to ${extractedProvider} based on database settings`);
+        console.log(`🔄 Switching default provider from "${this.defaultProvider}" to "${extractedProvider}" based on database settings`);
         this.defaultProvider = extractedProvider;
       } else {
         console.log(`✅ Keeping current provider ${this.defaultProvider} as it matches database settings`);
@@ -162,6 +170,33 @@ export class LLMManager {
 
       // Store the actual model name without provider prefix
       this.actualModel = activeModel.includes('/') ? activeModel.split('/')[1] : activeModel;
+
+      // CRITICAL FIX: Remove -latest suffix from Gemini models (no longer supported)
+      if (this.actualModel && this.actualModel.includes('gemini') && this.actualModel.includes('-latest')) {
+        const fixedModel = this.actualModel.replace('-latest', '');
+        console.warn(`🔄 FORCE FIXING deprecated Gemini model "${this.actualModel}" to "${fixedModel}"`);
+        this.actualModel = fixedModel;
+
+        // Update provider configuration
+        if (this.providers.has('gemini')) {
+          const geminiProvider = this.providers.get('gemini')!;
+          geminiProvider.model = fixedModel;
+          if (geminiProvider.isInitialized) {
+            geminiProvider.isInitialized = false;
+          }
+        }
+
+        // Update database to prevent future issues
+        try {
+          await lsembPool.query(
+            'UPDATE settings SET value = $1 WHERE key = $2',
+            [`${extractedProvider}/${fixedModel}`, 'llmSettings.activeChatModel']
+          );
+          console.log('✅ Updated Gemini model in database');
+        } catch (error) {
+          console.warn('⚠️ Failed to update database setting:', error);
+        }
+      }
 
       // FORCE UPDATE: Always replace deprecated Claude model
       if (this.actualModel === 'claude-3-sonnet-20240229') {
@@ -203,10 +238,11 @@ export class LLMManager {
       } else if (this.actualModel === 'deepseek-chat') {
         this.actualModel = 'deepseek-chat'; // DeepSeek uses the same name
       } else if (this.actualModel === 'gemini-1.5-pro' || this.actualModel === 'gemini-pro') {
-        // Map to valid Gemini model
-        this.actualModel = 'gemini-1.5-pro-latest';
+        // Keep as is - Gemini API no longer uses -latest suffix
+        this.actualModel = 'gemini-1.5-pro';
       } else if (this.actualModel === 'gemini-1.5-flash') {
-        this.actualModel = 'gemini-1.5-flash-latest';
+        // Keep as is - Gemini API no longer uses -latest suffix
+        this.actualModel = 'gemini-1.5-flash';
       }
 
       // Store configuration
@@ -228,29 +264,69 @@ export class LLMManager {
 
       const openaiApiKey = settings['openai.apiKey'];
       if (openaiApiKey) {
-        this.updateProviderSettings('openai', {
-          apiKey: openaiApiKey,
-          model: settings['llmSettings.openaiModel'] || 'gpt-4o-mini'  // Correct default model
-        });
-        console.log('✅ Updated OpenAI API key from database');
+        // CRITICAL: If OpenAI is the active provider, ALWAYS use this.actualModel from database
+        // NO fallback to hardcoded values
+        const openaiModel = (this.defaultProvider === 'openai' && this.actualModel)
+          ? this.actualModel
+          : settings['llmSettings.openaiModel'];
+
+        if (!openaiModel) {
+          console.warn('⚠️ No OpenAI model configured in database! Skipping OpenAI provider initialization.');
+        } else {
+          this.updateProviderSettings('openai', {
+            apiKey: openaiApiKey,
+            model: openaiModel
+          });
+          console.log(`✅ Updated OpenAI API key from database with model: ${openaiModel}`);
+        }
       }
 
       const googleApiKey = settings['google.apiKey'] || settings['gemini.apiKey'];
-      if (googleApiKey) {
-        this.updateProviderSettings('gemini', {
-          apiKey: googleApiKey,
-          model: settings['llmSettings.geminiModel'] || 'gemini-1.5-flash-latest'  // Use valid model name
+      // Only log in debug mode
+      if (process.env.DEBUG_LLM === 'true') {
+        console.log('🔍 Checking Google/Gemini API key:', {
+          'google.apiKey': settings['google.apiKey'] ? `✅ Present (${settings['google.apiKey'].substring(0, 10)}...)` : '❌ Missing',
+          'gemini.apiKey': settings['gemini.apiKey'] ? `✅ Present (${settings['gemini.apiKey'].substring(0, 10)}...)` : '❌ Missing',
+          'final': googleApiKey ? `✅ Will use (${googleApiKey.substring(0, 10)}...)` : '❌ No key found'
         });
-        console.log('✅ Updated Google/Gemini API key from database');
+      }
+      if (googleApiKey) {
+        // CRITICAL: If Gemini is the active provider, ALWAYS use this.actualModel from database
+        // NO fallback to hardcoded values
+        const geminiModel = (this.defaultProvider === 'gemini' && this.actualModel)
+          ? this.actualModel
+          : settings['llmSettings.geminiModel'];
+
+        if (!geminiModel) {
+          console.warn('⚠️ No Gemini model configured in database! Skipping Gemini provider initialization.');
+        } else {
+          this.updateProviderSettings('gemini', {
+            apiKey: googleApiKey,
+            model: geminiModel
+          });
+          console.log(`✅ Updated Google/Gemini API key from database with model: ${geminiModel}`);
+        }
+      } else {
+        console.warn('⚠️ No Google/Gemini API key found in database');
       }
 
       const deepseekApiKey = settings['deepseek.apiKey'];
       if (deepseekApiKey) {
-        this.updateProviderSettings('deepseek', {
-          apiKey: deepseekApiKey,
-          model: settings['llmSettings.deepseekModel'] || 'deepseek-chat'
-        });
-        console.log('✅ Updated DeepSeek API key from database');
+        // CRITICAL: If DeepSeek is the active provider, ALWAYS use this.actualModel from database
+        // NO fallback to hardcoded values
+        const deepseekModel = (this.defaultProvider === 'deepseek' && this.actualModel)
+          ? this.actualModel
+          : settings['llmSettings.deepseekModel'];
+
+        if (!deepseekModel) {
+          console.warn('⚠️ No DeepSeek model configured in database! Skipping DeepSeek provider initialization.');
+        } else {
+          this.updateProviderSettings('deepseek', {
+            apiKey: deepseekApiKey,
+            model: deepseekModel
+          });
+          console.log(`✅ Updated DeepSeek API key from database with model: ${deepseekModel}`);
+        }
       }
 
       const embeddingProviderSetting = settings['embedding_provider'] || settings['embeddings.provider'] || settings['llmSettings.embeddingProvider'];
@@ -268,15 +344,22 @@ export class LLMManager {
 
       // Only log on startup or when changed
       if (!this.lastLoggedConfig || this.lastLoggedConfig.provider !== this.defaultProvider || this.lastLoggedConfig.model !== this.actualModel) {
-        console.log(`🤖 LLM Manager - Default provider: ${this.defaultProvider}`);
-        console.log(`🤖 LLM Manager - Model: ${this.actualModel}`);
-        console.log(`🤖 LLM Manager - Fallback order: ${this.fallbackOrder.join(', ')}`);
+        console.log(`🤖 [LLM Manager] Active Chat Provider: ${this.defaultProvider}`);
+        console.log(`🤖 [LLM Manager] Active Chat Model: ${this.defaultProvider}/${this.actualModel}`);
+        console.log(`🎯 [LLM Manager] Fallback order: ${this.fallbackOrder.join(', ')}`);
         this.lastLoggedConfig = { provider: this.defaultProvider, model: this.actualModel };
       }
 
     } catch (error) {
       console.warn('⚠️ Failed to load LLM settings from database:', error);
     }
+  }
+
+  /**
+   * Public method to reload settings from database
+   */
+  public async reloadSettings(): Promise<void> {
+    await this.loadSettingsFromDatabase();
   }
 
   /**
@@ -440,7 +523,19 @@ export class LLMManager {
           }
           break;
         case 'gemini':
-          prov.client = new GoogleGenerativeAI(prov.apiKey);
+          console.log('🔧 Initializing Gemini provider with API key:', prov.apiKey ? `✅ Present (${prov.apiKey.substring(0, 10)}...)` : '❌ Missing');
+          try {
+            prov.client = new GoogleGenerativeAI(prov.apiKey);
+            console.log('✅ Gemini client created successfully');
+            console.log('🔍 Verification - Gemini client:', {
+              hasClient: !!prov.client,
+              clientType: typeof prov.client,
+              hasMethod: typeof prov.client?.getGenerativeModel === 'function'
+            });
+          } catch (error) {
+            console.error('❌ Failed to create Gemini client:', error);
+            return false;
+          }
           break;
         case 'deepseek':
           console.log('🔧 Initializing DeepSeek provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
@@ -646,6 +741,8 @@ export class LLMManager {
     const preferredProvider = options.preferredProvider || this.defaultProvider;
     let provider = preferredProvider;
 
+    console.log(`🎯 MODEL SELECTION: User requested provider: "${preferredProvider}", defaultProvider: "${this.defaultProvider}"`);
+
     // Check if preferred provider is available
     let prov = this.providers.get(provider);
     console.log(`🔍 Provider ${provider} state:`, {
@@ -660,22 +757,46 @@ export class LLMManager {
     // Only try fallbacks if this is a user-specified preferred provider that fails
     const isFromSettings = !options.preferredProvider; // If no preferred provider specified, this is from settings
 
+    let activeProviderFailed = false;
     if (!prov || !prov.isInitialized || !prov.apiKey) {
       if (isFromSettings) {
-        // This is the active provider from settings - initialize it instead of falling back
+        // This is the active provider from settings - try to initialize, if fails use fallback
         console.log(`🔧 Initializing active provider from settings: ${provider}`);
         if (!this.initializeProvider(provider)) {
-          throw new Error(`Active provider ${provider} failed to initialize. Please check configuration.`);
+          console.error(`❌ CRITICAL: Active provider ${provider} failed to initialize. Reason: ${!prov?.apiKey ? 'Missing API key' : 'Initialization error'}`);
+          activeProviderFailed = true;
+
+          // Save the error status to settings
+          const settingsService = require('./settings.service').SettingsService.getInstance();
+          await settingsService.saveSetting(`llmStatus.${provider}.status`, 'error');
+          await settingsService.saveSetting(`llmStatus.${provider}.error`, `Failed to initialize: Check API key`);
+          await settingsService.saveSetting(`llmStatus.${provider}.lastChecked`, new Date().toISOString());
+
+          // Try fallback
+          console.log(`🔄 Trying to find fallback provider...`);
+          const availableProvider = await this.getAvailableProvider();
+          if (!availableProvider) {
+            throw new Error('LLM e bağlanılamadı. Lütfen API anahtarlarınızı kontrol edin.');
+          }
+          console.log(`✅ Using fallback provider: ${availableProvider}`);
+          provider = availableProvider;
+        } else {
+          console.log(`✅ Successfully initialized provider: ${provider}`);
         }
       } else {
         // User specified a different provider - try fallbacks
-        console.log(`⚠️ Preferred provider ${provider} not available, trying fallback...`);
+        console.log(`⚠️ USER'S PREFERRED provider ${provider} not available (API key or initialization issue)`);
+        console.log(`🔄 Trying to find fallback provider...`);
         const availableProvider = await this.getAvailableProvider();
         if (!availableProvider) {
           throw new Error('LLM e bağlanılamadı. Lütfen API anahtarlarınızı kontrol edin.');
         }
+        console.log(`⚠️ FALLBACK TO: ${availableProvider} (User requested: ${preferredProvider})`);
         provider = availableProvider;
+        activeProviderFailed = true;
       }
+    } else {
+      console.log(`✅ Provider ${provider} is ready to use (already initialized)`);
     }
 
     if (!provider) {
@@ -723,7 +844,7 @@ export class LLMManager {
             content: content,
             provider: 'Claude',
             model: prov!.model,
-            fallbackUsed: provider !== preferredProvider
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed || activeProviderFailed
           };
 
         case 'openai':
@@ -745,6 +866,7 @@ export class LLMManager {
             hasChat: !!(prov!.client && (prov!.client as any).chat),
             hasCompletions: !!(prov!.client && (prov!.client as any).chat && (prov!.client as any).chat.completions)
           });
+          console.log(`🤖 [CHAT REQUEST] Using OpenAI | Model: ${prov!.model} | Provider: ${provider} | Preferred: ${preferredProvider}`);
           const openaiResponse = await prov!.client.chat.completions.create({
             model: prov!.model,
             max_tokens: maxTokens,
@@ -758,7 +880,7 @@ export class LLMManager {
             content: openaiResponse.choices[0].message.content || '',
             provider: 'OpenAI',
             model: prov!.model,
-            fallbackUsed: provider !== preferredProvider
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed
           };
 
         case 'gemini':
@@ -772,16 +894,15 @@ export class LLMManager {
             throw new Error('Gemini client is not properly initialized');
           }
 
-          // Map model names to valid Gemini models
+          // Use model name as-is (Gemini API no longer uses -latest suffix)
           let geminiModelName = prov!.model;
-          if (geminiModelName === 'gemini-1.5-pro') {
-            geminiModelName = 'gemini-1.5-pro-latest';
-          } else if (geminiModelName === 'gemini-1.5-flash') {
-            geminiModelName = 'gemini-1.5-flash-latest';
-          } else if (!geminiModelName.includes('gemini-')) {
+          // Validate model name
+          if (!geminiModelName || !geminiModelName.includes('gemini-')) {
             // Fallback to flash if invalid model
-            geminiModelName = 'gemini-1.5-flash-latest';
+            geminiModelName = 'gemini-1.5-flash';
           }
+          // Remove -latest suffix if present (deprecated)
+          geminiModelName = geminiModelName.replace('-latest', '');
 
           const geminiModel = prov!.client.getGenerativeModel({ model: geminiModelName });
 
@@ -806,7 +927,7 @@ export class LLMManager {
             content: geminiResponse.response.text() || '',
             provider: 'Gemini',
             model: geminiModelName,
-            fallbackUsed: provider !== preferredProvider
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed
           };
 
         case 'deepseek':
@@ -844,7 +965,7 @@ export class LLMManager {
             content: deepseekResponse.choices[0].message.content || '',
             provider: 'DeepSeek',
             model: deepseekModel,
-            fallbackUsed: provider !== preferredProvider
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed
           };
 
         default:

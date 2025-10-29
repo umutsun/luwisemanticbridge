@@ -109,6 +109,13 @@ router.get('/system', async (req: Request, res: Response) => {
           status: serverStatus.settings || 'unknown',
           message: serverStatus.settings === 'loaded' ? 'Settings loaded' : (serverStatus.settings === 'failed' ? 'Failed to load settings' : 'Checking...'),
           responseTime: null
+        },
+        active_llm: {
+          status: 'unknown',
+          message: 'Checking active LLM...',
+          responseTime: null,
+          provider: null,
+          model: null
         }
       },
       uptime: process.uptime(),
@@ -168,6 +175,27 @@ router.get('/system', async (req: Request, res: Response) => {
       healthStatus.services.settings.status = 'loaded';
       healthStatus.services.settings.message = 'Settings loaded';
       healthStatus.services.settings.responseTime = Date.now() - settingsStart;
+
+      // Check Active LLM Status
+      const llmStart = Date.now();
+      const activeModel = await settingsService.getSetting('llmSettings.activeChatModel');
+      if (activeModel) {
+        const [provider, model] = activeModel.split('/');
+        const llmStatus = settings?.llmStatus?.[provider];
+
+        healthStatus.services.active_llm.provider = provider;
+        healthStatus.services.active_llm.model = model;
+        healthStatus.services.active_llm.responseTime = Date.now() - llmStart;
+
+        if (llmStatus?.status === 'error') {
+          healthStatus.services.active_llm.status = 'error';
+          healthStatus.services.active_llm.message = llmStatus.error || 'Active LLM provider failed';
+          healthStatus.status = 'degraded';
+        } else {
+          healthStatus.services.active_llm.status = 'connected';
+          healthStatus.services.active_llm.message = `Connected to ${provider}`;
+        }
+      }
     } catch (error) {
       healthStatus.services.settings.status = 'error';
       healthStatus.services.settings.message = error.message;
@@ -337,24 +365,36 @@ router.get('/services', async (req: Request, res: Response) => {
 // Configuration status
 router.get('/config', async (req: Request, res: Response) => {
   try {
+    // Load database and redis settings from settings table
+    let dbSettings: any = {};
+    let redisSettings: any = {};
+    try {
+      const settingsService = SettingsService.getInstance();
+      const settings = await settingsService.getAllSettings();
+      dbSettings = settings.database || settings.lsemb_database || {};
+      redisSettings = settings.redis || settings.redis_config || {};
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+
     const configStatus = {
       timestamp: new Date().toISOString(),
       lsemb_database: {
-        host: process.env.POSTGRES_HOST || 'lsemb.luwi.dev',
-        port: process.env.POSTGRES_PORT || '5432',
-        database: process.env.POSTGRES_DB || 'lsemb',
+        host: dbSettings.host || process.env.POSTGRES_HOST || 'localhost',
+        port: dbSettings.port || process.env.POSTGRES_PORT || '5432',
+        database: dbSettings.database || dbSettings.name || process.env.POSTGRES_DB || 'lsemb',
         connected: false
       },
       source_database: {
-        host: 'Loaded from settings',
-        port: 'Loaded from settings',
-        database: 'Loaded from settings',
+        host: dbSettings.host || 'Not configured',
+        port: dbSettings.port || 'Not configured',
+        database: dbSettings.database || dbSettings.name || 'Not configured',
         connected: false
       },
       redis: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: process.env.REDIS_PORT || 6379,
-        db: process.env.REDIS_DB || 2,
+        host: redisSettings.host || process.env.REDIS_HOST || 'localhost',
+        port: redisSettings.port || process.env.REDIS_PORT || 6379,
+        db: redisSettings.db || process.env.REDIS_DB || 2,
         connected: false
       },
       app_config: {

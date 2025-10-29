@@ -348,8 +348,25 @@ export async function initializeLsembDatabase() {
         embedding_count INTEGER DEFAULT 0,
         metadata JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        parsed_data JSONB,
+        column_headers TEXT[],
+        row_count INTEGER,
+        transform_status VARCHAR(50) DEFAULT 'pending',
+        transform_progress INTEGER DEFAULT 0,
+        target_table_name VARCHAR(255),
+        source_db_id VARCHAR(100),
+        transform_errors JSONB,
+        transformed_at TIMESTAMP,
+        data_quality_score FLOAT
       )
+    `);
+
+    // Create indexes for document transform
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_documents_transform_status ON documents(transform_status);
+      CREATE INDEX IF NOT EXISTS idx_documents_file_type ON documents(file_type);
+      CREATE INDEX IF NOT EXISTS idx_documents_source_db_id ON documents(source_db_id);
     `);
 
     await client.query(`

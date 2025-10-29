@@ -318,7 +318,9 @@ let migrationProgress: any = {
   totalBatches: 0,
   fallbackMode: false,
   fallbackReason: null,
-  embeddingSettings: null
+  embeddingSettings: null,
+  duplicatesSkipped: 0,  // NEW: Track duplicate content skipped
+  duplicateDetails: []    // NEW: Store details of skipped duplicates
 };
 
 // Load progress from Redis on startup
@@ -362,6 +364,14 @@ async function loadProgressFromRedis() {
 function getEmbeddingCacheKey(text: string): string {
   const hash = crypto.createHash('md5').update(text).digest('hex');
   return `embedding:${hash}`;
+}
+
+// Helper function to generate content hash for duplicate detection
+function generateContentHash(text: string): string {
+  // Normalize: lowercase, trim, compress whitespace
+  const normalized = text.toLowerCase().trim().replace(/\s+/g, ' ');
+  // Generate SHA-256 hash
+  return crypto.createHash('sha256').update(normalized).digest('hex');
 }
 
 // Export the load function to be called on server startup
@@ -2448,27 +2458,97 @@ async function processMigration(tables: string[], batchSize: number, migrationId
             const { embedding, cached } = embeddings[i];
             const row = validRows[i];
             const text = batchTexts[i];
-            
+
+            // ═══════════════════════════════════════════════════════
+            // ✅ DUPLICATE PREVENTION: Content Hash Check
+            // ═══════════════════════════════════════════════════════
+            const contentHash = generateContentHash(text);
+
+            try {
+              // Check if this exact content already exists in unified_embeddings
+              const duplicateCheck = await targetPool.query(
+                `SELECT id, source_table, source_id, source_name, created_at
+                 FROM unified_embeddings
+                 WHERE content_hash = $1
+                 LIMIT 1`,
+                [contentHash]
+              );
+
+              if (duplicateCheck.rows.length > 0) {
+                const existing = duplicateCheck.rows[0];
+                const skipReason = `Duplicate content found: ${existing.source_name}/${existing.source_table} ID=${existing.source_id}`;
+
+                console.log(`⚠️  DUPLICATE SKIPPED: ${table} ID=${row[primaryKey]}`);
+                console.log(`    → Already exists as: ${existing.source_table} ID=${existing.source_id}`);
+                console.log(`    → Content hash: ${contentHash.substring(0, 16)}...`);
+                console.log(`    → Original created: ${existing.created_at}`);
+
+                // Track duplicate statistics
+                if (!migrationProgress.duplicatesSkipped) {
+                  migrationProgress.duplicatesSkipped = 0;
+                  migrationProgress.duplicateDetails = [];
+                }
+                migrationProgress.duplicatesSkipped++;
+
+                // Store details (keep last 100 for monitoring)
+                if (migrationProgress.duplicateDetails.length < 100) {
+                  migrationProgress.duplicateDetails.push({
+                    skippedTable: table,
+                    skippedId: row[primaryKey],
+                    existingTable: existing.source_table,
+                    existingId: existing.source_id,
+                    contentHash: contentHash.substring(0, 16),
+                    timestamp: new Date().toISOString()
+                  });
+                }
+
+                // Update progress counter but skip insertion
+                migrationProgress.current++;
+                migrationProgress.percentage = Math.min(
+                  100,
+                  Math.round((migrationProgress.current / migrationProgress.total) * 100)
+                );
+
+                // Save progress to Redis
+                try {
+                  await redis.set('migration:progress', JSON.stringify(migrationProgress), 'EX', 7 * 24 * 60 * 60);
+                } catch (redisErr) {
+                  console.error('Failed to persist progress to Redis:', redisErr);
+                }
+
+                // Skip this record - continue to next
+                continue;
+              }
+            } catch (hashCheckErr) {
+              console.error(`❌ Error checking content hash for ${table} ID=${row[primaryKey]}:`, hashCheckErr);
+              // Continue with insertion if hash check fails (fail-safe)
+            }
+            // ═══════════════════════════════════════════════════════
+            // End of duplicate check
+            // ═══════════════════════════════════════════════════════
+
             // Track token usage (divided by batch size for per-record tracking)
             const tokensPerRecord = cached ? 0 : Math.round(500); // Estimate 500 tokens per uncached record
-            
+
             // Save embedding to unified_embeddings table in TARGET database (lsemb)
             if (primaryKey !== 'ROW_NUMBER') {
               try {
                 // Get display name for the table
                 const displayNames = await getTableDisplayNames();
-                
-                // Insert into unified_embeddings table
+
+                // Insert into unified_embeddings table (NOW WITH content_hash)
                 await targetPool.query(
                   `INSERT INTO unified_embeddings (
                     source_type, source_name, source_table, source_id,
-                    title, content, embedding, metadata, tokens_used, model_used
-                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                  ON CONFLICT (source_type, source_name, source_table, source_id) 
-                  DO UPDATE SET 
-                    embedding = $7, 
-                    content = $6,
-                    tokens_used = $9,
+                    title, content, embedding, metadata, tokens_used, model_used,
+                    content_hash
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                  ON CONFLICT (source_type, source_name, source_table, source_id)
+                  DO UPDATE SET
+                    embedding = EXCLUDED.embedding,
+                    content = EXCLUDED.content,
+                    content_hash = EXCLUDED.content_hash,
+                    tokens_used = EXCLUDED.tokens_used,
                     updated_at = NOW()`,
                   [
                     'database',
@@ -2478,14 +2558,16 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                     `${displayNames[table] || table} - ID: ${row[primaryKey]}`,
                     text.substring(0, 5000),
                     `[${embedding.join(',')}]`,
-                    JSON.stringify({ 
+                    JSON.stringify({
                       original_table: table,
-                      migrated_at: new Date()
+                      migrated_at: new Date(),
+                      content_hash: contentHash
                     }),
                     tokensPerRecord,
                     fallbackMode ? 'fallback-local' :
                       embeddingSettings.provider === 'ollama' ? `ollama:${ollamaModelName}` :
-                      embeddingSettings.provider === 'mistral' ? embeddingSettings.model : 'text-embedding-ada-002'
+                      embeddingSettings.provider === 'mistral' ? embeddingSettings.model : 'text-embedding-ada-002',
+                    contentHash  // $11: NEW content_hash parameter
                   ]
                 );
                 

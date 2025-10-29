@@ -83,7 +83,7 @@ class LoggerService {
         winston.format.errors({ stack: true }),
         winston.format.json()
       ),
-      defaultMeta: { service: 'alice-semantic-bridge' },
+      defaultMeta: { service: 'luwi-semantic-bridge' },
       transports
     });
   }

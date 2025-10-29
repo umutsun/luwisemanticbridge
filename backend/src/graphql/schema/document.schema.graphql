@@ -1,0 +1,75 @@
+# Document Schema
+# GraphQL types for document management
+
+type Document {
+  id: ID!
+  title: String!
+  content: String!
+  source: String
+  metadata: JSON
+  createdAt: DateTime!
+  updatedAt: DateTime
+  embeddings: [Embedding!]
+
+  # Transform metadata
+  transformStatus: String
+  transformProgress: Int
+  targetTableName: String
+  transformedAt: DateTime
+  lastTransformRowCount: Int
+  columnCount: Int
+  rowCount: Int
+  columnHeaders: [String!]
+  originalFilename: String
+  uploadCount: Int
+}
+
+type Embedding {
+  id: ID!
+  documentId: ID!
+  content: String!
+  vector: [Float!]
+  metadata: JSON
+}
+
+type DocumentList {
+  items: [Document!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
+input DocumentUploadInput {
+  title: String!
+  content: String!
+  source: String
+  metadata: JSON
+}
+
+input DocumentUpdateInput {
+  id: ID!
+  title: String
+  content: String
+  metadata: JSON
+}
+
+extend type Query {
+  # Get all documents
+  documents(limit: Int, offset: Int): DocumentList!
+
+  # Get single document
+  document(id: ID!): Document
+
+  # Search documents
+  searchDocuments(query: String!, limit: Int): [Document!]!
+}
+
+extend type Mutation {
+  # Upload document
+  uploadDocument(input: DocumentUploadInput!): Document!
+
+  # Update document
+  updateDocument(input: DocumentUpdateInput!): Document!
+
+  # Delete document
+  deleteDocument(id: ID!): Boolean!
+}

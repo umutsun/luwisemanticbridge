@@ -1,0 +1,4 @@
+### Run this to setup upload limits in database
+### Open in browser: http://localhost:3001/api/setup/upload-limits
+
+GET http://localhost:3001/api/setup/upload-limits

@@ -1,0 +1,296 @@
+# Optimized Semantic Search Schema
+# Performance-first implementation with caching, batching, and analytics
+
+# ============================================
+# QUERIES
+# ============================================
+
+extend type Query {
+  # Standard semantic search with caching
+  optimizedSemanticSearch(input: OptimizedSearchInput!): OptimizedSearchResponse!
+
+  # Batch search for multiple queries (deduplication + caching)
+  batchSemanticSearch(inputs: [OptimizedSearchInput!]!): [OptimizedSearchResponse!]!
+
+  # Get cached search result by cache key
+  getCachedSearch(cacheKey: String!): OptimizedSearchResponse
+
+  # Get popular searches
+  popularSearches(limit: Int = 10, timeframe: String = "24h"): [PopularSearch!]!
+
+  # Get search analytics
+  searchAnalytics(timeRange: TimeRangeInput): SearchAnalytics!
+
+  # Check cache status for a query
+  searchCacheStatus(query: String!, filters: SearchFilters): CacheStatus!
+
+  # Get cache statistics
+  cacheStatistics: CacheStatistics!
+}
+
+# ============================================
+# MUTATIONS
+# ============================================
+
+extend type Mutation {
+  # Prewarm cache for specific queries
+  prewarmSearchCache(queries: [String!]!): PrewarmResult!
+
+  # Clear search cache (admin only)
+  clearSearchCache(pattern: String): ClearCacheResult!
+
+  # Save search to history
+  saveSearchHistory(input: SaveSearchInput!): SearchHistory!
+
+  # Provide relevance feedback
+  provideRelevanceFeedback(input: FeedbackInput!): Boolean!
+}
+
+# ============================================
+# SUBSCRIPTIONS
+# ============================================
+
+extend type Subscription {
+  # Real-time search updates (streaming results)
+  searchStream(query: String!): SearchStreamResult!
+
+  # Cache updates notifications
+  cacheUpdates: CacheUpdate!
+
+  # Popular searches live updates
+  popularSearchesUpdates(limit: Int = 10): [PopularSearch!]!
+
+  # Search analytics live updates
+  analyticsUpdates: SearchAnalytics!
+}
+
+# ============================================
+# TYPES
+# ============================================
+
+type OptimizedSearchResponse {
+  results: [OptimizedSearchResult!]!
+  total: Int!
+  queryTime: Int!                    # Milliseconds
+  cacheHit: Boolean!                 # Was result from cache?
+  cacheKey: String!                  # Cache key for this query
+  queryVector: [Float!]              # Optional query embedding
+  suggestions: [String!]!
+  relatedQueries: [RelatedQuery!]!
+  facets: [Facet!]!                 # Aggregations for filtering
+  performance: PerformanceMetrics!
+}
+
+type OptimizedSearchResult {
+  id: ID!
+  content: String!
+  title: String
+  score: Float!
+  source: String!
+  documentId: String
+  metadata: JSON
+  embedding: Embedding
+  highlights: [Highlight!]!
+  timestamp: DateTime!
+  relevanceFeedback: RelevanceFeedback
+  rank: Int!                         # Result position (1-based)
+  explanation: String                # Why this result was selected
+}
+
+type PerformanceMetrics {
+  embeddingTime: Int!                # Time to generate query embedding (ms)
+  searchTime: Int!                   # Time to search vector database (ms)
+  postProcessingTime: Int!           # Time for ranking, filtering (ms)
+  totalTime: Int!                    # Total query time (ms)
+  vectorsScanned: Int!               # Number of vectors examined
+  cacheHit: Boolean!                 # Was embedding cached?
+}
+
+type PopularSearch {
+  query: String!
+  count: Int!                        # Number of times searched
+  avgResponseTime: Float!            # Average response time (ms)
+  lastSearched: DateTime!
+  trending: Boolean!                 # Trending in last hour
+}
+
+type SearchAnalytics {
+  totalSearches: Int!
+  uniqueQueries: Int!
+  avgResponseTime: Float!
+  cacheHitRate: Float!               # Percentage (0-100)
+  topQueries: [PopularSearch!]!
+  searchesByHour: [HourlyStats!]!
+  performanceDistribution: PerformanceDistribution!
+}
+
+type HourlyStats {
+  hour: DateTime!
+  count: Int!
+  avgResponseTime: Float!
+}
+
+type PerformanceDistribution {
+  p50: Float!                        # 50th percentile (median)
+  p95: Float!                        # 95th percentile
+  p99: Float!                        # 99th percentile
+  min: Float!
+  max: Float!
+}
+
+type CacheStatus {
+  cached: Boolean!
+  cacheKey: String
+  expiresAt: DateTime
+  hitCount: Int!                     # Times this query was served from cache
+  age: Int                           # Seconds since cached
+}
+
+type CacheStatistics {
+  hits: Int!
+  misses: Int!
+  hitRate: Float!                    # Percentage (0-100)
+  totalKeys: Int!
+  memoryUsage: Int                   # Bytes
+  oldestEntry: DateTime
+  newestEntry: DateTime
+}
+
+type CacheUpdate {
+  action: CacheAction!               # ADDED, REMOVED, UPDATED, CLEARED
+  cacheKey: String!
+  query: String
+  timestamp: DateTime!
+}
+
+enum CacheAction {
+  ADDED
+  REMOVED
+  UPDATED
+  CLEARED
+}
+
+type SearchStreamResult {
+  result: OptimizedSearchResult!
+  progress: Int!                     # Percentage (0-100)
+  totalExpected: Int!
+  isComplete: Boolean!
+}
+
+type RelatedQuery {
+  query: String!
+  score: Float!                      # Similarity score
+  count: Int!                        # Number of times searched
+}
+
+type Facet {
+  field: String!                     # Field name (e.g., "type", "source")
+  values: [FacetValue!]!
+}
+
+type FacetValue {
+  value: String!
+  count: Int!
+  selected: Boolean                  # Is this filter currently applied?
+}
+
+type Highlight {
+  field: String!
+  fragment: String!
+  matchedTerms: [String!]!
+}
+
+type RelevanceFeedback {
+  userId: String!
+  rating: Int!                       # 1-5 stars
+  clicked: Boolean!
+  feedback: String
+  timestamp: DateTime!
+}
+
+type SearchHistory {
+  id: ID!
+  userId: String!
+  query: String!
+  filters: SearchFilters
+  resultsCount: Int!
+  responseTime: Int!
+  clickedResults: [String!]!
+  timestamp: DateTime!
+}
+
+type PrewarmResult {
+  queriesProcessed: Int!
+  successful: Int!
+  failed: Int!
+  totalTime: Int!                    # Milliseconds
+}
+
+type ClearCacheResult {
+  keysCleared: Int!
+  pattern: String
+  success: Boolean!
+}
+
+# ============================================
+# INPUTS
+# ============================================
+
+input OptimizedSearchInput {
+  query: String!
+  limit: Int = 10
+  threshold: Float = 0.7
+  filters: SearchFilters
+  includeMetadata: Boolean = false
+  includeEmbeddings: Boolean = false
+  searchType: SearchType = HYBRID
+  sortBy: SortBy = RELEVANCE
+  enableCache: Boolean = true        # Allow cache usage
+  forceRefresh: Boolean = false      # Bypass cache
+}
+
+input SearchFilters {
+  documentTypes: [String!]
+  dateRange: DateRangeInput
+  sources: [String!]
+  metadata: JSON
+}
+
+input DateRangeInput {
+  start: DateTime!
+  end: DateTime!
+}
+
+input TimeRangeInput {
+  start: DateTime!
+  end: DateTime!
+}
+
+enum SearchType {
+  SEMANTIC                           # Pure vector search
+  KEYWORD                            # Pure text search (BM25)
+  HYBRID                             # Semantic + keyword (default)
+  NEURAL                             # Advanced neural search
+}
+
+enum SortBy {
+  RELEVANCE                          # By similarity score
+  DATE                               # By timestamp
+  POPULARITY                         # By click-through rate
+}
+
+input SaveSearchInput {
+  query: String!
+  filters: SearchFilters
+  resultsCount: Int!
+  responseTime: Int!
+  clickedResults: [String!]
+}
+
+input FeedbackInput {
+  searchId: String!
+  resultId: String!
+  rating: Int!                       # 1-5 stars
+  clicked: Boolean!
+  feedback: String
+}

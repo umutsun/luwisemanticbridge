@@ -48,7 +48,14 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    console.log('Processing message:', { message, conversationId, userId, temperature, stream });
+    console.log('🔍 [CHAT] Processing message:', {
+      message: message.substring(0, 50),
+      conversationId,
+      userId,
+      temperature,
+      model: model || 'NOT PROVIDED',
+      stream
+    });
 
     // Check if WebSocket streaming is requested
     if (stream && clientId && chatWss) {
@@ -218,7 +225,33 @@ router.get('/api/v2/chat/conversation/:id', async (req: Request, res: Response) 
  */
 router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
   try {
-    const suggestions = await ragChat.getPopularQuestions();
+    // Get chatbot settings to check autoGenerateSuggestions toggle
+    const settingsResult = await dbConfig.query(`
+      SELECT value FROM settings WHERE key = 'chatbot'
+    `);
+
+    let suggestions: string[] = [];
+
+    if (settingsResult.rows.length > 0) {
+      const rawValue = settingsResult.rows[0].value;
+      const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
+
+      const autoGenerate = chatbotData.autoGenerateSuggestions !== undefined
+        ? chatbotData.autoGenerateSuggestions
+        : true; // Default to true for backwards compatibility
+
+      if (autoGenerate) {
+        // Auto-generate suggestions from recent questions, documents, and topics
+        suggestions = await ragChat.getPopularQuestions();
+      } else {
+        // Use manual suggestion questions from chatbot settings
+        suggestions = chatbotData.suggestionQuestions || [];
+      }
+    } else {
+      // No settings found, use auto-generation
+      suggestions = await ragChat.getPopularQuestions();
+    }
+
     res.json({ suggestions });
   } catch (error: any) {
     console.error('Get suggestions error:', error);

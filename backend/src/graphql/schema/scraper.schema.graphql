@@ -1,0 +1,72 @@
+# Scraper Schema
+# Web scraping işlemleri için GraphQL types
+
+type ScrapingJob {
+  id: ID!
+  url: String!
+  status: ScrapingStatus!
+  progress: Int!
+  totalPages: Int
+  processedPages: Int
+  results: [ScrapedContent!]
+  error: String
+  startedAt: DateTime
+  completedAt: DateTime
+}
+
+enum ScrapingStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  PAUSED
+}
+
+type ScrapedContent {
+  id: ID!
+  url: String!
+  title: String
+  content: String!
+  metadata: JSON
+  scrapedAt: DateTime!
+}
+
+type ScrapingJobList {
+  items: [ScrapingJob!]!
+  total: Int!
+}
+
+input ScrapeInput {
+  url: String!
+  maxDepth: Int
+  includePatterns: [String!]
+  excludePatterns: [String!]
+  processEmbeddings: Boolean
+}
+
+extend type Query {
+  # Tüm scraping işlerini getir
+  scrapingJobs(limit: Int, status: ScrapingStatus): ScrapingJobList!
+
+  # Tek scraping işi getir
+  scrapingJob(id: ID!): ScrapingJob
+}
+
+extend type Mutation {
+  # Yeni scraping işi başlat
+  startScraping(input: ScrapeInput!): ScrapingJob!
+
+  # Scraping'i duraklat
+  pauseScraping(jobId: ID!): ScrapingJob!
+
+  # Scraping'i devam ettir
+  resumeScraping(jobId: ID!): ScrapingJob!
+
+  # Scraping'i iptal et
+  cancelScraping(jobId: ID!): Boolean!
+}
+
+extend type Subscription {
+  # Scraping progress'i izle
+  scrapingProgress(jobId: ID!): ScrapingJob!
+}

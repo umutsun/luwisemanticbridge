@@ -1195,21 +1195,20 @@ function LLMSettings() {
                 <Label>LLM Provider</Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
-                    value={tempConfig?.provider || 'openai'}
+                    value={tempConfig?.provider || llmConfig.provider}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
-                        // Update provider and activeChatModel
+                        const newModel = getDefaultModelForProvider(value);
                         const updatedConfig = {
                           ...tempConfig,
                           provider: value,
+                          model: newModel,
                           llmSettings: {
                             ...tempConfig?.llmSettings,
-                            activeChatModel: `${value}/${tempConfig?.model || getDefaultModelForProvider(value)}`
+                            activeChatModel: `${value}/${newModel}`
                           }
                         };
-                        updateTempConfig('provider', value);
                         setTempConfig(updatedConfig);
-                        // Auto-save when provider changes
                         try {
                           await updateSettingsCategory('llm', updatedConfig);
                           setLlmConfig(updatedConfig);
@@ -1312,22 +1311,21 @@ function LLMSettings() {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
                     disabled={false}
-                    value={tempConfig?.embeddingProvider || 'google'}
+                    value={tempConfig?.embeddingProvider}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
-                        // Update embedding provider in llmSettings
+                        const newModel = getDefaultEmbeddingModelForProvider(value);
                         const updatedConfig = {
                           ...tempConfig,
                           embeddingProvider: value,
+                          embeddingModel: newModel,
                           llmSettings: {
                             ...tempConfig?.llmSettings,
                             embeddingProvider: value,
-                            activeEmbeddingModel: `${value}/${tempConfig?.embeddingModel || getDefaultEmbeddingModelForProvider(value)}`
+                            activeEmbeddingModel: `${value}/${newModel}`
                           }
                         };
-                        updateTempConfig('embeddingProvider', value);
                         setTempConfig(updatedConfig);
-                        // Auto-save when provider changes
                         try {
                           await updateSettingsCategory('llm', updatedConfig);
                           setLlmConfig(updatedConfig);
@@ -1363,7 +1361,7 @@ function LLMSettings() {
                     </SelectContent>
                   </Select>
                   <Select
-                    value={tempConfig?.embeddingModel || getDefaultEmbeddingModelForProvider(tempConfig?.embeddingProvider || 'openai')}
+                    value={tempConfig?.embeddingModel}
                     onValueChange={async (value) => {
                       // Update embedding model in llmSettings
                       const updatedConfig = {
@@ -1398,8 +1396,8 @@ function LLMSettings() {
                       <SelectValue placeholder="Select embedding model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getEmbeddingModelsForProvider(tempConfig?.embeddingProvider || 'openai').map(model => {
-                        const details = getEmbeddingModelDetails(tempConfig?.embeddingProvider || 'openai', model);
+                      {getEmbeddingModelsForProvider(tempConfig?.embeddingProvider || llmConfig.embeddingProvider || 'openai').map(model => {
+                        const details = getEmbeddingModelDetails(tempConfig?.embeddingProvider || llmConfig.embeddingProvider || 'openai', model);
                         return (
                           <SelectItem key={model} value={model}>
                             <div className="flex flex-col">
@@ -1672,6 +1670,7 @@ function RAGSettings() {
         getRAGSettings(),
         fetch('/api/v2/chatbot/settings').then(res => res.json())
       ]);
+      console.log('RAG Data from API:', ragData);
       setRagConfig(ragData);
       setTempRAGConfig(ragData);
 

@@ -1,0 +1,382 @@
+# Data Pipeline Schema
+# Scraped data analysis, table creation, and migration pipeline
+
+# ============================================
+# TYPES
+# ============================================
+
+type DataAnalysis {
+  id: ID!
+  projectKey: String!
+  source: String!
+
+  # Sample data (first 10-20 rows)
+  sampleData: JSON!
+
+  # Detected entities and structure
+  detectedEntities: [DetectedEntity!]!
+
+  # Field type suggestions
+  fieldTypes: [FieldTypeSuggestion!]!
+
+  # Data quality metrics
+  dataQualityScore: Float!
+  rowCount: Int!
+  columnCount: Int!
+
+  # Issues found in data
+  issues: [DataIssue!]!
+
+  # Analysis metadata
+  analyzedAt: DateTime!
+  analyzedBy: String
+}
+
+type DetectedEntity {
+  name: String!
+  confidence: Float!
+  fields: [String!]!
+  sampleValues: JSON
+
+  # Suggested primary key
+  suggestedPrimaryKey: String
+
+  # Detected relationships with other entities
+  relationships: [EntityRelationship!]!
+}
+
+type EntityRelationship {
+  targetEntity: String!
+  type: RelationshipType!
+  foreignKeyField: String!
+  confidence: Float!
+}
+
+enum RelationshipType {
+  ONE_TO_ONE
+  ONE_TO_MANY
+  MANY_TO_ONE
+  MANY_TO_MANY
+}
+
+type FieldTypeSuggestion {
+  fieldName: String!
+  detectedType: String!
+  suggestedSQLType: String!
+  nullable: Boolean!
+
+  # Constraints
+  isPrimaryKey: Boolean!
+  isUnique: Boolean!
+  hasIndex: Boolean!
+
+  # Value analysis
+  uniqueValues: Int!
+  nullCount: Int!
+  sampleValues: [String!]!
+
+  # Warnings
+  warnings: [String!]!
+}
+
+type DataIssue {
+  severity: IssueSeverity!
+  field: String
+  row: Int
+  description: String!
+  suggestion: String
+  affectedRows: Int!
+  canAutoFix: Boolean!
+}
+
+enum IssueSeverity {
+  ERROR
+  WARNING
+  INFO
+}
+
+# ============================================
+# TABLE SCHEMA SUGGESTION
+# ============================================
+
+type TableSchemaSuggestion {
+  id: ID!
+  dataAnalysisId: ID!
+
+  # Suggested table structure
+  tableName: String!
+  columns: [ColumnDefinition!]!
+  primaryKey: String!
+  indexes: [IndexDefinition!]!
+  constraints: [ConstraintDefinition!]!
+
+  # SQL preview
+  createTableSQL: String!
+  estimatedSize: String!
+
+  # Validation results
+  conflicts: [SchemaConflict!]!
+  warnings: [String!]!
+  recommendations: [String!]!
+
+  # Can this schema be applied?
+  isValid: Boolean!
+  validationErrors: [String!]!
+}
+
+type ColumnDefinition {
+  name: String!
+  type: String!
+  nullable: Boolean!
+  defaultValue: String
+  isPrimaryKey: Boolean!
+  isUnique: Boolean!
+  isForeignKey: Boolean!
+  references: ForeignKeyReference
+  comment: String
+}
+
+type ForeignKeyReference {
+  table: String!
+  column: String!
+  onDelete: String
+  onUpdate: String
+}
+
+type IndexDefinition {
+  name: String!
+  columns: [String!]!
+  type: IndexType!
+  unique: Boolean!
+}
+
+enum IndexType {
+  BTREE
+  HASH
+  GIN
+  GIST
+}
+
+type ConstraintDefinition {
+  name: String!
+  type: ConstraintType!
+  columns: [String!]!
+  definition: String!
+}
+
+enum ConstraintType {
+  PRIMARY_KEY
+  FOREIGN_KEY
+  UNIQUE
+  CHECK
+  NOT_NULL
+}
+
+type SchemaConflict {
+  type: ConflictType!
+  description: String!
+  affectedObject: String!
+  resolution: String!
+  severity: IssueSeverity!
+}
+
+enum ConflictType {
+  TABLE_EXISTS
+  COLUMN_MISMATCH
+  TYPE_INCOMPATIBLE
+  CONSTRAINT_VIOLATION
+  INDEX_EXISTS
+}
+
+# ============================================
+# EXISTING TABLES INFO
+# ============================================
+
+type TableInfo {
+  schema: String!
+  name: String!
+  rowCount: Int
+  sizeInBytes: Int
+  columns: [ColumnInfo!]!
+  indexes: [IndexInfo!]!
+  foreignKeys: [ForeignKeyInfo!]!
+  createdAt: DateTime
+  lastModified: DateTime
+}
+
+type ColumnInfo {
+  name: String!
+  type: String!
+  nullable: Boolean!
+  defaultValue: String
+  isPrimaryKey: Boolean!
+  isUnique: Boolean!
+  comment: String
+}
+
+type IndexInfo {
+  name: String!
+  columns: [String!]!
+  type: String!
+  unique: Boolean!
+}
+
+type ForeignKeyInfo {
+  name: String!
+  column: String!
+  referencedTable: String!
+  referencedColumn: String!
+  onDelete: String
+  onUpdate: String
+}
+
+# ============================================
+# QUERIES
+# ============================================
+
+extend type Query {
+  # Analyze scraped data structure and quality
+  analyzeScrapedData(
+    source: String!
+    projectKey: String!
+    options: AnalysisOptions
+  ): DataAnalysis!
+
+  # Get table schema suggestion based on analysis
+  suggestTableSchema(
+    dataAnalysisId: ID!
+    targetDb: String
+    customizations: SchemaCustomization
+  ): TableSchemaSuggestion!
+
+  # Get existing tables in client database
+  existingTables(
+    clientDb: String
+    schema: String
+    includeSystemTables: Boolean
+  ): [TableInfo!]!
+
+  # Get specific table details
+  tableDetails(
+    clientDb: String
+    tableName: String!
+    schema: String
+  ): TableInfo
+
+  # Get data analysis by ID
+  dataAnalysis(id: ID!): DataAnalysis
+
+  # List all data analyses for a project
+  dataAnalyses(
+    projectKey: String!
+    limit: Int
+    offset: Int
+  ): DataAnalysisList!
+}
+
+type DataAnalysisList {
+  items: [DataAnalysis!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
+# ============================================
+# MUTATIONS
+# ============================================
+
+extend type Mutation {
+  # Create table from analyzed data
+  createTableFromData(
+    schemaId: ID!
+    targetDb: String
+    importData: Boolean
+  ): TableCreationResult!
+
+  # Insert data into created table
+  insertDataIntoTable(
+    tableName: String!
+    dataAnalysisId: ID!
+    targetDb: String
+    batchSize: Int
+  ): DataInsertionResult!
+
+  # Complete pipeline: analyze -> create table -> insert data -> embed
+  createAndPopulateTable(
+    source: String!
+    projectKey: String!
+    tableName: String
+    targetDb: String
+    embedAfterInsert: Boolean
+  ): TableCreationResult!
+}
+
+type TableCreationResult {
+  success: Boolean!
+  tableName: String!
+  rowsInserted: Int
+  errors: [String!]!
+  warnings: [String!]!
+  executionTime: Float!
+  tableSchema: TableSchemaSuggestion
+}
+
+type DataInsertionResult {
+  success: Boolean!
+  rowsInserted: Int!
+  rowsFailed: Int!
+  errors: [String!]!
+  executionTime: Float!
+}
+
+# ============================================
+# INPUTS
+# ============================================
+
+input AnalysisOptions {
+  # Sample size for analysis
+  sampleSize: Int
+
+  # Auto-detect entity relationships
+  detectRelationships: Boolean
+
+  # Run data quality checks
+  runQualityChecks: Boolean
+
+  # Suggest indexes
+  suggestIndexes: Boolean
+}
+
+input SchemaCustomization {
+  # Override table name
+  tableName: String
+
+  # Override column types
+  columnTypes: [ColumnTypeOverride!]
+
+  # Custom indexes
+  indexes: [IndexDefinitionInput!]
+
+  # Custom constraints
+  constraints: [ConstraintDefinitionInput!]
+}
+
+input ColumnTypeOverride {
+  columnName: String!
+  sqlType: String!
+  nullable: Boolean
+  defaultValue: String
+}
+
+input IndexDefinitionInput {
+  name: String!
+  columns: [String!]!
+  type: IndexType
+  unique: Boolean
+}
+
+input ConstraintDefinitionInput {
+  name: String!
+  type: ConstraintType!
+  columns: [String!]!
+  definition: String
+}

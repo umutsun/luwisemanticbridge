@@ -87,24 +87,34 @@ export class MessageStorageService {
       // Store in Redis first
       await this.storeMessageInRedis(data);
 
-      // Also generate embedding immediately for important messages
+      // Also generate embedding immediately for important messages (if table exists)
       if (type === 'answer' || type === 'search_result') {
-        const embedding = await LLMManager.generateEmbedding(content);
+        // Check if table exists first
+        const tableCheck = await lsembPool.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name = 'message_embeddings'
+          );
+        `);
 
-        // Store in message_embeddings with full context
-        const query = `
-          INSERT INTO message_embeddings (session_id, user_id, message_type, content, embedding, metadata)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT DO NOTHING
-          RETURNING id
-        `;
+        if (tableCheck.rows[0].exists) {
+          const embedding = await LLMManager.generateEmbedding(content);
 
-        await pool.query(query, [sessionId, userId, type, content, embedding, {
-          ...metadata,
-          sourceType: 'message_embeddings',
-          isEmbedded: true,
-          embeddedAt: new Date().toISOString()
-        }]);
+          // Store in message_embeddings with full context
+          const query = `
+            INSERT INTO message_embeddings (session_id, user_id, message_type, content, embedding, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT DO NOTHING
+            RETURNING id
+          `;
+
+          await lsembPool.query(query, [sessionId, userId, type, content, embedding, {
+            ...metadata,
+            sourceType: 'message_embeddings',
+            isEmbedded: true,
+            embeddedAt: new Date().toISOString()
+          }]);
+        }
       }
     } catch (error) {
       logger.error('Error saving enhanced message:', error);
@@ -201,7 +211,7 @@ export class MessageStorageService {
         if (message.type === 'search_result' || message.type === 'source_context') {
           const embedding = await LLMManager.generateEmbedding(message.content);
 
-          await pool.query(`
+          await lsembPool.query(`
             INSERT INTO message_embeddings (session_id, user_id, message_type, content, embedding, metadata)
             VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT DO NOTHING
@@ -252,7 +262,7 @@ export class MessageStorageService {
         LIMIT 100
       `;
 
-      const result = await pool.query(query, [sessionId]);
+      const result = await lsembPool.query(query, [sessionId]);
       return result.rows;
     } catch (error) {
       logger.error('Error getting session messages:', error);
@@ -297,7 +307,7 @@ export class MessageStorageService {
     `;
 
     try {
-      const result = await pool.query(query, [userId]);
+      const result = await lsembPool.query(query, [userId]);
       return result.rows[0] || {};
     } catch (error) {
       logger.error('Error analyzing user patterns:', error);
@@ -330,7 +340,7 @@ export class MessageStorageService {
     `;
 
     try {
-      const result = await pool.query(query, [limit]);
+      const result = await lsembPool.query(query, [limit]);
       return result.rows;
     } catch (error) {
       logger.error('Error getting popular topics:', error);
@@ -354,7 +364,7 @@ export class MessageStorageService {
       }
 
       // Clean up old database messages
-      await pool.query(`
+      await lsembPool.query(`
         DELETE FROM message_embeddings
         WHERE created_at < CURRENT_DATE - INTERVAL '${daysToKeep} days'
           AND user_id IS NOT NULL
@@ -391,25 +401,32 @@ export class MessageStorageService {
     metadata: any = {}
   ): Promise<void> {
     try {
+      // Ensure conversation exists first
+      await lsembPool.query(`
+        INSERT INTO conversations (id, user_id, title, created_at, updated_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+      `, [sessionId, userId, question.substring(0, 100)]);
+
+      // Note: messages table doesn't have user_id column, it uses conversation_id instead
+      // user_id is stored in the conversations table
       const query = `
-        INSERT INTO messages (conversation_id, user_id, message, role, created_at, metadata)
-        VALUES ($1, $2, $3, $4, NOW(), $5)
+        INSERT INTO messages (conversation_id, content, role, metadata, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
       `;
 
       await lsembPool.query(query, [
         sessionId,
-        userId,
         question,
         'user',
-        { ...metadata, timestamp: new Date().toISOString() }
+        { ...metadata, userId, timestamp: new Date().toISOString() }
       ]);
 
       await lsembPool.query(query, [
         sessionId,
-        userId,
         answer,
         'assistant',
-        { ...metadata, timestamp: new Date().toISOString() }
+        { ...metadata, userId, timestamp: new Date().toISOString() }
       ]);
 
       logger.info(`Basic Q&A pair saved for session: ${sessionId}`);
@@ -461,7 +478,7 @@ export class MessageStorageService {
 
     for (const [key, query] of Object.entries(queries)) {
       try {
-        const result = await pool.query(query, params);
+        const result = await lsembPool.query(query, params);
         stats[key] = result.rows;
       } catch (error) {
         stats[key] = [];

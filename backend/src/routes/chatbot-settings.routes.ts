@@ -6,40 +6,61 @@ const router = Router();
 // Get chatbot settings
 router.get('/settings', async (req: Request, res: Response) => {
   try {
-    // First, check if table exists, if not create it
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS chatbot_settings (
-        id SERIAL PRIMARY KEY,
-        setting_key VARCHAR(255) UNIQUE NOT NULL,
-        setting_value TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+    // Get chatbot settings from main settings table
+    const result = await pool.query(`
+      SELECT value FROM settings WHERE key = 'chatbot'
     `);
 
-    // Get all settings
-    const result = await pool.query('SELECT * FROM chatbot_settings');
-    
-    // Convert to key-value object
-    const settings = result.rows.reduce((acc: any, row: any) => {
-      acc[row.setting_key] = row.setting_value;
-      return acc;
-    }, {});
+    let chatbotData: any = {};
+    if (result.rows.length > 0) {
+      const rawValue = result.rows[0].value;
+      // Parse if string (TEXT column), use directly if already object (JSONB column)
+      chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
+    }
+
+    // Simplified log - only log if title exists
+    if (chatbotData.title) {
+      console.log(`💬 [Chatbot] ${chatbotData.title}`);
+    }
 
     // Default values if not set
+    // Note: maxResults/minResults are in RAG settings (ragSettings.maxResults, ragSettings.minResults)
+
+    // IMPORTANT: Validate and clean placeholder text
+    const defaultPlaceholder = 'Sorunuzu yazın...';
+    let cleanPlaceholder = defaultPlaceholder;
+
+    if (chatbotData.placeholder && typeof chatbotData.placeholder === 'string') {
+      const placeholder = chatbotData.placeholder.trim();
+
+      // Check if placeholder looks valid (reasonable length, no duplicates)
+      const isDuplicated = placeholder.toLowerCase().split('sorunuzu').length > 2;
+      const isReasonableLength = placeholder.length > 5 && placeholder.length < 100;
+      const hasValidChars = /^[\w\sğüşıöçĞÜŞİÖÇ.,!?-]+$/.test(placeholder);
+
+      if (!isDuplicated && isReasonableLength && hasValidChars) {
+        cleanPlaceholder = placeholder;
+      } else {
+        console.warn(`⚠️ Invalid placeholder detected: "${placeholder}", using default`);
+      }
+    }
+
     const defaultSettings = {
-      title: settings.title || 'ASB Hukuki Asistan',
-      subtitle: settings.subtitle || 'Yapay Zeka Asistanınız',
-      logoUrl: settings.logoUrl || '',
-      welcomeMessage: settings.welcomeMessage || 'Türk hukuku hakkında soru sorun, belgeler arasında arama yapın ve hukuki danışmanlık alın.',
-      placeholder: settings.placeholder || 'Hukuki sorunuzu yazın...',
-      primaryColor: settings.primaryColor || '#3B82F6',
-      suggestions: settings.suggestions || JSON.stringify([
-        { icon: '📚', title: 'Hukuki Araştırma', description: 'İlgili kararları ve kanunları bulun' },
-        { icon: '📄', title: 'Belge Analizi', description: 'Sözleşme ve yasal belgeleri inceleyin' },
-        { icon: '⚖️', title: 'İçtihat Hukuku', description: 'Emsal kararları ve içtihatları keşfedin' }
-      ])
+      title: chatbotData.title || '',
+      subtitle: chatbotData.subtitle || '',
+      logoUrl: chatbotData.logoUrl || '',
+      placeholder: cleanPlaceholder,
+      primaryColor: chatbotData.primaryColor || '#3B82F6',
+      suggestionQuestions: chatbotData.suggestionQuestions || [],
+      enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
+      autoGenerateSuggestions: chatbotData.autoGenerateSuggestions !== undefined ? chatbotData.autoGenerateSuggestions : true,
+      maxResponseLength: chatbotData.maxResponseLength || 1000,
+      maxQuestionLength: chatbotData.maxQuestionLength || 500,
+      questionTemplate: chatbotData.questionTemplate || 'Yaptığımız konuşmaya göre, şunu da merak ediyor olabilirsiniz: {question}',
+      autoGenerateQuestions: chatbotData.autoGenerateQuestions || false
     };
+
+    // Log removed - already logged above
 
     res.json(defaultSettings);
   } catch (error) {
@@ -53,27 +74,16 @@ router.post('/settings', async (req: Request, res: Response) => {
   try {
     const settings = req.body;
 
-    // Ensure table exists
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS chatbot_settings (
-        id SERIAL PRIMARY KEY,
-        setting_key VARCHAR(255) UNIQUE NOT NULL,
-        setting_value TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    // Update chatbot settings in main settings table
+    await pool.query(
+      `INSERT INTO settings (key, value, category, description, updated_at)
+       VALUES ('chatbot', $1, 'chatbot', 'Chatbot configuration and customization', CURRENT_TIMESTAMP)
+       ON CONFLICT (key)
+       DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(settings)]
+    );
 
-    // Update each setting
-    for (const [key, value] of Object.entries(settings)) {
-      await pool.query(
-        `INSERT INTO chatbot_settings (setting_key, setting_value, updated_at) 
-         VALUES ($1, $2, CURRENT_TIMESTAMP) 
-         ON CONFLICT (setting_key) 
-         DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP`,
-        [key, typeof value === 'string' ? value : JSON.stringify(value)]
-      );
-    }
+    console.log(`✅ [Chatbot] Saved: ${settings.title || 'Untitled'}`);
 
     res.json({ success: true, message: 'Settings updated successfully' });
   } catch (error) {
@@ -85,7 +95,7 @@ router.post('/settings', async (req: Request, res: Response) => {
 // Reset to default settings
 router.delete('/settings', async (req: Request, res: Response) => {
   try {
-    await pool.query('DELETE FROM chatbot_settings');
+    await pool.query(`DELETE FROM settings WHERE key = 'chatbot'`);
     res.json({ success: true, message: 'Settings reset to default' });
   } catch (error) {
     console.error('Error resetting settings:', error);

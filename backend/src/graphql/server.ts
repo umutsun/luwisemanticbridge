@@ -6,9 +6,9 @@
 import { createYoga } from 'graphql-yoga';
 import { createServer } from 'node:http';
 import { makeExecutableSchema } from '@graphql-tools/schema';
-import { loadFilesSync } from '@graphql-tools/load-files';
-import { mergeTypeDefs, mergeResolvers } from '@graphql-tools/merge';
+import { mergeResolvers } from '@graphql-tools/merge';
 import { Application } from 'express';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { GraphQLContext, createContext } from './context';
 import * as resolvers from './resolvers';
@@ -24,13 +24,29 @@ import {
  * GraphQL schema ve resolver'ları yükle
  */
 export function loadSchema() {
-  // Tüm .graphql dosyalarını yükle
-  const typesArray = loadFilesSync(join(__dirname, './schema'), {
-    extensions: ['graphql'],
-  });
+  // Schema dosyalarını manual olarak yükle
+  const schemaDir = join(__dirname, './schema');
 
-  // Type definition'ları birleştir
-  const typeDefs = mergeTypeDefs(typesArray);
+  const baseSchema = readFileSync(join(schemaDir, 'base.schema.graphql'), 'utf-8');
+  const searchSchema = readFileSync(join(schemaDir, 'search.schema.graphql'), 'utf-8');
+  const chatSchema = readFileSync(join(schemaDir, 'chat.schema.graphql'), 'utf-8');
+  const settingsSchema = readFileSync(join(schemaDir, 'settings.schema.graphql'), 'utf-8');
+  const documentSchema = readFileSync(join(schemaDir, 'document.schema.graphql'), 'utf-8');
+  const scraperSchema = readFileSync(join(schemaDir, 'scraper.schema.graphql'), 'utf-8');
+  const dataPipelineSchema = readFileSync(join(schemaDir, 'data-pipeline.schema.graphql'), 'utf-8');
+  const documentTransformSchema = readFileSync(join(schemaDir, 'document-transform.schema.graphql'), 'utf-8');
+
+  // Tüm schema'ları birleştir
+  const typeDefs = `
+    ${baseSchema}
+    ${searchSchema}
+    ${chatSchema}
+    ${settingsSchema}
+    ${documentSchema}
+    ${scraperSchema}
+    ${dataPipelineSchema}
+    ${documentTransformSchema}
+  `;
 
   // Resolver'ları birleştir
   const mergedResolvers = mergeResolvers([
@@ -40,6 +56,8 @@ export function loadSchema() {
     resolvers.settingsResolvers,
     resolvers.documentResolvers,
     resolvers.scraperResolvers,
+    resolvers.dataPipelineResolvers,
+    resolvers.documentTransformResolvers,
   ]);
 
   // Executable schema oluştur
@@ -83,41 +101,72 @@ export function createGraphQLServer(app: Application) {
       `,
     },
 
-    // CORS configuration
-    cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-      credentials: true,
-    },
+    // CORS configuration - disable, let Express handle it
+    cors: false, // Let Express CORS middleware handle CORS
 
     // Error masking in production
-    maskedErrors: process.env.NODE_ENV === 'production',
+    maskedErrors: false, // Disable error masking for debugging
+
+    // Logging
+    logging: {
+      debug: (...args) => console.log('[GraphQL Debug]', ...args),
+      info: (...args) => console.log('[GraphQL Info]', ...args),
+      warn: (...args) => console.warn('[GraphQL Warning]', ...args),
+      error: (...args) => console.error('[GraphQL Error]', ...args),
+    },
+
+    // Format errors for better debugging
+    formatError: (err) => {
+      console.error('[GraphQL] Full Error Details:', {
+        message: err.message,
+        path: err.path,
+        locations: err.locations,
+        extensions: err.extensions,
+        originalError: err.originalError,
+        stack: err.originalError?.stack,
+      });
+      return err;
+    },
 
     // Batching configuration
     batching: {
       limit: 10,
     },
 
-    // Plugins
+    // Plugins - Minimal debugging without blocking
     plugins: [
-      // Rate limiting
-      rateLimitPlugin({
-        max: 100,
-        window: '1m',
-      }),
+      {
+        onExecute({ args }) {
+          console.log('[GraphQL Plugin] onExecute called');
+          return {
+            onExecuteDone({ result }) {
+              console.log('[GraphQL Plugin] Execution done');
+              if (result && 'errors' in result) {
+                console.error('[GraphQL Plugin] Execution errors:', result.errors);
+              }
+            },
+          };
+        },
+      },
+      // // Rate limiting
+      // rateLimitPlugin({
+      //   max: 100,
+      //   window: '1m',
+      // }),
 
-      // Request logging
-      loggingPlugin(),
+      // // Request logging
+      // loggingPlugin(),
 
-      // Query complexity limiting
-      complexityPlugin({
-        maxComplexity: 1000,
-      }),
+      // // Query complexity limiting
+      // complexityPlugin({
+      //   maxComplexity: 1000,
+      // }),
 
-      // Authentication & Authorization
-      authPlugin(),
+      // // Authentication & Authorization
+      // authPlugin(),
 
-      // DataLoader for N+1 prevention
-      dataloaderPlugin(),
+      // // DataLoader for N+1 prevention
+      // dataloaderPlugin(),
     ],
 
     // Health check endpoint

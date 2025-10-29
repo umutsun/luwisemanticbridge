@@ -1,0 +1,171 @@
+# Document Transform Schema
+# Handles CSV/JSON upload, preview, and transformation to source_db
+
+# ============================================
+# TYPES
+# ============================================
+
+type DocumentMetadata {
+  id: ID!
+  filename: String!
+  fileType: String!
+  fileSize: Int!
+  rowCount: Int!
+  columnHeaders: [String!]!
+  parsedData: JSON
+  dataQualityScore: Float!
+  transformStatus: TransformStatus!
+  transformProgress: Int!
+  targetTableName: String
+  sourceDbId: String
+  transformErrors: JSON
+  transformedAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type DocumentPreview {
+  documentId: ID!
+  filename: String!
+  fileType: String!
+  rowCount: Int!
+  columnHeaders: [String!]!
+  sampleRows: [JSON!]!
+  dataQuality: TransformDataQuality!
+  suggestedTableName: String!
+  isValid: Boolean!
+  existingTableStatus: ExistingTableStatus
+}
+
+type ExistingTableStatus {
+  exists: Boolean!
+  rowCount: Int!
+  willResume: Boolean!
+  resumeFromRow: Int
+}
+
+type TransformDataQuality {
+  score: Float!
+  issues: [TransformDataIssue!]!
+  fieldTypes: [TransformFieldType!]!
+  warnings: [String!]!
+}
+
+type TransformDataIssue {
+  severity: String!
+  field: String
+  row: Int
+  description: String!
+  suggestion: String
+  affectedRows: Int!
+  canAutoFix: Boolean!
+}
+
+type TransformFieldType {
+  field: String!
+  type: String!
+  nullable: Boolean!
+  unique: Boolean!
+}
+
+type TransformProgress {
+  jobId: String!
+  documentId: ID!
+  status: TransformStatus!
+  progress: Int!
+  rowsProcessed: Int!
+  totalRows: Int!
+  currentDocument: String!
+  errors: [String!]!
+  startedAt: DateTime!
+  completedAt: DateTime
+}
+
+type TransformResult {
+  jobId: String!
+  status: String!
+  message: String!
+  documentsProcessed: Int!
+}
+
+enum TransformStatus {
+  PENDING
+  ANALYZING
+  CREATING_TABLE
+  INSERTING_DATA
+  TRANSFORMING
+  COMPLETED
+  FAILED
+}
+
+# ============================================
+# QUERIES
+# ============================================
+
+extend type Query {
+  # Get transform document by ID
+  transformDocument(id: ID!): DocumentMetadata
+
+  # List all transform documents with optional filters
+  transformDocuments(
+    limit: Int
+    offset: Int
+    status: TransformStatus
+    fileType: String
+  ): TransformDocumentList!
+
+  # Get document preview with sample data
+  documentPreview(documentId: ID!): DocumentPreview!
+
+  # Get transformation progress
+  transformProgress(jobId: String!): [TransformProgress!]!
+}
+
+type TransformDocumentList {
+  items: [DocumentMetadata!]!
+  total: Int!
+  hasMore: Boolean!
+}
+
+# ============================================
+# MUTATIONS
+# ============================================
+
+extend type Mutation {
+  # Upload CSV/JSON document for transformation (disabled for now)
+  # uploadTransformDocument(
+  #   file: Upload!
+  #   filename: String!
+  # ): DocumentMetadata!
+
+  # Transform documents to source database (batch)
+  transformDocumentsToSourceDb(
+    documentIds: [ID!]!
+    sourceDbId: String!
+    tableName: String
+    batchSize: Int
+    createNewTable: Boolean
+  ): TransformResult!
+
+  # Delete transform document
+  deleteTransformDocument(id: ID!): Boolean!
+
+  # Update document metadata
+  updateDocumentMetadata(
+    id: ID!
+    targetTableName: String
+    sourceDbId: String
+  ): DocumentMetadata!
+}
+
+# ============================================
+# SUBSCRIPTIONS
+# ============================================
+
+type Subscription {
+  # Subscribe to transformation progress updates
+  transformProgressUpdates(jobId: String!): TransformProgress!
+
+  # Subscribe to document status changes
+  documentStatusUpdates(documentId: ID!): DocumentMetadata!
+}
