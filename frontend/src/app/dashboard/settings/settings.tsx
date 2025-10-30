@@ -2646,16 +2646,18 @@ function SecuritySettings() {
   const saveAllSettings = async () => {
     setSaving(true);
     try {
-      // Save both security and advanced settings
+      // Save all settings categories
       await Promise.all([
         updateSettingsCategory('security', tempConfig.security || {}),
         updateSettingsCategory('advanced', tempConfig.advanced || {}),
-        updateSettingsCategory('storage', tempConfig.storage || {})
+        updateSettingsCategory('storage', tempConfig.storage || {}),
+        updateSettingsCategory('crawler', tempConfig.crawler || {}),
+        updateSettingsCategory('smtp', tempConfig.smtp || {})
       ]);
       setSecurityConfig(tempConfig);
       toast({
         title: "Success",
-        description: "Security and advanced settings saved successfully",
+        description: "All advanced settings saved successfully",
       });
     } catch (error) {
       toast({
@@ -2674,11 +2676,15 @@ function SecuritySettings() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Security Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {/* 2-Column Grid Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Security Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <Label>Enable Authentication</Label>
             <Switch
@@ -2784,11 +2790,11 @@ function SecuritySettings() {
             </div>
           </div>
         </CardContent>
-      </Card>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Upload Limits</CardTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle>Upload Limits</CardTitle>
           <p className="text-sm text-muted-foreground">
             Configure maximum file sizes for uploads (requires backend restart)
           </p>
@@ -2861,7 +2867,224 @@ function SecuritySettings() {
             </p>
           </div>
         </CardContent>
-      </Card>
+          </Card>
+        </div>
+
+        {/* Right Column */}
+        <div className="space-y-6">
+          {/* Crawler Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Web Crawler Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Timeout (seconds)</Label>
+                  <Input
+                    type="number"
+                    value={tempConfig?.crawler?.timeout ?? securityConfig?.crawler?.timeout ?? 30}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      crawler: {
+                        ...tempConfig.crawler,
+                        timeout: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                </div>
+                <div>
+                  <Label>Max Concurrency</Label>
+                  <Input
+                    type="number"
+                    value={tempConfig?.crawler?.maxConcurrency ?? securityConfig?.crawler?.maxConcurrency ?? 5}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      crawler: {
+                        ...tempConfig.crawler,
+                        maxConcurrency: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>User Agent</Label>
+                <Input
+                  value={tempConfig?.crawler?.userAgent ?? securityConfig?.crawler?.userAgent ?? 'LSEMB-Crawler/1.0'}
+                  onChange={(e) => setTempConfig({
+                    ...tempConfig,
+                    crawler: {
+                      ...tempConfig.crawler,
+                      userAgent: e.target.value
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Enable JavaScript</Label>
+                  <Switch
+                    checked={tempConfig?.crawler?.enableJavaScript ?? securityConfig?.crawler?.enableJavaScript ?? true}
+                    onCheckedChange={(checked) => setTempConfig({
+                      ...tempConfig,
+                      crawler: {
+                        ...tempConfig.crawler,
+                        enableJavaScript: checked
+                      }
+                    })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Follow Redirects</Label>
+                  <Switch
+                    checked={tempConfig?.crawler?.followRedirects ?? securityConfig?.crawler?.followRedirects ?? true}
+                    onCheckedChange={(checked) => setTempConfig({
+                      ...tempConfig,
+                      crawler: {
+                        ...tempConfig.crawler,
+                        followRedirects: checked
+                      }
+                    })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Respect Robots.txt</Label>
+                  <Switch
+                    checked={tempConfig?.crawler?.respectRobotsTxt ?? securityConfig?.crawler?.respectRobotsTxt ?? true}
+                    onCheckedChange={(checked) => setTempConfig({
+                      ...tempConfig,
+                      crawler: {
+                        ...tempConfig.crawler,
+                        respectRobotsTxt: checked
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SMTP Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>SMTP Settings</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Configure email server for notifications
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>SMTP Host</Label>
+                <Input
+                  placeholder="smtp.gmail.com"
+                  value={tempConfig?.smtp?.host ?? securityConfig?.smtp?.host ?? ''}
+                  onChange={(e) => setTempConfig({
+                    ...tempConfig,
+                    smtp: {
+                      ...tempConfig.smtp,
+                      host: e.target.value
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Port</Label>
+                  <Input
+                    type="number"
+                    placeholder="587"
+                    value={tempConfig?.smtp?.port ?? securityConfig?.smtp?.port ?? 587}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      smtp: {
+                        ...tempConfig.smtp,
+                        port: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                </div>
+                <div>
+                  <Label>Secure</Label>
+                  <Switch
+                    checked={tempConfig?.smtp?.secure ?? securityConfig?.smtp?.secure ?? true}
+                    onCheckedChange={(checked) => setTempConfig({
+                      ...tempConfig,
+                      smtp: {
+                        ...tempConfig.smtp,
+                        secure: checked
+                      }
+                    })}
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Username / Email</Label>
+                <Input
+                  type="email"
+                  placeholder="your-email@gmail.com"
+                  value={tempConfig?.smtp?.username ?? securityConfig?.smtp?.username ?? ''}
+                  onChange={(e) => setTempConfig({
+                    ...tempConfig,
+                    smtp: {
+                      ...tempConfig.smtp,
+                      username: e.target.value
+                    }
+                  })}
+                />
+              </div>
+
+              <div>
+                <Label>Password / App Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Enter SMTP password"
+                  value={tempConfig?.smtp?.password ?? securityConfig?.smtp?.password ?? ''}
+                  onChange={(e) => setTempConfig({
+                    ...tempConfig,
+                    smtp: {
+                      ...tempConfig.smtp,
+                      password: e.target.value
+                    }
+                  })}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  For Gmail: Use App Password, not account password
+                </p>
+              </div>
+
+              <div>
+                <Label>From Name</Label>
+                <Input
+                  placeholder="LSEMB Notifications"
+                  value={tempConfig?.smtp?.fromName ?? securityConfig?.smtp?.fromName ?? 'LSEMB'}
+                  onChange={(e) => setTempConfig({
+                    ...tempConfig,
+                    smtp: {
+                      ...tempConfig.smtp,
+                      fromName: e.target.value
+                    }
+                  })}
+                />
+              </div>
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+                <p className="text-xs text-blue-800 dark:text-blue-200">
+                  💡 <strong>Popular Providers:</strong><br/>
+                  • Gmail: smtp.gmail.com:587 (TLS)<br/>
+                  • Brevo: smtp-relay.brevo.com:587<br/>
+                  • Outlook: smtp-mail.outlook.com:587
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       <div className="flex justify-end pt-4">
         <Button onClick={saveAllSettings} disabled={saving}>
@@ -2871,7 +3094,7 @@ function SecuritySettings() {
               Saving...
             </>
           ) : (
-            'Save'
+            'Save All Settings'
           )}
         </Button>
       </div>
@@ -3779,9 +4002,6 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="database" className="h-12 px-4">
             <span className="text-sm">Database</span>
           </TabsTrigger>
-          <TabsTrigger value="crawler" className="h-12 px-4">
-            <span className="text-sm">Crawler</span>
-          </TabsTrigger>
           <TabsTrigger value="prompts" className="h-12 px-4">
             <span className="text-sm">Prompts</span>
           </TabsTrigger>
@@ -3808,12 +4028,6 @@ export default function OptimizedSettingsPage() {
         <TabsContent value="database">
           <DatabaseSettings />
         </TabsContent>
-
-
-        <TabsContent value="crawler">
-          <CrawlerSettings />
-        </TabsContent>
-
 
         <TabsContent value="prompts">
           <PromptsSettings />
