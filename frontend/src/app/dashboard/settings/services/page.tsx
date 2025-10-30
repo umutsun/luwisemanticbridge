@@ -122,13 +122,41 @@ export default function ServicesPage() {
   const [activeService, setActiveService] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showPgaiModal, setShowPgaiModal] = useState(false);
-  const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string}>>([]);
+  const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string, table?: string}>>([]);
+  const [vectorTables, setVectorTables] = useState<string[]>([]);
 
   useEffect(() => {
     fetchServicesStatus();
     const interval = setInterval(fetchServicesStatus, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (showPgaiModal) {
+      fetchVectorTables();
+    }
+  }, [showPgaiModal]);
+
+  const fetchVectorTables = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/v2/embeddings/tables', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Extract table names that have vector columns
+        const tables = data.tables?.map((t: any) => t.table_name) || [];
+        setVectorTables(tables);
+      }
+    } catch (error) {
+      console.error('Failed to fetch vector tables:', error);
+      // Fallback to common tables
+      setVectorTables(['unified_embeddings', 'document_embeddings', 'message_embeddings']);
+    }
+  };
 
   const fetchServicesStatus = async () => {
     try {
@@ -494,7 +522,33 @@ export default function ServicesPage() {
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <Label className="text-xs">Table</Label>
-                                  <Input className="h-8 text-xs" placeholder="unified_embeddings" />
+                                  <Select
+                                    value={worker.table || 'unified_embeddings'}
+                                    onValueChange={(value) => {
+                                      setPgaiWorkers(pgaiWorkers.map(w =>
+                                        w.id === worker.id ? { ...w, table: value } : w
+                                      ));
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue placeholder="Select table" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {vectorTables.length > 0 ? (
+                                        vectorTables.map(table => (
+                                          <SelectItem key={table} value={table}>
+                                            {table}
+                                          </SelectItem>
+                                        ))
+                                      ) : (
+                                        <>
+                                          <SelectItem value="unified_embeddings">unified_embeddings</SelectItem>
+                                          <SelectItem value="document_embeddings">document_embeddings</SelectItem>
+                                          <SelectItem value="message_embeddings">message_embeddings</SelectItem>
+                                        </>
+                                      )}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                                 <div>
                                   <Label className="text-xs">Embedding Model</Label>
