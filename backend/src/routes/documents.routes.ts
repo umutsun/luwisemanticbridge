@@ -288,9 +288,10 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
       }
     }
 
-    // Determine file type - prioritize processedDoc metadata
+    // Determine file type - prioritize file extension to avoid incorrect types
+    // File extension is the most reliable source for file type
     const ext = path.extname(originalname).toLowerCase().replace('.', '');
-    const fileType = processedDoc.metadata?.type || ext || 'text';
+    const fileType = ext || processedDoc.metadata?.type || 'text';
 
     // Generate content hash for additional duplicate checking
     const crypto = require('crypto');
