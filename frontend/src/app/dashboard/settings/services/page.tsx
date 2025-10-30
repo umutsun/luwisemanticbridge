@@ -10,11 +10,13 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Play,
   Square,
   RefreshCw,
-  Settings,
+  Settings as SettingsIcon,
   Activity,
   CheckCircle,
   XCircle,
@@ -26,7 +28,10 @@ import {
   Globe,
   Code,
   GitBranch,
-  Server
+  Server,
+  Plus,
+  Trash2,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +49,7 @@ interface ServiceStatus {
   url?: string;
   version?: string;
   icon: any;
+  workerCount?: number; // For pgai worker
 }
 
 export default function ServicesPage() {
@@ -115,6 +121,8 @@ export default function ServicesPage() {
   const [loading, setLoading] = useState(false);
   const [activeService, setActiveService] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [showPgaiModal, setShowPgaiModal] = useState(false);
+  const [pgaiWorkers, setPgaiWorkers] = useState<Array<{id: number, name: string, status: string}>>([]);
 
   useEffect(() => {
     fetchServicesStatus();
@@ -252,10 +260,28 @@ export default function ServicesPage() {
                     <Icon className="h-4 w-4 text-muted-foreground" />
                     <CardTitle className="text-sm">{service.displayName}</CardTitle>
                   </div>
-                  {getStatusIcon(service.status)}
+                  <div className="flex items-center gap-1">
+                    {service.name === "pgai" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowPgaiModal(true);
+                        }}
+                        title="Configure Workers"
+                      >
+                        <SettingsIcon className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {getStatusIcon(service.status)}
+                  </div>
                 </div>
                 <CardDescription className="text-xs mt-1">
-                  {service.description}
+                  {service.name === "pgai" && service.workerCount
+                    ? `${service.workerCount} worker${service.workerCount > 1 ? 's' : ''} running`
+                    : service.description}
                 </CardDescription>
               </CardHeader>
 
@@ -400,6 +426,164 @@ export default function ServicesPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* pgai Worker Configuration Modal */}
+      <Dialog open={showPgaiModal} onOpenChange={setShowPgaiModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5" />
+              pgai Worker Configuration
+            </DialogTitle>
+            <DialogDescription>
+              Configure and manage pgai workers for automatic embeddings
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Workers List */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-sm font-medium">Active Workers</Label>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const newWorker = {
+                      id: Date.now(),
+                      name: `Worker ${pgaiWorkers.length + 1}`,
+                      status: 'configuring'
+                    };
+                    setPgaiWorkers([...pgaiWorkers, newWorker]);
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Worker
+                </Button>
+              </div>
+
+              <ScrollArea className="h-[300px] rounded-md border p-4">
+                {pgaiWorkers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Brain className="h-12 w-12 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No workers configured</p>
+                    <p className="text-xs mt-1">Click "Add Worker" to create a new worker</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pgaiWorkers.map((worker) => (
+                      <Card key={worker.id} className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={worker.name}
+                                onChange={(e) => {
+                                  setPgaiWorkers(pgaiWorkers.map(w =>
+                                    w.id === worker.id ? { ...w, name: e.target.value } : w
+                                  ));
+                                }}
+                                className="h-8 text-sm font-medium"
+                                placeholder="Worker name"
+                              />
+                              <Badge variant={worker.status === 'running' ? 'default' : 'secondary'}>
+                                {worker.status}
+                              </Badge>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs">Table</Label>
+                                  <Input className="h-8 text-xs" placeholder="unified_embeddings" />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Embedding Model</Label>
+                                  <Select defaultValue="openai">
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="openai">OpenAI</SelectItem>
+                                      <SelectItem value="google">Google AI</SelectItem>
+                                      <SelectItem value="deepseek">DeepSeek</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant={worker.status === 'running' ? 'destructive' : 'default'}
+                                  className="h-7 text-xs flex-1"
+                                  onClick={() => {
+                                    setPgaiWorkers(pgaiWorkers.map(w =>
+                                      w.id === worker.id
+                                        ? { ...w, status: w.status === 'running' ? 'stopped' : 'running' }
+                                        : w
+                                    ));
+                                    // Update service worker count
+                                    const runningCount = pgaiWorkers.filter(w =>
+                                      w.id === worker.id ? w.status !== 'running' : w.status === 'running'
+                                    ).length;
+                                    setServices(services.map(s =>
+                                      s.name === 'pgai' ? { ...s, workerCount: runningCount } : s
+                                    ));
+                                  }}
+                                >
+                                  {worker.status === 'running' ? (
+                                    <>
+                                      <Square className="h-3 w-3 mr-1" />
+                                      Stop
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Play className="h-3 w-3 mr-1" />
+                                      Start
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs"
+                                  onClick={() => {
+                                    setPgaiWorkers(pgaiWorkers.filter(w => w.id !== worker.id));
+                                    // Update service worker count
+                                    const runningCount = pgaiWorkers.filter(w =>
+                                      w.id !== worker.id && w.status === 'running'
+                                    ).length;
+                                    setServices(services.map(s =>
+                                      s.name === 'pgai' ? { ...s, workerCount: runningCount } : s
+                                    ));
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3 mr-1" />
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+
+            {/* Summary */}
+            <div className="flex items-center justify-between pt-3 border-t">
+              <div className="text-sm text-muted-foreground">
+                {pgaiWorkers.filter(w => w.status === 'running').length} of {pgaiWorkers.length} workers running
+              </div>
+              <Button onClick={() => setShowPgaiModal(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
