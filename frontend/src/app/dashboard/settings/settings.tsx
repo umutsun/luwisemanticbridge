@@ -1,6 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+
+// Dynamic import for Services page to avoid iframe issues
+const ServicesPage = dynamic(() => import('./services/page'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-64">Loading services...</div>
+});
 import { useToast } from '../../../hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -127,15 +134,30 @@ function LLMSettings() {
       setTranslationConfig(translationData);
 
       // Initialize with database values or defaults
+      // IMPORTANT: Use database values directly, fallback to defaults only if null/undefined
+      const activeChatParts = data?.llmSettings?.activeChatModel?.split('/');
+      const activeEmbeddingParts = data?.llmSettings?.activeEmbeddingModel?.split('/');
+
+      console.log('🔧 [LLM SETTINGS LOAD] Database values:', {
+        activeChatModel: data?.llmSettings?.activeChatModel,
+        activeEmbeddingModel: data?.llmSettings?.activeEmbeddingModel,
+        embeddingProvider: data?.llmSettings?.embeddingProvider,
+        embeddingModel: data?.llmSettings?.embeddingModel,
+        translationProvider: data?.llmSettings?.translationProvider,
+        temperature: data?.llmSettings?.temperature
+      });
+
       const defaultConfig = {
-        provider: data?.llmSettings?.activeChatModel?.split('/')?.[0] || 'anthropic',
-        model: data?.llmSettings?.activeChatModel?.split('/')?.[1] || 'claude-3-sonnet',
-        temperature: data?.llmSettings?.temperature || 0.7,
-        maxTokens: data?.llmSettings?.maxTokens || 4096,
-        embeddingProvider: data?.llmSettings?.activeEmbeddingModel?.split('/')?.[0] || data?.llmSettings?.embeddingProvider || 'google',
-        embeddingModel: data?.llmSettings?.activeEmbeddingModel?.split('/')?.[1] || data?.llmSettings?.embeddingModel || 'text-embedding-004',
-        translationProvider: data?.llmSettings?.translationProvider || data?.translationProvider || 'google',
-        ocrProvider: data?.ocrSettings?.activeProvider || data?.ocrProvider || 'gemini-vision',
+        provider: activeChatParts?.[0] || 'openai',
+        model: activeChatParts?.[1] || 'gpt-4o-mini',
+        temperature: data?.llmSettings?.temperature ?? 0.7,
+        maxTokens: data?.llmSettings?.maxTokens ?? 4096,
+        // CRITICAL: Use activeEmbeddingModel first (authoritative source), then llmSettings fields
+        // DO NOT use embeddings.* keys as they are legacy/unused
+        embeddingProvider: activeEmbeddingParts?.[0] || data?.llmSettings?.embeddingProvider || 'openai',
+        embeddingModel: activeEmbeddingParts?.[1] || data?.llmSettings?.embeddingModel || 'gpt-4o-mini',
+        translationProvider: data?.llmSettings?.translationProvider || 'deepseek',
+        ocrProvider: data?.ocrSettings?.activeProvider || 'gemini-vision',
         ocrSettings: {
           activeProvider: data?.ocrSettings?.activeProvider || 'gemini-vision',
           fallbackEnabled: data?.ocrSettings?.fallbackEnabled !== false,
@@ -183,6 +205,14 @@ function LLMSettings() {
         llmSettings: data?.llmSettings || {}
       };
 
+      console.log('📊 [LLM SETTINGS LOAD] Parsed config:', {
+        provider: defaultConfig.provider,
+        model: defaultConfig.model,
+        embeddingProvider: defaultConfig.embeddingProvider,
+        embeddingModel: defaultConfig.embeddingModel,
+        temperature: defaultConfig.temperature
+      });
+
       setLlmConfig(defaultConfig);
 
       // Include translation API keys in tempConfig
@@ -201,6 +231,13 @@ function LLMSettings() {
           }
         }
       };
+
+      console.log('📊 [LLM SETTINGS LOAD] Final tempConfig:', {
+        provider: configWithTranslation.provider,
+        model: configWithTranslation.model,
+        embeddingProvider: configWithTranslation.embeddingProvider,
+        embeddingModel: configWithTranslation.embeddingModel
+      });
 
       setTempConfig(configWithTranslation);
 
@@ -966,15 +1003,18 @@ function LLMSettings() {
   };
 
   const getValidatedProviders = () => {
-    return Object.entries({
-      openai: { key: llmConfig?.openai?.apiKey, name: 'OpenAI' },
-      google: { key: llmConfig?.google?.apiKey, name: 'Google AI' },
-      anthropic: { key: llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
-      deepseek: { key: llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
-      huggingface: { key: llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
-      openrouter: { key: llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
+    const providers = Object.entries({
+      openai: { key: tempConfig?.openai?.apiKey || llmConfig?.openai?.apiKey, name: 'OpenAI' },
+      google: { key: tempConfig?.google?.apiKey || llmConfig?.google?.apiKey, name: 'Google AI' },
+      anthropic: { key: tempConfig?.anthropic?.apiKey || llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
+      deepseek: { key: tempConfig?.deepseek?.apiKey || llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
+      huggingface: { key: tempConfig?.huggingface?.apiKey || llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
+      openrouter: { key: tempConfig?.openrouter?.apiKey || llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
       deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
     }).filter(([provider]) => isProviderValidated(provider));
+
+    console.log('🔍 [VALIDATED PROVIDERS]', providers.map(([p]) => p));
+    return providers;
   };
 
   const getValidatedTranslationProviders = () => {
@@ -1192,10 +1232,17 @@ function LLMSettings() {
             <CardContent className="space-y-4">
               {/* Active LLM Provider Selection */}
               <div>
-                <Label>LLM Provider</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Label>LLM Provider</Label>
+                  <Label>LLM Model</Label>
+                </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
-                    value={tempConfig?.provider || llmConfig.provider}
+                    value={(() => {
+                      const val = tempConfig?.provider || llmConfig.provider;
+                      console.log('🎯 [LLM PROVIDER SELECT] Current value:', val, '| tempConfig.provider:', tempConfig?.provider, '| llmConfig.provider:', llmConfig.provider);
+                      return val;
+                    })()}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
                         const newModel = getDefaultModelForProvider(value);
@@ -1307,11 +1354,18 @@ function LLMSettings() {
 
               {/* Active Embedding Provider Selection */}
               <div>
-                <Label>Embedding Provider</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Label>Embedding Provider</Label>
+                  <Label>Embedding Model</Label>
+                </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
                     disabled={false}
-                    value={tempConfig?.embeddingProvider}
+                    value={(() => {
+                      const val = tempConfig?.embeddingProvider;
+                      console.log('🎯 [EMBEDDING PROVIDER SELECT] Current value:', val, '| tempConfig.embeddingProvider:', tempConfig?.embeddingProvider, '| llmConfig.embeddingProvider:', llmConfig?.embeddingProvider);
+                      return val;
+                    })()}
                     onValueChange={async (value) => {
                       if (isProviderValidated(value)) {
                         const newModel = getDefaultEmbeddingModelForProvider(value);
@@ -1416,153 +1470,156 @@ function LLMSettings() {
                 </div>
               </div>
 
-              {/* Active Translation Provider Selection */}
-              <div>
-                <Label>Translation Provider</Label>
-                <div className="mt-2">
-                  <Select
-                    value={tempConfig?.translationProvider || 'google'}
-                  onValueChange={async (value) => {
-                    // Update translation provider in llmSettings
-                    const updatedConfig = {
-                      ...tempConfig,
-                      translationProvider: value,
-                      llmSettings: {
-                        ...tempConfig?.llmSettings,
-                        translationProvider: value
-                      }
-                    };
-                    updateTempConfig('translationProvider', value);
-                    setTempConfig(updatedConfig);
-                    // Auto-save when provider changes
-                    try {
-                      await updateSettingsCategory('llm', updatedConfig);
-                      setLlmConfig(updatedConfig);
-                      toast({
-                        title: "Success",
-                        description: "Translation provider updated successfully",
-                      });
-                    } catch (error) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to update translation provider",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select translation provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getValidatedTranslationProviders().map(provider => {
-                      const status = getTranslationProviderStatus(provider.value as 'deepl' | 'google');
-                      return (
-                        <SelectItem key={provider.value} value={provider.value}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{provider.label}</span>
-                            {status && (
-                              <span className="text-xs text-gray-500">
-                                {status.verifiedDate}
-                              </span>
-                            )}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-                </div>
-              </div>
-
-              {/* Active OCR Provider Selection */}
-              <div>
-                <Label>OCR Provider</Label>
-                <div className="mt-2">
-                  <Select
-                    value={tempConfig?.ocrProvider || 'gemini-vision'}
+              {/* Translation Provider and OCR Provider Side-by-Side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Active Translation Provider Selection */}
+                <div>
+                  <Label>Translation Provider</Label>
+                  <div className="mt-2">
+                    <Select
+                      value={tempConfig?.translationProvider || 'google'}
                     onValueChange={async (value) => {
+                      // Update translation provider in llmSettings
                       const updatedConfig = {
                         ...tempConfig,
-                        ocrProvider: value,
-                        ocrSettings: {
-                          ...tempConfig?.ocrSettings,
-                          activeProvider: value
+                        translationProvider: value,
+                        llmSettings: {
+                          ...tempConfig?.llmSettings,
+                          translationProvider: value
                         }
                       };
-                      updateTempConfig('ocrProvider', value);
+                      updateTempConfig('translationProvider', value);
                       setTempConfig(updatedConfig);
                       // Auto-save when provider changes
                       try {
-                        await updateSettingsCategory('ocr', {
-                          activeProvider: value,
-                          fallbackEnabled: tempConfig?.ocrSettings?.fallbackEnabled !== false,
-                          cacheEnabled: tempConfig?.ocrSettings?.cacheEnabled !== false
-                        });
+                        await updateSettingsCategory('llm', updatedConfig);
+                        setLlmConfig(updatedConfig);
                         toast({
-                          title: "Başarılı",
-                          description: "OCR provider güncellendi",
+                          title: "Success",
+                          description: "Translation provider updated successfully",
                         });
                       } catch (error) {
                         toast({
-                          title: "Hata",
-                          description: "OCR provider güncellenemedi",
+                          title: "Error",
+                          description: "Failed to update translation provider",
                           variant: "destructive",
                         });
                       }
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="OCR provider seçin" />
+                      <SelectValue placeholder="Select translation provider" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="gemini-vision">
-                        <div className="flex flex-col">
-                          <span className="font-medium">Gemini Vision</span>
-                          {(() => {
-                            const status = getOCRProviderStatus('gemini-vision');
-                            return status && (
-                              <span className="text-xs text-gray-500">
-                                {status.verifiedDate}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="openai-vision">
-                        <div className="flex flex-col">
-                          <span className="font-medium">OpenAI Vision</span>
-                          {(() => {
-                            const status = getOCRProviderStatus('openai-vision');
-                            return status && (
-                              <span className="text-xs text-gray-500">
-                                {status.verifiedDate}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="deepseek-vision">
-                        <div className="flex flex-col">
-                          <span className="font-medium">DeepSeek Vision</span>
-                          {(() => {
-                            const status = getOCRProviderStatus('deepseek-vision');
-                            return status && (
-                              <span className="text-xs text-gray-500">
-                                {status.verifiedDate}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="tesseract">
-                        <div className="flex flex-col">
-                          <span className="font-medium">Tesseract</span>
-                          <span className="text-xs text-green-600">Ücretsiz</span>
-                        </div>
-                      </SelectItem>
+                      {getValidatedTranslationProviders().map(provider => {
+                        const status = getTranslationProviderStatus(provider.value as 'deepl' | 'google');
+                        return (
+                          <SelectItem key={provider.value} value={provider.value}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{provider.label}</span>
+                              {status && (
+                                <span className="text-xs text-gray-500">
+                                  {status.verifiedDate}
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
+                  </div>
+                </div>
+
+                {/* Active OCR Provider Selection */}
+                <div>
+                  <Label>OCR Provider</Label>
+                  <div className="mt-2">
+                    <Select
+                      value={tempConfig?.ocrProvider || 'gemini-vision'}
+                      onValueChange={async (value) => {
+                        const updatedConfig = {
+                          ...tempConfig,
+                          ocrProvider: value,
+                          ocrSettings: {
+                            ...tempConfig?.ocrSettings,
+                            activeProvider: value
+                          }
+                        };
+                        updateTempConfig('ocrProvider', value);
+                        setTempConfig(updatedConfig);
+                        // Auto-save when provider changes
+                        try {
+                          await updateSettingsCategory('ocr', {
+                            activeProvider: value,
+                            fallbackEnabled: tempConfig?.ocrSettings?.fallbackEnabled !== false,
+                            cacheEnabled: tempConfig?.ocrSettings?.cacheEnabled !== false
+                          });
+                          toast({
+                            title: "Başarılı",
+                            description: "OCR provider güncellendi",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Hata",
+                            description: "OCR provider güncellenemedi",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="OCR provider seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gemini-vision">
+                          <div className="flex flex-col">
+                            <span className="font-medium">Gemini Vision</span>
+                            {(() => {
+                              const status = getOCRProviderStatus('gemini-vision');
+                              return status && (
+                                <span className="text-xs text-gray-500">
+                                  {status.verifiedDate}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="openai-vision">
+                          <div className="flex flex-col">
+                            <span className="font-medium">OpenAI Vision</span>
+                            {(() => {
+                              const status = getOCRProviderStatus('openai-vision');
+                              return status && (
+                                <span className="text-xs text-gray-500">
+                                  {status.verifiedDate}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="deepseek-vision">
+                          <div className="flex flex-col">
+                            <span className="font-medium">DeepSeek Vision</span>
+                            {(() => {
+                              const status = getOCRProviderStatus('deepseek-vision');
+                              return status && (
+                                <span className="text-xs text-gray-500">
+                                  {status.verifiedDate}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="tesseract">
+                          <div className="flex flex-col">
+                            <span className="font-medium">Tesseract</span>
+                            <span className="text-xs text-green-600">Ücretsiz</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -1670,7 +1727,15 @@ function RAGSettings() {
         getRAGSettings(),
         fetch('/api/v2/chatbot/settings').then(res => res.json())
       ]);
-      console.log('RAG Data from API:', ragData);
+      console.log('📊 [RAG SETTINGS LOAD] Full RAG Data from API:', ragData);
+      console.log('📊 [RAG SETTINGS LOAD] RAG Settings values:', {
+        similarityThreshold: ragData?.ragSettings?.similarityThreshold,
+        minResults: ragData?.ragSettings?.minResults,
+        maxResults: ragData?.ragSettings?.maxResults,
+        parallelLLMCount: ragData?.ragSettings?.parallelLLMCount,
+        batchSize: ragData?.ragSettings?.batchSize,
+        chunkOverlap: ragData?.ragSettings?.chunkOverlap
+      });
       setRagConfig(ragData);
       setTempRAGConfig(ragData);
 
@@ -1827,10 +1892,10 @@ function RAGSettings() {
               <h3 className="text-lg font-medium">Search Parameters</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>Similarity Threshold: {tempRAGConfig?.ragSettings?.similarityThreshold || ragConfig?.ragSettings?.similarityThreshold || 0.02}</Label>
+                  <Label>Similarity Threshold: {tempRAGConfig?.ragSettings?.similarityThreshold ?? ragConfig?.ragSettings?.similarityThreshold ?? 0.02}</Label>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score for search results (0-1). Lower = more results, but less relevant.</p>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.similarityThreshold || ragConfig?.ragSettings?.similarityThreshold || 0.02]}
+                    value={[tempRAGConfig?.ragSettings?.similarityThreshold ?? ragConfig?.ragSettings?.similarityThreshold ?? 0.02]}
                     max={1}
                     min={0}
                     step={0.01}
@@ -1840,10 +1905,10 @@ function RAGSettings() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults || ragConfig?.ragSettings?.minResults || 5}</Label>
+                    <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults ?? ragConfig?.ragSettings?.minResults ?? 5}</Label>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Initial number of sources to display</p>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.minResults || ragConfig?.ragSettings?.minResults || 5]}
+                      value={[tempRAGConfig?.ragSettings?.minResults ?? ragConfig?.ragSettings?.minResults ?? 5]}
                       max={20}
                       min={1}
                       step={1}
@@ -1852,10 +1917,10 @@ function RAGSettings() {
                     />
                   </div>
                   <div>
-                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults || ragConfig?.ragSettings?.maxResults || 20}</Label>
+                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults ?? ragConfig?.ragSettings?.maxResults ?? 20}</Label>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sources to fetch from database (shows 7 initially, rest available via "Load More")</p>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.maxResults || ragConfig?.ragSettings?.maxResults || 20]}
+                      value={[tempRAGConfig?.ragSettings?.maxResults ?? ragConfig?.ragSettings?.maxResults ?? 20]}
                       max={50}
                       min={7}
                       step={1}
@@ -1871,9 +1936,9 @@ function RAGSettings() {
               <h3 className="text-lg font-medium">Processing Parameters</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>Parallel LLM Count: {tempRAGConfig?.ragSettings?.parallelLLMCount || ragConfig?.ragSettings?.parallelLLMCount || 4}</Label>
+                  <Label>Parallel LLM Count: {tempRAGConfig?.ragSettings?.parallelLLMCount ?? ragConfig?.ragSettings?.parallelLLMCount ?? 4}</Label>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.parallelLLMCount || ragConfig?.ragSettings?.parallelLLMCount || 4]}
+                    value={[tempRAGConfig?.ragSettings?.parallelLLMCount ?? ragConfig?.ragSettings?.parallelLLMCount ?? 4]}
                     max={10}
                     min={1}
                     step={1}
@@ -1883,20 +1948,20 @@ function RAGSettings() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Batch Size: {tempRAGConfig?.ragSettings?.batchSize || ragConfig?.ragSettings?.batchSize || 100}</Label>
+                    <Label>Batch Size: {tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 100}</Label>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.batchSize || ragConfig?.ragSettings?.batchSize || 100]}
+                      value={[tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 100]}
                       max={500}
                       min={10}
                       step={10}
                       className="mt-2"
-                      onValueChange={([value]) => updateRAGSetting('batchSize', value)}
+                      onValueChange={([value]) => updateRAGSetting('parallelLLMBatchSize', value)}
                     />
                   </div>
                   <div>
-                    <Label>Chunk Overlap: {tempRAGConfig?.ragSettings?.chunkOverlap || ragConfig?.ragSettings?.chunkOverlap || 200}</Label>
+                    <Label>Chunk Overlap: {tempRAGConfig?.ragSettings?.chunkOverlap ?? ragConfig?.ragSettings?.chunkOverlap ?? 200}</Label>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.chunkOverlap || ragConfig?.ragSettings?.chunkOverlap || 200]}
+                      value={[tempRAGConfig?.ragSettings?.chunkOverlap ?? ragConfig?.ragSettings?.chunkOverlap ?? 200]}
                       max={500}
                       min={0}
                       step={50}
@@ -1951,6 +2016,77 @@ function RAGSettings() {
                   <Switch
                     checked={tempRAGConfig?.ragSettings?.enableKeywordBoost ?? ragConfig?.ragSettings?.enableKeywordBoost}
                     onCheckedChange={(checked) => updateRAGSetting('enableKeywordBoost', checked)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Data Sources</h3>
+              <p className="text-xs text-muted-foreground">
+                Control which data sources are included in semantic search results
+              </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Database Content (Unified)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Includes: Soru-Cevap, Makaleler, Özelgeler, Danıştay Kararları
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.enableUnifiedEmbeddings ?? ragConfig?.ragSettings?.enableUnifiedEmbeddings ?? true}
+                    onCheckedChange={(checked) => updateRAGSetting('enableUnifiedEmbeddings', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Chat Messages</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Previous conversations and Q&A
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.enableMessageEmbeddings ?? ragConfig?.ragSettings?.enableMessageEmbeddings ?? true}
+                    onCheckedChange={(checked) => updateRAGSetting('enableMessageEmbeddings', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Documents</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Uploaded PDFs, Word docs, etc.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.enableDocumentEmbeddings ?? ragConfig?.ragSettings?.enableDocumentEmbeddings ?? true}
+                    onCheckedChange={(checked) => updateRAGSetting('enableDocumentEmbeddings', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex-1">
+                    <Label>Web Content</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Scraped web pages
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempRAGConfig?.ragSettings?.enableScrapeEmbeddings ?? ragConfig?.ragSettings?.enableScrapeEmbeddings ?? true}
+                    onCheckedChange={(checked) => updateRAGSetting('enableScrapeEmbeddings', checked)}
+                  />
+                </div>
+                <div className="mt-4">
+                  <Label>Database Content Priority: {tempRAGConfig?.ragSettings?.unifiedEmbeddingsPriority || ragConfig?.ragSettings?.unifiedEmbeddingsPriority || 1}</Label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Boost priority for database content (1-10, higher = more priority)
+                  </p>
+                  <Slider
+                    value={[tempRAGConfig?.ragSettings?.unifiedEmbeddingsPriority || ragConfig?.ragSettings?.unifiedEmbeddingsPriority || 1]}
+                    max={10}
+                    min={1}
+                    step={1}
+                    className="mt-2"
+                    onValueChange={([value]) => updateRAGSetting('unifiedEmbeddingsPriority', value)}
                   />
                 </div>
               </div>
@@ -2086,28 +2222,6 @@ function RAGSettings() {
               <h3 className="text-lg font-medium">Response Generation</h3>
 
               <div className="space-y-6">
-                {/* Conversation Tone */}
-                <div>
-                  <p className="text-xs text-muted-foreground mt-1 mb-2">
-                    Choose the tone for AI responses
-                  </p>
-                  <Select
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select tone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="professional">Professional - Formal and business-like</SelectItem>
-                      <SelectItem value="friendly">Friendly - Warm and approachable</SelectItem>
-                      <SelectItem value="casual">Casual - Relaxed and conversational</SelectItem>
-                      <SelectItem value="technical">Technical - Detailed and precise</SelectItem>
-                      <SelectItem value="empathetic">Empathetic - Understanding and supportive</SelectItem>
-                      <SelectItem value="concise">Concise - Brief and to the point</SelectItem>
-                      <SelectItem value="educational">Educational - Clear and instructive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <Label>Max Response Length</Label>
@@ -2793,8 +2907,12 @@ function AppSettings() {
   const saveAllSettings = async () => {
     setSaving(true);
     try {
-      await updateSettingsCategory('app', tempConfig);
-      setAppConfig(tempConfig);
+      // IMPORTANT: Wrap tempConfig in 'app' key to match database structure
+      const settingsToSave = {
+        app: tempConfig
+      };
+      await updateSettingsCategory('app', settingsToSave);
+      setAppConfig({ app: tempConfig });
       toast({
         title: "Success",
         description: "App settings saved successfully",
@@ -2893,9 +3011,9 @@ function AppSettings() {
 }
 
 
-// Scraper Settings Component
-function ScraperSettings() {
-  const [scraperConfig, setScraperConfig] = useState<any>({});
+// Crawler Settings Component
+function CrawlerSettings() {
+  const [crawlerConfig, setCrawlerConfig] = useState<any>({});
   const [tempConfig, setTempConfig] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -2904,11 +3022,11 @@ function ScraperSettings() {
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSettingsCategory('scraper');
-      setScraperConfig(data);
+      const data = await getSettingsCategory('crawler');
+      setCrawlerConfig(data);
       setTempConfig(data);
     } catch (error) {
-      console.error('Failed to load scraper settings:', error);
+      console.error('Failed to load crawler settings:', error);
     } finally {
       setLoading(false);
     }
@@ -2921,16 +3039,16 @@ function ScraperSettings() {
   const saveAllSettings = async () => {
     setSaving(true);
     try {
-      await updateSettingsCategory('scraper', tempConfig);
-      setScraperConfig(tempConfig);
+      await updateSettingsCategory('crawler', tempConfig);
+      setCrawlerConfig(tempConfig);
       toast({
         title: "Success",
-        description: "Scraper settings saved successfully",
+        description: "Crawler settings saved successfully",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save scraper settings",
+        description: "Failed to save crawler settings",
         variant: "destructive",
       });
     } finally {
@@ -2941,8 +3059,8 @@ function ScraperSettings() {
   const updateSetting = (key: string, value: any) => {
     setTempConfig({
       ...tempConfig,
-      scraper: {
-        ...tempConfig.scraper,
+      crawler: {
+        ...tempConfig.crawler,
         [key]: value
       }
     });
@@ -2956,7 +3074,10 @@ function ScraperSettings() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Web Scraper Configuration</CardTitle>
+          <CardTitle>Web Crawler Configuration</CardTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Configure Crawl4AI settings for web data extraction
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -2964,7 +3085,7 @@ function ScraperSettings() {
               <Label>Timeout (seconds)</Label>
               <Input
                 type="number"
-                value={tempConfig?.scraper?.timeout ?? scraperConfig?.scraper?.timeout ?? 30}
+                value={tempConfig?.crawler?.timeout ?? crawlerConfig?.crawler?.timeout ?? 30}
                 onChange={(e) => updateSetting('timeout', parseInt(e.target.value))}
               />
             </div>
@@ -2972,16 +3093,41 @@ function ScraperSettings() {
               <Label>Max Concurrency</Label>
               <Input
                 type="number"
-                value={tempConfig?.scraper?.maxConcurrency ?? scraperConfig?.scraper?.maxConcurrency ?? 5}
+                value={tempConfig?.crawler?.maxConcurrency ?? crawlerConfig?.crawler?.maxConcurrency ?? 5}
                 onChange={(e) => updateSetting('maxConcurrency', parseInt(e.target.value))}
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Redis DB (Crawl4AI)</Label>
+              <Input
+                type="number"
+                value={tempConfig?.crawler?.redisDb ?? crawlerConfig?.crawler?.redisDb ?? 0}
+                onChange={(e) => updateSetting('redisDb', parseInt(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Redis database index for crawler data
+              </p>
+            </div>
+            <div>
+              <Label>Data Retention (days)</Label>
+              <Input
+                type="number"
+                value={tempConfig?.crawler?.retentionDays ?? crawlerConfig?.crawler?.retentionDays ?? 30}
+                onChange={(e) => updateSetting('retentionDays', parseInt(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                How long to keep crawled data
+              </p>
             </div>
           </div>
 
           <div>
             <Label>User Agent</Label>
             <Input
-              value={tempConfig?.scraper?.userAgent ?? scraperConfig?.scraper?.userAgent ?? 'ASB-Scraper/1.0'}
+              value={tempConfig?.crawler?.userAgent ?? crawlerConfig?.crawler?.userAgent ?? 'LSEMB-Crawler/1.0'}
               placeholder="Enter custom user agent"
               onChange={(e) => updateSetting('userAgent', e.target.value)}
             />
@@ -2991,22 +3137,29 @@ function ScraperSettings() {
             <div className="flex items-center justify-between">
               <Label>Enable JavaScript</Label>
               <Switch
-                checked={tempConfig?.scraper?.enableJavaScript ?? scraperConfig?.scraper?.enableJavaScript}
+                checked={tempConfig?.crawler?.enableJavaScript ?? crawlerConfig?.crawler?.enableJavaScript ?? true}
                 onCheckedChange={(checked) => updateSetting('enableJavaScript', checked)}
               />
             </div>
             <div className="flex items-center justify-between">
               <Label>Follow Redirects</Label>
               <Switch
-                checked={tempConfig?.scraper?.followRedirects ?? scraperConfig?.scraper?.followRedirects}
+                checked={tempConfig?.crawler?.followRedirects ?? crawlerConfig?.crawler?.followRedirects ?? true}
                 onCheckedChange={(checked) => updateSetting('followRedirects', checked)}
               />
             </div>
             <div className="flex items-center justify-between">
               <Label>Respect Robots.txt</Label>
               <Switch
-                checked={tempConfig?.scraper?.respectRobotsTxt ?? scraperConfig?.scraper?.respectRobotsTxt}
+                checked={tempConfig?.crawler?.respectRobotsTxt ?? crawlerConfig?.crawler?.respectRobotsTxt ?? true}
                 onCheckedChange={(checked) => updateSetting('respectRobotsTxt', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Auto-generate Embeddings</Label>
+              <Switch
+                checked={tempConfig?.crawler?.autoEmbeddings ?? crawlerConfig?.crawler?.autoEmbeddings ?? false}
+                onCheckedChange={(checked) => updateSetting('autoEmbeddings', checked)}
               />
             </div>
           </div>
@@ -3590,7 +3743,7 @@ function TranslationSettings() {
 // Main Optimized Settings Component
 export default function OptimizedSettingsPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const initialTab = searchParams.get('tab') || 'llm';
+  const initialTab = searchParams.get('tab') || 'app';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   // Update URL when tab changes
@@ -3613,7 +3766,7 @@ export default function OptimizedSettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7 h-14">
+        <TabsList className="grid w-full grid-cols-8 h-14">
           <TabsTrigger value="app" className="h-12 px-4">
             <span className="text-sm">App</span>
           </TabsTrigger>
@@ -3626,11 +3779,14 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="database" className="h-12 px-4">
             <span className="text-sm">Database</span>
           </TabsTrigger>
-          <TabsTrigger value="scraper" className="h-12 px-4">
-            <span className="text-sm">Scraper</span>
+          <TabsTrigger value="crawler" className="h-12 px-4">
+            <span className="text-sm">Crawler</span>
           </TabsTrigger>
-              <TabsTrigger value="prompts" className="h-12 px-4">
+          <TabsTrigger value="prompts" className="h-12 px-4">
             <span className="text-sm">Prompts</span>
+          </TabsTrigger>
+          <TabsTrigger value="services" className="h-12 px-4">
+            <span className="text-sm">Services</span>
           </TabsTrigger>
           <TabsTrigger value="security" className="h-12 px-4">
             <span className="text-sm">Advanced</span>
@@ -3654,13 +3810,17 @@ export default function OptimizedSettingsPage() {
         </TabsContent>
 
 
-        <TabsContent value="scraper">
-          <ScraperSettings />
+        <TabsContent value="crawler">
+          <CrawlerSettings />
         </TabsContent>
 
 
         <TabsContent value="prompts">
           <PromptsSettings />
+        </TabsContent>
+
+        <TabsContent value="services">
+          <ServicesPage />
         </TabsContent>
 
         <TabsContent value="security">
