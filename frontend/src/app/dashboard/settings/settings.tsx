@@ -2704,11 +2704,11 @@ function SecuritySettings() {
 
   return (
     <div className="space-y-6">
-      {/* 2-Column Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column */}
-        <div className="space-y-6">
-          <Card>
+      {/* 2-Column Grid Layout - Balanced 60/40 split for better use of space */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Left Column - Takes 3 out of 5 columns */}
+        <div className="lg:col-span-3 space-y-6">
+          <Card className="bg-slate-50/50 dark:bg-slate-900/20">
             <CardHeader>
               <CardTitle>Security Configuration</CardTitle>
             </CardHeader>
@@ -2776,7 +2776,7 @@ function SecuritySettings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="bg-blue-50/30 dark:bg-blue-950/10">
         <CardHeader>
           <CardTitle>File Storage Configuration</CardTitle>
         </CardHeader>
@@ -2820,7 +2820,7 @@ function SecuritySettings() {
         </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-green-50/30 dark:bg-green-950/10">
             <CardHeader>
               <CardTitle>Upload Limits</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -2898,10 +2898,10 @@ function SecuritySettings() {
           </Card>
         </div>
 
-        {/* Right Column */}
-        <div className="space-y-6">
+        {/* Right Column - Takes 2 out of 5 columns */}
+        <div className="lg:col-span-2 space-y-6">
           {/* Crawler Settings */}
-          <Card>
+          <Card className="bg-purple-50/30 dark:bg-purple-950/10">
             <CardHeader>
               <CardTitle>Web Crawler Configuration</CardTitle>
             </CardHeader>
@@ -2996,7 +2996,7 @@ function SecuritySettings() {
           </Card>
 
           {/* SMTP Settings */}
-          <Card>
+          <Card className="bg-amber-50/30 dark:bg-amber-950/10">
             <CardHeader>
               <CardTitle>SMTP Settings</CardTitle>
               <p className="text-sm text-muted-foreground">
