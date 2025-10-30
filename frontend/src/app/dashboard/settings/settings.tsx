@@ -144,12 +144,25 @@ function LLMSettings() {
         embeddingProvider: data?.llmSettings?.embeddingProvider,
         embeddingModel: data?.llmSettings?.embeddingModel,
         translationProvider: data?.llmSettings?.translationProvider,
-        temperature: data?.llmSettings?.temperature
+        temperature: data?.llmSettings?.temperature,
+        // Also log provider-specific models for debugging
+        openaiModel: data?.openai?.model,
+        googleModel: data?.google?.model,
+        deepseekModel: data?.deepseek?.model
       });
 
+      // Determine provider and model with comprehensive fallback logic
+      // 1. Try activeChatModel (authoritative source)
+      // 2. Fall back to llmSettings.provider/model if available
+      // 3. Otherwise use sensible defaults
+      const provider = activeChatParts?.[0] || data?.llmSettings?.provider || 'gemini';
+      const model = activeChatParts?.[1] || data?.llmSettings?.model || data?.[provider]?.model || 'gemini-1.5-flash';
+
+      console.log('🎯 [LLM SETTINGS LOAD] Determined provider/model:', { provider, model });
+
       const defaultConfig = {
-        provider: activeChatParts?.[0] || 'openai',
-        model: activeChatParts?.[1] || 'gpt-4o-mini',
+        provider,
+        model,
         temperature: data?.llmSettings?.temperature ?? 0.7,
         maxTokens: data?.llmSettings?.maxTokens ?? 4096,
         // CRITICAL: Use activeEmbeddingModel first (authoritative source), then llmSettings fields
@@ -214,6 +227,21 @@ function LLMSettings() {
       });
 
       setLlmConfig(defaultConfig);
+
+      // If activeChatModel was missing from database, save the determined value
+      if (!data?.llmSettings?.activeChatModel && provider && model) {
+        console.log('⚠️ [LLM SETTINGS LOAD] activeChatModel missing in database, saving:', `${provider}/${model}`);
+        try {
+          await updateSettingsCategory('llm', {
+            llmSettings: {
+              ...data?.llmSettings,
+              activeChatModel: `${provider}/${model}`
+            }
+          });
+        } catch (error) {
+          console.error('Failed to save activeChatModel:', error);
+        }
+      }
 
       // Include translation API keys in tempConfig
       // IMPORTANT: Merge with existing google config instead of replacing it
