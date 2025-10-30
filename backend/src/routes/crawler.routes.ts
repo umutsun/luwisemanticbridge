@@ -983,9 +983,8 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
 
     // Execute Python script as child process
     const { spawn } = require('child_process');
-    const pythonPath = process.platform === 'win32'
-      ? path.join(__dirname, '../../python-services/venv/Scripts/python.exe')
-      : path.join(__dirname, '../../python-services/venv/bin/python');
+    // Use global Python (has playwright installed) instead of venv
+    const pythonPath = 'python';
 
     const jobId = `script_run_${crawlerName}_${Date.now()}`;
     console.log(`📊 Job ID: ${jobId}`);
@@ -1003,7 +1002,7 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
       console.log(`[${crawlerName}] ${output.trim()}`);
 
       // Store logs in Redis with TTL (24 hours)
-      const logKey = `Crawl4AI:logs:${crawlerName}:${jobId}`;
+      const logKey = `crawl_logs:${crawlerName}:${jobId}`;
       crawl4aiRedis.rpush(logKey, JSON.stringify({
         type: 'stdout',
         message: output,
@@ -1030,7 +1029,7 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
       console.error(`[${crawlerName}] ERROR: ${error.trim()}`);
 
       // Store errors in Redis with TTL
-      const logKey = `Crawl4AI:logs:${crawlerName}:${jobId}`;
+      const logKey = `crawl_logs:${crawlerName}:${jobId}`;
       crawl4aiRedis.rpush(logKey, JSON.stringify({
         type: 'stderr',
         message: error,
