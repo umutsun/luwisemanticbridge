@@ -1267,8 +1267,8 @@ function LLMSettings() {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
                     value={(() => {
-                      const val = tempConfig?.provider || llmConfig.provider;
-                      console.log('🎯 [LLM PROVIDER SELECT] Current value:', val, '| tempConfig.provider:', tempConfig?.provider, '| llmConfig.provider:', llmConfig.provider);
+                      const val = tempConfig?.provider || llmConfig?.provider || 'gemini';
+                      console.log('🎯 [LLM PROVIDER SELECT] Current value:', val, '| tempConfig.provider:', tempConfig?.provider, '| llmConfig.provider:', llmConfig?.provider);
                       return val;
                     })()}
                     onValueChange={async (value) => {
@@ -1319,15 +1319,21 @@ function LLMSettings() {
                     </SelectContent>
                   </Select>
                   <Select
-                    value={tempConfig?.model || getDefaultModelForProvider(tempConfig?.provider || 'openai')}
+                    value={(() => {
+                      const currentProvider = tempConfig?.provider || llmConfig?.provider || 'gemini';
+                      const val = tempConfig?.model || llmConfig?.model || getDefaultModelForProvider(currentProvider);
+                      console.log('🎯 [LLM MODEL SELECT] Current value:', val, '| tempConfig.model:', tempConfig?.model, '| llmConfig.model:', llmConfig?.model, '| provider:', currentProvider);
+                      return val;
+                    })()}
                     onValueChange={async (value) => {
                       // Update model and activeChatModel
+                      const currentProvider = tempConfig?.provider || llmConfig?.provider || 'gemini';
                       const updatedConfig = {
                         ...tempConfig,
                         model: value,
                         llmSettings: {
                           ...tempConfig?.llmSettings,
-                          activeChatModel: `${tempConfig?.provider || 'openai'}/${value}`
+                          activeChatModel: `${currentProvider}/${value}`
                         }
                       };
                       updateTempConfig('model', value);
@@ -1353,8 +1359,8 @@ function LLMSettings() {
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getModelsForProvider(tempConfig?.provider || 'openai').map(model => {
-                        const details = getModelDetails(tempConfig?.provider || 'openai', model);
+                      {getModelsForProvider(tempConfig?.provider || llmConfig?.provider || 'gemini').map(model => {
+                        const details = getModelDetails(tempConfig?.provider || llmConfig?.provider || 'gemini', model);
                         return (
                           <SelectItem key={model} value={model}>
                             <div className="flex flex-col">
