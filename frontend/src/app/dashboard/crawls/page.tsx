@@ -217,11 +217,24 @@ export default function CrawlerDataPage() {
             : `Failed with code ${exitCode} at ${new Date(timestamp).toLocaleTimeString()}`;
           updated.set(jobId, [...existingLogs, completionMsg]);
 
-          // Mark script as completed
+          // Mark script as completed - find which crawler by jobId
           if (currentJobId === jobId) {
             setTimeout(() => {
               setIsScriptRunning(false);
             }, 3000);
+          }
+
+          // Also remove from runningScripts set
+          // jobId format: script_run_CRAWLERNAME_timestamp
+          const crawlerNameMatch = jobId.match(/script_run_(.+?)_\d+$/);
+          if (crawlerNameMatch) {
+            const crawlerName = crawlerNameMatch[1];
+            setRunningScripts(prev => {
+              const next = new Set(prev);
+              next.delete(crawlerName);
+              return next;
+            });
+            console.log(`[Script Completed] Removed ${crawlerName} from running scripts`);
           }
         } else {
           const cleanMessage = message?.trim() || '';
@@ -300,6 +313,33 @@ export default function CrawlerDataPage() {
       socket.off('crawler:item:added', handleCrawlerItemAdded);
     };
   }, [socket, selectedDirectory, toast]);
+
+  // Poll state.json for running scripts (queue, progress, visited URLs)
+  useEffect(() => {
+    if (runningScripts.size === 0) return;
+
+    const baseUrl = config.api.baseUrl;
+    const pollInterval = setInterval(async () => {
+      for (const crawlerName of runningScripts) {
+        try {
+          const response = await fetchWithAuth(
+            `${baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/state`
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.hasState) {
+              setCrawlerStates(prev => new Map(prev).set(crawlerName, data.state));
+            }
+          }
+        } catch (error) {
+          console.error(`[State Poll] Failed to fetch state for ${crawlerName}:`, error);
+        }
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [runningScripts]);
 
   const loadPythonScripts = async () => {
     const scriptsMap = new Map<string, File>();
@@ -1275,15 +1315,38 @@ export default function CrawlerDataPage() {
                                             size="sm"
                                             variant="ghost"
                                             className="h-5 w-5 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                            onClick={(e) => {
+                                            onClick={async (e) => {
                                               e.stopPropagation();
-                                              // Stop script
-                                              setRunningScripts(prev => {
-                                                const next = new Set(prev);
-                                                next.delete(directory.name);
-                                                return next;
-                                              });
-                                              toast({ title: 'Script stopped', description: `${directory.displayName} stopped` });
+                                              // Stop script via backend
+                                              try {
+                                                await fetchWithAuth(
+                                                  `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${directory.name}/script/stop`,
+                                                  {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ jobId: currentJobId })
+                                                  }
+                                                );
+
+                                                // Remove from running scripts immediately
+                                                setRunningScripts(prev => {
+                                                  const next = new Set(prev);
+                                                  next.delete(directory.name);
+                                                  return next;
+                                                });
+
+                                                toast({
+                                                  title: 'Script Stopped',
+                                                  description: `${directory.displayName} crawler stopped`
+                                                });
+                                              } catch (error) {
+                                                console.error('Failed to stop script:', error);
+                                                toast({
+                                                  title: 'Error',
+                                                  description: 'Failed to stop script',
+                                                  variant: 'destructive'
+                                                });
+                                              }
                                             }}
                                             title="Stop script"
                                           >
@@ -1341,19 +1404,39 @@ export default function CrawlerDataPage() {
                                             </Button>
                                           </div>
                                         ) : (
-                                          <div className="flex items-center justify-between flex-1 px-2 py-1 rounded-md bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50">
-                                            <span className="text-[10px] font-medium truncate text-slate-700 dark:text-slate-300">
+                                          <div className="relative flex items-center justify-between flex-1 px-2 py-1 rounded-md bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+                                            {/* Animated background when running */}
+                                            {runningScripts.has(directory.name) && (
+                                              <div className="absolute inset-0 bg-gradient-to-r from-green-500/30 via-green-400/20 to-transparent animate-pulse" style={{ animationDuration: '2s' }} />
+                                            )}
+
+                                            <div className="text-[10px] font-medium truncate text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2">
                                               {runningScripts.has(directory.name) ? (
-                                                <span className="flex items-center gap-1">
-                                                  <Activity className="w-2.5 h-2.5 text-green-500 animate-pulse" />
-                                                  Running...
-                                                </span>
+                                                // Show queue/progress from Redis when running
+                                                (() => {
+                                                  const state = crawlerStates.get(directory.name);
+                                                  if (state) {
+                                                    const queueCount = state.queue?.length || 0;
+                                                    const visitedCount = state.visited?.length || 0;
+                                                    const total = queueCount + visitedCount;
+                                                    const progress = total > 0 ? Math.round((visitedCount / total) * 100) : 0;
+                                                    return (
+                                                      <>
+                                                        <span className="opacity-70">Q:{queueCount}</span>
+                                                        <span className="opacity-50">•</span>
+                                                        <span className="opacity-70">{progress}%</span>
+                                                      </>
+                                                    );
+                                                  }
+                                                  return scriptUrls.get(directory.name) || pythonScripts.get(directory.name)?.name;
+                                                })()
                                               ) : (
+                                                // Show script name when idle
                                                 pythonScripts.get(directory.name)?.name
                                               )}
-                                            </span>
+                                            </div>
 
-                                            {/* Delete script button */}
+                                            {/* Delete button (only when idle) */}
                                             {!runningScripts.has(directory.name) && (
                                               <ConfirmTooltip
                                                 onConfirm={() => handleDeletePythonScript(directory)}
@@ -1402,6 +1485,7 @@ export default function CrawlerDataPage() {
                         </div>
                       )}
                     </ScrollArea>
+
                   </CardContent>
                 </Card>
               </div>

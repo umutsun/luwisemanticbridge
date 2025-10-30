@@ -52,8 +52,8 @@ module.exports = {
     // ==========================================
     {
       name: 'lsemb-frontend',
-      script: 'node',
-      args: '.next/standalone/server.js',
+      script: 'npm',
+      args: 'start',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
@@ -72,7 +72,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3002,
         HOSTNAME: '0.0.0.0',
-        NEXT_PUBLIC_API_URL: 'https://lsemb.luwi.dev'
+        NEXT_PUBLIC_API_URL: 'https://lsemb.luwi.dev',
+        NEXT_PUBLIC_APP_URL: 'https://lsemb.luwi.dev'
       },
 
       // Logging
@@ -93,6 +94,48 @@ module.exports = {
 
       // Performance
       node_args: '--max-old-space-size=2048',
+    },
+
+    // ==========================================
+    // PYTHON SERVICES (Crawl4AI, Whisper, pgai)
+    // ==========================================
+    {
+      name: 'lsemb-python',
+      script: 'main.py',
+      interpreter: 'python3',
+      cwd: './backend/python-services',
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      max_memory_restart: '2G',
+
+      // Environment
+      env: {
+        PYTHONUNBUFFERED: '1',
+        PYTHON_ENV: 'development',
+        PORT: '8001'
+      },
+      env_production: {
+        PYTHONUNBUFFERED: '1',
+        PYTHON_ENV: 'production',
+        PORT: '8001'
+      },
+
+      // Logging
+      error_file: './logs/python-error.log',
+      out_file: './logs/python-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+
+      // Auto restart strategies
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      restart_delay: 4000,
+
+      // Health check
+      listen_timeout: 20000, // Python services need time to load models
+      kill_timeout: 10000, // Give time for cleanup
     },
 
     // ==========================================

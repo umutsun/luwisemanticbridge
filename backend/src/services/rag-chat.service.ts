@@ -394,9 +394,9 @@ export class RAGChatService {
         console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 40%)`);
 
         // Still show low-confidence results as reference (but with disclaimer)
-        const processedSources = await this.processSearchResults(
+        const processedSources = await this.formatSources(
           searchResults.slice(0, Math.min(searchResults.length, 5)),
-          enableLLMGeneration
+          {} // No settings needed for low-confidence results
         );
 
         return {

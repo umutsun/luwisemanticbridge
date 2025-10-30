@@ -4,6 +4,7 @@ import json
 import re
 import sys
 import random
+import aiohttp
 from urllib.parse import urljoin, urlparse, urlunparse, parse_qs, urlencode
 
 import redis
@@ -14,10 +15,27 @@ STATE_FILE = "iskultur_crawler_state.json"
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_DB = 0
+BACKEND_URL = 'http://localhost:3001'
 default_start_url = "https://www.iskultur.com.tr/kitap/cocuk-okul-oncesi/"
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+
+async def notify_backend_item_added(item_key, total_count):
+    """Notify Node.js backend that a new item was added"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{BACKEND_URL}/api/v2/crawler/crawler-directories/iskultur_crawler/notify-item-added",
+                json={"itemKey": item_key, "totalCount": total_count},
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as response:
+                if response.status == 200:
+                    print(f"✅ [WS] Backend notified: {item_key}")
+                else:
+                    print(f"⚠️ [WS] Backend notification failed: {response.status}")
+    except Exception as e:
+        print(f"⚠️ [WS] Failed to notify backend: {e}")
 
 def clean_url(url):
     parsed = urlparse(url)
@@ -190,6 +208,10 @@ async def extract_product_details(page, url, current_category_path):
         r.set(redis_key, json.dumps(final_data, ensure_ascii=False))
         print(f"[OK] Product data saved to Redis: {redis_key}")
         print(f"[IMG] Image URL: {data.get('image_url')}")
+
+        # Get total count and notify backend
+        total_count = len(r.keys("crawl4ai:iskultur_crawler:kitaplar:*"))
+        await notify_backend_item_added(slug, total_count)
 
     except Exception as e:
         try:

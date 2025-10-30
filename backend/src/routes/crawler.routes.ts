@@ -1084,6 +1084,97 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
 });
 
 /**
+ * POST /crawler-directories/:crawlerName/script/stop
+ * Stop a running crawler script
+ */
+router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request, res: Response) => {
+  try {
+    const { crawlerName } = req.params;
+    const { jobId } = req.body;
+
+    console.log('🛑 [Stop Script] Received request');
+    console.log('📁 Crawler Name:', crawlerName);
+    console.log('📊 Job ID:', jobId);
+
+    // Find and kill Python process and its child processes (Playwright/Chromium)
+    const { exec } = require('child_process');
+
+    if (process.platform === 'win32') {
+      // Windows: First find Python PID running the crawler, then kill it with /T (tree) flag to kill children
+      exec(`wmic process where "CommandLine like '%${crawlerName}.py%' and name='python.exe'" get ProcessId`, (error: any, stdout: any) => {
+        if (error || !stdout) {
+          console.warn('⚠️  Failed to find Python process');
+          return;
+        }
+
+        // Parse PIDs from output
+        const lines = stdout.split('\n').filter((line: string) => line.trim() && line.trim() !== 'ProcessId');
+        lines.forEach((line: string) => {
+          const pid = line.trim();
+          if (pid && !isNaN(Number(pid))) {
+            // Kill process tree (includes Playwright/Chromium children)
+            exec(`taskkill /F /T /PID ${pid}`, (killError: any) => {
+              if (killError) {
+                console.warn(`⚠️  Failed to kill PID ${pid}:`, killError.message);
+              } else {
+                console.log(`✅ Killed process tree for PID ${pid} (Python + Playwright)`);
+              }
+            });
+          }
+        });
+      });
+    } else {
+      // Linux/Mac: Find Python PID and kill its process group
+      exec(`pgrep -f "${crawlerName}.py"`, (error: any, stdout: any) => {
+        if (error || !stdout) {
+          console.warn('⚠️  Failed to find Python process');
+          return;
+        }
+
+        const pid = stdout.trim();
+        if (pid) {
+          // Kill process group (includes child processes)
+          exec(`pkill -P ${pid}`, () => {
+            exec(`kill -9 ${pid}`, (killError: any) => {
+              if (killError) {
+                console.warn('⚠️  Failed to kill process:', killError.message);
+              } else {
+                console.log('✅ Killed Python process and children');
+              }
+            });
+          });
+        }
+      });
+    }
+
+    // Publish stop event
+    if (jobId) {
+      crawl4aiRedis.publish(
+        `script_log:${jobId}`,
+        JSON.stringify({
+          jobId,
+          type: 'completed',
+          exitCode: -1,
+          message: 'Stopped by user',
+          timestamp: new Date().toISOString()
+        })
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Stop command sent'
+    });
+  } catch (error: any) {
+    console.error('❌ Failed to stop script:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * DELETE /crawler-directories/:crawlerName/script
  * Delete Python script for a crawler
  */
