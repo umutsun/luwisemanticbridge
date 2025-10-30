@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 // Page title mapping - Turkish titles for display
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
+  '/dashboard/crawls': 'Crawls',
   '/dashboard/documents': 'Documents',
   '/dashboard/migrations': 'Migrations',
   '/dashboard/messages': 'Messages',
