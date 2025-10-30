@@ -31,7 +31,6 @@ import {
 } from '@/components/ui/select';
 import {
   Search,
-  RefreshCw,
   Database,
   FileText,
   Eye,
@@ -48,13 +47,13 @@ import {
   Table as TableIcon,
   Trash2,
   Play,
-  Square,
-  Terminal,
-  ChevronDown,
-  ChevronUp,
   X,
   Activity,
-  Globe
+  StopCircle,
+  Pause,
+  Clock,
+  MousePointer2,
+  Square
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -148,10 +147,7 @@ export default function CrawlerDataPage() {
   const [hasMoreItems, setHasMoreItems] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalItemsCount, setTotalItemsCount] = useState(0);
-  const [runningScripts, setRunningScripts] = useState<Map<string, string>>(new Map()); // crawlerName -> jobId
   const [scriptLogs, setScriptLogs] = useState<Map<string, string[]>>(new Map()); // jobId -> logs
-  const [showLogViewer, setShowLogViewer] = useState<string | null>(null); // crawlerName
-  const [logWidgetMinimized, setLogWidgetMinimized] = useState(false);
   const [showUrlDialog, setShowUrlDialog] = useState(false);
   const [urlDialogDirectory, setUrlDialogDirectory] = useState<CrawlerDirectory | null>(null);
   const [scriptUrl, setScriptUrl] = useState('');
@@ -160,6 +156,12 @@ export default function CrawlerDataPage() {
   const [editingScript, setEditingScript] = useState<{ directory: CrawlerDirectory; content: string } | null>(null);
   const [scriptContent, setScriptContent] = useState('');
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [scriptStartTime, setScriptStartTime] = useState<Date | null>(null);
+  const [isScriptPaused, setIsScriptPaused] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState<string | null>(null); // directory name
+  const [runningScripts, setRunningScripts] = useState<Set<string>>(new Set()); // running directory names
+  const [scriptUrls, setScriptUrls] = useState<Map<string, string>>(new Map()); // directory -> URL
+  const [crawlerStates, setCrawlerStates] = useState<Map<string, any>>(new Map()); // directory -> state.json
 
   // Stats
   const [stats, setStats] = useState<Stats>({
@@ -215,20 +217,12 @@ export default function CrawlerDataPage() {
             : `Failed with code ${exitCode} at ${new Date(timestamp).toLocaleTimeString()}`;
           updated.set(jobId, [...existingLogs, completionMsg]);
 
-          // Remove from running scripts after a delay
-          setTimeout(() => {
-            setRunningScripts(prev => {
-              const newMap = new Map(prev);
-              // Find and remove the crawler that has this jobId
-              for (const [crawlerName, jid] of newMap.entries()) {
-                if (jid === jobId) {
-                  newMap.delete(crawlerName);
-                  break;
-                }
-              }
-              return newMap;
-            });
-          }, 3000);
+          // Mark script as completed
+          if (currentJobId === jobId) {
+            setTimeout(() => {
+              setIsScriptRunning(false);
+            }, 3000);
+          }
         } else {
           const cleanMessage = message?.trim() || '';
           if (cleanMessage) {
@@ -266,11 +260,12 @@ export default function CrawlerDataPage() {
 
         if (!response.ok) continue;
 
-        const data = await response.json();
-        if (data.hasScript) {
+        // If script exists, response will be text/plain with script content
+        const scriptText = await response.text();
+        if (scriptText && scriptText.length > 0) {
           // Create a virtual File object to represent the existing script
-          const virtualFile = new File([], data.filename, { type: 'text/x-python' });
-          Object.defineProperty(virtualFile, 'size', { value: data.size, writable: false });
+          const filename = `${directory.name}.py`;
+          const virtualFile = new File([scriptText], filename, { type: 'text/x-python' });
           scriptsMap.set(directory.name, virtualFile);
         }
       } catch (error) {
@@ -683,25 +678,21 @@ export default function CrawlerDataPage() {
     setShowUrlDialog(true);
   };
 
-  const handleRunScript = async () => {
-    if (!urlDialogDirectory) return;
-    if (!scriptUrl.trim()) {
+  const handleRunScript = async (directory: CrawlerDirectory, url: string) => {
+    if (!url.trim()) {
       toast({ title: 'URL Required', description: 'Please enter a URL to crawl', variant: 'destructive' });
       return;
     }
 
-    const directory = urlDialogDirectory;
-    setIsScriptRunning(true);
-
     try {
-      console.log(`[Run Script] Starting script for ${directory.name} with URL: ${scriptUrl}`);
+      console.log(`[Run Script] Starting script for ${directory.name} with URL: ${url}`);
 
       const response = await fetchWithAuth(
         `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${directory.name}/script/run`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: scriptUrl })
+          body: JSON.stringify({ url })
         }
       );
 
@@ -717,14 +708,63 @@ export default function CrawlerDataPage() {
       console.log('[Run Script] Success response:', result);
 
       setCurrentJobId(result.jobId);
-      setRunningScripts(prev => new Map(prev).set(directory.name, result.jobId));
-      setScriptLogs(prev => new Map(prev).set(result.jobId, [`[${new Date().toLocaleTimeString()}] Script started\n[${new Date().toLocaleTimeString()}] Crawling URL: ${scriptUrl}\n`]));
+      setScriptStartTime(new Date());
+      setScriptLogs(prev => new Map(prev).set(result.jobId, [`[${new Date().toLocaleTimeString()}] Script started\n[${new Date().toLocaleTimeString()}] Crawling URL: ${url}\n`]));
 
-      toast({ title: 'Script Running', description: `${directory.displayName} crawler started` });
+      toast({
+        title: 'Script Running',
+        description: `${directory.displayName} crawler started in background`
+      });
     } catch (error: any) {
       console.error('[Run Script] Error:', error);
       toast({ title: 'Error', description: error.message || 'Failed to run script', variant: 'destructive' });
-      setIsScriptRunning(false);
+
+      // Remove from running scripts on error
+      setRunningScripts(prev => {
+        const next = new Set(prev);
+        next.delete(directory.name);
+        return next;
+      });
+    }
+  };
+
+  const handleSaveScript = async () => {
+    if (!editingScript) return;
+
+    try {
+      const blob = new Blob([scriptContent], { type: 'text/plain' });
+      const file = new File([blob], `${editingScript.directory.name}.py`);
+
+      const formData = new FormData();
+      formData.append('script', file);
+
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${editingScript.directory.name}/script`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save script');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Script saved successfully',
+      });
+
+      setShowScriptEditor(false);
+      setEditingScript(null);
+    } catch (error: any) {
+      console.error('[Save Script] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to save script',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -961,10 +1001,6 @@ export default function CrawlerDataPage() {
                   Import and process crawled data from Redis to your database
                 </p>
               </div>
-              <Button onClick={fetchDirectories} variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh
-              </Button>
             </div>
 
             {/* Statistics Cards - Pastel Gradients */}
@@ -1060,7 +1096,7 @@ export default function CrawlerDataPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Side - Source Selection / Settings */}
               <div className="lg:col-span-1">
-                <Card className="h-[calc(100vh-280px)]">
+                <Card className="h-[calc(100vh-200px)]">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">Crawler Sources</CardTitle>
                   </CardHeader>
@@ -1127,20 +1163,40 @@ export default function CrawlerDataPage() {
                                           className="h-5 w-5 p-0 flex-shrink-0 hover:bg-slate-100 dark:hover:bg-slate-800"
                                           onClick={async (e) => {
                                             e.stopPropagation();
-                                            // Load script content
+                                            // Load script content and state.json
                                             try {
-                                              const response = await fetchWithAuth(
+                                              // Load script content
+                                              const scriptResponse = await fetchWithAuth(
                                                 `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${directory.name}/script`
                                               );
-                                              if (response.ok) {
-                                                const blob = await response.blob();
-                                                const text = await blob.text();
+                                              if (scriptResponse.ok) {
+                                                const text = await scriptResponse.text();
                                                 setScriptContent(text);
                                                 setEditingScript({ directory, content: text });
+
+                                                // Load state.json
+                                                try {
+                                                  const stateResponse = await fetchWithAuth(
+                                                    `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${directory.name}/state`
+                                                  );
+                                                  if (stateResponse.ok) {
+                                                    const stateData = await stateResponse.json();
+                                                    if (stateData.hasState) {
+                                                      setCrawlerStates(prev => new Map(prev).set(directory.name, stateData.state));
+                                                    }
+                                                  }
+                                                } catch (stateError) {
+                                                  console.log('No state file found (normal for new crawlers)');
+                                                }
+
                                                 setShowScriptEditor(true);
+                                              } else {
+                                                throw new Error('Failed to load script');
                                               }
                                             } catch (error) {
-                                              toast({ title: 'Error', description: 'Failed to load script', variant: 'destructive' });
+                                              console.error('Failed to load script:', error);
+                                              const errorMessage = error instanceof Error ? error.message : 'Failed to load script';
+                                              toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
                                             }
                                           }}
                                           title="Edit script"
@@ -1148,211 +1204,112 @@ export default function CrawlerDataPage() {
                                           <FileText className="w-3 h-3 text-slate-600 dark:text-slate-400" />
                                         </Button>
 
-                                        {/* Run/Stop button with URL input widget */}
-                                        <div className="relative">
+                                        {/* Play/Stop button */}
+                                        {!runningScripts.has(directory.name) ? (
                                           <Button
                                             size="sm"
                                             variant="ghost"
-                                            className={`h-5 w-5 p-0 flex-shrink-0 ${
-                                              runningScripts.has(directory.name)
-                                                ? 'hover:bg-red-50 dark:hover:bg-red-900/20'
-                                                : 'hover:bg-green-50 dark:hover:bg-green-900/20'
-                                            }`}
+                                            className="h-5 w-5 p-0 flex-shrink-0 hover:bg-green-50 dark:hover:bg-green-900/20"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              if (runningScripts.has(directory.name)) {
-                                                // TODO: Implement stop functionality
-                                                toast({ title: 'Stop script', description: 'Not yet implemented' });
-                                              } else {
-                                                setUrlDialogDirectory(directory);
-                                                setScriptUrl('');
-                                              }
+                                              setShowUrlInput(directory.name);
                                             }}
-                                            title={runningScripts.has(directory.name) ? 'Stop script' : 'Run script'}
+                                            title="Run script"
                                           >
-                                            {runningScripts.has(directory.name) ? (
-                                              <Square className="w-3 h-3 text-red-500 fill-red-500" />
-                                            ) : (
-                                              <Play className="w-3 h-3 text-green-600 dark:text-green-400" />
-                                            )}
+                                            <Play className="w-3 h-3 text-green-600 dark:text-green-400" />
                                           </Button>
+                                        ) : (
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-5 w-5 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              // Stop script
+                                              setRunningScripts(prev => {
+                                                const next = new Set(prev);
+                                                next.delete(directory.name);
+                                                return next;
+                                              });
+                                              toast({ title: 'Script stopped', description: `${directory.displayName} stopped` });
+                                            }}
+                                            title="Stop script"
+                                          >
+                                            <Square className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                          </Button>
+                                        )}
 
-                                          {/* Floating URL Input Widget */}
-                                          {urlDialogDirectory?.name === directory.name && !runningScripts.has(directory.name) && (
-                                            <div
-                                              className="absolute bottom-full left-0 mb-1 z-[100]"
-                                              onClick={(e) => e.stopPropagation()}
-                                            >
-                                              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg shadow-2xl border-2 border-blue-200 dark:border-blue-700/50 w-96 p-4">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                  <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                                  <span className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                                                    Enter URL to Crawl
-                                                  </span>
-                                                </div>
-                                                <input
-                                                  type="text"
-                                                  value={scriptUrl}
-                                                  onChange={(e) => setScriptUrl(e.target.value)}
-                                                  placeholder="https://example.com/page-to-crawl"
-                                                  className="w-full px-3 py-2 text-sm border-2 border-blue-200 dark:border-blue-700/50 rounded-md bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                  autoFocus
-                                                  onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                      handleRunScript();
-                                                    } else if (e.key === 'Escape') {
-                                                      setUrlDialogDirectory(null);
+                                        {/* Inline URL Input or Script Name */}
+                                        {showUrlInput === directory.name ? (
+                                          <div className="flex items-center gap-1 flex-1">
+                                            <div className="relative flex-1">
+                                              <MousePointer2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                                              <Input
+                                                type="url"
+                                                placeholder="https://example.com"
+                                                className="h-6 text-xs pl-7 pr-2 border-slate-300 dark:border-slate-600"
+                                                autoFocus
+                                                value={scriptUrls.get(directory.name) || ''}
+                                                onChange={(e) => {
+                                                  setScriptUrls(prev => new Map(prev).set(directory.name, e.target.value));
+                                                }}
+                                                onKeyDown={(e) => {
+                                                  if (e.key === 'Enter') {
+                                                    const url = scriptUrls.get(directory.name);
+                                                    if (url) {
+                                                      // Start script
+                                                      setRunningScripts(prev => new Set(prev).add(directory.name));
+                                                      setShowUrlInput(null);
+                                                      handleRunScript(directory, url);
                                                     }
-                                                  }}
-                                                />
-                                                <div className="flex items-center justify-between mt-3">
-                                                  <span className="text-[10px] text-blue-600 dark:text-blue-400 italic">
-                                                    Press Enter to run, Esc to cancel
-                                                  </span>
-                                                  <div className="flex items-center gap-2">
-                                                    <Button
-                                                      size="sm"
-                                                      variant="ghost"
-                                                      className="h-7 px-3 text-xs hover:bg-blue-100 dark:hover:bg-blue-900/30"
-                                                      onClick={() => setUrlDialogDirectory(null)}
-                                                    >
-                                                      Cancel
-                                                    </Button>
-                                                    <Button
-                                                      size="sm"
-                                                      className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white"
-                                                      onClick={handleRunScript}
-                                                    >
-                                                      <Play className="w-3 h-3 mr-1" />
-                                                      Run Script
-                                                    </Button>
-                                                  </div>
-                                                </div>
-                                              </div>
+                                                  } else if (e.key === 'Escape') {
+                                                    setShowUrlInput(null);
+                                                  }
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                              />
                                             </div>
-                                          )}
-                                        </div>
-
-                                        {/* Toggle logs button with floating widget */}
-                                        {runningScripts.has(directory.name) && (
-                                          <div className="relative">
                                             <Button
                                               size="sm"
                                               variant="ghost"
-                                              className="h-5 w-5 p-0 flex-shrink-0 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                              className="h-5 w-5 p-0"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (showLogViewer === directory.name) {
-                                                  setShowLogViewer(null);
-                                                } else {
-                                                  setShowLogViewer(directory.name);
-                                                  setLogWidgetMinimized(false);
-                                                }
+                                                setShowUrlInput(null);
                                               }}
-                                              title="View logs"
                                             >
-                                              <Terminal className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                              <X className="w-3 h-3 text-slate-500" />
                                             </Button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center justify-between flex-1 px-2 py-1 rounded-md bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50">
+                                            <span className="text-[10px] font-medium truncate text-slate-700 dark:text-slate-300">
+                                              {runningScripts.has(directory.name) ? (
+                                                <span className="flex items-center gap-1">
+                                                  <Activity className="w-2.5 h-2.5 text-green-500 animate-pulse" />
+                                                  Running...
+                                                </span>
+                                              ) : (
+                                                pythonScripts.get(directory.name)?.name
+                                              )}
+                                            </span>
 
-                                        {/* Script name */}
-                                        <span className="text-[10px] font-medium truncate max-w-[100px] text-slate-600 dark:text-slate-400">
-                                          {pythonScripts.get(directory.name)?.name}
-                                        </span>
-
-                                        {/* Delete script button */}
-                                        <ConfirmTooltip
-                                          onConfirm={() => handleDeletePythonScript(directory)}
-                                          message="Delete this Python script?"
-                                          side="top"
-                                        >
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-4 w-4 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-60 hover:opacity-100 transition-opacity ml-auto"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <X className="w-2.5 h-2.5 text-red-500" />
-                                          </Button>
-                                        </ConfirmTooltip>
-
-                                            {/* Floating Log Widget */}
-                                            {showLogViewer === directory.name && (
-                                              <div
-                                                className="absolute bottom-full right-0 mb-1 z-[100]"
-                                                onClick={(e) => e.stopPropagation()}
+                                            {/* Delete script button */}
+                                            {!runningScripts.has(directory.name) && (
+                                              <ConfirmTooltip
+                                                onConfirm={() => handleDeletePythonScript(directory)}
+                                                message="Delete this Python script?"
+                                                side="top"
                                               >
-                                                <div className={`bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-lg shadow-2xl border-2 border-yellow-200 dark:border-yellow-700/50 transition-all ${
-                                                  logWidgetMinimized ? 'w-48' : 'w-96'
-                                                }`}>
-                                                  {/* Header */}
-                                                  <div className="flex items-center justify-between px-3 py-2 border-b-2 border-yellow-200 dark:border-yellow-700/50 bg-yellow-100/50 dark:bg-yellow-900/30 rounded-t-lg">
-                                                    <div className="flex items-center gap-2">
-                                                      <Terminal className="w-3.5 h-3.5 text-yellow-700 dark:text-yellow-400" />
-                                                      <span className="text-[10px] font-semibold text-yellow-900 dark:text-yellow-200">
-                                                        {directory.displayName}
-                                                      </span>
-                                                      {/* Minimal circle progress */}
-                                                      {runningScripts.has(directory.name) && (
-                                                        <div className="flex items-center gap-1">
-                                                          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                                          <span className="text-[8px] text-yellow-700 dark:text-yellow-400">Running</span>
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                    <Button
-                                                      size="sm"
-                                                      variant="ghost"
-                                                      className="h-5 w-5 p-0 hover:bg-yellow-200 dark:hover:bg-yellow-800/50"
-                                                      onClick={() => {
-                                                        if (logWidgetMinimized) {
-                                                          setLogWidgetMinimized(false);
-                                                        } else {
-                                                          setShowLogViewer(null);
-                                                        }
-                                                      }}
-                                                      title={logWidgetMinimized ? 'Maximize' : 'Minimize & Close'}
-                                                    >
-                                                      {logWidgetMinimized ? (
-                                                        <ChevronUp className="w-3 h-3 text-yellow-700 dark:text-yellow-400" />
-                                                      ) : (
-                                                        <ChevronDown className="w-3 h-3 text-yellow-700 dark:text-yellow-400" />
-                                                      )}
-                                                    </Button>
-                                                  </div>
-
-                                                  {/* Log Content */}
-                                                  {!logWidgetMinimized && (
-                                                    <div className="p-3 max-h-96 overflow-y-auto bg-white/50 dark:bg-slate-900/30">
-                                                      {(() => {
-                                                        const jobId = runningScripts.get(directory.name);
-                                                        const logs = jobId ? scriptLogs.get(jobId) : null;
-                                                        return logs?.length ? (
-                                                          <div className="space-y-1">
-                                                            {logs.map((log, index) => (
-                                                              <div
-                                                                key={index}
-                                                                className={`text-[9px] leading-tight font-mono px-2 py-0.5 rounded ${
-                                                                  log.includes('ERROR') || log.includes('Failed')
-                                                                    ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
-                                                                    : log.includes('Completed') || log.includes('successfully')
-                                                                    ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                                                                    : 'bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300'
-                                                                }`}
-                                                              >
-                                                                {log}
-                                                              </div>
-                                                            ))}
-                                                          </div>
-                                                        ) : (
-                                                          <div className="text-[9px] text-yellow-600 dark:text-yellow-400 text-center py-8 italic">
-                                                            Waiting for output...
-                                                          </div>
-                                                        );
-                                                      })()}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </div>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-4 w-4 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-60 hover:opacity-100 transition-opacity"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <X className="w-2.5 h-2.5 text-red-500" />
+                                                </Button>
+                                              </ConfirmTooltip>
                                             )}
                                           </div>
                                         )}
@@ -1394,7 +1351,7 @@ export default function CrawlerDataPage() {
               <div className="lg:col-span-2">
                 {/* Empty state - No source selected */}
                 {!selectedDirectory && (
-                  <Card className="h-[calc(100vh-280px)] flex items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-700">
+                  <Card className="h-[calc(100vh-200px)] flex items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-700">
                     <div className="text-center px-8 py-12">
                       <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-800 mb-6">
                         <Database className="w-10 h-10 text-slate-400 dark:text-slate-500" />
@@ -1798,11 +1755,17 @@ export default function CrawlerDataPage() {
 
       {/* Edit Item Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-5xl max-h-fit p-0 gap-0 overflow-hidden flex flex-col z-[200]">
-          {/* Modal Header - Fixed */}
-          <div className="flex-shrink-0 bg-background border-b border-border px-6 py-4">
-            <div className="flex items-center gap-2.5">
-              <DialogTitle className="text-base font-bold">{editingItem?.title}</DialogTitle>
+        <DialogContent className="max-w-5xl max-h-fit p-0 gap-0 overflow-hidden flex flex-col !z-[10000]">
+          {/* Modal Header - Fixed - 3D Glassmorphic */}
+          <div className="flex-shrink-0 px-6 py-4 relative">
+            {/* 3D Background Layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-50 to-white dark:from-slate-800 dark:via-slate-850 dark:to-slate-900" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_8px_32px_0_rgba(0,0,0,0.4)] border-b border-slate-300/50 dark:border-slate-700/50" />
+
+            <div className="flex items-center gap-2.5 relative z-10">
+              <DialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">{editingItem?.title}</DialogTitle>
               <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
                 CRAWL DATA
               </Badge>
@@ -1813,7 +1776,7 @@ export default function CrawlerDataPage() {
           </div>
 
           {/* Modal Content - Scrollable */}
-          <div className="overflow-hidden px-6 py-4">
+          <div className="overflow-hidden px-6 py-4 bg-white dark:bg-slate-900">
             {/* Metadata Section */}
             {editingItem && (
               <div className="mb-4 p-4 bg-muted/30 rounded-lg">
@@ -1881,10 +1844,16 @@ export default function CrawlerDataPage() {
             </div>
           </div>
 
-          {/* Modal Footer - Fixed */}
-          <div className="flex-shrink-0 bg-muted/50 dark:bg-black/30 border-t border-border px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] text-muted-foreground">
+          {/* Modal Footer - Fixed - 3D Glassmorphic */}
+          <div className="flex-shrink-0 px-6 py-3 relative">
+            {/* 3D Background Layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-850 dark:to-slate-800" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
+
+            <div className="flex items-center justify-between relative z-10">
+              <div className="text-[10px] text-slate-600 dark:text-slate-400">
                 Press Ctrl+F to search within content
               </div>
               <div className="flex gap-2">
@@ -1921,68 +1890,106 @@ export default function CrawlerDataPage() {
           setScriptUrl('');
         }
       }}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col z-[200]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Terminal className="w-5 h-5" />
-              {isScriptRunning ? `Running: ${urlDialogDirectory?.displayName}` : `Run Crawler Script`}
-            </DialogTitle>
-            <DialogDescription>
-              {isScriptRunning
-                ? `Crawling ${scriptUrl} - Logs updating in real-time`
-                : `Enter the URL to crawl with ${urlDialogDirectory?.displayName}`
-              }
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col !z-[10000] p-0">
+          {/* 3D Glassmorphic Header */}
+          <div className="px-6 py-4 relative">
+            {/* 3D Background Layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-50 to-white dark:from-slate-800 dark:via-slate-850 dark:to-slate-900" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_8px_32px_0_rgba(0,0,0,0.4)] border-b border-slate-300/50 dark:border-slate-700/50" />
+
+            <div className="relative z-10">
+              <DialogTitle className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {isScriptRunning ? `Running: ${urlDialogDirectory?.displayName}` : `Run Crawler Script`}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                {isScriptRunning
+                  ? `Crawling ${scriptUrl} - Logs updating in real-time`
+                  : `Enter the URL to crawl with ${urlDialogDirectory?.displayName}`
+                }
+              </DialogDescription>
+            </div>
+          </div>
 
           {!isScriptRunning ? (
             // URL Input View
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="script-url">Target URL</Label>
-                <Input
-                  id="script-url"
-                  type="url"
-                  placeholder="https://example.com"
-                  value={scriptUrl}
-                  onChange={(e) => setScriptUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleRunScript();
-                    }
-                  }}
-                  autoFocus
-                />
+            <>
+              <div className="flex-1 px-6 py-6 bg-white dark:bg-slate-900">
+                <div className="space-y-2">
+                  <Label htmlFor="script-url" className="text-sm font-medium text-slate-700 dark:text-slate-300">Target URL</Label>
+                  <Input
+                    id="script-url"
+                    type="url"
+                    placeholder="https://example.com"
+                    value={scriptUrl}
+                    onChange={(e) => setScriptUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleRunScript();
+                      }
+                    }}
+                    className="border-slate-300 dark:border-slate-700"
+                    autoFocus
+                  />
+                </div>
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setShowUrlDialog(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleRunScript} className="bg-green-600 hover:bg-green-700">
-                  <Play className="w-4 h-4 mr-2" />
-                  Run Script
-                </Button>
+
+              {/* 3D Glassmorphic Footer */}
+              <div className="px-6 py-4 relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-850 dark:to-slate-800" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+                <div className="absolute inset-0 backdrop-blur-xl" />
+                <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
+
+                <div className="flex justify-end gap-2 relative z-10">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowUrlDialog(false)}
+                    className="text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleRunScript}
+                    className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white"
+                  >
+                    Run Script
+                  </Button>
+                </div>
               </div>
-            </div>
+            </>
           ) : (
             // Log Viewer View
             <div className="flex-1 flex flex-col min-h-0 py-4">
               <div className="flex-1 bg-slate-950 rounded-lg overflow-hidden border border-slate-700 flex flex-col">
                 {/* Terminal Header */}
                 <div className="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-slate-700">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <div className="flex gap-1.5">
                       <div className="w-3 h-3 rounded-full bg-red-500" />
                       <div className="w-3 h-3 rounded-full bg-yellow-500" />
                       <div className="w-3 h-3 rounded-full bg-green-500" />
                     </div>
-                    <span className="text-slate-400 text-xs font-mono ml-2">
-                      {urlDialogDirectory?.name}.py - Output
+                    <span className="text-slate-400 text-xs font-mono">
+                      {urlDialogDirectory?.name}.py
                     </span>
+                    {scriptStartTime && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Clock className="w-3 h-3" />
+                        <span>{scriptStartTime.toLocaleTimeString()}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Activity className="w-3 h-3 text-green-400 animate-pulse" />
-                    <span className="text-xs text-slate-400">Running</span>
+                    {!isScriptPaused ? (
+                      <Activity className="w-3 h-3 text-green-400 animate-pulse" />
+                    ) : (
+                      <Pause className="w-3 h-3 text-yellow-400" />
+                    )}
+                    <span className="text-xs text-slate-400">
+                      {isScriptPaused ? 'Paused' : 'Running'}
+                    </span>
                   </div>
                 </div>
 
@@ -1997,10 +2004,46 @@ export default function CrawlerDataPage() {
               </div>
 
               <div className="flex justify-between items-center mt-4">
-                <div className="text-xs text-slate-500">
-                  {currentJobId && scriptLogs.get(currentJobId)?.length || 0} log entries
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span>{currentJobId && scriptLogs.get(currentJobId)?.length || 0} log entries</span>
+                  {scriptStartTime && (
+                    <>
+                      <span>•</span>
+                      <span>Started: {scriptStartTime.toLocaleTimeString()}</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsScriptPaused(!isScriptPaused);
+                      toast({
+                        title: isScriptPaused ? 'Resumed' : 'Paused',
+                        description: isScriptPaused ? 'Script execution resumed' : 'Script execution paused'
+                      });
+                    }}
+                    className={isScriptPaused ? 'text-green-600' : 'text-yellow-600'}
+                  >
+                    {isScriptPaused ? 'Resume' : 'Pause'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowUrlDialog(false);
+                      setIsScriptRunning(false);
+                      setCurrentJobId(null);
+                      setScriptStartTime(null);
+                      setIsScriptPaused(false);
+                      toast({ title: 'Stopped', description: 'Script execution stopped' });
+                    }}
+                    className="text-red-600"
+                  >
+                    <StopCircle className="w-3.5 h-3.5 mr-1.5" />
+                    Stop
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -2016,20 +2059,138 @@ export default function CrawlerDataPage() {
                   >
                     Clear Logs
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowUrlDialog(false);
-                      setIsScriptRunning(false);
-                      setCurrentJobId(null);
-                    }}
-                  >
-                    Close
-                  </Button>
                 </div>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Script Editor Modal */}
+      <Dialog open={showScriptEditor} onOpenChange={setShowScriptEditor}>
+        <DialogContent className="max-w-6xl h-[95vh] p-0 flex flex-col !z-[10000]">
+          {/* 3D Glassmorphic Header */}
+          <div className="px-6 py-4 relative">
+            {/* 3D Background Layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-50 to-white dark:from-slate-800 dark:via-slate-850 dark:to-slate-900" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_8px_32px_0_rgba(0,0,0,0.4)] border-b border-slate-300/50 dark:border-slate-700/50" />
+
+            <DialogTitle className="text-sm font-semibold text-slate-900 dark:text-slate-100 relative z-10">
+              {editingScript?.directory.name}.py - Editing
+            </DialogTitle>
+          </div>
+
+          {/* Two-column layout: Code editor + State viewer */}
+          <div className="flex-1 overflow-hidden p-4 flex gap-4 bg-white dark:bg-slate-900">
+            {/* Left: Code editor */}
+            <div className="flex-1 h-full rounded-lg overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800">
+              <textarea
+                value={scriptContent}
+                onChange={(e) => setScriptContent(e.target.value)}
+                className="w-full h-full font-mono text-sm p-4 bg-white dark:bg-slate-950 text-slate-800 dark:text-green-400 resize-none focus:outline-none"
+                spellCheck={false}
+                autoFocus
+                style={{
+                  lineHeight: '1.6',
+                  tabSize: 4,
+                }}
+              />
+            </div>
+
+            {/* Right: State.json viewer */}
+            {editingScript && crawlerStates.has(editingScript.directory.name) && (
+              <div className="w-80 h-full rounded-lg overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col">
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+                  <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Crawler State
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-auto p-4 space-y-3">
+                  {(() => {
+                    const state = crawlerStates.get(editingScript.directory.name);
+                    return (
+                      <>
+                        {/* Queue */}
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                            Queue
+                          </div>
+                          <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                            {state?.queue?.length || 0}
+                          </div>
+                          <div className="text-xs text-slate-500">URLs pending</div>
+                        </div>
+
+                        {/* Visited */}
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                            Visited
+                          </div>
+                          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                            {state?.visited?.length || 0}
+                          </div>
+                          <div className="text-xs text-slate-500">URLs crawled</div>
+                        </div>
+
+                        {/* Failed */}
+                        {state?.failed_urls && state.failed_urls.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                              Failed
+                            </div>
+                            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                              {state.failed_urls.length}
+                            </div>
+                            <div className="text-xs text-slate-500">URLs failed</div>
+                          </div>
+                        )}
+
+                        {/* Progress */}
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                            Progress
+                          </div>
+                          <div className="text-sm font-mono text-slate-700 dark:text-slate-300">
+                            {Math.round((state?.visited?.length || 0) / ((state?.visited?.length || 0) + (state?.queue?.length || 1)) * 100)}%
+                          </div>
+                          <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2">
+                            <div
+                              className="bg-green-600 dark:bg-green-400 h-2 rounded-full transition-all"
+                              style={{
+                                width: `${Math.round((state?.visited?.length || 0) / ((state?.visited?.length || 0) + (state?.queue?.length || 1)) * 100)}%`
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3D Glassmorphic Footer */}
+          <div className="flex items-center justify-between px-6 py-4 relative">
+            {/* 3D Background Layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-850 dark:to-slate-800" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
+
+            <div className="text-xs text-slate-600 dark:text-slate-400 font-mono relative z-10">
+              {scriptContent.split('\n').length} lines • {scriptContent.length} characters
+            </div>
+            <Button
+              onClick={handleSaveScript}
+              size="sm"
+              className="relative z-10"
+            >
+              Save Changes
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
