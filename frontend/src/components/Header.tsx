@@ -47,7 +47,8 @@ import {
   Filter,
   CheckSquare,
   Square,
-  Server
+  Server,
+  CircuitBoard
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
@@ -333,10 +334,9 @@ export default function Header() {
       { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
       { href: '/dashboard/migrations', label: 'Migration', icon: Database },
       { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
-      { href: '/dashboard/scrapes', label: 'Web Scraper', icon: Globe },
+      { href: '/dashboard/crawls', label: 'Crawler Data', icon: Database },
       { href: '/dashboard/messages', label: 'Sohbet Geçmişi', icon: MessageSquare },
       { href: '/dashboard/translations', label: 'Translations', icon: Languages },
-      { href: '/dashboard/integrations', label: 'Integrations', icon: CircuitBoard },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
     ] : [])
   ];

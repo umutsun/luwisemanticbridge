@@ -49,29 +49,24 @@ export const ConfirmTooltip: React.FC<ConfirmTooltipProps> = ({
         {showConfirm && (
           <TooltipContent
             side={side}
-            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg px-3 py-2"
+            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg px-2 py-2"
             onPointerDownOutside={() => setShowConfirm(false)}
           >
-            <div className="flex flex-col items-center gap-2">
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                {message}
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleConfirm}
-                  className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 transition-colors"
-                  title="Yes"
-                >
-                  <ThumbsUp className="w-4 h-4 text-green-600 dark:text-green-400" />
-                </button>
-                <button
-                  onClick={handleCancel}
-                  className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 transition-colors"
-                  title="No"
-                >
-                  <ThumbsDown className="w-4 h-4 text-red-600 dark:text-red-400" />
-                </button>
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleConfirm}
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 transition-colors"
+                title="Yes"
+              >
+                <ThumbsUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+              </button>
+              <button
+                onClick={handleCancel}
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 transition-colors"
+                title="No"
+              >
+                <ThumbsDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+              </button>
             </div>
           </TooltipContent>
         )}

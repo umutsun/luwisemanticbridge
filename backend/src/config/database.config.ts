@@ -176,9 +176,6 @@ setInterval(() => {
   }
 }, 30000);
 
-// Alias for backward compatibility - some services still use lsembPool
-export const lsembPool = lsembPool;
-
 // Customer Database Pool (created dynamically)
 let customerPool: Pool | null = null;
 

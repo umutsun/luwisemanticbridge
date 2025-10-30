@@ -23,27 +23,54 @@ let pythonProcess: ChildProcess | null = null;
  */
 router.get('/status', async (req: Request, res: Response) => {
   try {
+    // Check Python service status
+    const pythonAvailable = await pythonService.isPythonServiceAvailable();
+
+    // GraphQL is part of Node.js server on /graphql endpoint
+    const graphqlRunning = true; // Always running with Node.js on port 8083
+
     const status = {
-      pythonServices: await pythonService.isPythonServiceAvailable(),
-      crawl4ai: false,
-      pgai: false,
-      pgvectorscale: false,
-      nodejsScraper: true // Always available
+      graphql: {
+        status: graphqlRunning ? 'running' : 'stopped',
+        port: 8083, // Same as Node.js port, runs on /graphql endpoint
+      },
+      python: {
+        status: pythonAvailable ? 'running' : 'stopped',
+        port: 8001
+      },
+      crawl4ai: {
+        status: pythonAvailable ? 'running' : 'stopped',
+        port: 8001
+      },
+      pgai: {
+        status: 'stopped', // Will be updated below
+        installed: false
+      },
+      pgvectorscale: {
+        status: 'stopped' // Will need extension check
+      },
+      nodejs: {
+        status: 'running', // Always running if this endpoint is reached
+        port: 8083
+      },
+      database: {
+        status: 'running', // Check if needed
+        port: 5432
+      }
     };
 
-    // Check if Python service is running and get detailed status
-    if (status.pythonServices) {
+    // Check pgai worker status from Python service
+    if (pythonAvailable) {
       try {
-        const health = await pythonService.getDetailedHealth();
-        if (health.services) {
-          status.crawl4ai = true; // If Python is running, Crawl4AI is available
-        }
-
-        // Check pgai status
-        const pgaiStatus = await pythonService.getPgaiStatus();
-        status.pgai = pgaiStatus.installed || false;
+        const pgaiWorkerStatus = await pythonService.getPgaiWorkerStatus();
+        status.pgai = {
+          status: pgaiWorkerStatus.running ? 'running' : 'stopped',
+          installed: true,
+          processed_count: pgaiWorkerStatus.processed_count || 0,
+          last_run: pgaiWorkerStatus.last_run
+        };
       } catch (error) {
-        logger.error('Error getting detailed status:', error);
+        logger.error('Error checking pgai worker status:', error);
       }
     }
 
@@ -55,7 +82,9 @@ router.get('/status', async (req: Request, res: Response) => {
           SELECT 1 FROM pg_extension WHERE extname = 'vectorscale'
         )
       `);
-      status.pgvectorscale = result.rows[0]?.exists || false;
+      if (result.rows[0]?.exists) {
+        status.pgvectorscale.status = 'running';
+      }
     } catch (error) {
       logger.error('Error checking pgvectorscale:', error);
     }
@@ -73,30 +102,70 @@ router.get('/status', async (req: Request, res: Response) => {
 router.post('/service', async (req: Request, res: Response) => {
   const { service, action } = req.body;
 
-  if (service !== 'python-services') {
-    return res.status(400).json({ error: 'Only Python services can be managed' });
+  // Services that can be managed
+  const manageableServices = ['pgai'];
+
+  if (!manageableServices.includes(service)) {
+    return res.status(400).json({
+      error: `Service ${service} cannot be managed from the UI. Please manage it manually.`
+    });
   }
 
   try {
-    switch (action) {
-      case 'start':
-        await startPythonService();
-        res.json({ message: 'Python service starting...', status: 'starting' });
+    switch (service) {
+      case 'python':
+      case 'crawl4ai': // Deprecated - manage these services manually
+        res.status(400).json({
+          error: 'Python services must be started manually. They are already running.'
+        });
         break;
 
-      case 'stop':
-        await stopPythonService();
-        res.json({ message: 'Python service stopping...', status: 'stopping' });
+      case 'pgai':
+        switch (action) {
+          case 'start':
+            try {
+              await pythonService.startPgaiWorker();
+              res.json({ message: 'pgai worker started successfully', status: 'running' });
+            } catch (error) {
+              logger.error('Failed to start pgai worker:', error);
+              res.status(500).json({ error: 'Failed to start pgai worker' });
+            }
+            break;
+
+          case 'stop':
+            try {
+              await pythonService.stopPgaiWorker();
+              res.json({ message: 'pgai worker stopped successfully', status: 'stopped' });
+            } catch (error) {
+              logger.error('Failed to stop pgai worker:', error);
+              res.status(500).json({ error: 'Failed to stop pgai worker' });
+            }
+            break;
+
+          case 'restart':
+            try {
+              await pythonService.stopPgaiWorker();
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              await pythonService.startPgaiWorker();
+              res.json({ message: 'pgai worker restarted successfully', status: 'running' });
+            } catch (error) {
+              logger.error('Failed to restart pgai worker:', error);
+              res.status(500).json({ error: 'Failed to restart pgai worker' });
+            }
+            break;
+
+          default:
+            res.status(400).json({ error: 'Invalid action' });
+        }
         break;
 
-      case 'restart':
-        await stopPythonService();
-        setTimeout(() => startPythonService(), 2000);
-        res.json({ message: 'Python service restarting...', status: 'restarting' });
+      case 'graphql':
+        // GraphQL server management would go here
+        res.json({ message: 'GraphQL server management not implemented yet', status: 'unknown' });
         break;
 
       default:
-        res.status(400).json({ error: 'Invalid action' });
+        res.status(400).json({ error: 'Invalid service' });
     }
   } catch (error) {
     logger.error(`Error ${action}ing Python service:`, error);

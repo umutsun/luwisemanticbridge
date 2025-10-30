@@ -52,6 +52,13 @@ interface Message {
   isFromSource?: boolean;
   isStreaming?: boolean;
   isError?: boolean;
+  responseTime?: number; // Response time in milliseconds
+  startTime?: number; // Start timestamp for calculating response time
+  tokens?: {
+    input?: number;
+    output?: number;
+    total?: number;
+  };
 }
 
 const getSourceTableName = (sourceTable?: string) => {
@@ -129,11 +136,13 @@ export default function ChatInterface() {
 
   // Start with empty messages - no welcome message
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [, setTimerTick] = useState(0); // Force re-render for timer update
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -176,6 +185,13 @@ export default function ChatInterface() {
       document.title = chatbotSettings.title;
     }
   }, [settingsLoaded, chatbotSettings.title]);
+
+  // Initialize suggestions when settings are loaded
+  useEffect(() => {
+    if (settingsLoaded && messages.length === 0) {
+      setShowSuggestions(true);
+    }
+  }, [settingsLoaded]);
 
   // Client-side'da olduğumuzu işaretle ve soruları yükle
   useEffect(() => {
@@ -282,6 +298,16 @@ export default function ChatInterface() {
     // Fetch available models with force refresh to avoid caching
     fetchAvailableModels(true);
   }, []);
+
+  // Update timer every second when streaming
+  useEffect(() => {
+    if (isStreaming) {
+      const interval = setInterval(() => {
+        setTimerTick(prev => prev + 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isStreaming]);
 
   // Fetch available models
   const fetchAvailableModels = async (forceRefresh = false) => {
@@ -535,12 +561,14 @@ export default function ChatInterface() {
 
     // Create empty streaming message
     const messageId = (Date.now() + 1).toString();
+    const messageStartTime = Date.now(); // Track start time for response time calculation
     const streamingMessage: Message = {
       id: messageId,
       role: 'assistant',
       content: '',
       timestamp: new Date(),
       isStreaming: true,
+      startTime: messageStartTime,
     };
     setMessages(prev => [...prev, streamingMessage]);
     setStreamingMessageId(messageId);
@@ -568,6 +596,7 @@ export default function ChatInterface() {
         },
         body: JSON.stringify({
           message: messageContent,
+          conversationId: conversationId, // Include conversation ID for session continuity
           model: chatbotSettings.activeChatModel,  // CRITICAL: Send model to backend!
           temperature,
           maxTokens,
@@ -691,13 +720,21 @@ export default function ChatInterface() {
                 isStreaming: false,
                 sources: finalData.sources,
                 relatedTopics: finalData.relatedTopics,
-                context: finalData.context
+                context: finalData.context,
+                responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
+                tokens: finalData.tokens || finalData.usage
               }
             : msg
         ));
       } else {
         // Fallback to non-streaming
         const data = await response.json();
+
+        // Save conversation ID from response
+        if (data.conversationId && !conversationId) {
+          setConversationId(data.conversationId);
+        }
+
         setMessages(prev => prev.map(msg =>
           msg.id === messageId
             ? {
@@ -706,7 +743,9 @@ export default function ChatInterface() {
                 isStreaming: false,
                 sources: data.sources,
                 relatedTopics: data.relatedTopics,
-                context: data.context
+                context: data.context,
+                responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
+                tokens: data.tokens || data.usage
               }
             : msg
         ));
@@ -735,7 +774,8 @@ export default function ChatInterface() {
               ...msg,
               content: userFriendlyMessage,
               isStreaming: false,
-              isError: true
+              isError: true,
+              responseTime: msg.startTime ? Date.now() - msg.startTime : undefined
             }
           : msg
       ));
@@ -772,13 +812,12 @@ export default function ChatInterface() {
   );
 
   const clearChat = () => {
-    setMessages([{
-      id: '1',
-      role: 'assistant',
-      content: 'Merhaba! Ben Luwi Semantic BridgeAI asistanınız. Size nasıl yardımcı olabilirim?',
-      timestamp: new Date(),
-    }]);
+    // Clear messages and reset to initial state
+    setMessages([]);
     setShowSuggestions(true);
+    setConversationId(undefined); // Clear conversation ID for new session
+
+    // Fetch new suggestions
     if (typeof window !== 'undefined') {
       setIsSuggestionsLoading(true);
       fetchSuggestedQuestions().then(questions => {
@@ -946,8 +985,8 @@ export default function ChatInterface() {
 
         {/* Main Chat Area */}
         <div className="pt-20 pb-32 max-w-4xl mx-auto px-5">
-          <ScrollArea className="h-[calc(100vh-12rem)]">
-            <div className="space-y-4 py-4">
+          <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
+            <div className="space-y-4 py-4 pr-2">
               {/* Suggestions skeleton loader */}
               {isClient && showSuggestions && messages.length === 0 && isSuggestionsLoading && (
                 <motion.div
@@ -967,6 +1006,29 @@ export default function ChatInterface() {
                 </motion.div>
               )}
 
+              {/* Welcome Message (only when no user interaction yet) */}
+              {isClient && showSuggestions && messages.length === 0 && settingsLoaded && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="flex gap-3 justify-start mb-8"
+                >
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback className="bg-primary/10">
+                      <Bot className="w-5 h-5 text-primary" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <div className="rounded-lg p-4 bg-card border">
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        {chatbotSettings.welcomeMessage || 'Merhaba! Size nasıl yardımcı olabilirim?'}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Suggestions for new conversations */}
               {isClient && showSuggestions && messages.length === 0 && !isSuggestionsLoading && suggestedQuestions.length > 0 && (
                 <motion.div
@@ -977,14 +1039,6 @@ export default function ChatInterface() {
                   className="my-8"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="col-span-full text-center mb-4">
-                      <h2 className="text-lg font-semibold text-muted-foreground">
-                        Başlamak için bir konu seçin veya sorunuzu yazın
-                      </h2>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Her yenilemede farklı öneriler gösterilir
-                      </p>
-                    </div>
                     {suggestedQuestions.map((question, index) => (
                       <motion.button
                         key={`suggestion-${question.substring(0, 20)}-${index}`}
@@ -1199,12 +1253,35 @@ export default function ChatInterface() {
                                 </div>
                               )}
 
-                              <p className="text-xs opacity-60 mt-2">
-                                {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </p>
+                              <div className="flex justify-end mt-2">
+                                <div className="text-[9px] font-semibold opacity-50 text-right">
+                                  {message.role === 'assistant' && message.isStreaming ? (
+                                    <span className="tabular-nums">
+                                      {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit'
+                                      })} • {Math.floor((Date.now() - message.timestamp.getTime()) / 1000)}s
+                                    </span>
+                                  ) : (
+                                    <span className="tabular-nums">
+                                      {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit'
+                                      })}
+                                      {message.responseTime && message.role === 'assistant' && (
+                                        <>
+                                          {' • '}{(message.responseTime / 1000).toFixed(2)}s
+                                          {message.tokens?.total && (
+                                            <> • {message.tokens.total.toLocaleString('tr-TR')} tokens</>
+                                          )}
+                                        </>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </>
                           )}
                         </CardContent>

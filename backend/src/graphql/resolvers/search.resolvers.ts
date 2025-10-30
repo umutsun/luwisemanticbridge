@@ -37,53 +37,51 @@ export const searchResolvers = {
           });
         }
 
-        // Semantic search servisini çağır
-        const results = await search.search({
-          query: args.input.query,
-          limit: args.input.limit || 10,
-          threshold: args.input.threshold || 0.7,
-          filters: args.input.filters,
-          searchType: args.input.searchType || 'HYBRID',
-        });
-
-        // Query vector'ü al (caching için)
-        const queryVector = await context.dataloaders.embeddingLoader.load(
-          args.input.query
-        );
-
-        // İlişkili sorguları bul
-        const relatedQueries = await search.findRelatedQueries(
+        // Semantic search servisini çağır (optimized with HNSW index + batch LLM)
+        const results = await search.semanticSearch(
           args.input.query,
-          5
+          args.input.limit || 10
         );
 
-        // Önerileri oluştur
-        const suggestions = await search.generateSuggestions(
-          args.input.query,
-          results
-        );
+        // Query vector'ü al (optional, for debugging)
+        let queryVector = null;
+        if (args.input.includeEmbeddings) {
+          try {
+            queryVector = await context.dataloaders.embeddingLoader.load(
+              args.input.query
+            );
+          } catch (error) {
+            console.warn('[GraphQL] Failed to load query vector:', error);
+          }
+        }
+
+        // İlişkili sorguları bul (optional feature - not implemented yet)
+        const relatedQueries: string[] = [];
+
+        // Önerileri oluştur (optional feature - not implemented yet)
+        const suggestions: string[] = [];
 
         // Response'u dön
         return {
           results: results.map((result) => ({
-            id: result.id,
-            content: result.content,
+            id: result.id?.toString() || `${result.source_table}_${result.id}`,
+            content: result.excerpt || result.content || '',
             title: result.title || null,
-            score: result.score,
-            source: result.source,
-            documentId: result.documentId || null,
+            score: result.score || result.similarity_score || 0,
+            source: result.source_table || 'unknown',
+            documentId: result.id?.toString() || null,
             metadata: args.input.includeMetadata ? result.metadata : null,
-            embedding: args.input.includeEmbeddings
+            embedding: args.input.includeEmbeddings && result.embedding
               ? {
-                  id: result.embeddingId,
+                  id: result.id?.toString() || 'unknown',
                   vector: result.embedding,
-                  model: 'text-embedding-ada-002',
+                  model: 'text-embedding-3-small',
                   dimensions: 1536,
-                  createdAt: result.createdAt,
+                  createdAt: new Date(),
                 }
               : null,
-            highlights: result.highlights || [],
-            timestamp: result.createdAt,
+            highlights: [], // TODO: implement highlights
+            timestamp: new Date(),
             relevanceFeedback: null, // TODO: implement feedback
           })),
           total: results.length,

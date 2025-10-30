@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import OpenAI from 'openai';
 import { EventEmitter } from 'events';
+import { lsembPool } from '../config/database.config';
 
 const router = Router();
 
@@ -130,11 +131,10 @@ class MigrationProgress extends EventEmitter {
 
   stopMigration(id: string) {
     this.stoppedMigrations.add(id);
-    this.pausedMigrations.delete(id);
     const current = this.progress.get(id);
     if (current) {
       this.updateProgress(id, { ...current, status: 'stopped' });
-      this.addToHistory({ ...current, id, status: 'stopped', stoppedAt: new Date().toISOString() });
+      this.history.push({ id, ...current, stoppedAt: new Date().toISOString() });
     }
   }
 
@@ -146,22 +146,21 @@ class MigrationProgress extends EventEmitter {
     return this.stoppedMigrations.has(id);
   }
 
-  addToHistory(data: any) {
-    this.history.unshift(data);
-    if (this.history.length > 100) {
-      this.history = this.history.slice(0, 100);
-    }
+  clearMigration(id: string) {
+    this.progress.delete(id);
+    this.pausedMigrations.delete(id);
+    this.stoppedMigrations.delete(id);
   }
 
   getHistory() {
     return this.history;
   }
 
-  completeMigration(id: string) {
-    const current = this.progress.get(id);
-    if (current) {
-      this.addToHistory({ ...current, id, completedAt: new Date().toISOString() });
-    }
+  getAllProgress() {
+    return Array.from(this.progress.entries()).map(([id, data]) => ({
+      id,
+      ...data
+    }));
   }
 }
 
@@ -188,23 +187,12 @@ router.get('/stats', async (req: Request, res: Response) => {
     // Initialize pools from settings
     const pools = await initializePools();
 
-    // Get embedding provider and model from settings
-    const { pool: lsembPool } = await import('../config/database');
-    const settingsResult = await lsembPool.query(`
-      SELECT key, value FROM settings
-      WHERE key IN ('embedding.activeProvider', 'embedding.activeModel')
-    `);
+    // Get embedding provider and model from settings (use correct keys from llmSettings)
+    const embeddingSettings = await getEmbeddingSettings();
 
-    let embeddingProvider = 'openai';
-    let embeddingModel = 'text-embedding-ada-002';
-
-    settingsResult.rows.forEach(row => {
-      if (row.key === 'embedding.activeProvider') {
-        embeddingProvider = row.value;
-      } else if (row.key === 'embedding.activeModel') {
-        embeddingModel = row.value;
-      }
-    });
+    // Use provider and model from settings
+    let embeddingProvider = embeddingSettings.provider || 'openai';
+    let embeddingModel = embeddingSettings.model || 'text-embedding-ada-002';
 
     // Get all tables from source database dynamically
     const tablesResult = await pools.sourcePool.query(`
@@ -242,6 +230,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     const stats = {
       totalRecords: 0,
       embeddedRecords: 0,
+      skippedRecords: 0,
       pendingRecords: 0,
       tables: [] as any[],
       tokenUsage: {
@@ -275,21 +264,40 @@ router.get('/stats', async (req: Request, res: Response) => {
             throw embeddedError;
           }
         }
-        
+
+        // Check skipped count from skipped_embeddings table
+        let skipped = 0;
+        try {
+          const skippedResult = await pools.targetPool.query(
+            `SELECT COUNT(DISTINCT source_id) as count
+             FROM skipped_embeddings
+             WHERE LOWER(source_table) = LOWER($1)`,
+            [table]
+          );
+          skipped = parseInt(skippedResult.rows[0]?.count || 0);
+        } catch (skippedError: any) {
+          // Table doesn't exist yet - that's fine, skipped count is 0
+          if (skippedError.code !== '42P01') {
+            throw skippedError;
+          }
+        }
+
         stats.tables.push({
           name: table,
           count: count,
-          embedded: embedded
+          embedded: embedded,
+          skipped: skipped
         });
-        
+
         stats.totalRecords += count;
         stats.embeddedRecords += embedded;
+        stats.skippedRecords += skipped;
       } catch (error) {
         console.error(`Error checking table ${table}:`, error);
       }
     }
     
-    stats.pendingRecords = stats.totalRecords - stats.embeddedRecords;
+    stats.pendingRecords = stats.totalRecords - stats.embeddedRecords - stats.skippedRecords;
     
     res.json(stats);
   } catch (error) {
@@ -382,57 +390,229 @@ router.get('/history', async (req: Request, res: Response) => {
   }
 });
 
+// Get skipped records
+router.get('/skipped', async (req: Request, res: Response) => {
+  try {
+    const { table } = req.query;
+    const pools = await initializePools();
+
+    let query = `
+      SELECT
+        id,
+        source_table,
+        source_type,
+        source_id,
+        source_name,
+        LEFT(content, 200) as content_preview,
+        skip_reason,
+        metadata,
+        created_at,
+        updated_at
+      FROM skipped_embeddings
+    `;
+
+    const params: any[] = [];
+
+    if (table) {
+      query += ` WHERE LOWER(source_table) = LOWER($1)`;
+      params.push(table);
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const result = await pools.targetPool.query(query, params);
+
+    res.json({
+      success: true,
+      count: result.rows.length,
+      records: result.rows
+    });
+  } catch (error: any) {
+    console.error('Error fetching skipped records:', error);
+
+    // If table doesn't exist yet, return empty array
+    if (error.code === '42P01') {
+      res.json({
+        success: true,
+        count: 0,
+        records: []
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch skipped records',
+        message: error.message
+      });
+    }
+  }
+});
+
+// Delete skipped records
+router.delete('/skipped', async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No record IDs provided'
+      });
+    }
+
+    const pools = await initializePools();
+
+    // Delete records by IDs
+    const result = await pools.targetPool.query(
+      `DELETE FROM skipped_embeddings WHERE id = ANY($1::int[])`,
+      [ids]
+    );
+
+    res.json({
+      success: true,
+      deletedCount: result.rowCount,
+      message: `Successfully deleted ${result.rowCount} skipped record(s)`
+    });
+  } catch (error: any) {
+    console.error('Error deleting skipped records:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete skipped records',
+      message: error.message
+    });
+  }
+});
+
 // Generate embeddings
 router.post('/generate', async (req: Request, res: Response) => {
-  const { batchSize = 50, sourceTable = null } = req.body;
+  const { batchSize = 50, sourceTable = null, tables: requestedTables = null } = req.body;
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': req.headers.origin || '*',
+    'Access-Control-Allow-Credentials': 'true',
+    'X-Accel-Buffering': 'no' // Disable nginx buffering for SSE
   });
 
   try {
     const pools = await initializePools();
 
-    // Get embedding settings
+    // Get embedding settings (will be used for metadata tracking)
     const { pool: lsembPool } = await import('../config/database');
     const settingsResult = await lsembPool.query(`
       SELECT key, value FROM settings
-      WHERE key IN ('embedding.activeProvider', 'embedding.activeModel')
+      WHERE key IN ('llmSettings.embeddingProvider', 'llmSettings.activeEmbeddingModel')
     `);
 
     let embeddingProvider = 'openai';
     let embeddingModel = 'text-embedding-ada-002';
 
     settingsResult.rows.forEach(row => {
-      if (row.key === 'embedding.activeProvider') {
+      if (row.key === 'llmSettings.embeddingProvider') {
         embeddingProvider = row.value;
-      } else if (row.key === 'embedding.activeModel') {
-        embeddingModel = row.value;
+      } else if (row.key === 'llmSettings.activeEmbeddingModel') {
+        // Extract model from format like "google/text-embedding-004"
+        const parts = row.value.split('/');
+        embeddingModel = parts.length === 2 ? parts[1] : row.value;
       }
     });
 
-    // Build query - get records from source that don't have embeddings yet
-    let sourceQuery = '';
-    const tables = sourceTable ? [sourceTable] : ['DANISTAYKARARLARI', 'SORUCEVAP', 'MAKALELER', 'OZELGELER'];
+    // Get available tables from source database dynamically
+    let tables: string[] = [];
+
+    // Support both 'tables' array (from frontend) and 'sourceTable' string (legacy)
+    if (requestedTables && Array.isArray(requestedTables) && requestedTables.length > 0) {
+      tables = requestedTables;
+      console.log(`🔧 Using requested tables: ${tables.join(', ')}`);
+    } else if (sourceTable) {
+      tables = [sourceTable];
+      console.log(`🔧 Using source table: ${sourceTable}`);
+    } else {
+      // Auto-discover tables from source database
+      try {
+        const tablesResult = await pools.sourcePool.query(`
+          SELECT tablename
+          FROM pg_tables
+          WHERE schemaname = 'public'
+          AND tablename NOT IN ('spatial_ref_sys', 'settings', 'users', 'sessions')
+          ORDER BY tablename
+        `);
+        tables = tablesResult.rows.map(r => r.tablename);
+        console.log(`🔍 Auto-discovered tables: ${tables.join(', ')}`);
+
+        if (tables.length === 0) {
+          res.write(`data: ${JSON.stringify({
+            current: 0,
+            total: 0,
+            percentage: 100,
+            status: 'completed',
+            message: 'No source tables found in database',
+            tokenUsage: globalTokenUsage
+          })}\n\n`);
+          res.end();
+          return;
+        }
+      } catch (err) {
+        console.error('Error discovering tables:', err);
+        res.write(`data: ${JSON.stringify({ status: 'failed', error: 'Could not discover source tables' })}\n\n`);
+        res.end();
+        return;
+      }
+    }
+
+    // Check if unified_embeddings table exists
+    let unifiedEmbeddingsExists = false;
+    try {
+      await pools.targetPool.query(`SELECT 1 FROM unified_embeddings LIMIT 1`);
+      unifiedEmbeddingsExists = true;
+    } catch (err) {
+      console.log(`⚠️ unified_embeddings table does not exist, will process all records`);
+    }
 
     const allPending: any[] = [];
     for (const table of tables) {
       try {
-        // Get records from source table that aren't in unified_embeddings yet
-        const checkQuery = `
-          SELECT s.id, s.*
-          FROM public."${table}" s
-          LEFT JOIN unified_embeddings u ON u.source_table = $1 AND u.source_id = s.id
-          WHERE u.id IS NULL
-          LIMIT $2
-        `;
+        // Normalize table name to lowercase ASCII (remove Turkish characters)
+        const normalizedTableName = table.toLowerCase()
+          .replace(/ö/g, 'o')
+          .replace(/ü/g, 'u')
+          .replace(/ş/g, 's')
+          .replace(/ğ/g, 'g')
+          .replace(/ç/g, 'c')
+          .replace(/ı/g, 'i');
 
-        const result = await pools.sourcePool.query(checkQuery, [table, Math.floor(batchSize / tables.length)]);
-        result.rows.forEach(row => allPending.push({ ...row, _sourceTable: table }));
+        if (unifiedEmbeddingsExists) {
+          // First, get already embedded IDs from target database
+          const embeddedIdsResult = await pools.targetPool.query(
+            `SELECT source_id FROM unified_embeddings WHERE source_table = $1`,
+            [normalizedTableName]
+          );
+          const embeddedIds = new Set(embeddedIdsResult.rows.map(row => row.source_id));
+
+          // Then, get ALL records from source table (no LIMIT)
+          const allRecordsResult = await pools.sourcePool.query(
+            `SELECT id, * FROM public."${table}"`
+          );
+
+          // Filter out already embedded records
+          const pendingRecords = allRecordsResult.rows
+            .filter(row => !embeddedIds.has(row.id));
+
+          console.log(`📊 Table ${table}: ${allRecordsResult.rows.length} total records, ${embeddedIds.size} already embedded, ${pendingRecords.length} pending`);
+
+          pendingRecords.forEach(row => allPending.push({ ...row, _sourceTable: normalizedTableName }));
+        } else {
+          // If unified_embeddings doesn't exist, get ALL records (no LIMIT)
+          const result = await pools.sourcePool.query(
+            `SELECT id, * FROM public."${table}"`
+          );
+          console.log(`📊 Table ${table}: ${result.rows.length} records to process (no embeddings table exists)`);
+          result.rows.forEach(row => allPending.push({ ...row, _sourceTable: normalizedTableName }));
+        }
       } catch (err) {
-        console.error(`Error checking table ${table}:`, err);
+        // Silently skip tables that don't exist or have errors
+        console.log(`Skipping table ${table}: ${err.message}`);
       }
     }
 
@@ -440,92 +620,200 @@ router.post('/generate', async (req: Request, res: Response) => {
     let processed = 0;
 
     if (total === 0) {
+      console.log(`✅ No pending records found in tables: ${tables.join(', ')}`);
+      console.log(`📊 All selected tables are fully embedded`);
       res.write(`data: ${JSON.stringify({
         current: 0,
         total: 0,
         percentage: 100,
         status: 'completed',
-        message: 'No pending records to process',
+        currentTable: tables[0] || null,
+        message: `✅ All records in selected tables (${tables.join(', ')}) are already embedded. No new records to process.`,
+        completedTables: tables,
         tokenUsage: globalTokenUsage
       })}\n\n`);
       res.end();
       return;
     }
 
+    // Send initial progress update
+    res.write(`data: ${JSON.stringify({
+      current: 0,
+      total: total,
+      percentage: 0,
+      status: 'processing',
+      currentTable: tables[0] || null,
+      message: `Starting migration for ${tables.length} table(s): ${tables.join(', ')}`,
+      tokenUsage: globalTokenUsage
+    })}\n\n`);
+
     for (const row of allPending) {
       try {
         const table = row._sourceTable;
 
-        // Extract content based on table
+        // Note: LEFT JOIN already filters out duplicates (WHERE u.id IS NULL)
+        // No need for additional existence check here
+
+        // Dynamic content extraction - auto-detect content columns
         let content = '';
         let title = '';
         let sourceType = 'document';
 
-        if (table === 'SORUCEVAP') {
-          content = `Soru: ${row.soru || ''}\n\nCevap: ${row.cevap || ''}`;
-          title = (row.soru || '').substring(0, 255);
+        const tableLower = table.toLowerCase();
+
+        // Auto-detect content columns based on common patterns
+        // Priority order for content: script_text, metin, icerik, content, text, cevap, description, body
+        const contentKeys = ['script_text', 'metin', 'icerik', 'content', 'text', 'cevap', 'description', 'body', 'aciklama'];
+        const titleKeys = ['baslik', 'title', 'ad', 'name', 'soru', 'karar_no', 'ozelge_no', 'subject', 'konu'];
+        const questionKeys = ['soru', 'question', 'q'];
+        const answerKeys = ['cevap', 'answer', 'a'];
+
+        // Check if this is a Q&A table (has both question and answer columns)
+        const hasQuestion = questionKeys.some(key => row[key] && String(row[key]).trim().length > 0);
+        const hasAnswer = answerKeys.some(key => row[key] && String(row[key]).trim().length > 0);
+
+        if (hasQuestion && hasAnswer) {
+          // Q&A format
+          const question = questionKeys.map(key => row[key]).find(val => val && String(val).trim().length > 0) || '';
+          const answer = answerKeys.map(key => row[key]).find(val => val && String(val).trim().length > 0) || '';
+          content = `Soru: ${question}\n\nCevap: ${answer}`;
+          title = String(question).substring(0, 255);
           sourceType = 'qa';
-        } else if (table === 'DANISTAYKARARLARI') {
-          content = row.metin || '';
-          title = row.karar_no || `Karar ${row.id}`;
-          sourceType = 'court_decision';
-        } else if (table === 'MAKALELER') {
-          content = row.icerik || '';
-          title = row.baslik || `Makale ${row.id}`;
-          sourceType = 'article';
-        } else if (table === 'OZELGELER') {
-          content = row.metin || '';
-          title = row.ozelge_no || `Özelge ${row.id}`;
-          sourceType = 'official_letter';
+        } else {
+          // Regular document format
+          // Find first non-empty content field
+          for (const key of contentKeys) {
+            if (row[key] && String(row[key]).trim().length > 0) {
+              content = String(row[key]);
+              break;
+            }
+          }
+
+          // Find first non-empty title field
+          for (const key of titleKeys) {
+            if (row[key] && String(row[key]).trim().length > 0) {
+              title = String(row[key]).substring(0, 255);
+              break;
+            }
+          }
+
+          // Fallback title
+          if (!title) {
+            title = `${table} #${row.id}`;
+          }
+
+          // Infer source type from table name
+          if (tableLower.includes('karar') || tableLower.includes('court') || tableLower.includes('decision')) {
+            sourceType = 'court_decision';
+          } else if (tableLower.includes('makale') || tableLower.includes('article')) {
+            sourceType = 'article';
+          } else if (tableLower.includes('ozelge') || tableLower.includes('letter')) {
+            sourceType = 'official_letter';
+          } else if (tableLower.includes('soru') || tableLower.includes('qa')) {
+            sourceType = 'qa';
+          } else {
+            sourceType = 'document';
+          }
         }
 
         if (!content || content.trim().length === 0) {
+          console.warn(`⚠️ No content found for ${table}[${row.id}] - moving to skipped_embeddings`);
+
+          // Insert into skipped_embeddings table
+          try {
+            await pools.targetPool.query(
+              `INSERT INTO skipped_embeddings (source_table, source_type, source_id, source_name, content, skip_reason, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (source_table, source_id) DO UPDATE SET
+                 skip_reason = EXCLUDED.skip_reason,
+                 metadata = EXCLUDED.metadata,
+                 updated_at = CURRENT_TIMESTAMP`,
+              [table, sourceType, row.id, title, '[No content available]', 'no_content', JSON.stringify({
+                note: 'Skipped - no content in source table',
+                skipped_at: new Date().toISOString()
+              })]
+            );
+            console.log(`✅ Record moved to skipped_embeddings: ${table}[${row.id}]`);
+          } catch (err) {
+            console.error(`❌ Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+          }
+
           processed++;
           continue;
         }
 
         // Generate embedding
+        console.log(`🔄 Generating embedding for ${table}[${row.id}]...`);
         const embedding = await generateEmbedding(content);
 
         if (embedding.length === 0) {
+          console.warn(`⚠️ Empty embedding returned for ${table}[${row.id}] - moving to skipped_embeddings`);
+
+          // Insert into skipped_embeddings table
+          try {
+            await pools.targetPool.query(
+              `INSERT INTO skipped_embeddings (source_table, source_type, source_id, source_name, content, skip_reason, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (source_table, source_id) DO UPDATE SET
+                 skip_reason = EXCLUDED.skip_reason,
+                 content = EXCLUDED.content,
+                 metadata = EXCLUDED.metadata,
+                 updated_at = CURRENT_TIMESTAMP`,
+              [table, sourceType, row.id, title, content.substring(0, 500), 'empty_embedding', JSON.stringify({
+                note: 'Skipped - embedding API returned empty result',
+                content_length: content.length,
+                skipped_at: new Date().toISOString()
+              })]
+            );
+            console.log(`✅ Record moved to skipped_embeddings: ${table}[${row.id}]`);
+          } catch (err) {
+            console.error(`❌ Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+          }
+
           processed++;
           continue;
         }
+        console.log(`✅ Embedding generated for ${table}[${row.id}]: ${embedding.length} dimensions`);
 
-        // Prepare metadata
+        // Prepare metadata - dynamically include all relevant fields
         const metadata: any = {
           embeddingProvider,
           embeddingModel,
           tokens_used: Math.ceil(content.length / 4)
         };
 
-        if (table === 'DANISTAYKARARLARI') {
-          metadata.karar_no = row.karar_no;
-          metadata.karar_tarihi = row.karar_tarihi;
-          metadata.daire = row.daire;
-        } else if (table === 'SORUCEVAP') {
-          metadata.kategori = row.kategori;
-          metadata.tarih = row.tarih;
-        } else if (table === 'MAKALELER') {
-          metadata.yazar = row.yazar;
-          metadata.yayin_tarihi = row.yayin_tarihi;
-        } else if (table === 'OZELGELER') {
-          metadata.ozelge_no = row.ozelge_no;
-          metadata.kurum = row.kurum;
-        }
+        // Auto-extract metadata from all row fields (excluding system fields and already extracted content)
+        const systemFields = ['id', '_sourceTable', 'created_at', 'updated_at', 'embedding'];
+        const extractedFields = new Set([
+          ...contentKeys.filter(k => row[k]),
+          ...titleKeys.filter(k => row[k]),
+          ...questionKeys.filter(k => row[k]),
+          ...answerKeys.filter(k => row[k])
+        ]);
 
-        // Insert into unified_embeddings
+        // Add all other fields as metadata
+        Object.keys(row).forEach(key => {
+          const keyLower = key.toLowerCase();
+          // Skip system fields, extracted content fields, and null/undefined values
+          if (!systemFields.includes(keyLower) && !extractedFields.has(key) && row[key] !== null && row[key] !== undefined) {
+            // Skip very large fields (likely already used as content)
+            const value = row[key];
+            if (typeof value === 'string' && value.length > 1000) {
+              return; // Skip large text fields
+            }
+            metadata[key] = value;
+          }
+        });
+
+        // Insert into unified_embeddings (skip if duplicate)
+        // Use normalized table name for consistency
         await pools.targetPool.query(`
           INSERT INTO unified_embeddings
           (source_table, source_type, source_id, source_name, content, embedding, metadata)
           VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT (source_table, source_id) DO UPDATE
-          SET content = EXCLUDED.content,
-              embedding = EXCLUDED.embedding,
-              metadata = EXCLUDED.metadata,
-              updated_at = CURRENT_TIMESTAMP
+          ON CONFLICT (source_table, source_id) DO NOTHING
         `, [
-          table,
+          tableLower, // Use normalized lowercase table name
           sourceType,
           row.id,
           title,
@@ -559,6 +847,9 @@ router.post('/generate', async (req: Request, res: Response) => {
       total: total,
       percentage: 100,
       status: 'completed',
+      currentTable: tables[tables.length - 1] || null,
+      message: `✅ Migration completed! Processed ${processed} record(s) from ${tables.length} table(s).`,
+      completedTables: tables,
       tokenUsage: globalTokenUsage
     })}\n\n`);
 
@@ -587,31 +878,141 @@ router.delete('/clear/:table', async (req: Request, res: Response) => {
   }
 });
 
-// Helper: Generate embedding
+// Helper: Get embedding settings
+async function getEmbeddingSettings(): Promise<{ provider: string; model: string; apiKey: string | null }> {
+  try {
+    if (!lsembPool) {
+      console.error('❌ lsembPool is not available');
+      return { provider: 'google', model: 'text-embedding-004', apiKey: null };
+    }
+
+    // Get embedding provider and model
+    const settingsResult = await lsembPool.query(
+      `SELECT key, value FROM settings WHERE key IN ($1, $2)`,
+      ['llmSettings.embeddingProvider', 'llmSettings.activeEmbeddingModel']
+    );
+
+    let provider = 'openai';
+    let model = 'text-embedding-ada-002';
+
+    settingsResult.rows.forEach(row => {
+      if (row.key === 'llmSettings.embeddingProvider') {
+        provider = row.value;
+      } else if (row.key === 'llmSettings.activeEmbeddingModel') {
+        // Extract model from format like "google/text-embedding-004" or "openai/text-embedding-3-small"
+        const parts = row.value.split('/');
+        if (parts.length === 2) {
+          model = parts[1];
+        } else {
+          model = row.value;
+        }
+      }
+    });
+
+    // Check if provider supports embeddings
+    if (provider === 'claude' || provider === 'anthropic') {
+      console.warn(`⚠️ ${provider} does not support embeddings API. Please use OpenAI or Google for embeddings.`);
+      console.warn(`🔄 Falling back to Google embeddings...`);
+      provider = 'google';
+      model = 'text-embedding-004';
+    }
+
+    // Get API key based on provider
+    let apiKey: string | null = null;
+    if (provider === 'google') {
+      const googleKeyResult = await lsembPool.query(
+        'SELECT value FROM settings WHERE key = $1',
+        ['google.apiKey']
+      );
+      apiKey = googleKeyResult.rows.length > 0 ? googleKeyResult.rows[0].value : null;
+    } else if (provider === 'openai') {
+      const openaiKeyResult = await lsembPool.query(
+        'SELECT value FROM settings WHERE key = $1',
+        ['openai.apiKey']
+      );
+      if (openaiKeyResult.rows.length > 0) {
+        const keyValue = openaiKeyResult.rows[0].value;
+        try {
+          const parsed = JSON.parse(keyValue);
+          apiKey = typeof parsed === 'object' && parsed.apiKey ? parsed.apiKey : keyValue;
+        } catch {
+          apiKey = keyValue;
+        }
+      }
+    }
+
+    return { provider, model, apiKey };
+  } catch (error) {
+    console.error('Error fetching embedding settings:', error);
+    return { provider: 'openai', model: 'text-embedding-ada-002', apiKey: null };
+  }
+}
+
+// Helper: Generate embedding (supports multiple providers)
 async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    const openaiClient = await getOpenAIClient();
+    const { provider, model, apiKey } = await getEmbeddingSettings();
 
-    if (!openaiClient) {
-      console.warn('OpenAI client not available. Skipping embedding generation.');
-      // Return empty array or fallback embedding
+    if (!apiKey) {
+      console.warn(`${provider} API key not available. Skipping embedding generation.`);
       return [];
     }
 
-    const response = await openaiClient.embeddings.create({
-      model: 'text-embedding-ada-002',
-      input: text.substring(0, 8000) // Truncate to limit
-    });
+    const truncatedText = text.substring(0, 8000); // Truncate to limit
 
-    // Track token usage (estimate)
-    const estimatedTokens = Math.ceil(text.length / 4);
-    globalTokenUsage.prompt_tokens += estimatedTokens;
-    globalTokenUsage.total_tokens += estimatedTokens;
-    globalTokenUsage.estimated_cost += (estimatedTokens / 1000) * 0.0001; // Ada-002 pricing
+    if (provider === 'google') {
+      // Google Text Embedding API
+      console.log(`Using Google embedding: ${model}`);
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: `models/${model}`,
+            content: { parts: [{ text: truncatedText }] }
+          })
+        }
+      );
 
-    return response.data[0].embedding;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Google API error: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const embedding = data.embedding.values;
+
+      // Track token usage (estimate for Google)
+      const estimatedTokens = Math.ceil(text.length / 3.5); // Google uses ~3.5 chars/token
+      globalTokenUsage.prompt_tokens += estimatedTokens;
+      globalTokenUsage.total_tokens += estimatedTokens;
+      globalTokenUsage.estimated_cost += (estimatedTokens / 1000) * 0.00001; // Google pricing
+
+      return embedding;
+    } else if (provider === 'openai') {
+      // OpenAI Embedding API
+      console.log(`Using OpenAI embedding: ${model}`);
+      const openaiClient = new OpenAI({ apiKey });
+
+      const response = await openaiClient.embeddings.create({
+        model: model,
+        input: truncatedText
+      });
+
+      // Track token usage (estimate for OpenAI)
+      const estimatedTokens = Math.ceil(text.length / 4);
+      globalTokenUsage.prompt_tokens += estimatedTokens;
+      globalTokenUsage.total_tokens += estimatedTokens;
+      globalTokenUsage.estimated_cost += (estimatedTokens / 1000) * 0.0001; // OpenAI pricing
+
+      return response.data[0].embedding;
+    } else {
+      console.warn(`Unsupported embedding provider: ${provider}`);
+      return [];
+    }
   } catch (error) {
-    console.error('OpenAI embedding error:', error);
+    console.error('Embedding generation error:', error);
     // Return empty array instead of throwing error to prevent crashes
     return [];
   }
@@ -665,18 +1066,52 @@ async function performMigration(migrationId: string, config: any) {
       CREATE INDEX IF NOT EXISTS idx_unified_embeddings_embedding_vector
       ON unified_embeddings USING hnsw (embedding vector_cosine_ops)
     `);
-    
-    const tables = sourceTable === 'all' 
-      ? ['DANISTAYKARARLARI', 'SORUCEVAP', 'MAKALELER', 'OZELGELER']
-      : [sourceTable];
-    
+
+    // Get available tables from source database dynamically
+    let tables: string[] = [];
+    if (sourceTable && sourceTable !== 'all') {
+      tables = [sourceTable];
+    } else {
+      // Auto-discover tables from source database
+      try {
+        const tablesResult = await pools.sourcePool.query(`
+          SELECT tablename
+          FROM pg_tables
+          WHERE schemaname = 'public'
+          AND tablename NOT IN ('spatial_ref_sys', 'settings', 'users', 'sessions')
+          ORDER BY tablename
+        `);
+        tables = tablesResult.rows.map(r => r.tablename);
+
+        if (tables.length === 0) {
+          console.log('No source tables found in database');
+          migrationProgress.updateProgress(migrationId, {
+            status: 'completed',
+            message: 'No source tables found'
+          });
+          return;
+        }
+      } catch (err) {
+        console.error('Error discovering tables:', err);
+        migrationProgress.updateProgress(migrationId, {
+          status: 'failed',
+          error: 'Could not discover source tables'
+        });
+        return;
+      }
+    }
+
     let totalProcessed = 0;
     let totalRecords = 0;
-    
+
     // Get total count
     for (const table of tables) {
-      const countResult = await pools.sourcePool.query(`SELECT COUNT(*) FROM public."${table}"`);
-      totalRecords += parseInt(countResult.rows[0].count);
+      try {
+        const countResult = await pools.sourcePool.query(`SELECT COUNT(*) FROM public."${table}"`);
+        totalRecords += parseInt(countResult.rows[0].count);
+      } catch (err) {
+        console.log(`Skipping table ${table}: ${err.message}`);
+      }
     }
 
     migrationProgress.updateProgress(migrationId, {
@@ -715,6 +1150,18 @@ async function performMigration(migrationId: string, config: any) {
             // Wait while paused
             while (migrationProgress.isPaused(migrationId)) {
               await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // Check if record already exists to avoid duplicate processing
+            const existsCheck = await pools.targetPool.query(
+              'SELECT id FROM unified_embeddings WHERE source_table = $1 AND source_id = $2',
+              [table, row.id]
+            );
+
+            if (existsCheck.rows.length > 0) {
+              totalProcessed++;
+              console.log(`Skipping duplicate: ${table}[${row.id}] already exists`);
+              continue;
             }
 
             // Extract content and determine source type
@@ -770,16 +1217,12 @@ async function performMigration(migrationId: string, config: any) {
               metadata.kurum = row.kurum;
             }
 
-            // Insert into unified_embeddings
+            // Insert into unified_embeddings (skip if duplicate)
             await pools.targetPool.query(`
               INSERT INTO unified_embeddings
               (source_table, source_type, source_id, source_name, content, embedding, metadata)
               VALUES ($1, $2, $3, $4, $5, $6, $7)
-              ON CONFLICT (source_table, source_id) DO UPDATE
-              SET content = EXCLUDED.content,
-                  embedding = EXCLUDED.embedding,
-                  metadata = EXCLUDED.metadata,
-                  updated_at = CURRENT_TIMESTAMP
+              ON CONFLICT (source_table, source_id) DO NOTHING
             `, [
               table,
               sourceType,
@@ -870,3 +1313,5 @@ function getTitle(table: string, row: any): string {
 }
 
 export default router;
+
+

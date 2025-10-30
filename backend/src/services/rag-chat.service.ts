@@ -168,13 +168,14 @@ export class RAGChatService {
 
   private getToneInstruction(tone: string): string {
     const toneInstructions = {
-      professional: 'TONE: Profesyonel, resmi ve iş dünyasına uygun bir dil kullan. Saygılı ve net ifadeler tercih et.',
-      friendly: 'TONE: Sıcak, samimi ve arkadaşça bir üslup kullan. Kullanıcıyı rahat hissettir.',
-      casual: 'TONE: Rahat, günlük ve sohbet tarzında yanıt ver. Samimi ama saygılı ol.',
-      technical: 'TONE: Detaylı, kesin ve teknik açıklamalar yap. Terminolojiyi doğru kullan.',
-      empathetic: 'TONE: Anlayışlı, destekleyici ve empatik bir yaklaşım sergile.',
-      concise: 'TONE: Kısa, öz ve net yanıtlar ver. Gereksiz detaya girme.',
-      educational: 'TONE: Açıklayıcı, öğretici ve anlaşılır bir dil kullan. Adım adım anlat.'
+      professional: 'TONE: Profesyonel, resmi ve iş dünyasına uygun bir dil kullan. Saygılı ve net ifadeler tercih et. Uzmanlık ile anlaşılırlığı dengele.',
+      friendly: 'TONE: Sıcak, samimi ve arkadaşça bir üslup kullan. Yardımsever bir arkadaş gibi konuş. Kullanıcıyı rahat hissettir. "Şöyle düşünebilirsiniz", "size yardımcı olur" gibi ifadeler kullan.',
+      formal: 'TONE: Resmi, kurumsal ve otoriter bir dil kullan. Nesnelliği koru. Kesin hukuki terminoloji ve yazılı dil kurallarına uy. Saygılı ve resmî ifadeler tercih et.',
+      casual: 'TONE: Rahat, günlük ve sohbet tarzında yanıt ver. Biriyle sohbet eder gibi konuş. Samimi ama saygılı ol. Basit ve anlaşılır tut.',
+      technical: 'TONE: Detaylı, kesin ve teknik açıklamalar yap. Terminolojiyi doğru kullan. Teknik detaylara gir.',
+      empathetic: 'TONE: Anlayışlı, destekleyici ve empatik bir yaklaşım sergile. Kullanıcının duygularını dikkate al.',
+      concise: 'TONE: Kısa, öz ve net yanıtlar ver. Gereksiz detaya girme. Doğrudan sonuca odaklan.',
+      educational: 'TONE: Açıklayıcı, öğretici ve anlaşılır bir dil kullan. Adım adım anlat. Sanki birine öğretiyormuşsun gibi.'
     };
     return toneInstructions[tone.toLowerCase() as keyof typeof toneInstructions] || toneInstructions.professional;
   }
@@ -380,17 +381,27 @@ export class RAGChatService {
         return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
-      // If no relevant context found, return a helpful message instead of hallucinating
-      if (!enhancedContext || enhancedContext.trim().length === 0 || searchResults.length === 0) {
+      // Check if best result has low confidence (< 40% similarity)
+      const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
+      const hasLowConfidence = bestScore < 40;
+
+      // If no relevant context found or all results have low confidence
+      if (!enhancedContext || enhancedContext.trim().length === 0 || searchResults.length === 0 || hasLowConfidence) {
         const noResultsMessage = responseLanguage === 'en'
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
 
-        console.log(`⚠️ No relevant context found for query: "${message}"`);
+        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 40%)`);
+
+        // Still show low-confidence results as reference (but with disclaimer)
+        const processedSources = await this.processSearchResults(
+          searchResults.slice(0, Math.min(searchResults.length, 5)),
+          enableLLMGeneration
+        );
 
         return {
           response: noResultsMessage,
-          sources: [],
+          sources: processedSources, // Show them but with low scores
           relatedTopics: [],
           conversationId: convId,
           provider: 'system',
@@ -399,7 +410,8 @@ export class RAGChatService {
           language: options.language || 'tr',
           fallbackUsed: false,
           originalModel: activeModel || 'none',
-          actualProvider: 'system'
+          actualProvider: 'system',
+          lowConfidence: true // Flag for frontend
         };
       }
 
@@ -666,86 +678,37 @@ export class RAGChatService {
       5
     );
     const batchSize = settings?.batchSize ?? parseInt(await settingsService.getSetting('parallel_llm_batch_size') || '3');
-    const enableLLMGeneration = false; // DISABLE LLM generation for performance (saves ~47s per request)
 
-    console.log(`🚀 Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for performance)`);
+    // Enable LLM generation for natural language summaries - controlled by settings
+    // WARNING: LLM generation adds 10-30 seconds per search! Use sparingly.
+    const enableLLMGenerationSetting = await settingsService.getSetting('ragSettings.enableLLMSummaries');
+    const enableLLMGeneration = enableLLMGenerationSetting === 'true'; // Default: false (disabled for performance)
+
+    console.log(`🚀 Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for natural summaries)`);
 
     if (enableParallelLLM && searchResults.length > 1) {
-      // ENHANCED: Process sources with dynamic concurrency based on parallelCount
-      console.log(`⚡ Starting enhanced parallel processing with ${parallelCount} concurrent workers`);
+      // NOTE: Parallel mode is now deprecated in favor of batch LLM processing
+      // Batch processing is much faster (1 call vs N calls) and simpler
+      // Redirecting to sequential path which uses batch LLM optimization
+      console.log('⚠️ Parallel LLM mode is deprecated - using optimized batch processing instead');
+    }
 
-      // Create processing queue with all sources
-      const allSources = [...searchResults];
-      const processingPromises: Promise<any>[] = [];
+    // Always use batch processing path (much faster than parallel individual calls)
+    {
+      // Optimized batch LLM processing - single API call for all sources
+      console.log('🔄 Using optimized batch processing for all sources');
 
-      // Process sources in parallel chunks
-      for (let i = 0; i < allSources.length; i++) {
-        const r = allSources[i];
-
-        // Create processing promise for each source
-        const sourcePromise = this.processSourceWithLLM(r, i, enableLLMGeneration);
-
-        // Add to processing queue
-        processingPromises.push(sourcePromise);
-
-        // When we reach max concurrent, wait for some to complete
-        if (processingPromises.length >= parallelCount) {
-          // Process current batch
-          const batchResults = await Promise.allSettled(processingPromises);
-
-          // Extract successful results
-          batchResults.forEach((result, idx) => {
-            if (result.status === 'fulfilled') {
-              formattedResults.push(result.value);
-            } else {
-              console.warn(`Failed to process source ${i - processingPromises.length + idx + 1}:`, result.reason);
-              // Add fallback result
-              formattedResults.push(this.createFallbackResult(r, i - processingPromises.length + idx + 1));
-            }
-          });
-
-          // Clear the queue for next batch
-          processingPromises.length = 0;
-          console.log(`✅ Processed ${batchResults.length} sources, total: ${formattedResults.length}`);
-        }
-      }
-
-      // Process remaining sources
-      if (processingPromises.length > 0) {
-        const remainingResults = await Promise.allSettled(processingPromises);
-        remainingResults.forEach((result, idx) => {
-          if (result.status === 'fulfilled') {
-            formattedResults.push(result.value);
-          } else {
-            console.warn(`Failed to process remaining source:`, result.reason);
-            formattedResults.push(this.createFallbackResult(r, searchResults.length - processingPromises.length + idx + 1));
-          }
-        });
-      }
-
-      // Sort results by original index to maintain order
-      formattedResults.sort((a, b) => a.index - b.index);
-      console.log(`🎉 Enhanced parallel processing completed: ${formattedResults.length} sources processed`);
-
-    } else {
-      // Sequential processing (fallback)
-      console.log('🔄 Using sequential processing (parallel disabled or single result)');
-      for (let idx = 0; idx < searchResults.length; idx++) {
-        const r = searchResults[idx];
+      // STEP 1: Prepare all results with metadata and categories
+      const preparedResults = searchResults.map((r, idx) => {
         const category = this.categorizeSource(r);
-        // Score already calculated in search results
-        const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
-        // Only log in debug mode
-        if (process.env.DEBUG_RAG === 'true') {
-          console.log(`Source ${idx}: score=${r.score}, similarity_score=${r.similarity_score}, calculated=${score}`);
-        }
+        // Score is already 0-100 from semantic search service, use it directly
+        // Only multiply by 100 if similarity_score is in 0-1 range (< 1)
+        const score = r.score || (r.similarity_score && r.similarity_score < 1 ? Math.round(r.similarity_score * 100) : r.similarity_score) || 50;
 
         // Build proper citation
         let citation = `[Source ${idx + 1}]`;
         if (r.metadata) {
-          // Dynamic citation based on metadata fields
           const parts = [];
-          // Add metadata fields dynamically (skip source_table as it's redundant)
           Object.keys(r.metadata).forEach(key => {
             const value = r.metadata[key];
             if (value && typeof value === 'string' && value.trim()) {
@@ -761,51 +724,81 @@ export class RAGChatService {
         const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
         const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
 
-        // Use fallback content by default for faster response
-        let processedContent = cleanExcerpt;
-        // Generate dynamic question based on content and category
-        let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
+        return {
+          originalResult: r,
+          idx,
+          category,
+          score,
+          citation,
+          cleanTitle,
+          cleanExcerpt
+        };
+      });
 
-        // Generate LLM content if explicitly enabled
-        if (enableLLMGeneration) {
-          try {
-            console.time(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
-            const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
-            processedContent = llmResult.processedContent;
-            generatedQuestion = llmResult.generatedQuestion;
-            console.log(`✅ LLM generated content (length: ${processedContent?.length || 0}): ${processedContent?.substring(0, 50)}...`);
-            console.timeEnd(`LLM processing for: ${cleanTitle.substring(0, 30)}...`);
-          } catch (error) {
-            console.error(`❌ LLM content generation FAILED for source ${idx + 1}:`, error);
-            console.warn('Using fallback content instead');
-          }
+      // STEP 2: Batch LLM processing if enabled (10x faster than individual calls!)
+      let batchLLMResults: Array<{ processedContent: string; generatedQuestion: string }> = [];
+
+      if (enableLLMGeneration && preparedResults.length > 0) {
+        try {
+          console.time('⚡ Batch LLM processing for ALL results');
+          console.log(`🚀 Processing ${preparedResults.length} sources in SINGLE batch LLM call...`);
+
+          // Single batch call instead of N individual calls
+          batchLLMResults = await this.generateBatchContentAndQuestions(
+            preparedResults.map(p => ({
+              title: p.cleanTitle,
+              excerpt: p.cleanExcerpt,
+              category: p.category
+            }))
+          );
+
+          console.log(`✅ Batch LLM completed: ${batchLLMResults.length} results generated`);
+          console.timeEnd('⚡ Batch LLM processing for ALL results');
+        } catch (error) {
+          console.error('❌ Batch LLM processing FAILED:', error);
+          console.warn('Falling back to non-LLM content');
+          batchLLMResults = []; // Will use fallback content below
         }
-        // Log removed - too spammy (19 logs per request)
+      }
+
+      // STEP 3: Build final formatted results
+      for (let i = 0; i < preparedResults.length; i++) {
+        const prep = preparedResults[i];
+        const r = prep.originalResult;
+
+        // Use batch LLM result if available, otherwise use fallback
+        let processedContent = prep.cleanExcerpt;
+        let generatedQuestion = this.generateDynamicQuestion(prep.cleanTitle, prep.cleanExcerpt, prep.category);
+
+        if (enableLLMGeneration && batchLLMResults[i]) {
+          processedContent = batchLLMResults[i].processedContent || prep.cleanExcerpt;
+          generatedQuestion = batchLLMResults[i].generatedQuestion || generatedQuestion;
+        }
 
         formattedResults.push({
           id: r.id,
-          title: cleanTitle,
-          excerpt: this.truncateExcerpt(cleanExcerpt, 250),
+          title: prep.cleanTitle,
+          excerpt: this.truncateExcerpt(prep.cleanExcerpt, 250),
           content: processedContent,
           question: generatedQuestion,
-          category: category,
+          category: prep.category,
           sourceTable: r.source_table || 'documents',
-          citation: citation,
-          score: score,
-          relevance: score,
-          relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
+          citation: prep.citation,
+          score: prep.score,
+          relevance: prep.score,
+          relevanceText: prep.score > 80 ? 'Yüksek' : prep.score > 60 ? 'Orta' : 'Düşük',
           databaseInfo: {
             table: r.source_table || 'documents',
             id: r.id,
             hasMetadata: !!r.metadata
           },
-          index: idx + 1,
+          index: prep.idx + 1,
           metadata: r.metadata || {},
-          priority: idx + 1,
+          priority: prep.idx + 1,
           hasContent: !!(r.content || r.excerpt),
           contentLength: (r.content || r.excerpt || '').length,
           // Add flag indicating if LLM enrichment was applied
-          enriched: enableLLMGeneration
+          enriched: enableLLMGeneration && !!batchLLMResults[i]
         });
       }
     }
@@ -826,71 +819,222 @@ export class RAGChatService {
     const titleWords = title.toLowerCase().split(' ').filter(w => w.length > 3);
     const excerptWords = excerpt.toLowerCase().split(' ').filter(w => w.length > 4);
 
-    // Category-specific question templates
-    const templates = {
-      'Vergi': isTurkish ? [
-        `${title} konusunda nasıl bir yol izlemeliyim?`,
-        `${title} için gerekli belgeler nelerdir?`,
-        `${title} süreci nasıl işler?`
-      ] : [
-        `What is the process for ${title}?`,
-        `What documents are needed for ${title}?`,
-        `How should I proceed with ${title}?`
-      ],
-      'Hukuk': isTurkish ? [
-        `${title} hukuki olarak ne anlama gelir?`,
-        `${title} ile ilgili haklarım nelerdir?`,
-        `${title} durumunda ne yapmalıyım?`
-      ] : [
-        `What are the legal implications of ${title}?`,
-        `What are my rights regarding ${title}?`,
-        `What should I do in case of ${title}?`
-      ],
-      'Mali': isTurkish ? [
-        `${title} maliyetini nasıl hesaplarım?`,
-        `${title} için ne kadar bütçe ayırmalıyım?`,
-        `${title} finansal avantajları nelerdir?`
-      ] : [
-        `How to calculate the cost of ${title}?`,
-        `What budget should I allocate for ${title}?`,
-        `What are the financial benefits of ${title}?`
-      ],
-      'İdare': isTurkish ? [
-        `${title} için nereye başvurmalıyım?`,
-        `${title} başvuru şartları nelerdir?`,
-        `${title} işlemi ne kadar sürer?`
-      ] : [
-        `Where should I apply for ${title}?`,
-        `What are the application requirements for ${title}?`,
-        `How long does the ${title} process take?`
-      ]
-    };
+    // Smarter question generation based on content keywords
+    let smartQuestion = '';
 
-    // Get template for category or use default
-    const categoryTemplates = templates[category] || (isTurkish ? [
-      `${title} hakkında detaylı bilgi verir misiniz?`,
-      `${title} ile ilgili önemli noktalar nelerdir?`,
-      `${title} konusuna açıklık getirebilir misiniz?`
-    ] : [
-      `Can you provide detailed information about ${title}?`,
-      `What are the key points about ${title}?`,
-      `Could you clarify the ${title} topic?`
-    ]);
+    if (isTurkish) {
+      // Extract key tax/legal terms to create contextual questions
+      const hasStopaj = /stopaj|tevkifat/i.test(excerpt);
+      const hasKDV = /kdv|katma değer/i.test(excerpt);
+      const hasGelir = /gelir vergisi/i.test(excerpt);
+      const hasBeyanname = /beyanname/i.test(excerpt);
+      const hasMuafiyet = /muafiyet|istisna/i.test(excerpt);
+      const hasOran = /oran|yüzde|%/i.test(excerpt);
+      const hasSure = /süre|tarih|son gün/i.test(excerpt);
 
-    // Return a random template from the category
-    return categoryTemplates[Math.floor(Math.random() * categoryTemplates.length)];
+      if (hasStopaj && hasOran) {
+        smartQuestion = 'Stopaj oranları hangi durumlarda değişir?';
+      } else if (hasStopaj) {
+        smartQuestion = 'Bu stopaj uygulaması kimler için geçerlidir?';
+      } else if (hasKDV && hasOran) {
+        smartQuestion = 'KDV oranı bu işlem için ne kadardır?';
+      } else if (hasBeyanname && hasSure) {
+        smartQuestion = 'Beyanname verme süreleri ne zaman doluyor?';
+      } else if (hasMuafiyet) {
+        smartQuestion = 'Muafiyetten kimler yararlanabilir?';
+      } else if (hasGelir) {
+        smartQuestion = 'Gelir vergisi matrahı nasıl hesaplanır?';
+      } else if (title.length > 10 && title.length < 100) {
+        // Use title-based questions
+        smartQuestion = `${title.substring(0, 60)} hakkında detaylar neler?`;
+      } else {
+        smartQuestion = 'Bu düzenleme hangi durumları kapsıyor?';
+      }
+    } else {
+      // English fallback
+      smartQuestion = `What are the key requirements for ${title.substring(0, 40)}?`;
+    }
+
+    // Return the contextually generated question
+    return smartQuestion;
   }
 
   
   /**
-   * Generate LLM-processed content and question from excerpt
+   * BATCH: Generate LLM-processed content and questions for multiple results at once
+   * This is 10x faster than processing individually!
+   */
+  private async generateBatchContentAndQuestions(
+    results: Array<{ title: string; excerpt: string; category: string }>
+  ): Promise<Array<{ processedContent: string; generatedQuestion: string }>> {
+    try {
+      console.log(`🚀 Batch processing ${results.length} results with LLM...`);
+      console.time('Batch LLM processing');
+
+      // Get settings once for all results
+      const maxSummaryLength = parseInt(
+        await settingsService.getSetting('ragSettings.summaryMaxLength') || '500'
+      );
+      const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
+      const conversationTone = await settingsService.getSetting('llmSettings.conversationTone')
+        || await settingsService.getSetting('conversationTone')
+        || 'professional';
+
+      let temperature = 0.3;
+      const tempSetting = await settingsService.getSetting('llmSettings.temperature')
+        || await settingsService.getSetting('temperature');
+      if (tempSetting) {
+        const parsed = parseFloat(tempSetting);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 2) {
+          temperature = parsed;
+        }
+      }
+
+      // Clean all excerpts
+      const cleanedResults = results.map(r => ({
+        title: r.title,
+        excerpt: r.excerpt
+          .replace(/^(Cevap|Soru|Yanıt|Answer|Question):\s*/i, '')
+          .trim(),
+        category: r.category
+      }));
+
+      // Build batch prompt for all results
+      const toneInstruction = responseLanguage === 'tr'
+        ? 'Profesyonel ama anlaşılır bir üslup kullan. Doğal dilde yaz.'
+        : 'Use a professional but accessible tone. Write naturally.';
+
+      const batchPrompt = responseLanguage === 'en' ? `
+You are a tax and legal expert. Process ALL items below in ONE response.
+
+TONE: ${toneInstruction}
+
+For EACH item, provide:
+1. A natural explanation (max ${maxSummaryLength} chars) - INTERPRET, don't copy
+2. A specific question (max 15 words)
+
+RESPOND IN THIS EXACT FORMAT:
+
+ITEM 1:
+CONTENT: [Your natural explanation]
+QUESTION: [Specific question]
+
+ITEM 2:
+CONTENT: [Your natural explanation]
+QUESTION: [Specific question]
+
+... continue for all items ...
+
+${cleanedResults.map((r, i) => `
+ITEM ${i + 1}:
+Title: ${r.title}
+Content: ${r.excerpt.substring(0, 1000)}
+`).join('\n')}
+
+CRITICAL: Process ALL ${results.length} items. INTERPRET each, don't copy. Be specific.
+` : `
+Sen vergi ve hukuk uzmanısın. Aşağıdaki TÜM kayıtları TEK yanıtta işle.
+
+ÜSLUBİN: ${toneInstruction}
+
+HER kayıt için ver:
+1. Doğal açıklama (maks ${maxSummaryLength} karakter) - YORUMLA, kopyalama
+2. Spesifik soru (maks 15 kelime)
+
+TAM OLARAK BU FORMATTA YANITLA:
+
+KAYIT 1:
+İÇERİK: [Doğal açıklaman]
+SORU: [Spesifik soru]
+
+KAYIT 2:
+İÇERİK: [Doğal açıklaman]
+SORU: [Spesifik soru]
+
+... tüm kayıtlar için devam et ...
+
+${cleanedResults.map((r, i) => `
+KAYIT ${i + 1}:
+Başlık: ${r.title}
+İçerik: ${r.excerpt.substring(0, 1000)}
+`).join('\n')}
+
+ÖNEMLİ: TÜM ${results.length} kaydı işle. Her birini YORUMLA, kopyalama. Spesifik ol.
+`;
+
+      // Single LLM call for all results
+      const response = await this.llmManager.generateChatResponse(batchPrompt, {
+        temperature: temperature,
+        maxTokens: results.length * 300, // ~300 tokens per result
+        systemPrompt: ''
+      });
+
+      if (!response || !response.content) {
+        throw new Error('No response from LLM');
+      }
+
+      // Parse the batch response
+      const parsed: Array<{ processedContent: string; generatedQuestion: string }> = [];
+      const itemPattern = responseLanguage === 'en'
+        ? /ITEM \d+:[\s\S]*?CONTENT:\s*(.*?)[\s\S]*?QUESTION:\s*(.*?)(?=ITEM \d+:|$)/gi
+        : /KAYIT \d+:[\s\S]*?İÇERİK:\s*(.*?)[\s\S]*?SORU:\s*(.*?)(?=KAYIT \d+:|$)/gi;
+
+      let match;
+      while ((match = itemPattern.exec(response.content)) !== null) {
+        parsed.push({
+          processedContent: match[1].trim().replace(/^\*\*+|\*\*+$/g, '').substring(0, maxSummaryLength),
+          generatedQuestion: match[2].trim().replace(/^\*\*+|\*\*+$/g, '')
+        });
+      }
+
+      console.timeEnd('Batch LLM processing');
+      console.log(`✅ Batch processed ${parsed.length}/${results.length} results`);
+
+      // Fallback for missing results
+      while (parsed.length < results.length) {
+        const idx = parsed.length;
+        parsed.push({
+          processedContent: cleanedResults[idx].excerpt.substring(0, maxSummaryLength),
+          generatedQuestion: this.generateDynamicQuestion(
+            cleanedResults[idx].title,
+            cleanedResults[idx].excerpt,
+            cleanedResults[idx].category
+          )
+        });
+      }
+
+      return parsed;
+    } catch (error) {
+      console.error('❌ Batch LLM processing failed:', error);
+      // Fallback: return original excerpts
+      return results.map(r => ({
+        processedContent: r.excerpt.substring(0, 500),
+        generatedQuestion: this.generateDynamicQuestion(r.title, r.excerpt, r.category)
+      }));
+    }
+  }
+
+  /**
+   * Generate LLM-processed content and question from excerpt (LEGACY - use batch instead)
    */
   private async generateContentAndQuestion(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
     try {
       console.log(`🤖 Attempting to generate question for: ${title.substring(0, 30)}...`);
       console.time(`LLM processing for: ${title.substring(0, 30)}...`);
-      // Clean the excerpt first
-      const cleanExcerpt = excerpt.replace(/^Cevap:\s*/i, '').trim();
+
+      // Clean the excerpt - remove all formatting artifacts
+      let cleanExcerpt = excerpt
+        .replace(/^Cevap:\s*/i, '')
+        .replace(/^Soru:\s*/i, '')
+        .replace(/^Yanıt:\s*/i, '')
+        .replace(/^Answer:\s*/i, '')
+        .replace(/^Question:\s*/i, '')
+        .trim();
+
+      // Get max length from settings
+      const maxSummaryLength = parseInt(
+        await settingsService.getSetting('ragSettings.summaryMaxLength') || '500'
+      );
 
       // Get active system prompt from database
       const activeSystemPrompt = await this.getSystemPrompt();
@@ -899,35 +1043,129 @@ export class RAGChatService {
       // Get language setting from database
       const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
 
-      // Create a simple prompt for the selected chat model
+      // Get conversation tone from settings (friendly, formal, professional, casual)
+      const conversationTone = await settingsService.getSetting('llmSettings.conversationTone')
+        || await settingsService.getSetting('conversationTone')
+        || await settingsService.getSetting('prompts.conversationTone')
+        || 'professional';
+      console.log(`🎭 Using conversation tone: ${conversationTone}`);
+
+      // Get temperature from settings (check multiple possible keys)
+      let temperature = 0.3; // Default fallback
+      const tempSetting = await settingsService.getSetting('llmSettings.temperature')
+        || await settingsService.getSetting('temperature')
+        || await settingsService.getSetting('content_generation_temperature');
+
+      if (tempSetting) {
+        const parsed = parseFloat(tempSetting);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 2) {
+          temperature = parsed;
+          console.log(`🌡️  Using temperature from settings: ${temperature}`);
+        }
+      }
+
+      // Define tone-specific instructions
+      const toneInstructions = {
+        friendly: responseLanguage === 'en'
+          ? 'Use a warm, approachable tone. Speak like a helpful colleague. Use phrases like "you can", "this helps you", "simply put".'
+          : 'Sıcak, samimi bir üslup kullan. Yardımsever bir arkadaş gibi konuş. "Şöyle düşünebilirsiniz", "basitçe", "size yardımcı olur" gibi ifadeler kullan.',
+        formal: responseLanguage === 'en'
+          ? 'Use a formal, professional tone. Maintain objectivity. Use precise legal terminology. Be respectful and authoritative.'
+          : 'Resmi, profesyonel bir üslup kullan. Nesnelliği koru. Kesin hukuki terminoloji kullan. Saygılı ve otoriter ol.',
+        professional: responseLanguage === 'en'
+          ? 'Use a professional but accessible tone. Balance expertise with clarity. Be informative and trustworthy.'
+          : 'Profesyonel ama anlaşılır bir üslup kullan. Uzmanlık ile açıklığı dengele. Bilgilendirici ve güvenilir ol.',
+        casual: responseLanguage === 'en'
+          ? 'Use a casual, conversational tone. Speak like chatting with someone. Keep it simple and easy to understand.'
+          : 'Günlük, sohbet havasında bir üslup kullan. Biriyle sohbet eder gibi konuş. Basit ve anlaşılır tut.'
+      };
+
+      const toneInstruction = toneInstructions[conversationTone as keyof typeof toneInstructions] || toneInstructions.professional;
+
+      // Create a powerful prompt that forces interpretation, not copying
+      // Tone-aware and optimized for any LLM (OpenAI, Gemini, Claude, etc.)
       const prompt = responseLanguage === 'en' ? `
-Process the title and content below. Respond in this exact format:
+You are a tax and legal expert. Your job is to INTERPRET and explain content in YOUR OWN WORDS.
 
-IMPROVED CONTENT:
-[Write a clear, 1-2 sentence summary of the content]
+TONE: ${toneInstruction}
 
-QUESTION:
-[Ask a specific question about the content details, max 10 words]
+CRITICAL RULES:
+❌ DO NOT copy the original text
+❌ DO NOT start with "The document says..." or "This content discusses..."
+❌ DO NOT preserve the original structure
+✅ REWRITE in natural language matching the tone above
+✅ EXPLAIN as if talking to someone who needs to understand quickly
+
+TASK:
+Read the content below and create:
+
+1. A NATURAL EXPLANATION (max ${maxSummaryLength} characters):
+   - What is the main point? (be specific: rates, deadlines, requirements)
+   - Who does it affect? (taxpayers, companies, specific groups)
+   - How does it work? (procedure, calculation, conditions)
+   - Write in the ${conversationTone} tone specified above
+
+2. A SPECIFIC QUESTION (max 15 words):
+   - About the actual topic (use specific terms from content)
+   - Natural conversation style matching the tone
+   - Something someone would really ask
+
+FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+
+İYİLEŞTİRİLMİŞ İÇERİK:
+[Your interpretation - completely rewritten in ${conversationTone} tone, NOT copied]
+
+SORU:
+[Natural question about the topic]
 
 Title: ${title}
 Content: ${cleanExcerpt}
+
+REMEMBER: INTERPRET in ${conversationTone} tone, don't copy. Explain in YOUR OWN WORDS.
 ` : `
-Aşağıdaki başlığı ve içeriği işle. Tam olarak bu formatla yanıtla:
+Sen vergi ve hukuk uzmanısın. Görevin içeriği YORUMLAMAK ve KENDI KELİMELERİNLE açıklamak.
+
+ÜSLUBİN: ${toneInstruction}
+
+KRİTİK KURALLAR:
+❌ Orijinal metni KOPYALAMA
+❌ "Bu belge şunu söylüyor..." diye BAŞLAMA
+❌ Orijinal yapıyı KORUMA
+✅ Yukarıdaki üsluba uygun doğal dilde YENİDEN YAZ
+✅ Hızlıca anlaması gereken birine anlatır gibi AÇIKLA
+
+GÖREV:
+Aşağıdaki içeriği oku ve oluştur:
+
+1. DOĞAL BİR AÇIKLAMA (maksimum ${maxSummaryLength} karakter):
+   - Ana nokta ne? (spesifik ol: oranlar, süreler, gereksinimler)
+   - Kimi etkiliyor? (mükellefler, şirketler, belirli gruplar)
+   - Nasıl işliyor? (prosedür, hesaplama, koşullar)
+   - Yukarıda belirtilen ${conversationTone} üslubunda yaz
+
+2. SPESİFİK BİR SORU (maksimum 15 kelime):
+   - Gerçek konu hakkında (içerikteki spesifik terimleri kullan)
+   - Üsluba uygun doğal konuşma tarzı
+   - Birinin gerçekten soracağı bir şey
+
+YANITI TAM OLARAK BU FORMATTA VER:
 
 İYİLEŞTİRİLMİŞ İÇERİK:
-[İçeriğin net, 1-2 cümlelik özetini yaz]
+[Senin yorumun - ${conversationTone} üslubunda tamamen yeniden yazılmış, KOPYALANMAMIŞ]
 
 SORU:
-[İçerik detayları hakkında spesifik bir soru sor, maksimum 10 kelime]
+[Konu hakkında doğal soru]
 
 Başlık: ${title}
 İçerik: ${cleanExcerpt}
+
+UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE açıkla.
 `;
 
-      // Use the LLM Manager with active system prompt
+      // Use the LLM Manager with active system prompt and temperature from settings
       try {
         const response = await this.llmManager.generateChatResponse(prompt, {
-          temperature: 0.3,
+          temperature: temperature,
           maxTokens: 500,
           systemPrompt: activeSystemPrompt || ''
         });
@@ -947,11 +1185,34 @@ Başlık: ${title}
 
           // Clean the content
           let processedContent = contentMatch ? contentMatch[1].trim() : cleanExcerpt;
-          processedContent = processedContent.replace(/^\*\*+/g, '').replace(/\*\*+$/g, '').replace(/\*\*\*/g, '').trim();
+          processedContent = processedContent
+            .replace(/^\*\*+/g, '')
+            .replace(/\*\*+$/g, '')
+            .replace(/\*\*\*/g, '')
+            .replace(/^\[.*?\]/g, '') // Remove [Your interpretation...] if LLM copied the instruction
+            .replace(/^Senin yorumun -/i, '')
+            .replace(/^Your interpretation -/i, '')
+            .trim();
+
+          // Enforce max length from settings
+          if (processedContent.length > maxSummaryLength) {
+            processedContent = processedContent.substring(0, maxSummaryLength);
+            // Try to cut at sentence boundary
+            const lastPeriod = processedContent.lastIndexOf('.');
+            if (lastPeriod > maxSummaryLength * 0.7) {
+              processedContent = processedContent.substring(0, lastPeriod + 1);
+            } else {
+              processedContent += '...';
+            }
+          }
 
           // Clean the question
           let generatedQuestion = questionMatch ? questionMatch[1].trim() : `${title} hakkında bilgi verir misiniz?`;
-          generatedQuestion = generatedQuestion.replace(/^\*\*+/g, '').replace(/^Üretilmiş Soru:\s*/i, '').trim();
+          generatedQuestion = generatedQuestion
+            .replace(/^\*\*+/g, '')
+            .replace(/^Üretilmiş Soru:\s*/i, '')
+            .replace(/^\[.*?\]/g, '') // Remove [Natural question...] if LLM copied the instruction
+            .trim();
 
           return {
             processedContent,
@@ -1540,123 +1801,99 @@ Başlık: ${title}
   }
 
   /**
-   * Get popular questions based on recent searches and database content
+   * Get popular questions based on recent searches and actual database content
    */
   async getPopularQuestions(): Promise<string[]> {
     try {
-      // Get most searched questions from recent messages
+      // 1. Get most searched questions from recent messages
       const recentSearchesQuery = `
         SELECT content, COUNT(*) as count
         FROM messages
         WHERE role = 'user'
           AND created_at > NOW() - INTERVAL '7 days'
+          AND LENGTH(content) > 10
+          AND LENGTH(content) < 200
         GROUP BY content
         ORDER BY count DESC
-        LIMIT 10
+        LIMIT 5
       `;
 
       const recentResult = await this.pool.query(recentSearchesQuery);
       const recentQuestions = recentResult.rows.map(r => r.content);
 
-      // Get recent documents from database to generate relevant questions
-      const recentDocsQuery = `
-        SELECT title, content
-        FROM documents
-        WHERE created_at > NOW() - INTERVAL '30 days'
-          AND (content IS NOT NULL AND content != '')
-        ORDER BY created_at DESC
-        LIMIT 20
-      `;
-
-      const docsResult = await this.pool.query(recentDocsQuery);
-      const docQuestions: string[] = [];
-
-      // Generate questions based on actual document titles
-      for (const doc of docsResult.rows) {
-        const title = doc.title || '';
-
-        // Generate contextual questions based on document title
-        if (title.includes('KDV') || title.includes('KDV')) {
-          docQuestions.push(`${title} nasıl uygulanır?`);
-          docQuestions.push(`${title} ile ilgili esaslar nelerdir?`);
-        } else if (title.includes('vergi') || title.includes('Vergi')) {
-          docQuestions.push(`${title} hakkında bilinmesi gerekenler`);
-          docQuestions.push(`${title} ne zaman geçerlidir?`);
-        } else if (title.includes('beyanname') || title.includes('Beyanname')) {
-          docQuestions.push(`${title} verilme süresi`);
-          docQuestions.push(`${title} nasıl doldurulur?`);
-        } else if (title.includes('stopaj') || title.includes('tevkifat')) {
-          docQuestions.push(`${title} oranları`);
-          docQuestions.push(`${title} hesaplama yöntemi`);
-        } else {
-          // Generic questions for other documents
-          docQuestions.push(`${title} nedir?`);
-          docQuestions.push(`${title} ile ilgili usuller`);
-        }
-
-        if (docQuestions.length >= 10) break;
-      }
-
-      // Get most searched tax topics from all documents
-      const topicsQuery = `
+      // 2. Get interesting titles from unified_embeddings (actual soru-cevap, makaleler, etc.)
+      const unifiedQuestionsQuery = `
         SELECT DISTINCT
-          CASE
-            WHEN title ILIKE '%KDV%' THEN 'KDV'
-            WHEN title ILIKE '%gelir vergisi%' THEN 'Gelir Vergisi'
-            WHEN title ILIKE '%kurumlar vergisi%' THEN 'Kurumlar Vergisi'
-            WHEN title ILIKE '%stopaj%' THEN 'Stopaj'
-            WHEN title ILIKE '%tevkifat%' THEN 'Tevkifat'
-            WHEN title ILIKE '%beyanname%' THEN 'Beyanname'
-            WHEN title ILIKE '%e-fatura%' THEN 'E-fatura'
-            WHEN title ILIKE '%e-defter%' THEN 'E-defter'
-            WHEN title ILIKE '%ithalat%' OR title ILIKE '%ihracat%' THEN 'Dış Ticaret'
-            WHEN title ILIKE '%Özelge%' OR title ILIKE '%özelge%' THEN 'Özelge'
-            WHEN title ILIKE '%damga vergisi%' THEN 'Damga Vergisi'
-            WHEN title ILIKE '%MTV%' OR title ILIKE '%motorlu taşıt%' THEN 'Motorlu Taşıtlar Vergisi'
-            ELSE 'Diğer'
-          END as topic
-        FROM documents
-        WHERE created_at > NOW() - INTERVAL '30 days'
+          COALESCE(metadata->>'title',
+                   LEFT(content, 150)) as question_text,
+          metadata->>'table' as source_type
+        FROM unified_embeddings
+        WHERE metadata->>'table' IN ('sorucevap', 'makaleler', 'ozelgeler')
+          AND (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
+          AND LENGTH(COALESCE(metadata->>'title', content)) > 20
+          AND LENGTH(COALESCE(metadata->>'title', content)) < 200
+        ORDER BY RANDOM()
         LIMIT 10
       `;
 
-      const topicsResult = await this.pool.query(topicsQuery);
-      const topicQuestions: string[] = [];
+      const unifiedResult = await this.pool.query(unifiedQuestionsQuery);
+      const unifiedQuestions: string[] = [];
 
-      for (const topic of topicsResult.rows) {
-        const topicName = topic.topic;
-        if (topicName && topicName !== 'Diğer') {
-          topicQuestions.push(`${topicName} ile ilgili son düzenlemeler`);
-          topicQuestions.push(`${topicName} beyan ve ödeme takvimi`);
+      for (const row of unifiedResult.rows) {
+        let questionText = row.question_text || '';
+
+        // Clean up the question text
+        questionText = questionText
+          .replace(/<[^>]*>/g, '') // Remove HTML tags
+          .replace(/\s+/g, ' ') // Normalize whitespace
+          .trim();
+
+        // Skip if too short or contains unwanted patterns
+        if (questionText.length < 20 || questionText.includes('http')) {
+          continue;
         }
+
+        // Add question mark if it's a soru-cevap entry without one
+        if (row.source_type === 'sorucevap' && !questionText.endsWith('?')) {
+          questionText += '?';
+        }
+
+        unifiedQuestions.push(questionText);
       }
 
-      // Combine all questions, prioritize recent searches
+      // 3. Combine all questions, prioritize recent searches
       const allQuestions = [
-        ...new Set([...recentQuestions, ...docQuestions, ...topicQuestions])
+        ...new Set([
+          ...recentQuestions.slice(0, 2), // Max 2 recent searches
+          ...unifiedQuestions.slice(0, 8) // Max 8 from database
+        ])
       ];
 
-      // If no questions from database, use minimal tax-related questions
-      if (allQuestions.length === 0) {
-        return [
-          'Son vergi duyuruları nelerdir?',
-          'Beyanname süreçleri hakkında bilgi al',
-          'Vergi iade işlemleri nasıl yapılır?',
-          'Mevzuat değişiklikleri hakkında bilgi'
+      // 4. If not enough questions, add some default high-quality ones
+      if (allQuestions.length < 4) {
+        const defaultQuestions = [
+          'KDV tevkifatı nasıl hesaplanır?',
+          'Gelir vergisi beyannamesi hangi durumlarda verilir?',
+          'E-fatura uygulaması zorunlu mudur?',
+          'Stopaj oranları nelerdir?',
+          'Kurumlar vergisi beyannamesi ne zaman verilir?',
+          'Damga vergisi hangi işlemlerde alınır?'
         ];
+
+        allQuestions.push(...defaultQuestions.slice(0, 4 - allQuestions.length));
       }
 
-      // Randomly select 4 questions
+      // 5. Randomly select 4 questions
       const shuffled = allQuestions.sort(() => 0.5 - Math.random());
       return shuffled.slice(0, 4);
     } catch (error) {
       console.error('Error getting popular questions:', error);
-      // Return minimal default questions if error
+      // Return high-quality default questions if error
       return [
-        'Vergi danışmanlığı için nasıl yardımcı olabilirim?',
-        'Mevzuat sorgulaması yapabilir miyim?',
-        'Son düzenlemeler hakkında bilgi',
-        'Beyanname işlemleri hakkında yardım'
+        'KDV iade işlemleri nasıl yapılır?',
+        'Gelir vergisi matrah tespit yöntemleri nelerdir?',
+        'E-beyanname sistemi nasıl kullanılır?',
+        'Stopaj tevkifatı hangi durumlarda yapılır?'
       ];
     }
   }

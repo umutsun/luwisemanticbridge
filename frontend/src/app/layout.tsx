@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Luwi Semantic Bridge",
-  description: "Intelligent RAG & Context Engine",
+  // title: "Luwi Semantic Bridge", // Commented out - DynamicTitle handles this
+  description: "Intelligent RAG & Context Engine", // Initial fallback - DynamicTitle updates this dynamically
 };
 
 export default function RootLayout({

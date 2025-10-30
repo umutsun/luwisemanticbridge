@@ -185,6 +185,15 @@ export default function DashboardPage() {
   const [documentStats, setDocumentStats] = useState<any>(null);
   const [embeddingStats, setEmbeddingStats] = useState<any>(null);
 
+  // Token usage statistics
+  const [tokenStats, setTokenStats] = useState<{
+    totalTokensUsed: number;
+    totalCost: number;
+  }>({
+    totalTokensUsed: 0,
+    totalCost: 0
+  });
+
   // Settings data for real display
   const [llmSettings, setLlmSettings] = useState<any>(null);
   const [databaseSettings, setDatabaseSettings] = useState<any>(null);
@@ -404,6 +413,33 @@ export default function DashboardPage() {
     };
 
     fetchDatabaseSettings();
+  }, []);
+
+  // Fetch token usage statistics
+  useEffect(() => {
+    const fetchTokenStats = async () => {
+      try {
+        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/dashboard/stats'));
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📊 [DASHBOARD] Token stats loaded:', {
+            totalTokens: data.totalTokensUsed,
+            totalCost: data.totalCost
+          });
+          setTokenStats({
+            totalTokensUsed: data.totalTokensUsed || 0,
+            totalCost: data.totalCost || 0
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching token stats:', error);
+      }
+    };
+
+    fetchTokenStats();
+    // Refresh token stats every 30 seconds
+    const interval = setInterval(fetchTokenStats, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchSystemStatus = async () => {
@@ -1148,9 +1184,11 @@ export default function DashboardPage() {
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">Token Kullanımı</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {chatStats?.overview?.total_messages?.toLocaleString() || 0}
+                {tokenStats.totalTokensUsed > 0 ? tokenStats.totalTokensUsed.toLocaleString() : '0'}
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Günlük: {chatStats?.recentMessages || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Maliyet: ${tokenStats.totalCost.toFixed(4)}
+              </div>
             </CardContent>
           </Card>
 

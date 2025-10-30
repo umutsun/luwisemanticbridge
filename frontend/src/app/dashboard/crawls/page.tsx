@@ -249,6 +249,58 @@ export default function CrawlerDataPage() {
     };
   }, [socket]);
 
+  // Listen for crawler item added events (real-time table updates)
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleCrawlerItemAdded = (data: {
+      directoryName: string;
+      item: CrawledItem;
+      totalItems: number;
+      timestamp: string;
+    }) => {
+      const { directoryName, item, totalItems } = data;
+
+      console.log(`[Crawler Item Added] ${directoryName}: +1 item (total: ${totalItems})`);
+
+      // Update directory count in real-time
+      setDirectories(prev =>
+        prev.map(dir =>
+          dir.name === directoryName
+            ? { ...dir, itemCount: totalItems }
+            : dir
+        )
+      );
+
+      // If this directory is selected, add item to the items list (with animation)
+      if (selectedDirectory?.name === directoryName) {
+        setItems(prev => {
+          // Add new item at the beginning (newest first)
+          const newItems = [item, ...prev];
+          // Limit to reasonable size to prevent memory issues
+          return newItems.slice(0, 1000);
+        });
+
+        // Update total count
+        setTotalItemsCount(totalItems);
+
+        // Show toast notification
+        toast({
+          title: 'New Item Added',
+          description: `${item.title || 'Untitled'} - ${directoryName}`,
+          duration: 2000,
+        });
+      }
+    };
+
+    console.log('[Crawler] Registering crawler:item:added event listener');
+    socket.on('crawler:item:added', handleCrawlerItemAdded);
+
+    return () => {
+      socket.off('crawler:item:added', handleCrawlerItemAdded);
+    };
+  }, [socket, selectedDirectory, toast]);
+
   const loadPythonScripts = async () => {
     const scriptsMap = new Map<string, File>();
 
@@ -1254,13 +1306,20 @@ export default function CrawlerDataPage() {
                                                   setScriptUrls(prev => new Map(prev).set(directory.name, e.target.value));
                                                 }}
                                                 onKeyDown={(e) => {
+                                                  console.log('[URL Input] Key pressed:', e.key);
                                                   if (e.key === 'Enter') {
+                                                    e.preventDefault();
                                                     const url = scriptUrls.get(directory.name);
-                                                    if (url) {
+                                                    console.log('[URL Input] Enter pressed, URL:', url);
+                                                    if (url && url.trim()) {
+                                                      console.log('[URL Input] Starting script for', directory.name);
                                                       // Start script
                                                       setRunningScripts(prev => new Set(prev).add(directory.name));
                                                       setShowUrlInput(null);
                                                       handleRunScript(directory, url);
+                                                    } else {
+                                                      console.warn('[URL Input] URL is empty');
+                                                      toast({ title: 'URL Required', description: 'Please enter a URL', variant: 'destructive' });
                                                     }
                                                   } else if (e.key === 'Escape') {
                                                     setShowUrlInput(null);

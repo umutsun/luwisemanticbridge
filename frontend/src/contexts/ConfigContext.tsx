@@ -89,6 +89,14 @@ interface Config {
     responseStyle: string;
     language: string;
   };
+  chatbot?: {
+    title?: string;
+    subtitle?: string;
+    logoUrl?: string;
+    welcomeMessage?: string;
+    placeholder?: string;
+    primaryColor?: string;
+  };
 }
 
 interface ConfigContextType {
@@ -224,8 +232,30 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
           activeEmbeddingModel: 'openai/text-embedding-3-small',
           responseStyle: 'professional',
           language: 'tr',
-        }
+        },
+        // Chatbot settings for dynamic page title
+        chatbot: data.chatbot || undefined
       };
+
+      // Fetch chatbot settings separately if not in main config
+      if (!data.chatbot) {
+        try {
+          const chatbotResponse = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`, { headers });
+          if (chatbotResponse.ok) {
+            const chatbotData = await chatbotResponse.json();
+            transformedConfig.chatbot = {
+              title: chatbotData.title,
+              subtitle: chatbotData.subtitle,
+              logoUrl: chatbotData.logoUrl,
+              welcomeMessage: chatbotData.welcomeMessage,
+              placeholder: chatbotData.placeholder,
+              primaryColor: chatbotData.primaryColor
+            };
+          }
+        } catch (chatbotErr) {
+          console.warn('Could not fetch chatbot settings:', chatbotErr);
+        }
+      }
 
       setConfig(transformedConfig);
       setError(null);

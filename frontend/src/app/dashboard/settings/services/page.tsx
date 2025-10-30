@@ -31,7 +31,8 @@ import {
   Server,
   Plus,
   Trash2,
-  X
+  X,
+  Mic
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -82,6 +83,16 @@ export default function ServicesPage() {
       port: 8001,
       url: "http://localhost:8001/api/python/crawl",
       icon: Globe
+    },
+    {
+      name: "whisper",
+      displayName: "Whisper STT",
+      description: "Speech-to-text (OpenAI API)",
+      status: "stopped",
+      port: 8001,
+      url: "http://localhost:8001/api/python/whisper",
+      version: "API + Self-hosted",
+      icon: Mic
     },
     {
       name: "pgai",
@@ -274,9 +285,12 @@ export default function ServicesPage() {
           return (
             <Card
               key={service.name}
-              className={`relative overflow-hidden transition-all hover:shadow-md cursor-pointer flex flex-col ${
-                activeService === service.name ? 'ring-2 ring-primary' : ''
-              }`}
+              className={`relative overflow-hidden transition-all hover:shadow-md cursor-pointer flex flex-col
+                ${activeService === service.name ? 'ring-2 ring-primary' : ''}
+                backdrop-blur-sm
+                dark:bg-card/80
+                bg-gray-50/50 border-gray-200/60
+              `}
               onClick={() => setActiveService(service.name)}
             >
               {/* Status indicator line */}
@@ -411,9 +425,10 @@ export default function ServicesPage() {
                 {activeService === "graphql" && <GraphQLConfig />}
                 {activeService === "python" && <PythonConfig />}
                 {activeService === "crawl4ai" && <Crawl4AIConfig />}
+                {activeService === "whisper" && <WhisperConfig />}
                 {activeService === "pgai" && <PgaiConfig />}
                 {activeService === "pgvectorscale" && <PgvectorscaleConfig />}
-                {!["graphql", "python", "crawl4ai", "pgai", "pgvectorscale"].includes(activeService) && (
+                {!["graphql", "python", "crawl4ai", "whisper", "pgai", "pgvectorscale"].includes(activeService) && (
                   <Alert>
                     <AlertDescription>
                       No configuration available for this service.
@@ -442,7 +457,8 @@ export default function ServicesPage() {
                 {activeService === "graphql" && <GraphQLTest />}
                 {activeService === "python" && <PythonTest />}
                 {activeService === "crawl4ai" && <Crawl4AITest />}
-                {!["graphql", "python", "crawl4ai"].includes(activeService) && (
+                {activeService === "whisper" && <WhisperTest />}
+                {!["graphql", "python", "crawl4ai", "whisper"].includes(activeService) && (
                   <Alert>
                     <AlertDescription>
                       No test interface available for this service.
@@ -877,6 +893,169 @@ function Crawl4AITest() {
         <Globe className="h-4 w-4 mr-2" />
         Test Crawl
       </Button>
+    </div>
+  );
+}
+
+function WhisperConfig() {
+  const [mode, setMode] = useState<"api" | "local">("api");
+
+  return (
+    <div className="space-y-4">
+      <Alert>
+        <AlertDescription>
+          Whisper supports both OpenAI API (paid) and self-hosted (free) modes.
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-2">
+        <Label>Mode</Label>
+        <Select value={mode} onValueChange={(v: "api" | "local") => setMode(v)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="api">OpenAI API (Recommended)</SelectItem>
+            <SelectItem value="local">Self-hosted (Free, GPU recommended)</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          {mode === "api" ? "Uses OpenAI API key from settings ($0.006/minute)" : "Runs locally on your server (free)"}
+        </p>
+      </div>
+
+      {mode === "api" && (
+        <div className="space-y-2">
+          <Label>Model</Label>
+          <Select defaultValue="whisper-1">
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="whisper-1">whisper-1 (Latest)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {mode === "local" && (
+        <div className="space-y-2">
+          <Label>Model Size</Label>
+          <Select defaultValue="base">
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tiny">Tiny (~1GB RAM, fastest)</SelectItem>
+              <SelectItem value="base">Base (~1GB RAM, recommended)</SelectItem>
+              <SelectItem value="small">Small (~2GB RAM, more accurate)</SelectItem>
+              <SelectItem value="medium">Medium (~5GB RAM, high accuracy)</SelectItem>
+              <SelectItem value="large">Large (~10GB RAM, best)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Language</Label>
+          <Select defaultValue="tr">
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tr">Turkish</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="auto">Auto-detect</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Temperature</Label>
+          <Input type="number" defaultValue="0.0" min="0" max="1" step="0.1" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Initial Prompt (Optional)</Label>
+        <Textarea
+          placeholder="Vergi, muhasebe ve hukuk terimleri içerir..."
+          className="h-20 text-xs"
+        />
+        <p className="text-xs text-muted-foreground">
+          Helps improve accuracy for domain-specific terminology
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>Auto-send transcription</Label>
+          <Switch defaultChecked={false} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Automatically send transcribed text to chat
+        </p>
+      </div>
+
+      <Button className="w-full">
+        <Terminal className="h-4 w-4 mr-2" />
+        Save Configuration
+      </Button>
+    </div>
+  );
+}
+
+function WhisperTest() {
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<string>("");
+
+  return (
+    <div className="space-y-4">
+      <Alert>
+        <AlertDescription>
+          Record audio or upload a file to test speech-to-text transcription.
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-2">
+        <Label>Test Audio File</Label>
+        <Input type="file" accept="audio/*" />
+        <p className="text-xs text-muted-foreground">
+          Supported formats: webm, mp3, wav, m4a, ogg
+        </p>
+      </div>
+
+      <Button className="w-full" disabled={testing}>
+        {testing ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Transcribing...
+          </>
+        ) : (
+          <>
+            <Mic className="h-4 w-4 mr-2" />
+            Test Transcription
+          </>
+        )}
+      </Button>
+
+      {result && (
+        <div className="p-4 bg-muted rounded-lg">
+          <Label className="text-xs text-muted-foreground mb-2 block">Result:</Label>
+          <p className="text-sm">{result}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="outline" className="w-full" size="sm">
+          <Activity className="h-3 w-3 mr-2" />
+          Check Health
+        </Button>
+        <Button variant="outline" className="w-full" size="sm">
+          <Database className="h-3 w-3 mr-2" />
+          Model Info
+        </Button>
+      </div>
     </div>
   );
 }

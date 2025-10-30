@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { TaoProgressBar } from '@/components/ui/tao-progress-bar';
 import { ListSkeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { ProgressCircle } from '@/components/ui/progress-circle';
 import { useToast } from '@/hooks/use-toast';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import config from '@/config/api.config';
@@ -37,12 +37,14 @@ interface TableInfo {
   displayName: string;
   totalRecords: number;
   embeddedRecords: number;
+  skippedRecords?: number;
   lastUpdated?: string;
   avgTokens?: number;
   size?: number;
   embeddingModel?: string;
   sourceId?: string;
   tokensUsed?: number;
+  isFullyEmbedded?: boolean;
 }
 
 interface TableDataPreview {
@@ -93,7 +95,16 @@ interface ChartDataPoint {
 
 export default function EmbeddingsManagerPage() {
 
-  const [progress, setProgress] = useState<EmbeddingProgress | null>(null);
+  const [progress, setProgress] = useState<EmbeddingProgress | null>({
+    status: 'idle',
+    current: 0,
+    total: 0,
+    percentage: 0,
+    currentTable: null,
+    error: null,
+    tokensUsed: 0,
+    message: 'Ready to start migration'
+  });
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
   const [availableTables, setAvailableTables] = useState<TableInfo[]>([]);
   const [error, setError] = useState('');
@@ -109,6 +120,12 @@ export default function EmbeddingsManagerPage() {
   const [totalTokensUsed, setTotalTokensUsed] = useState<number>(0);
   const [embeddingProvider, setEmbeddingProvider] = useState<string>('openai');
   const [embeddingModel, setEmbeddingModel] = useState<string>('text-embedding-ada-002');
+  const [showSkippedModal, setShowSkippedModal] = useState(false);
+  const [skippedRecords, setSkippedRecords] = useState<any[]>([]);
+  const [isLoadingSkipped, setIsLoadingSkipped] = useState(false);
+  const [selectedTableForSkipped, setSelectedTableForSkipped] = useState<string | null>(null);
+  const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
+  const [isDeletingSkipped, setIsDeletingSkipped] = useState(false);
   const { toast } = useToast();
 
   // Settings state
@@ -153,16 +170,23 @@ export default function EmbeddingsManagerPage() {
             .replace(/_/g, ' ')  // Replace underscores with spaces
             .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize first letter
 
+          const totalRecords = table.count || 0;
+          const embeddedRecords = table.embedded || 0;
+          const skippedRecords = table.skipped || 0;
+          const isFullyEmbedded = totalRecords > 0 && (embeddedRecords + skippedRecords) >= totalRecords;
+
           return {
             name: table.name,
             displayName: displayName,
-            totalRecords: table.count || 0,
-            embeddedRecords: table.embedded || 0,
-            tokensUsed: 0 // Will be updated during migration
+            totalRecords: totalRecords,
+            embeddedRecords: embeddedRecords,
+            skippedRecords: skippedRecords,
+            tokensUsed: 0, // Will be updated during migration
+            isFullyEmbedded: isFullyEmbedded
           };
         });
 
-        console.log('Transformed tables:', transformedTables);
+        console.log('All tables with embedding status:', transformedTables);
         setAvailableTables(transformedTables);
 
         // Set token usage from API response
@@ -200,12 +224,12 @@ export default function EmbeddingsManagerPage() {
     try {
       console.log(`Fetching preview for ${tableName}...`);
 
-      // Try the required endpoint format - this needs to be created in backend
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings/unified-preview?source_table=${tableName}&source_name=rag_chatbot&limit=10`);
+      // Try the unified embeddings endpoint (no source_name needed)
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings/unified-preview?source_table=${tableName}&limit=10`);
       if (response.ok) {
         const data = await response.json();
         console.log(`Success! Unified preview data for ${tableName}:`, data);
-        setTablePreviewData(data.records || []);
+        setTablePreviewData(data.data || []);
       } else {
         console.log(`Required endpoint not found, trying fallback... Status: ${response.status}`);
 
@@ -255,12 +279,133 @@ export default function EmbeddingsManagerPage() {
       if (response.ok) {
         const data = await response.json();
         console.log('Token stats received:', data);
-        setTotalTokensUsed(data.totalTokensUsed || 0);
+        setTotalTokensUsed(data.tokenUsage?.total_tokens || 0);
       }
     } catch (error) {
       console.log('Error fetching token stats:', error);
     }
   }, []);
+
+  // Fetch skipped records for a table
+  const fetchSkippedRecords = useCallback(async (tableName: string) => {
+    setIsLoadingSkipped(true);
+    setSelectedSkippedIds(new Set());
+    try {
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/migration/skipped?table=${encodeURIComponent(tableName)}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Skipped records received:', data);
+        setSkippedRecords(data.records || []);
+        setSelectedTableForSkipped(tableName);
+
+        // Pre-select all records by default
+        const allIds = new Set((data.records || []).map((r: any) => r.id));
+        setSelectedSkippedIds(allIds);
+
+        setShowSkippedModal(true);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to fetch skipped records",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching skipped records:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch skipped records",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSkipped(false);
+    }
+  }, [toast]);
+
+  // Delete selected skipped records
+  const deleteSkippedRecords = useCallback(async () => {
+    if (selectedSkippedIds.size === 0) {
+      toast({
+        title: "No records selected",
+        description: "Please select records to delete",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDeletingSkipped(true);
+    try {
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/migration/skipped`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: Array.from(selectedSkippedIds) })
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: "Success",
+          description: data.message || `Deleted ${selectedSkippedIds.size} record(s)`,
+        });
+
+        // Remove deleted records from state
+        setSkippedRecords(prev =>
+          prev.filter(record => !selectedSkippedIds.has(record.id))
+        );
+        setSelectedSkippedIds(new Set());
+
+        // Refresh table stats
+        fetchAvailableTables();
+
+        // Close modal if no records left
+        if (skippedRecords.length === selectedSkippedIds.size) {
+          setShowSkippedModal(false);
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to delete skipped records",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting skipped records:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete skipped records",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingSkipped(false);
+    }
+  }, [selectedSkippedIds, skippedRecords.length, toast, fetchAvailableTables]);
+
+  // Toggle individual skipped record selection
+  const toggleSkippedRecord = useCallback((id: number) => {
+    setSelectedSkippedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  // Toggle all skipped records selection
+  const toggleAllSkippedRecords = useCallback(() => {
+    if (selectedSkippedIds.size === skippedRecords.length) {
+      setSelectedSkippedIds(new Set());
+    } else {
+      setSelectedSkippedIds(new Set(skippedRecords.map(r => r.id)));
+    }
+  }, [selectedSkippedIds.size, skippedRecords]);
 
   // Initial data fetch
   useEffect(() => {
@@ -269,41 +414,7 @@ export default function EmbeddingsManagerPage() {
     fetchTokenStats();
   }, [fetchAvailableTables, checkActiveMigration, fetchTokenStats]);
 
-  // Progress polling
-  useEffect(() => {
-    if (progress?.status === 'processing' || progress?.status === 'paused') {
-      const interval = setInterval(async () => {
-        try {
-          const response = await fetchWithAuth(`${API_MIGRATION}/progress`);
-          if (response.ok) {
-            const data = await response.json();
-            setProgress(data);
-
-            if (data.status === 'completed') {
-              toast({
-                title: "Completed",
-                description: `Migration completed! ${data.current || 0} records processed.`,
-              });
-              fetchAvailableTables();
-              fetchTokenStats(); // Refresh token stats after completion
-              setProgress(null);
-              setSelectedTables([]);
-            } else if (data.status === 'error') {
-              toast({
-                title: "Error",
-                description: data.error || 'Migration failed',
-                variant: "destructive",
-              });
-            }
-          }
-        } catch (error) {
-          console.error('Error polling progress:', error);
-        }
-      }, intervals.PERFORMANCE);
-
-      return () => clearInterval(interval);
-    }
-  }, [progress?.status, toast, fetchAvailableTables]);
+  // Note: Progress polling removed - now using real-time SSE updates from startMigration()
 
   const startMigration = async () => {
     console.log('Starting migration with selectedTables:', selectedTables);
@@ -324,6 +435,18 @@ export default function EmbeddingsManagerPage() {
     setIsStartingMigration(true);
 
     try {
+      // Set initial progress state immediately
+      setProgress({
+        status: 'processing',
+        current: 0,
+        total: 100,
+        percentage: 0,
+        currentTable: selectedTables[0] || null,
+        error: null,
+        tokensUsed: 0,
+        startTime: Date.now()
+      });
+
       const response = await fetchWithAuth(`${API_MIGRATION}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -336,19 +459,94 @@ export default function EmbeddingsManagerPage() {
       if (!response.ok) {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to start migration.');
-      } else {
-        const data = await response.json();
-        if (data.progress) {
-          setProgress(data.progress);
-        }
+        setProgress(null);
+        setIsStartingMigration(false);
+        return;
+      }
+
+      // Read SSE stream for real-time updates
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
         toast({
           title: "Started",
-          description: "Migration process started successfully.",
+          description: "Migration process started. Listening for updates...",
         });
+        setIsStartingMigration(false);
+
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            console.log('SSE stream ended');
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                console.log('📡 SSE Update:', data);
+
+                // Update progress in real-time
+                setProgress({
+                  status: data.status || 'processing',
+                  current: data.current || 0,
+                  total: data.total || 0,
+                  percentage: data.percentage || 0,
+                  currentTable: data.currentTable || null,
+                  error: data.error || null,
+                  tokensUsed: data.tokenUsage?.total || 0,
+                  message: data.message || null
+                });
+
+                // Handle completion
+                if (data.status === 'completed') {
+                  const isAlreadyEmbedded = data.total === 0 && data.current === 0;
+                  toast({
+                    title: isAlreadyEmbedded ? "Already Completed" : "Completed",
+                    description: data.message || `Migration completed! ${data.current || 0} records processed.`,
+                  });
+
+                  fetchAvailableTables();
+                  fetchTokenStats();
+
+                  // Keep progress visible - don't auto-hide
+                  // User can start a new migration to clear it
+
+                  break;
+                }
+
+                // Handle errors
+                if (data.status === 'failed' || data.status === 'error') {
+                  toast({
+                    title: "Error",
+                    description: data.error || data.message || 'Migration failed',
+                    variant: "destructive",
+                  });
+
+                  // Keep error progress visible - don't auto-hide
+
+                  break;
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e);
+              }
+            }
+          }
+        }
       }
     } catch (error) {
+      console.error('Migration start error:', error);
       setError('An error occurred while starting the migration.');
-    } finally {
+      setProgress(null);
       setIsStartingMigration(false);
     }
   };
@@ -396,7 +594,7 @@ export default function EmbeddingsManagerPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-        <div className="w-[90%] mx-auto space-y-6">
+        <div className="w-full max-w-[1400px] mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -422,6 +620,73 @@ export default function EmbeddingsManagerPage() {
             <CheckCircle className="h-4 w-4" />
             <AlertDescription>{success}</AlertDescription>
           </Alert>
+        )}
+
+        {/* Progress Card moved to right column below Migration Settings */}
+        {false && progress && (progress.status === 'processing' || progress.status === 'completed') && (
+          <Card className={`border-primary/30 ${
+            progress.status === 'completed'
+              ? 'bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20'
+              : 'bg-gradient-to-br from-primary/5 via-blue-50 to-purple-50 dark:from-primary/10 dark:via-blue-950/20 dark:to-purple-950/20'
+          }`}>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-6">
+                {/* Progress Circle */}
+                <div className="flex-shrink-0">
+                  <ProgressCircle
+                    progress={Math.round(progress.percentage || 0)}
+                    showPulse={progress.status === 'processing'}
+                    size={120}
+                    statusText={progress.status === 'completed' ? 'Completed' : 'Processing'}
+                  />
+                </div>
+
+                {/* Stats Grid */}
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Status</div>
+                    <Badge
+                      variant={progress.status === 'completed' ? 'default' : 'default'}
+                      className={progress.status === 'processing' ? 'animate-pulse bg-slate-500 dark:bg-slate-600' : 'bg-green-500'}
+                    >
+                      {progress.status === 'completed' ? (
+                        <><CheckCircle className="w-3 h-3 mr-1" /> Completed</>
+                      ) : (
+                        <><Activity className="w-3 h-3 mr-1" /> Processing</>
+                      )}
+                    </Badge>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Progress</div>
+                    <div className="text-lg font-semibold">
+                      {progress.current?.toLocaleString() || 0} / {progress.total?.toLocaleString() || 0}
+                    </div>
+                  </div>
+                  {progress.currentTable && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Current Table</div>
+                      <div className="text-sm font-medium truncate" title={progress.currentTable}>
+                        {progress.currentTable}
+                      </div>
+                    </div>
+                  )}
+                  {progress.tokensUsed !== undefined && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Tokens Used</div>
+                      <div className="text-lg font-semibold">{progress.tokensUsed.toLocaleString()}</div>
+                    </div>
+                  )}
+                  {progress.message && progress.status === 'completed' && (
+                    <div className="col-span-2 md:col-span-4">
+                      <div className="text-sm text-muted-foreground mt-2 p-3 bg-white/50 dark:bg-gray-900/50 rounded-lg">
+                        {progress.message}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Statistics Cards */}
@@ -485,7 +750,7 @@ export default function EmbeddingsManagerPage() {
           )}
         </div>
 
-        {/* Main Content */}
+        {/* Main Content - Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Control Panel */}
           <div className="lg:col-span-1">
@@ -495,20 +760,20 @@ export default function EmbeddingsManagerPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Embedding Model - Read from DB Settings */}
-                <div className="p-4 bg-gray-900 dark:bg-gray-950 border border-gray-700 dark:border-gray-800 rounded-lg">
-                  <div className="text-xs font-semibold text-gray-100 uppercase tracking-wider mb-3">
+                <div className="p-4 bg-gray-100 dark:bg-gray-950 border border-gray-300 dark:border-gray-800 rounded-lg">
+                  <div className="text-xs font-semibold text-gray-700 dark:text-gray-100 uppercase tracking-wider mb-3">
                     Embedding Model
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">Provider:</span>
-                      <span className="text-sm font-mono font-semibold text-gray-100">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Provider:</span>
+                      <span className="text-sm font-mono font-semibold text-gray-900 dark:text-gray-100">
                         {embeddingProvider}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">Model:</span>
-                      <span className="text-xs font-mono text-gray-100 truncate">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Model:</span>
+                      <span className="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
                         {embeddingModel}
                       </span>
                     </div>
@@ -578,67 +843,132 @@ export default function EmbeddingsManagerPage() {
                     </Button>
                   )}
                 </div>
-
-                {progress && (
-                  <div className="pt-4 border-t">
-                    <div className="text-sm space-y-1">
-                      <div className="flex justify-between">
-                        <span>Status:</span>
-                        <Badge variant={progress.status === 'processing' ? 'default' : 'secondary'}>
-                          {progress.status}
-                        </Badge>
-                      </div>
-                      {progress.current && progress.total && (
-                        <div className="flex justify-between">
-                          <span>Progress:</span>
-                          <span>{progress.current} / {progress.total}</span>
-                        </div>
-                      )}
-                      {progress.processingSpeed && (
-                        <div className="flex justify-between">
-                          <span>Speed:</span>
-                          <span>{progress.processingSpeed.toFixed(1)} rec/min</span>
-                        </div>
-                      )}
-                      {progress.estimatedTimeRemaining && (
-                        <div className="flex justify-between">
-                          <span>ETA:</span>
-                          <span>{formatETA(progress.estimatedTimeRemaining)}</span>
-                        </div>
-                      )}
-                    </div>
-                    <TaoProgressBar
-                      value={progress.percentage || 0}
-                      variant="zen"
-                      className="mt-2"
-                      showPercentage={false}
-                    />
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Tables List */}
-          <div className="lg:col-span-2">
+          {/* Right Column - Progress + Tables */}
+          <div className="lg:col-span-2 space-y-2">
+            {/* Progress Card */}
+            {progress && (
+              <Card className="border-0 shadow-none bg-transparent">
+                <CardContent className="p-0">
+                  <div className="border rounded-lg p-4 bg-white dark:bg-slate-900/30 border-slate-200 dark:border-slate-700/50">
+                    <div className="flex items-center gap-6">
+                      <div className="flex-shrink-0">
+                        <ProgressCircle
+                          progress={Math.round(progress.percentage || 0)}
+                          showPulse={progress.status === 'processing'}
+                          size={120}
+                          statusText={
+                            progress.status === 'processing' ? "Processing" :
+                            progress.status === 'completed' ? "Complete" :
+                            progress.status === 'idle' ? "Ready" :
+                            "Paused"
+                          }
+                        />
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                            Migration Progress
+                          </h3>
+                        </div>
+
+                      {/* Selected Tables Info - Only show when idle with selections */}
+                      {progress.status === 'idle' && selectedTables.length > 0 && (
+                        <div className="bg-white dark:bg-slate-800/50 rounded-lg p-3 border border-slate-200 dark:border-slate-700/50">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                              Selected: {selectedTables.length} table{selectedTables.length > 1 ? 's' : ''}
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {availableTables
+                                .filter(t => selectedTables.includes(t.name))
+                                .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0)
+                                .toLocaleString()} records to process
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {selectedTables.slice(0, 3).map(tableName => (
+                              <span key={tableName} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-slate-200/80 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300">
+                                {tableName}
+                              </span>
+                            ))}
+                            {selectedTables.length > 3 && (
+                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+                                +{selectedTables.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Processing/Completed Info */}
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        {progress.current !== undefined && progress.total !== undefined && progress.status !== 'idle' && (
+                          <div>
+                            <span className="text-slate-600 dark:text-slate-400">Records:</span>
+                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
+                              {progress.current} / {progress.total}
+                            </span>
+                          </div>
+                        )}
+                        {progress.currentTable && (
+                          <div>
+                            <span className="text-slate-600 dark:text-slate-400">Table:</span>
+                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
+                              {progress.currentTable}
+                            </span>
+                          </div>
+                        )}
+                        {progress.tokensUsed !== undefined && progress.tokensUsed > 0 && (
+                          <div>
+                            <span className="text-slate-600 dark:text-slate-400">Tokens:</span>
+                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
+                              {progress.tokensUsed.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        {progress.processingSpeed && (
+                          <div>
+                            <span className="text-slate-600 dark:text-slate-400">Speed:</span>
+                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
+                              {progress.processingSpeed.toFixed(1)} rec/min
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {progress.message && (
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
+                          {progress.message}
+                        </p>
+                      )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tables List */}
             <Card>
-              <CardHeader>
-                {/* Header removed - no Select All or Refresh buttons */}
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4 pb-4">
                 {isLoadingTables ? (
                   <ListSkeleton items={5} />
                 ) : (
                   <div className="space-y-2">
                     {availableTables.map((table) => {
-                      const isCompleted = table.embeddedRecords === table.totalRecords;
+                      const skipped = table.skippedRecords || 0;
+                      const isCompleted = (table.embeddedRecords + skipped) === table.totalRecords;
                       const tableProgress = table.totalRecords > 0 ? (table.embeddedRecords / table.totalRecords) * 100 : 0;
 
                       return (
                         <div key={table.name} className="border rounded-lg overflow-hidden transition-all">
                           <div
-                            className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                              selectedTables.includes(table.name) ? 'bg-blue-50 dark:bg-blue-950' : ''
+                            className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                              selectedTables.includes(table.name) ? 'bg-slate-100/80 dark:bg-slate-800/30' : ''
                             } ${expandedTables.has(table.name) ? 'border-b' : ''}`}
                             onClick={() => {
                               const newExpanded = new Set(expandedTables);
@@ -653,40 +983,64 @@ export default function EmbeddingsManagerPage() {
                             }}
                           >
                             <div className="flex items-center space-x-3">
-                              <input
-                                type="checkbox"
-                                id={`table-${table.name}`}
-                                checked={isCompleted ? true : selectedTables.includes(table.name)}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  if (!isCompleted) {
-                                    if (e.target.checked) {
-                                      setSelectedTables([...selectedTables, table.name]);
-                                    } else {
-                                      setSelectedTables(selectedTables.filter(t => t !== table.name));
+                              {!isCompleted && (
+                                <div
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (progress?.status !== 'processing') {
+                                      if (selectedTables.includes(table.name)) {
+                                        setSelectedTables(selectedTables.filter(t => t !== table.name));
+                                      } else {
+                                        setSelectedTables([...selectedTables, table.name]);
+                                      }
                                     }
-                                  }
-                                }}
-                                disabled={progress?.status === 'processing' || isCompleted}
-                                className="rounded"
-                              />
+                                  }}
+                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${
+                                    selectedTables.includes(table.name)
+                                      ? 'bg-slate-200/80 dark:bg-slate-700/40 border-slate-500 dark:border-slate-500/70'
+                                      : 'bg-white dark:bg-slate-800/50 border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500/70'
+                                  } ${progress?.status === 'processing' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                  {selectedTables.includes(table.name) && (
+                                    <CheckCircle className="w-3 h-3 text-slate-600 dark:text-slate-400 fill-current" />
+                                  )}
+                                </div>
+                              )}
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
-                                  <label
-                                    htmlFor={`table-${table.name}`}
-                                    className="font-medium cursor-pointer"
-                                  >
+                                  <span className="font-medium">
                                     {table.displayName}
-                                  </label>
+                                  </span>
                                   <div className="flex items-center gap-2">
-                                    {isCompleted && <CheckCircle className="w-4 h-4 text-green-500" />}
+                                    {isCompleted && (
+                                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-500" />
+                                    )}
                                     <span className="text-sm text-muted-foreground">
                                       {tableProgress.toFixed(1)}%
                                     </span>
                                   </div>
                                 </div>
-                                <div className="text-sm text-muted-foreground mt-1">
-                                  {table.embeddedRecords.toLocaleString()} / {table.totalRecords.toLocaleString()}
+                                <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                                  <span>
+                                    {table.embeddedRecords.toLocaleString()} / {table.totalRecords.toLocaleString()}
+                                  </span>
+                                  {skipped > 0 && (
+                                    <>
+                                      <span className="text-xs text-yellow-600 dark:text-yellow-500">
+                                        ({skipped} skipped)
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          fetchSkippedRecords(table.name);
+                                        }}
+                                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                                      >
+                                        <Eye className="w-3 h-3" />
+                                        View
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                                 <TaoProgressBar
                                   value={tableProgress}
@@ -702,8 +1056,18 @@ export default function EmbeddingsManagerPage() {
                           {/* Expanded Details - Just Records Table */}
                           {expandedTables.has(table.name) && (
                             <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t">
-  
-                              {tablePreviewData.length > 0 && (
+                              {isLoadingPreview ? (
+                                <div className="flex items-center justify-center py-8">
+                                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                  <span className="ml-2 text-sm text-muted-foreground">Loading preview...</span>
+                                </div>
+                              ) : tablePreviewData.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                                  <Database className="w-12 h-12 mb-3 opacity-40" />
+                                  <p className="text-sm font-medium">No embedded data found</p>
+                                  <p className="text-xs mt-1">This table has not been embedded yet</p>
+                                </div>
+                              ) : (
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-xs">
                                     <thead>
@@ -727,7 +1091,7 @@ export default function EmbeddingsManagerPage() {
                                             }
                                           </td>
                                           <td className="p-3 text-sm">
-                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50 shadow-sm">
+                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800/30 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                                               <Database className="w-3.5 h-3.5" />
                                               {record.tokens || record.token_used || '-'}
                                             </div>
@@ -755,17 +1119,6 @@ export default function EmbeddingsManagerPage() {
                                       ))}
                                     </tbody>
                                   </table>
-                                </div>
-                              )}
-
-                              {isLoadingPreview && (
-                                <div className="space-y-3">
-                                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                                  <div className="space-y-2">
-                                    {[...Array(5)].map((_, i) => (
-                                      <div key={i} className="h-3 bg-gray-100 dark:bg-gray-800 rounded animate-pulse"></div>
-                                    ))}
-                                  </div>
                                 </div>
                               )}
                             </div>
@@ -798,8 +1151,18 @@ export default function EmbeddingsManagerPage() {
             <>
               <div className="flex-1 overflow-y-auto max-h-[60vh]">
                 <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-                  <pre className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {selectedRecord.content || selectedRecord.content || 'No content available'}
+                  <pre className="whitespace-pre-wrap text-sm leading-relaxed font-mono">
+                    {(() => {
+                      try {
+                        const content = selectedRecord.content || 'No content available';
+                        // Try to parse and format as JSON
+                        const parsed = typeof content === 'string' ? JSON.parse(content) : content;
+                        return JSON.stringify(parsed, null, 2);
+                      } catch {
+                        // If not JSON, display as-is
+                        return selectedRecord.content || 'No content available';
+                      }
+                    })()}
                   </pre>
                 </div>
               </div>
@@ -818,6 +1181,174 @@ export default function EmbeddingsManagerPage() {
                 </div>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Skipped Records Modal - Minimal Table Design */}
+      <Dialog open={showSkippedModal} onOpenChange={() => {
+        setShowSkippedModal(false);
+        setSkippedRecords([]);
+        setSelectedTableForSkipped(null);
+        setSelectedSkippedIds(new Set());
+      }}>
+        <DialogContent className="max-w-6xl max-h-[90vh] p-0 overflow-hidden">
+          {/* Glassmorphic Header */}
+          <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50">
+            <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 dark:from-yellow-500/10 dark:to-orange-500/10" />
+            <div className="relative px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-lg font-semibold">
+                    Skipped Records
+                    {selectedTableForSkipped && (
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        {selectedTableForSkipped}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {skippedRecords.length} record{skippedRecords.length !== 1 ? 's' : ''} could not be embedded
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedSkippedIds.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={deleteSkippedRecords}
+                      disabled={isDeletingSkipped}
+                      className="shadow-lg"
+                    >
+                      {isDeletingSkipped ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          Delete ({selectedSkippedIds.size})
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowSkippedModal(false);
+                      setSkippedRecords([]);
+                      setSelectedTableForSkipped(null);
+                      setSelectedSkippedIds(new Set());
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isLoadingSkipped ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-7 h-7 animate-spin text-primary" />
+              <span className="ml-3 text-sm text-muted-foreground">Loading...</span>
+            </div>
+          ) : skippedRecords.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <CheckCircle className="w-12 h-12 mb-3 opacity-40 text-green-600" />
+              <p className="text-sm font-medium">No skipped records</p>
+              <p className="text-xs mt-1">All records were successfully embedded</p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
+                  <tr>
+                    <th className="text-left p-3 font-semibold w-10">
+                      <input
+                        type="checkbox"
+                        checked={selectedSkippedIds.size === skippedRecords.length && skippedRecords.length > 0}
+                        onChange={toggleAllSkippedRecords}
+                        className="w-4 h-4 rounded border-gray-300 dark:border-gray-600"
+                      />
+                    </th>
+                    <th className="text-left p-3 font-semibold">Name</th>
+                    <th className="text-left p-3 font-semibold">Reason</th>
+                    <th className="text-left p-3 font-semibold">ID</th>
+                    <th className="text-left p-3 font-semibold">Type</th>
+                    <th className="text-left p-3 font-semibold">Date</th>
+                    <th className="text-left p-3 font-semibold">Preview</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {skippedRecords.map((record, index) => (
+                    <tr
+                      key={record.id || index}
+                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+                    >
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedSkippedIds.has(record.id)}
+                          onChange={() => toggleSkippedRecord(record.id)}
+                          className="w-4 h-4 rounded border-gray-300 dark:border-gray-600"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                      <td className="p-3 font-medium max-w-[200px] truncate">
+                        {record.source_name || `Record #${record.source_id}`}
+                      </td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800">
+                          {record.skip_reason?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="p-3 text-muted-foreground font-mono">
+                        {record.source_id}
+                      </td>
+                      <td className="p-3 text-muted-foreground">
+                        {record.source_type}
+                      </td>
+                      <td className="p-3 text-muted-foreground whitespace-nowrap">
+                        {new Date(record.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: '2-digit'
+                        })}
+                      </td>
+                      <td className="p-3 max-w-[300px]">
+                        {record.content_preview ? (
+                          <div className="text-[10px] text-muted-foreground font-mono truncate">
+                            {record.content_preview.substring(0, 80)}
+                            {record.content_preview.length > 80 && '...'}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/50">No preview</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Glassmorphic Footer */}
+          {skippedRecords.length > 0 && (
+            <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50">
+              <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 dark:from-yellow-500/10 dark:to-orange-500/10" />
+              <div className="relative px-6 py-3">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="text-muted-foreground">
+                    Total: <span className="font-semibold text-yellow-600 dark:text-yellow-500">{skippedRecords.length}</span> skipped record{skippedRecords.length !== 1 ? 's' : ''}
+                  </div>
+                  <div className="text-muted-foreground">
+                    Selected: <span className="font-semibold">{selectedSkippedIds.size}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

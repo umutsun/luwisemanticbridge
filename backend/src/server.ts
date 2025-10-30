@@ -32,6 +32,8 @@ import searchRoutes from "./routes/search.routes";
 import chatRoutes from "./routes/chat.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import scraperRoutes from "./routes/scraper.routes";
+import crawlerRoutes, { initializeScriptLogBridge } from "./routes/crawler.routes";
+import sourceRoutes from "./routes/source.routes";
 import chatbotSettingsRoutes from "./routes/chatbot-settings.routes";
 import historyRoutes from "./routes/history.routes";
 import documentsRoutes from "./routes/documents.routes";
@@ -79,6 +81,8 @@ import messageEmbeddingsRoutes from "./routes/message-embeddings.routes";
 import messageAnalyticsRoutes from "./routes/message-analytics.routes";
 import documentProcessingRoutes from "./routes/document-processing.routes";
 import ocrRoutes from "./routes/ocr.routes";
+import integrationsRoutes from "./routes/integrations.routes";
+import whisperRoutes from "./routes/whisper.routes";
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
@@ -407,6 +411,8 @@ app.use(searchRoutes);
 app.use(chatRoutes);
 app.use("/api/v2/dashboard", dashboardRoutes);
 app.use("/api/v2/scraper", scraperRoutes);
+app.use("/api/v2/crawler", crawlerRoutes);
+app.use("/api/v2/source", sourceRoutes);
 app.use("/api/v2/chatbot", chatbotSettingsRoutes);
 app.use("/api/v2/translate", translateRoutes);
 app.use("/api/v2/translation-embeddings", translationEmbeddingsRoutes);
@@ -453,7 +459,8 @@ app.use("/api/v2/system", systemLogsRoutes);
 app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
-app.use("/api/v2/integrations", require("./routes/integrations.routes").default);
+app.use("/api/v2/integrations", integrationsRoutes);
+app.use("/api/whisper", whisperRoutes);
 
 // GraphQL server
 try {
@@ -549,6 +556,10 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
   console.log(
     `🔌 Standard WebSocket enabled on path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`
   );
+
+  // Store Redis subscriber instances per WebSocket connection
+  const redisSubscribers = new Map<any, Redis>();
+
   wss.on("connection", (ws, request) => {
     console.log("Standard WebSocket client connected to /ws/notifications");
 
@@ -595,6 +606,66 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
             );
             break;
 
+          case "subscribe_crawler_progress":
+            // Subscribe to crawler export progress updates
+            const jobId = message.jobId;
+            if (!jobId) {
+              ws.send(JSON.stringify({
+                type: "error",
+                message: "Job ID is required for subscription"
+              }));
+              break;
+            }
+
+            console.log(`📊 Subscribing to crawler progress: ${jobId}`);
+
+            // Create a new Redis subscriber for this connection if not exists
+            let redisSubscriber = redisSubscribers.get(ws);
+            if (!redisSubscriber) {
+              redisSubscriber = new Redis({
+                host: process.env.REDIS_HOST || 'localhost',
+                port: 6379,
+                db: 0, // Crawl4AI uses DB 0
+              });
+              redisSubscribers.set(ws, redisSubscriber);
+
+              // Set up message handler
+              redisSubscriber.on('message', (channel, message) => {
+                try {
+                  const progress = JSON.parse(message);
+                  if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({
+                      type: 'crawler_export_progress',
+                      data: progress
+                    }));
+                  }
+                } catch (parseError) {
+                  console.error('Error parsing Redis message:', parseError);
+                }
+              });
+            }
+
+            // Subscribe to the specific job's progress channel
+            await redisSubscriber.subscribe(`crawler_export_progress:${jobId}`);
+
+            // Confirm subscription
+            ws.send(JSON.stringify({
+              type: 'subscribed',
+              jobId,
+              message: 'Successfully subscribed to crawler export progress'
+            }));
+            break;
+
+          case "unsubscribe_crawler_progress":
+            // Unsubscribe from crawler progress
+            const unsubJobId = message.jobId;
+            const subscriber = redisSubscribers.get(ws);
+            if (subscriber && unsubJobId) {
+              await subscriber.unsubscribe(`crawler_export_progress:${unsubJobId}`);
+              console.log(`📊 Unsubscribed from crawler progress: ${unsubJobId}`);
+            }
+            break;
+
           default:
             console.log("Received unknown message type:", message.type);
         }
@@ -611,10 +682,18 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
     });
 
     // Handle connection close
-    ws.on("close", (code, reason) => {
+    ws.on("close", async (code, reason) => {
       console.log(
         `Standard WebSocket client disconnected: ${code} - ${reason}`
       );
+
+      // Clean up Redis subscriber
+      const subscriber = redisSubscribers.get(ws);
+      if (subscriber) {
+        await subscriber.quit();
+        redisSubscribers.delete(ws);
+        console.log('📊 Cleaned up Redis subscriber for closed connection');
+      }
     });
 
     // Handle errors
@@ -674,6 +753,9 @@ if (SERVER.WEBSOCKET.ENABLED && io) {
       broadcastNotification(notification);
     });
   });
+
+  // Initialize script log bridge for real-time Python script logs
+  initializeScriptLogBridge();
 }
 
 // Enhanced error handling middleware

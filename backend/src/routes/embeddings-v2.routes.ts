@@ -3322,6 +3322,67 @@ router.get('/analytics', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/v2/embeddings/unified-preview - Preview unified embeddings
+router.get('/unified-preview', async (req: Request, res: Response) => {
+  const { source_table, source_name, limit = 10 } = req.query;
+
+  try {
+    let query = `
+      SELECT
+        id,
+        source_table,
+        source_type,
+        source_id,
+        source_name,
+        content,
+        metadata,
+        tokens_used,
+        model_used,
+        created_at,
+        updated_at
+      FROM unified_embeddings
+      WHERE 1=1
+    `;
+
+    const params: any[] = [];
+    let paramCount = 0;
+
+    if (source_table) {
+      paramCount++;
+      query += ` AND source_table = $${paramCount}`;
+      params.push(source_table);
+    }
+
+    if (source_name) {
+      paramCount++;
+      query += ` AND source_name = $${paramCount}`;
+      params.push(source_name);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1}`;
+    params.push(parseInt(limit as string, 10));
+
+    const result = await lsembPool.query(query, params);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length,
+      filters: {
+        source_table,
+        source_name,
+        limit: parseInt(limit as string, 10)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching unified embeddings preview:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch embeddings preview'
+    });
+  }
+});
+
 // End of embeddings-v2.routes.ts
 
 export default router;

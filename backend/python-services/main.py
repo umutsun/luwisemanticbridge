@@ -27,8 +27,9 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
 )
 
-# Import routers (will create these next)
+# Import routers
 from routers import crawl_router, pgai_router, health_router
+# whisper_router disabled due to heavy dependencies
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,19 +86,20 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)):
     return True
 
 # Include routers
-app.include_router(health_router.router, tags=["health"])
+app.include_router(health_router, tags=["health"])
 app.include_router(
-    crawl_router.router,
+    crawl_router,
     prefix="/api/python/crawl",
     tags=["crawl4ai"],
     dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
-    pgai_router.router,
+    pgai_router,
     prefix="/api/python/pgai",
     tags=["pgai"],
     dependencies=[Depends(verify_api_key)]
 )
+# whisper_router disabled due to heavy dependencies (PyTorch, Whisper)
 
 # Global exception handler
 @app.exception_handler(Exception)

@@ -31,12 +31,7 @@ export default function DynamicTitle({
 
     // Wait for config to load before setting title
     const appName = config?.app?.name || 'Luwi Semantic Bridge';
-
-    // Skip if config hasn't loaded yet (avoid showing "Page Name - undefined")
-    if (!config?.app?.name && !appName) {
-      console.log('[DynamicTitle] Waiting for config to load...');
-      return;
-    }
+    const appDescription = config?.app?.description || 'Intelligent RAG & Context Engine';
 
     // For chatbot page (root or /chat), only show chatbot title without app name
     const isChatbotPage = pathname === '/' || pathname === '/chat' || pathname?.startsWith('/chat/');
@@ -44,36 +39,65 @@ export default function DynamicTitle({
 
     const finalTitle = isChatbotPage ? chatbotTitle : `${finalPageTitle} - ${appName}`;
 
-    console.log('[DynamicTitle] Setting title:', {
-      finalTitle,
-      appName,
+    // Only update if title actually changed (prevents unnecessary updates)
+    const titleChanged = document.title !== finalTitle;
+
+    // Check if description meta tag exists and needs update
+    const metaDescription = document.querySelector('meta[name="description"]');
+    const currentDescription = metaDescription?.getAttribute('content');
+    const descriptionChanged = currentDescription !== appDescription;
+
+    // Skip if nothing changed
+    if (!titleChanged && !descriptionChanged) {
+      return;
+    }
+
+    console.log('[DynamicTitle] Updating metadata:', {
+      title: titleChanged ? { from: document.title, to: finalTitle } : 'unchanged',
+      description: descriptionChanged ? { from: currentDescription, to: appDescription } : 'unchanged',
       pageTitle: finalPageTitle,
-      configAppName: config?.app?.name,
-      propPageTitle,
-      dynamicPageTitle
+      pathname,
+      isChatbotPage
     });
 
-    // Update document title IMMEDIATELY
-    document.title = finalTitle;
+    // Update document title
+    if (titleChanged) {
+      document.title = finalTitle;
+    }
+
+    // Update description meta tag (dynamic from app settings)
+    if (metaDescription && descriptionChanged) {
+      metaDescription.setAttribute('content', appDescription);
+    }
 
     // Also update the meta title if it exists
     const metaTitle = document.querySelector('meta[name="title"]');
-    if (metaTitle) {
+    if (metaTitle && titleChanged) {
       metaTitle.setAttribute('content', finalTitle);
     }
 
-    // Update og:title as well for social sharing
+    // Update og:title and og:description for social sharing
     const ogTitle = document.querySelector('meta[property="og:title"]');
-    if (ogTitle) {
+    if (ogTitle && titleChanged) {
       ogTitle.setAttribute('content', finalTitle);
     }
 
-    // Also update twitter:title
+    const ogDescription = document.querySelector('meta[property="og:description"]');
+    if (ogDescription && descriptionChanged) {
+      ogDescription.setAttribute('content', appDescription);
+    }
+
+    // Also update twitter:title and twitter:description
     const twitterTitle = document.querySelector('meta[name="twitter:title"]');
-    if (twitterTitle) {
+    if (twitterTitle && titleChanged) {
       twitterTitle.setAttribute('content', finalTitle);
     }
-  }, [config?.app?.name, finalPageTitle, pathname, config?.chatbot?.title]);
+
+    const twitterDescription = document.querySelector('meta[name="twitter:description"]');
+    if (twitterDescription && descriptionChanged) {
+      twitterDescription.setAttribute('content', appDescription);
+    }
+  }, [config?.app?.name, config?.app?.description, config?.chatbot?.title, finalPageTitle, pathname]);
 
   // Return null as this component only modifies the document title
   return null;

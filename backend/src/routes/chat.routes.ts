@@ -28,7 +28,7 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
     const {
       message,
       conversationId,
-      temperature = 0.1,
+      temperature: requestTemperature,
       model,
       systemPrompt,
       ragWeight,
@@ -42,6 +42,39 @@ router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: Aut
     } = req.body;
 
     const userId = req.user.userId;
+
+    // Get temperature from settings if not provided in request
+    let temperature = requestTemperature;
+    if (temperature === undefined || temperature === null) {
+      try {
+        const tempSetting = await dbConfig.query(`
+          SELECT value FROM settings
+          WHERE key IN ('llmSettings.temperature', 'temperature', 'content_generation_temperature')
+          ORDER BY CASE key
+            WHEN 'llmSettings.temperature' THEN 1
+            WHEN 'temperature' THEN 2
+            ELSE 3
+          END
+          LIMIT 1
+        `);
+
+        if (tempSetting.rows.length > 0) {
+          const parsed = parseFloat(tempSetting.rows[0].value);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 2) {
+            temperature = parsed;
+            console.log(`🌡️  Using temperature from settings: ${temperature}`);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to get temperature from settings, using default:', error);
+      }
+
+      // Final fallback
+      if (temperature === undefined || temperature === null) {
+        temperature = 0.7; // Balanced default
+        console.log(`🌡️  Using default temperature: ${temperature}`);
+      }
+    }
 
     if (!message || message.trim() === '') {
       console.log('Message validation failed:', { message });

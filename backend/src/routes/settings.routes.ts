@@ -70,17 +70,22 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     const { category } = req.query;
 
     if (!category) {
-      // Return minimal full config if no category
+      // Return minimal full config if no category - include active models
       const result = await lsembPool.query(
-        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3)',
-        ['app.name', 'app.version', 'app.locale']
+        `SELECT key, value FROM settings
+         WHERE key IN ($1, $2, $3, $4, $5)`,
+        ['app.name', 'app.version', 'app.locale', 'llmSettings.activeChatModel', 'llmSettings.activeEmbeddingModel']
       );
 
-      const config = {
+      const config: any = {
         app: {
           name: 'Mali Müşavir Asistanı',
           version: '1.0.0',
           locale: 'tr'
+        },
+        llmSettings: {
+          activeChatModel: null,
+          activeEmbeddingModel: null
         }
       };
 
@@ -152,6 +157,13 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
 
     const result = await lsembPool.query(query);
     console.log(`🔧 [OPTIMIZED] Found ${result.rows.length} settings for category: ${category}`);
+
+    // DEBUG: Log raw database results for troubleshooting
+    if (category === 'llm' || category === 'rag') {
+      console.log(`📊 [SETTINGS DEBUG] Raw DB results for ${category}:`,
+        result.rows.slice(0, 10).map(r => `${r.key}=${r.value}`).join(', ')
+      );
+    }
 
     // Build category-specific response
     const config: any = {};
@@ -239,30 +251,14 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
 
       config.apiStatus = apiStatus;
 
-      // Add embedding settings to LLM category for dashboard display
-      const embeddingResult = await lsembPool.query(
-        `SELECT key, value FROM settings WHERE key LIKE 'embeddings.%' OR key LIKE 'embedding_provider' OR key LIKE 'embedding_model'`
-      );
+      // IMPORTANT: Do NOT query embeddings.* or embedding_* keys!
+      // Only use llmSettings.* keys which are authoritative source
+      // llmSettings.activeEmbeddingModel is already fetched in main query above
 
-      embeddingResult.rows.forEach(row => {
-        const [section, ...keyParts] = row.key.split('.');
-        const key = keyParts.join('.') || row.key;
-
-        if (section === 'embeddings' || row.key.startsWith('embedding_')) {
-          if (!config.llmSettings) config.llmSettings = {};
-
-          // Map to expected field names
-          if (key === 'provider' || row.key === 'embedding_provider') {
-            config.llmSettings.embeddingProvider = row.value;
-          } else if (key === 'model' || row.key === 'embedding_model') {
-            config.llmSettings.embeddingModel = row.value;
-          }
-        }
-      });
-
-      // Construct activeEmbeddingModel from provider and model
-      if (config.llmSettings?.embeddingProvider && config.llmSettings?.embeddingModel) {
+      // Construct activeEmbeddingModel from provider and model ONLY if it doesn't exist
+      if (!config.llmSettings?.activeEmbeddingModel && config.llmSettings?.embeddingProvider && config.llmSettings?.embeddingModel) {
         config.llmSettings.activeEmbeddingModel = `${config.llmSettings.embeddingProvider}/${config.llmSettings.embeddingModel}`;
+        console.log('⚠️ [Settings] Constructed activeEmbeddingModel from separate fields:', config.llmSettings.activeEmbeddingModel);
       }
 
       // IMPORTANT: Ensure activeChatModel is in llmSettings
@@ -276,7 +272,19 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
         if (row.key === 'llmSettings.activeChatModel') {
           config.llmSettings.activeChatModel = row.value;
         }
+        if (row.key === 'llmSettings.activeEmbeddingModel') {
+          config.llmSettings.activeEmbeddingModel = row.value;
+        }
       });
+
+      // Parse activeEmbeddingModel to get provider and model
+      if (config.llmSettings?.activeEmbeddingModel) {
+        const parts = config.llmSettings.activeEmbeddingModel.split('/');
+        if (parts.length === 2) {
+          config.llmSettings.embeddingProvider = parts[0];
+          config.llmSettings.embeddingModel = parts[1];
+        }
+      }
 
       // CRITICAL: NO dynamic defaults - return what's in database OR null
       // Frontend/User MUST configure the model in Settings UI
@@ -286,7 +294,11 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       }
 
       // Log active models
-      console.log(`📊 [Settings] Chat: ${config.llmSettings?.activeChatModel || 'NOT SET'} | Embedding: ${config.llmSettings?.activeEmbeddingModel || 'NOT SET'}`);
+      console.log(`📊 [Settings API Response] Category: ${category}`);
+      console.log(`  ├─ Chat Model: ${config.llmSettings?.activeChatModel || 'NOT SET'}`);
+      console.log(`  ├─ Embedding: ${config.llmSettings?.activeEmbeddingModel || 'NOT SET'}`);
+      console.log(`  ├─ Embedding Provider: ${config.llmSettings?.embeddingProvider || 'NOT SET'}`);
+      console.log(`  └─ Embedding Model: ${config.llmSettings?.embeddingModel || 'NOT SET'}`);
     }
 
     res.json(config);
@@ -384,6 +396,14 @@ router.post('/', async (req: Request, res: Response) => {
     const llmManager = (await import('../services/llm-manager.service')).LLMManager.getInstance();
     await llmManager.reloadSettings();
     console.log('🔄 [LLM Manager] Settings reloaded after update');
+
+    // CRITICAL: Reload Semantic Search settings for RAG changes
+    const hasRAGSettings = updates.some(u => u.key.startsWith('ragSettings.'));
+    if (hasRAGSettings) {
+      const { semanticSearch } = await import('../services/semantic-search.service');
+      await semanticSearch.refreshRAGSettingsNow();
+      console.log('🔄 [Semantic Search] RAG settings reloaded after update');
+    }
 
     res.json({ success: true, message: 'Settings updated successfully' });
 

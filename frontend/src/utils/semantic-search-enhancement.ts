@@ -3,7 +3,7 @@
  * Provides intelligent query generation and semantic context for enhanced search capabilities
  */
 
-import { getTableDisplayName as getDynamicTableDisplayName } from './table-names';
+import { getTableDisplayName as getDynamicTableDisplayName, getDynamicTables } from './table-names';
 
 export interface SemanticContext {
   category?: string;
@@ -300,25 +300,8 @@ export function createEnhancedSourceClickHandler(
       sourceTable: source.sourceTable
     });
 
-    // Use LLM-generated question if available
-  if (source.question && typeof source.question === 'string' && source.question.trim().length > 0) {
-    // Use the LLM-generated question directly
-    question = source.question.trim();
-
-    // Truncate to a reasonable length if too long (max 100 chars)
-    if (question.length > 100) {
-      question = question.substring(0, 100);
-      // Try to end at a word boundary
-      const lastSpace = question.lastIndexOf(' ');
-      if (lastSpace > 50) {
-        question = question.substring(0, lastSpace);
-      }
-      question += '?';
-    }
-
-    console.log('Using LLM-generated question:', question);
-  } else {
-    // Generate a question from the source title and content
+    // ALWAYS generate question from source content for specificity
+    // Don't use pre-generated questions as they may be generic
     const title = (source.title as string) || '';
     const excerpt = (source.excerpt as string) || '';
     const content = (source.content as string) || '';
@@ -328,11 +311,10 @@ export function createEnhancedSourceClickHandler(
     // Extract keywords from the source
     const keywords = extractKeywords(title + ' ' + excerpt + ' ' + content);
 
-    // Generate contextual question
-    question = await generateQuestionFromContext(title, content || excerpt, category, sourceTable, keywords);
+    // Generate content-specific question (not generic!)
+    question = await generateContentSpecificQuestion(title, content || excerpt, category, sourceTable, keywords);
 
-    console.log('Generated contextual question:', question);
-  }
+    console.log('Generated content-specific question:', question);
 
     console.log('Final question to be set:', question);
     console.log('Current input text:', getInputText());
@@ -389,54 +371,227 @@ function extractKeywords(text: string): string[] {
 }
 
 /**
- * Generate contextual question from title and metadata
+ * Generate content-specific question from source title and content
+ * Creates questions specific to the actual content, avoiding generic questions
+ * Does NOT use "bu/şu/o" pronouns - directly references the content
+ */
+async function generateContentSpecificQuestion(title: string, content: string, category: string, sourceTable: string, keywords: string[]): Promise<string> {
+  // Clean title and extract first meaningful sentence from content
+  const cleanTitle = cleanSourceTitle(title);
+  const contentLower = content.toLowerCase();
+
+  // Extract first 1-2 sentences as summary (up to 200 chars)
+  let summary = content.trim();
+  const firstSentenceEnd = summary.search(/[.!?]\s/);
+  if (firstSentenceEnd > 0 && firstSentenceEnd < 200) {
+    summary = summary.substring(0, firstSentenceEnd + 1).trim();
+  } else {
+    summary = summary.substring(0, 200).trim();
+    // Try to end at word boundary
+    const lastSpace = summary.lastIndexOf(' ');
+    if (lastSpace > 100) {
+      summary = summary.substring(0, lastSpace) + '...';
+    }
+  }
+
+  // Analyze content to determine main topic/question type
+  const hasStopaj = /stopaj|tevkifat/i.test(contentLower);
+  const hasKDV = /kdv|katma değer/i.test(contentLower);
+  const hasGelir = /gelir vergisi/i.test(contentLower);
+  const hasBeyanname = /beyanname/i.test(contentLower);
+  const hasMuafiyet = /muafiyet|istisna/i.test(contentLower);
+  const hasOran = /oran|yüzde|%/i.test(contentLower);
+  const hasSure = /süre|tarih|son gün/i.test(contentLower);
+  const hasCeza = /ceza|yaptırım|idari/i.test(contentLower);
+  const hasBasvuru = /başvuru|talep|dilekçe/i.test(contentLower);
+  const hasHesaplama = /hesap|hesaplama|ödeme|tutar/i.test(contentLower);
+
+  // Extract specific numbers/rates if present
+  const percentMatch = content.match(/(%\s*\d+|\d+\s*%)/);
+  const numberMatch = content.match(/(\d+)\s*(gün|ay|yıl|TL|lira)/);
+
+  // Generate specific question based on content analysis
+  // Avoid "bu/şu/o" - directly reference the topic
+
+  // Rate/percentage questions
+  if (hasOran && percentMatch) {
+    if (hasStopaj) {
+      return `Stopaj oranları hangi durumlarda ${percentMatch[0]} olarak uygulanır?`;
+    }
+    if (hasKDV) {
+      return `KDV oranı ${percentMatch[0]} hangi mal ve hizmetler için geçerlidir?`;
+    }
+    return `${percentMatch[0]} oranı hangi hallerde uygulanır?`;
+  }
+
+  // Exemption/exception questions
+  if (hasMuafiyet) {
+    if (hasKDV) {
+      return `KDV muafiyetinden yararlanmak için hangi şartlar aranır?`;
+    }
+    if (hasGelir) {
+      return `Gelir vergisi muafiyeti hangi gelirler için uygulanır?`;
+    }
+    return `İstisna/muafiyet uygulaması için gerekli şartlar nelerdir?`;
+  }
+
+  // Time period questions
+  if (hasSure && numberMatch) {
+    return `${numberMatch[0]} içinde yapılması gereken işlemler nelerdir?`;
+  }
+  if (hasSure && hasBeyanname) {
+    return `Beyanname verme süreleri hangi tarihler arasındadır?`;
+  }
+
+  // Application/procedure questions
+  if (hasBasvuru) {
+    return `Başvuru yapmak için hangi belgeler gereklidir?`;
+  }
+
+  // Calculation questions
+  if (hasHesaplama) {
+    if (hasStopaj) {
+      return `Stopaj hesaplaması nasıl yapılır ve hangi tutarlar üzerinden hesaplanır?`;
+    }
+    if (hasKDV) {
+      return `KDV matrahı nasıl hesaplanır ve hangi indirimler yapılabilir?`;
+    }
+    return `Hesaplama yaparken dikkat edilmesi gereken hususlar nelerdir?`;
+  }
+
+  // Penalty questions
+  if (hasCeza) {
+    return `Hangi durumlarda vergi cezası uygulanır ve ceza tutarı nasıl hesaplanır?`;
+  }
+
+  // Use keywords to generate specific question
+  if (keywords.length > 0) {
+    const mainKeyword = keywords[0];
+    return `${mainKeyword} ile ilgili hangi düzenlemeler ve şartlar geçerlidir?`;
+  }
+
+  // Fallback: Extract main topic from title
+  if (cleanTitle.length > 10) {
+    return `${cleanTitle} konusunda hangi hükümler ve uygulamalar vardır?`;
+  }
+
+  // Last resort: Use content's main idea
+  return `${summary.substring(0, 60)}... ile ilgili detaylı bilgi nedir?`;
+}
+
+/**
+ * Generate contextual question from title and metadata (DEPRECATED - use generateContentSpecificQuestion instead)
+ * Generates natural, conversational questions based on content analysis
  */
 async function generateQuestionFromContext(title: string, content: string, category: string, sourceTable: string, keywords: string[]): Promise<string> {
   // Clean title for question generation
   const cleanTitle = cleanSourceTitle(title);
+  const contentLower = content.toLowerCase();
+  const titleLower = cleanTitle.toLowerCase();
 
   // Get dynamic table names
   const tables = await getDynamicTables();
 
-  // Category-specific question patterns
-  if (category === 'Mevzuat' || sourceTable === tables.MEVZUAT || sourceTable === 'MEVZUAT') {
-    if (keywords.some(k => k.includes('Vergi'))) {
-      return `${cleanTitle} konusunda vergisel yükümlülükler nelerdir?`;
-    }
-    return `${cleanTitle} hükmünün uygulaması nasıl yapılır?`;
-  }
+  // Detect key tax/legal terms for context-aware questions
+  const hasStopaj = /stopaj|tevkifat/i.test(contentLower);
+  const hasKDV = /kdv|katma değer/i.test(contentLower);
+  const hasGelir = /gelir vergisi/i.test(contentLower);
+  const hasBeyanname = /beyanname/i.test(contentLower);
+  const hasMuafiyet = /muafiyet|istisna/i.test(contentLower);
+  const hasOran = /oran|yüzde|%/i.test(contentLower);
+  const hasSure = /süre|tarih|son gün/i.test(contentLower);
+  const hasCeza = /ceza|yaptırım|idari/i.test(contentLower);
 
+  // Source-specific natural questions
   if (sourceTable === tables.DANISTAY_KARARLARI || sourceTable === 'DANISTAYKARARLARI' || category === 'İçtihat') {
-    return `${cleanTitle} kararının emsal değeri ve uygulaması hakkında bilgi verebilir misiniz?`;
+    return `Bu karar hangi durumlarda emsal teşkil eder?`;
   }
 
   if (sourceTable === tables.OZELGELER || sourceTable === 'OZELGELER') {
-    return `${cleanTitle} özelgesinin kapsamı ve şartları nelerdir?`;
+    if (hasSure) {
+      return `Bu özelge için başvuru süreleri nedir?`;
+    }
+    return `Bu özelgeden kimler yararlanabilir?`;
   }
 
   if (sourceTable === tables.MAKALELER || sourceTable === 'Makaleler') {
-    return `${cleanTitle} konusuyla ilgili görüşleriniz nelerdir?`;
+    if (hasKDV) {
+      return `KDV uygulaması bu durumda nasıl olur?`;
+    }
+    if (hasStopaj) {
+      return `Stopaj kesintisi hangi hallerde uygulanır?`;
+    }
+    return `Bu konuda uygulamada nelere dikkat edilmeli?`;
   }
 
   if (sourceTable === tables.SORU_CEVAP || sourceTable === 'sorucevap') {
-    return `${cleanTitle} sorusuna benzer durumlar için ne yapmalıyım?`;
+    if (hasStopaj && hasOran) {
+      return `Stopaj oranı bu işlemde ne kadardır?`;
+    }
+    if (hasKDV && hasMuafiyet) {
+      return `KDV muafiyeti bu durumda uygulanabilir mi?`;
+    }
+    if (hasBeyanname && hasSure) {
+      return `Beyanname için son tarih ne zaman?`;
+    }
+    return `Benzer durumda ne yapmalıyım?`;
   }
 
-  // Default patterns based on keywords
-  if (keywords.some(k => k.includes('şart') || k.includes('gerekir'))) {
-    return `${cleanTitle} için hangi şartlar aranır?`;
+  // Content-based natural questions
+  if (hasStopaj && hasOran) {
+    return `Stopaj oranları hangi durumlarda değişir?`;
   }
 
-  if (keywords.some(k => k.includes('süre') || k.includes('tarih'))) {
-    return `${cleanTitle} konusunda zaman sınırlamaları var mıdır?`;
+  if (hasStopaj) {
+    return `Bu stopaj uygulaması kimler için geçerlidir?`;
   }
 
-  if (keywords.some(k => k.includes('ceza') || k.includes('yaptırım'))) {
-    return `${cleanTitle} ihlalinin sonuçları nelerdir?`;
+  if (hasKDV && hasOran) {
+    return `KDV oranı bu işlem için ne kadardır?`;
   }
 
-  // Generic fallback
-  return `${cleanTitle} hakkında detaylı bilgi alabilir miyim?`;
+  if (hasKDV && hasMuafiyet) {
+    return `KDV muafiyeti hangi şartlarda uygulanır?`;
+  }
+
+  if (hasBeyanname && hasSure) {
+    return `Beyanname verme süreleri ne zaman doluyor?`;
+  }
+
+  if (hasBeyanname) {
+    return `Bu beyanname hangi gelirleri kapsar?`;
+  }
+
+  if (hasMuafiyet) {
+    return `Muafiyetten kimler yararlanabilir?`;
+  }
+
+  if (hasGelir) {
+    return `Gelir vergisi matrahı nasıl hesaplanır?`;
+  }
+
+  if (hasCeza) {
+    return `Bu ihlalin yaptırımları nelerdir?`;
+  }
+
+  if (hasSure) {
+    return `Bu işlem için süre sınırı var mı?`;
+  }
+
+  // Mevzuat-specific questions
+  if (category === 'Mevzuat' || sourceTable === tables.MEVZUAT || sourceTable === 'MEVZUAT') {
+    if (keywords.some(k => k.includes('Vergi'))) {
+      return `Bu düzenleme hangi vergi türlerini etkiliyor?`;
+    }
+    return `Bu hüküm hangi durumlarda uygulanır?`;
+  }
+
+  // Generic but natural fallback
+  if (cleanTitle.length > 10 && cleanTitle.length < 60) {
+    return `${cleanTitle} hakkında detaylar neler?`;
+  }
+
+  return `Bu düzenleme hangi durumları kapsıyor?`;
 }
 
 /**

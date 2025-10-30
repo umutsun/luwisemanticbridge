@@ -10,6 +10,8 @@ from enum import Enum
 from loguru import logger
 
 from services.database import execute_query, execute_update
+from services.pgai_worker import worker, get_worker_status
+import asyncio
 
 router = APIRouter()
 
@@ -48,47 +50,34 @@ class VectorizerConfig(BaseModel):
 
 @router.get("/status")
 async def get_pgai_status() -> Dict[str, Any]:
-    """Check pgai installation and worker status"""
+    """Check pgai worker status (client-side implementation)"""
     try:
-        # Check if pgai is installed
-        pgai_installed = await execute_query("""
-            SELECT EXISTS (
-                SELECT 1 FROM pg_namespace WHERE nspname = 'ai'
-            )
+        # Get worker status
+        worker_status = await get_worker_status()
+
+        # Check embeddings in database
+        embeddings_count = await execute_query("""
+            SELECT COUNT(*) as count FROM embeddings
         """)
 
-        if not pgai_installed[0]['exists']:
-            return {
-                "installed": False,
-                "message": "pgai is not installed. Run /api/python/pgai/install first"
-            }
-
-        # Get vectorizers
-        vectorizers = await execute_query("""
-            SELECT
-                id,
-                source_table,
-                destination,
-                config->>'embedding' as embedding_model,
-                config->>'schedule' as schedule,
-                created_at,
-                last_run_at
-            FROM ai.vectorizers
-            ORDER BY created_at DESC
+        message_embeddings_count = await execute_query("""
+            SELECT COUNT(*) as count FROM message_embeddings
         """)
 
         return {
-            "installed": True,
-            "vectorizers_count": len(vectorizers),
-            "vectorizers": vectorizers,
-            "worker_status": "Check logs for worker status"
+            "installed": True,  # Client-side pgai is always "installed"
+            "worker_status": worker_status,
+            "embeddings_count": embeddings_count[0]['count'] if embeddings_count else 0,
+            "message_embeddings_count": message_embeddings_count[0]['count'] if message_embeddings_count else 0,
+            "message": "Using client-side pgai worker (server-side extension not available)"
         }
 
     except Exception as e:
         logger.error(f"Failed to check pgai status: {e}")
         return {
             "installed": False,
-            "error": str(e)
+            "error": str(e),
+            "worker_status": {"running": False}
         }
 
 @router.post("/install")
@@ -202,11 +191,13 @@ async def get_vectorizer_stats(name: str) -> Dict[str, Any]:
         logger.error(f"Failed to get vectorizer stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/manual-embedding")
-async def create_manual_embedding(
-    text: str = Field(..., description="Text to embed"),
+class ManualEmbeddingRequest(BaseModel):
+    """Request model for manual embedding creation"""
+    text: str = Field(..., description="Text to embed")
     model: str = Field("text-embedding-3-large", description="Embedding model")
-) -> Dict[str, Any]:
+
+@router.post("/manual-embedding")
+async def create_manual_embedding(request: ManualEmbeddingRequest) -> Dict[str, Any]:
     """
     Manually create an embedding for testing
 
@@ -219,15 +210,15 @@ async def create_manual_embedding(
         openai.api_key = os.getenv("OPENAI_API_KEY")
 
         response = openai.embeddings.create(
-            input=text,
-            model=model
+            input=request.text,
+            model=request.model
         )
 
         embedding = response.data[0].embedding
 
         return {
-            "text": text[:100] + "..." if len(text) > 100 else text,
-            "model": model,
+            "text": request.text[:100] + "..." if len(request.text) > 100 else request.text,
+            "model": request.model,
             "dimensions": len(embedding),
             "embedding": embedding[:10] + ["..."],  # Show first 10 dimensions
             "usage": response.usage.dict() if hasattr(response, 'usage') else None
@@ -283,4 +274,61 @@ async def get_recommendations() -> Dict[str, Any]:
         return {
             "error": str(e),
             "recommendations": []
+        }
+
+@router.post("/worker/start")
+async def start_worker() -> Dict[str, Any]:
+    """Start the pgai worker for automatic embedding generation"""
+    try:
+        if worker.is_running:
+            return {
+                "status": "already_running",
+                "message": "Worker is already running"
+            }
+
+        # Start worker in background
+        asyncio.create_task(worker.start(interval_seconds=60))
+
+        return {
+            "status": "started",
+            "message": "pgai worker started successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to start worker: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/worker/stop")
+async def stop_worker() -> Dict[str, Any]:
+    """Stop the pgai worker"""
+    try:
+        if not worker.is_running:
+            return {
+                "status": "not_running",
+                "message": "Worker is not running"
+            }
+
+        await worker.stop()
+
+        return {
+            "status": "stopped",
+            "message": "pgai worker stopped successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to stop worker: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/worker/status")
+async def worker_status() -> Dict[str, Any]:
+    """Get pgai worker status"""
+    try:
+        status = await get_worker_status()
+        return status
+
+    except Exception as e:
+        logger.error(f"Failed to get worker status: {e}")
+        return {
+            "running": False,
+            "error": str(e)
         }

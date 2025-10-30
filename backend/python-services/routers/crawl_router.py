@@ -248,12 +248,14 @@ async def get_crawl_status(job_id: str) -> Dict[str, Any]:
 
     return response
 
-@router.post("/extract")
-async def extract_from_html(
-    html: str = Field(..., description="HTML content"),
-    extraction_prompt: str = Field(..., description="Extraction instructions"),
+class ExtractRequest(BaseModel):
+    """Request model for HTML extraction"""
+    html: str = Field(..., description="HTML content")
+    extraction_prompt: str = Field(..., description="Extraction instructions")
     model: str = Field("gpt-4", description="LLM model")
-) -> Dict[str, Any]:
+
+@router.post("/extract")
+async def extract_from_html(request: ExtractRequest) -> Dict[str, Any]:
     """
     Extract structured data from HTML using LLM
 

@@ -96,7 +96,7 @@ export function ProgressCircle({
           stroke="currentColor"
           strokeWidth={strokeWidth}
           fill="none"
-          className="text-muted/40"
+          className="text-slate-300 dark:text-white/20"
         />
         {/* Progress circle */}
         <circle
@@ -108,7 +108,7 @@ export function ProgressCircle({
           fill="none"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
-          className="text-primary transition-all duration-700 ease-in-out"
+          className="text-slate-600 dark:text-sky-300/70 transition-all duration-700 ease-in-out"
           strokeLinecap="round"
         />
       </svg>
@@ -119,7 +119,7 @@ export function ProgressCircle({
           className="font-bold tabular-nums transition-all duration-500 ease-out"
           style={{ fontSize: `${size * 0.222}px` }} // 40/180 ratio from original
         >
-          {progress}%
+          % {progress}
         </div>
         {statusText && (
           <div

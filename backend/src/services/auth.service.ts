@@ -18,17 +18,17 @@ export class AuthService {
   private saltRounds = 12;
 
   constructor() {
-    // Check if DATABASE_URL is defined
-    if (!process.env.DATABASE_URL) {
-      throw new Error("DATABASE_URL environment variable is not defined");
-    }
-
+    // Use explicit connection config to avoid SSL issues
     this.pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl:
-        process.env.NODE_ENV === "production"
-          ? { rejectUnauthorized: false }
-          : false,
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: parseInt(process.env.POSTGRES_PORT || '5432'),
+      database: process.env.POSTGRES_DB || 'lsemb',
+      user: process.env.POSTGRES_USER || 'postgres',
+      password: process.env.POSTGRES_PASSWORD || '',
+      ssl: false, // Disable SSL for local/development
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000, // 10 seconds for remote DB
     });
     this.jwtSecret =
       process.env.JWT_SECRET || "your-secret-key-change-in-production";

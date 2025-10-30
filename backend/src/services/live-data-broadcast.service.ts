@@ -231,6 +231,29 @@ export class LiveDataBroadcastService {
     this.wsService.getIO().emit('configuration:update', data);
   }
 
+  // Crawler data item added
+  broadcastCrawlerItemAdded(data: {
+    directoryName: string;
+    item: any;
+    totalItems: number;
+    timestamp: string;
+  }) {
+    this.wsService.getIO().emit('crawler:item:added', data);
+  }
+
+  // Crawler script status
+  broadcastCrawlerScriptStatus(data: {
+    directoryName: string;
+    jobId: string;
+    status: 'starting' | 'running' | 'completed' | 'failed';
+    url?: string;
+    itemsCount?: number;
+    error?: string;
+    timestamp: string;
+  }) {
+    this.wsService.getIO().emit('crawler:script:status', data);
+  }
+
   // Generic broadcast method
   broadcast(event: string, data: any, targetRoom?: string) {
     if (targetRoom) {

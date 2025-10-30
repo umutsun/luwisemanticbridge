@@ -72,6 +72,7 @@ interface Document {
   content: string;
   type: string;
   size: number;
+  file_path?: string; // Physical file path on server
   hasEmbeddings?: boolean; // from backend
   metadata: {
     source?: string;
@@ -802,22 +803,34 @@ export default function DocumentManagerPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'OCR failed');
+        const errorMessage = errorData.error || 'OCR failed';
+
+        // Provide user-friendly error messages
+        let userMessage = errorMessage;
+        if (errorMessage.includes('File not found on disk')) {
+          userMessage = 'Dosya sunucuda bulunamadı. Lütfen dosyayı tekrar yükleyin.';
+        } else if (errorMessage.includes('already processed with OCR')) {
+          userMessage = 'Bu belge zaten OCR ile işlenmiş.';
+        } else if (errorMessage.includes('Document not found')) {
+          userMessage = 'Belge bulunamadı.';
+        }
+
+        throw new Error(userMessage);
       }
 
       const result = await response.json();
 
       toast({
         title: 'Başarılı',
-        description: 'OCR processing completed successfully',
+        description: `OCR işlemi tamamlandı. Güven: ${result.data?.confidence || 'N/A'}%`,
       });
 
       fetchDocuments();
     } catch (error: any) {
       console.error('OCR error:', error);
       toast({
-        title: 'Hata',
-        description: error.message || 'OCR processing failed',
+        title: 'OCR Hatası',
+        description: error.message || 'OCR işlemi başarısız oldu',
         variant: 'destructive'
       });
     }
@@ -1491,18 +1504,35 @@ export default function DocumentManagerPage() {
                                       <Eye className="w-3 h-3" />
                                     </Button>
                                     {['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(doc.type.toLowerCase()) && !doc.metadata?.ocr_processed && (
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOCR(doc.id);
-                                        }}
-                                        className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors duration-150"
-                                        title="OCR"
-                                      >
-                                        <FileText className="w-3 h-3" />
-                                      </Button>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!doc.file_path) {
+                                                  toast({
+                                                    title: 'Dosya Bulunamadı',
+                                                    description: 'Bu belgenin sunucuda fiziksel dosyası bulunamadı. OCR işlemi yapılamaz.',
+                                                    variant: 'destructive'
+                                                  });
+                                                  return;
+                                                }
+                                                handleOCR(doc.id);
+                                              }}
+                                              disabled={!doc.file_path}
+                                              className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                              <FileText className="w-3 h-3" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            {doc.file_path ? 'OCR ile metin çıkar' : 'Dosya sunucuda bulunamadı'}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     )}
                                     {!doc.metadata?.embeddings && (
                                       <Button

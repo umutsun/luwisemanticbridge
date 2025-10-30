@@ -274,6 +274,53 @@ export class PythonIntegrationService {
     }
   }
 
+  public async getPgaiWorkerStatus(): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python service is not available');
+      }
+
+      const response = await this.axiosClient.get('/api/python/pgai/worker/status');
+      return response.data;
+
+    } catch (error) {
+      logger.error('Get pgai worker status error:', error);
+      throw error;
+    }
+  }
+
+  public async startPgaiWorker(): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python service is not available');
+      }
+
+      const response = await this.axiosClient.post('/api/python/pgai/worker/start');
+      logger.info('pgai worker started successfully');
+      return response.data;
+
+    } catch (error) {
+      logger.error('Start pgai worker error:', error);
+      throw error;
+    }
+  }
+
+  public async stopPgaiWorker(): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python service is not available');
+      }
+
+      const response = await this.axiosClient.post('/api/python/pgai/worker/stop');
+      logger.info('pgai worker stopped successfully');
+      return response.data;
+
+    } catch (error) {
+      logger.error('Stop pgai worker error:', error);
+      throw error;
+    }
+  }
+
   // ============= Fallback Support =============
 
   public async crawlWithFallback(

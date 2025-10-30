@@ -8,6 +8,61 @@ import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middle
 const router = Router();
 const ragAnythingRouter = Router();
 
+// Dashboard stats endpoint
+router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+
+    // Get comprehensive stats including token usage
+    const [convResult, msgResult, tokenResult, embResult, docResult] = await Promise.all([
+      lsembPool.query('SELECT COUNT(*) as count FROM conversations'),
+      lsembPool.query('SELECT COUNT(*) as count FROM messages'),
+      lsembPool.query(`
+        WITH token_summary AS (
+          -- Get tokens from unified_embeddings
+          SELECT
+            COALESCE(SUM(tokens_used), 0) as total_tokens,
+            0 as total_cost,
+            0 as unique_sessions
+          FROM unified_embeddings
+          WHERE tokens_used IS NOT NULL
+
+          UNION ALL
+
+          -- Get tokens and cost from documents
+          SELECT
+            COALESCE(SUM(tokens_used), 0) as total_tokens,
+            COALESCE(SUM(cost_usd), 0) as total_cost,
+            0 as unique_sessions
+          FROM documents
+          WHERE tokens_used IS NOT NULL
+        )
+        SELECT
+          SUM(total_tokens) as total_tokens,
+          SUM(total_cost) as total_cost,
+          0 as unique_sessions
+        FROM token_summary
+      `),
+      lsembPool.query('SELECT COUNT(*) as count FROM embeddings'),
+      lsembPool.query('SELECT COUNT(*) as count FROM documents')
+    ]);
+
+    res.json({
+      totalConversations: parseInt(convResult.rows[0].count),
+      totalMessages: parseInt(msgResult.rows[0].count),
+      totalTokensUsed: parseInt(tokenResult.rows[0].total_tokens || 0),
+      totalCost: parseFloat(tokenResult.rows[0].total_cost || 0),
+      uniqueSessions: parseInt(tokenResult.rows[0].unique_sessions || 0),
+      totalEmbeddings: parseInt(embResult.rows[0].count),
+      totalDocuments: parseInt(docResult.rows[0].count),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Dashboard stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
 // Dashboard main endpoint - requires authentication
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -43,6 +98,40 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
 
       dashboardData.stats.totalConversations = parseInt(convResult.rows[0].count);
       dashboardData.stats.totalMessages = parseInt(msgResult.rows[0].count);
+
+      // Get token usage stats from unified_embeddings and documents tables
+      try {
+        const tokenResult = await lsembPool.query(`
+          WITH token_summary AS (
+            -- Get tokens from unified_embeddings
+            SELECT
+              COALESCE(SUM(tokens_used), 0) as total_tokens,
+              0 as total_cost
+            FROM unified_embeddings
+            WHERE tokens_used IS NOT NULL
+
+            UNION ALL
+
+            -- Get tokens and cost from documents
+            SELECT
+              COALESCE(SUM(tokens_used), 0) as total_tokens,
+              COALESCE(SUM(cost_usd), 0) as total_cost
+            FROM documents
+            WHERE tokens_used IS NOT NULL
+          )
+          SELECT
+            SUM(total_tokens) as total_tokens,
+            SUM(total_cost) as total_cost
+          FROM token_summary
+        `);
+
+        dashboardData.stats.totalTokensUsed = parseInt(tokenResult.rows[0].total_tokens || 0);
+        dashboardData.stats.totalCost = parseFloat(tokenResult.rows[0].total_cost || 0);
+      } catch (tokenErr) {
+        console.log('Could not fetch token stats:', tokenErr);
+        dashboardData.stats.totalTokensUsed = 0;
+        dashboardData.stats.totalCost = 0;
+      }
     } catch (err) {
       console.log('Could not fetch stats:', err);
     }
@@ -1925,6 +2014,29 @@ router.get('/api/v2/chat/user-engagement', authenticateToken, requireAdmin, asyn
   } catch (error: any) {
     console.error('Error fetching user engagement metrics:', error);
     res.status(500).json({ error: 'Failed to fetch user engagement metrics' });
+  }
+});
+
+/**
+ * Get all available record types from unified_embeddings
+ */
+router.get('/api/v2/unified-embeddings/record-types', async (req: Request, res: Response) => {
+  try {
+    const { semanticSearch } = await import('../services/semantic-search.service');
+    const recordTypes = await semanticSearch.getUnifiedRecordTypes();
+
+    res.json({
+      success: true,
+      recordTypes,
+      count: recordTypes.length
+    });
+  } catch (error: any) {
+    console.error('Error fetching unified record types:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch unified record types',
+      recordTypes: []
+    });
   }
 });
 

@@ -41,6 +41,13 @@ anthropic==0.7.7
 langchain==0.0.345
 langchain-openai==0.0.5
 
+# Speech-to-Text - OpenAI Whisper (DISABLED: Heavy dependencies)
+# openai-whisper==20231117
+# torch==2.1.1
+# torchaudio==2.1.1
+# ffmpeg-python==0.2.0
+# openai>=1.0.0  # For Whisper API mode
+
 # API Documentation
 pydantic==2.5.2
 python-jose[cryptography]==3.3.0

@@ -10,6 +10,10 @@ import { createDataLoaders, DataLoaders } from '../dataloaders';
 import { lsembPool } from '../../config/database.config';
 import { initializeRedis } from '../../config/redis';
 
+// Import services
+import { SemanticSearchService } from '../../services/semantic-search.service';
+import { RAGChatService } from '../../services/rag-chat.service';
+
 /**
  * GraphQL Context tipi
  */
@@ -26,8 +30,10 @@ export interface GraphQLContext {
   // DataLoaders (N+1 prevention)
   dataloaders: DataLoaders;
 
-  // Services
-  services?: {
+  // Services - Optimized semantic search with HNSW index and batch LLM
+  services: {
+    search: SemanticSearchService;
+    ragChat: RAGChatService;
     embedding?: {
       checkHealth: () => Promise<boolean>;
     };
@@ -65,6 +71,10 @@ export async function createContext({
   // DataLoader'ları oluştur (her request için yeni instance)
   const dataloaders = createDataLoaders(lsembPool);
 
+  // Initialize services with optimized implementations
+  const semanticSearchService = new SemanticSearchService();
+  const ragChatService = new RAGChatService();
+
   // Base context
   const context: GraphQLContext = {
     req,
@@ -72,6 +82,10 @@ export async function createContext({
     pool: lsembPool,  // lsembPool kullan
     redis,
     dataloaders,
+    services: {
+      search: semanticSearchService,
+      ragChat: ragChatService,
+    },
     requestId,
     startTime: Date.now(),
   };
