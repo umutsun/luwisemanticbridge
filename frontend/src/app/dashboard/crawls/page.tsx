@@ -162,6 +162,8 @@ export default function CrawlerDataPage() {
   const [runningScripts, setRunningScripts] = useState<Set<string>>(new Set()); // running directory names
   const [scriptUrls, setScriptUrls] = useState<Map<string, string>>(new Map()); // directory -> URL
   const [crawlerStates, setCrawlerStates] = useState<Map<string, any>>(new Map()); // directory -> state.json
+  const [showAddCrawlerDialog, setShowAddCrawlerDialog] = useState(false);
+  const [newCrawlerName, setNewCrawlerName] = useState('');
 
   // Stats
   const [stats, setStats] = useState<Stats>({
@@ -916,6 +918,54 @@ export default function CrawlerDataPage() {
     }
   };
 
+  const handleAddCrawler = async () => {
+    if (!newCrawlerName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a crawler name',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newCrawlerName.trim() })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create crawler');
+      }
+
+      const result = await response.json();
+
+      // Add to directories list
+      setDirectories(prev => [...prev, result.directory]);
+
+      toast({
+        title: 'Success',
+        description: `Created crawler source "${result.directory.displayName}"`
+      });
+
+      // Reset and close
+      setNewCrawlerName('');
+      setShowAddCrawlerDialog(false);
+    } catch (error: any) {
+      console.error('❌ [Add Crawler] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create crawler',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handleDeleteItem = async (itemKey: string) => {
     if (!selectedDirectory) return;
 
@@ -1190,7 +1240,17 @@ export default function CrawlerDataPage() {
               <div className="lg:col-span-1">
                 <Card className="h-[calc(100vh-200px)]">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-lg">Crawler Sources</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">Crawler Sources</CardTitle>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setShowAddCrawlerDialog(true)}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="h-[calc(100%-60px)]">
                     <ScrollArea className="h-full pr-2">
@@ -2332,6 +2392,52 @@ export default function CrawlerDataPage() {
               className="relative z-10"
             >
               Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Crawler Dialog */}
+      <Dialog open={showAddCrawlerDialog} onOpenChange={setShowAddCrawlerDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Crawler Source</DialogTitle>
+            <DialogDescription>
+              Create a new crawler data source
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="crawler-name">Crawler Name</Label>
+              <Input
+                id="crawler-name"
+                placeholder="e.g., my_crawler"
+                value={newCrawlerName}
+                onChange={(e) => setNewCrawlerName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddCrawler();
+                  }
+                }}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                Use lowercase letters, numbers, and underscores only
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddCrawlerDialog(false);
+                setNewCrawlerName('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleAddCrawler}>
+              Create
             </Button>
           </div>
         </DialogContent>

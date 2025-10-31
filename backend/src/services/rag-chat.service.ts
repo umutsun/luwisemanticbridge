@@ -381,9 +381,9 @@ export class RAGChatService {
         return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
-      // Check if best result has low confidence (< 40% similarity)
+      // Check if best result has low confidence (< 30% similarity)
       const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
-      const hasLowConfidence = bestScore < 40;
+      const hasLowConfidence = bestScore < 30;
 
       // If no relevant context found or all results have low confidence
       if (!enhancedContext || enhancedContext.trim().length === 0 || searchResults.length === 0 || hasLowConfidence) {
@@ -391,7 +391,7 @@ export class RAGChatService {
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
 
-        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 40%)`);
+        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 30%)`);
 
         // Still show low-confidence results as reference (but with disclaimer)
         const processedSources = await this.formatSources(
@@ -1805,7 +1805,32 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
    */
   async getPopularQuestions(): Promise<string[]> {
     try {
-      // 1. Get most searched questions from recent messages
+      // 1. PRIORITY: Get generated questions from recent assistant messages
+      const generatedQuestionsQuery = `
+        SELECT DISTINCT jsonb_array_elements(sources::jsonb)->>'question' as question
+        FROM messages
+        WHERE role = 'assistant'
+          AND sources IS NOT NULL
+          AND sources::text != '[]'
+          AND created_at > NOW() - INTERVAL '30 days'
+          AND jsonb_array_elements(sources::jsonb)->>'question' IS NOT NULL
+        ORDER BY RANDOM()
+        LIMIT 20
+      `;
+
+      const generatedResult = await this.pool.query(generatedQuestionsQuery);
+      const generatedQuestions = generatedResult.rows
+        .map(r => r.question)
+        .filter((q: string) => q && q.length > 15 && q.length < 150);
+
+      console.log(`✨ Found ${generatedQuestions.length} generated questions from recent searches`);
+
+      // If we have enough generated questions, use them
+      if (generatedQuestions.length >= 4) {
+        return generatedQuestions.slice(0, 4);
+      }
+
+      // 2. Fallback: Get most searched questions from recent messages (randomized)
       const recentSearchesQuery = `
         SELECT content, COUNT(*) as count
         FROM messages
@@ -1814,7 +1839,8 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           AND LENGTH(content) > 10
           AND LENGTH(content) < 200
         GROUP BY content
-        ORDER BY count DESC
+        HAVING COUNT(*) >= 2
+        ORDER BY RANDOM()
         LIMIT 5
       `;
 
@@ -1861,11 +1887,12 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         unifiedQuestions.push(questionText);
       }
 
-      // 3. Combine all questions, prioritize recent searches
+      // 3. Combine all questions, prioritize generated questions
       const allQuestions = [
         ...new Set([
+          ...generatedQuestions, // Generated questions first (most relevant)
           ...recentQuestions.slice(0, 2), // Max 2 recent searches
-          ...unifiedQuestions.slice(0, 8) // Max 8 from database
+          ...unifiedQuestions.slice(0, 6) // Max 6 from database
         ])
       ];
 

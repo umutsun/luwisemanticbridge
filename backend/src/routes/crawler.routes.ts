@@ -58,6 +58,71 @@ crawl4aiRedis.on('error', (err: any) => {
 // ============================================================================
 
 /**
+ * POST /crawler-directories
+ * Create a new crawler directory
+ */
+router.post('/crawler-directories', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Crawler name is required'
+      });
+    }
+
+    // Validate name format (lowercase, numbers, underscores only)
+    if (!/^[a-z0-9_]+$/.test(name)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Crawler name must contain only lowercase letters, numbers, and underscores'
+      });
+    }
+
+    // Add _crawler suffix if not already present
+    const crawlerName = name.endsWith('_crawler') ? name : `${name}_crawler`;
+
+    // Check if already exists by checking for any keys with this crawler name
+    const existingKeys = await crawl4aiRedis.keys(`crawl4ai:${crawlerName}:*`);
+    if (existingKeys.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'Crawler with this name already exists'
+      });
+    }
+
+    // Create a placeholder key to register the crawler
+    const placeholderKey = `crawl4ai:${crawlerName}:_init`;
+    await crawl4aiRedis.set(placeholderKey, JSON.stringify({
+      created: new Date().toISOString(),
+      status: 'initialized'
+    }));
+
+    const directory = {
+      id: crawlerName,
+      name: crawlerName,
+      displayName: crawlerName.replace(/_crawler$/, '').replace(/_/g, ' ').toUpperCase(),
+      itemCount: 0,
+      lastCrawled: null,
+      type: 'crawler'
+    };
+
+    res.json({
+      success: true,
+      directory,
+      message: `Crawler "${crawlerName}" created successfully`
+    });
+  } catch (error: any) {
+    console.error('❌ Failed to create crawler:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to create crawler'
+    });
+  }
+});
+
+/**
  * GET /crawler-directories
  * List all crawler directories from Redis (e.g., yky_crawler, can_crawler)
  */

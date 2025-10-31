@@ -100,9 +100,9 @@ export default function ChatInterface() {
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Cache for suggestions (10 minutes)
+  // Cache for suggestions (2 minutes for more variety)
   const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
-  const SUGGESTIONS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+  const SUGGESTIONS_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
   // Fetch popular questions from backend with cache
   const fetchSuggestedQuestions = async () => {
@@ -116,11 +116,14 @@ export default function ChatInterface() {
     }
 
     try {
-      console.log('🔄 Fetching fresh suggestions...');
+      console.log('🔄 Fetching fresh suggestions from backend...');
+
+      // Fetch from backend (includes generated questions from database)
       const response = await fetch(getEndpoint('chat', 'suggestions'));
       if (response.ok) {
         const data = await response.json();
         const suggestions = data.suggestions || [];
+
         // Update cache
         suggestionsCache.current = {
           data: suggestions,
@@ -131,7 +134,14 @@ export default function ChatInterface() {
     } catch (error) {
       console.error('Failed to fetch suggestions:', error);
     }
-    return [];
+
+    // Fallback: Default questions
+    return [
+      'KDV iade işlemleri nasıl yapılır?',
+      'Gelir vergisi matrah tespit yöntemleri nelerdir?',
+      'E-beyanname sistemi nasıl kullanılır?',
+      'Stopaj tevkifatı hangi durumlarda yapılır?'
+    ];
   };
 
   // Start with empty messages - no welcome message
@@ -712,6 +722,7 @@ export default function ChatInterface() {
         // Finalize message - KEEP the accumulated content and ADD sources
         console.log('Setting sources on message:', finalData.sources?.length || 0, 'sources');
         console.log('Accumulated content length:', accumulatedContent.length);
+
         setMessages(prev => prev.map(msg =>
           msg.id === messageId
             ? {
