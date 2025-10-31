@@ -269,15 +269,26 @@ export class AuthService {
         createdAt: new Date().toISOString(),
       };
 
-      // Store session in Redis with 30 days expiration (in seconds)
-      await redis.setex(
-        `session:${userId}`,
-        30 * 24 * 60 * 60,
-        JSON.stringify(sessionData)
+      // Wrap Redis operations with timeout to prevent hanging
+      const redisTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Redis operation timeout')), 2000)
       );
 
+      // Store session in Redis with 30 days expiration (in seconds)
+      await Promise.race([
+        redis.setex(
+          `session:${userId}`,
+          30 * 24 * 60 * 60,
+          JSON.stringify(sessionData)
+        ),
+        redisTimeout
+      ]);
+
       // Store a mapping from token to userId for quick token validation
-      await redis.setex(`token:${accessToken}`, 30 * 24 * 60 * 60, userId);
+      await Promise.race([
+        redis.setex(`token:${accessToken}`, 30 * 24 * 60 * 60, userId),
+        redisTimeout
+      ]);
 
       console.log(`[AuthService] Session saved to Redis for user ${userId}`);
     } catch (error) {
@@ -293,7 +304,14 @@ export class AuthService {
       // First check Redis for faster validation
       try {
         // Redis is already imported as a singleton
-        const userId = await redis.get(`token:${token}`);
+        const redisTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Redis operation timeout')), 2000)
+        );
+
+        const userId = await Promise.race([
+          redis.get(`token:${token}`),
+          redisTimeout
+        ]) as string | null;
 
         if (userId && userId === decoded.userId.toString()) {
           // Token found in Redis, return decoded payload
@@ -320,11 +338,18 @@ export class AuthService {
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30);
 
-        await redis.setex(
-          `token:${token}`,
-          30 * 24 * 60 * 60,
-          decoded.userId.toString()
+        const redisTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Redis operation timeout')), 2000)
         );
+
+        await Promise.race([
+          redis.setex(
+            `token:${token}`,
+            30 * 24 * 60 * 60,
+            decoded.userId.toString()
+          ),
+          redisTimeout
+        ]);
         console.log(
           `[AuthService] Token refreshed in Redis for user ${decoded.userId}`
         );

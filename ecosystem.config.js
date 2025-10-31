@@ -10,14 +10,8 @@ module.exports = {
     // ==========================================
     {
       name: 'lsemb-backend',
-      script: './node_modules/.bin/ts-node',
-      args: '-r dotenv/config src/server.ts dotenv_config_path=../.env.lsemb',
+      script: 'dist/server.js',
       cwd: './backend',
-      instances: 1,
-      exec_mode: 'fork',
-      watch: false,
-      max_memory_restart: '1G',
-      interpreter: 'node',
 
       // Environment - .env.lsemb dosyasından okunacak
       env: {
