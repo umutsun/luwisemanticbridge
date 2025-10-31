@@ -626,6 +626,7 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
                 host: process.env.REDIS_HOST || 'localhost',
                 port: 6379,
                 db: 0, // Crawl4AI uses DB 0
+                password: process.env.REDIS_PASSWORD || undefined,
               });
               redisSubscribers.set(ws, redisSubscriber);
 
