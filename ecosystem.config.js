@@ -46,8 +46,12 @@ module.exports = {
     // ==========================================
     {
       name: 'lsemb-frontend',
-      script: 'npm',
-      args: 'start',
+      script: process.platform === 'win32'
+        ? 'node_modules/next/dist/bin/next'
+        : 'npm',
+      args: process.platform === 'win32'
+        ? 'start'
+        : 'start',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
