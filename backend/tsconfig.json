@@ -33,7 +33,8 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/routes/install.routes.ts"
   ],
   "ts-node": {
     "transpileOnly": true,
