@@ -1034,10 +1034,10 @@ export default function EmbeddingsManagerPage() {
                                           e.stopPropagation();
                                           fetchSkippedRecords(table.name);
                                         }}
-                                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                                        className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded p-0.5 transition-colors"
+                                        title="View skipped records"
                                       >
-                                        <Eye className="w-3 h-3" />
-                                        View
+                                        <Eye className="w-3.5 h-3.5" />
                                       </button>
                                     </>
                                   )}
@@ -1301,7 +1301,9 @@ export default function EmbeddingsManagerPage() {
                       </td>
                       <td className="p-3">
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800">
-                          {record.skip_reason?.replace(/_/g, ' ')}
+                          {record.skip_reason === 'empty_embedding'
+                            ? 'No content to embed'
+                            : record.skip_reason?.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td className="p-3 text-muted-foreground font-mono">
