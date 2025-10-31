@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
         host: dbSettings.redis_host || 'localhost',
         port: parseInt(dbSettings.redis_port) || 6379,
         password: dbSettings.redis_password || '',
-        db: parseInt(dbSettings.redis_db) || 0
+        db: parseInt(dbSettings.redis_db) || 2
       },
       openai: {
         apiKey: dbSettings.openai_api_key || '',

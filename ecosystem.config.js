@@ -50,8 +50,8 @@ module.exports = {
         ? 'node_modules/next/dist/bin/next'
         : 'npm',
       args: process.platform === 'win32'
-        ? 'start'
-        : 'start',
+        ? 'dev'
+        : 'run dev',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',
