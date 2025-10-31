@@ -1754,6 +1754,24 @@ function RAGSettings() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
+  // Optimal default values for RAG settings
+  const DEFAULT_RAG_SETTINGS = {
+    similarityThreshold: 0.25,      // 25% - Good balance between precision and recall
+    minResults: 5,                   // Show 5 sources initially
+    maxResults: 15,                  // Fetch up to 15 total sources
+    parallelLLMCount: 4,            // Process 4 chunks in parallel
+    parallelLLMBatchSize: 100,      // Batch size for embeddings
+    chunkOverlap: 200,              // 200 chars overlap between chunks
+    chunkSize: 1000,                // 1000 chars per chunk
+    enableHybridSearch: false,      // Semantic search only by default
+    enableKeywordBoost: false,      // No keyword boost by default
+    enableUnifiedEmbeddings: true,  // Include database content
+    enableMessageEmbeddings: false, // Don't include chat history
+    enableDocumentEmbeddings: false,// Don't include uploaded docs
+    enableScrapeEmbeddings: false,  // Don't include scraped content
+    unifiedEmbeddingsPriority: 8    // High priority for database content
+  };
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -1770,8 +1788,18 @@ function RAGSettings() {
         batchSize: ragData?.ragSettings?.batchSize,
         chunkOverlap: ragData?.ragSettings?.chunkOverlap
       });
-      setRagConfig(ragData);
-      setTempRAGConfig(ragData);
+
+      // Apply defaults to missing values
+      const ragWithDefaults = {
+        ...ragData,
+        ragSettings: {
+          ...DEFAULT_RAG_SETTINGS,
+          ...ragData?.ragSettings
+        }
+      };
+
+      setRagConfig(ragWithDefaults);
+      setTempRAGConfig(ragWithDefaults);
 
       console.log('📥 [RAG SETTINGS LOAD] Chatbot response from API:', {
         title: chatbotResponse.title,
@@ -1909,6 +1937,17 @@ function RAGSettings() {
     setTempChatbotConfig(newConfig);
   };
 
+  const resetToDefaults = () => {
+    setTempRAGConfig({
+      ...tempRAGConfig,
+      ragSettings: DEFAULT_RAG_SETTINGS
+    });
+    toast({
+      title: "Defaults Applied",
+      description: "RAG settings reset to optimal defaults. Click Save to apply changes.",
+    });
+  };
+
   if (loading) {
     return <Spinner size="lg" />;
   }
@@ -1918,18 +1957,33 @@ function RAGSettings() {
       <div className="grid grid-cols-2 gap-6">
         {/* RAG Configuration - Left Column */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>RAG Configuration</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetToDefaults}
+              className="ml-auto"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Reset to Defaults
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+              <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                <strong>Optimal defaults:</strong> 25% similarity threshold, 5-15 results, semantic search only, database content enabled.
+                These settings provide the best balance between accuracy and coverage for most use cases.
+              </AlertDescription>
+            </Alert>
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Search Parameters</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>Similarity Threshold: {tempRAGConfig?.ragSettings?.similarityThreshold ?? ragConfig?.ragSettings?.similarityThreshold ?? 0.02}</Label>
+                  <Label>Similarity Threshold: {(tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold).toFixed(2)} (Default: 0.25)</Label>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score for search results (0-1). Lower = more results, but less relevant.</p>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.similarityThreshold ?? ragConfig?.ragSettings?.similarityThreshold ?? 0.02]}
+                    value={[tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold]}
                     max={1}
                     min={0}
                     step={0.01}
@@ -1939,10 +1993,10 @@ function RAGSettings() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults ?? ragConfig?.ragSettings?.minResults ?? 5}</Label>
+                    <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults} (Default: 5)</Label>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Initial number of sources to display</p>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.minResults ?? ragConfig?.ragSettings?.minResults ?? 5]}
+                      value={[tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults]}
                       max={20}
                       min={1}
                       step={1}
@@ -1951,10 +2005,10 @@ function RAGSettings() {
                     />
                   </div>
                   <div>
-                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults ?? ragConfig?.ragSettings?.maxResults ?? 20}</Label>
+                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults} (Default: 15)</Label>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sources to fetch from database (shows 7 initially, rest available via "Load More")</p>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.maxResults ?? ragConfig?.ragSettings?.maxResults ?? 20]}
+                      value={[tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults]}
                       max={50}
                       min={7}
                       step={1}
