@@ -65,13 +65,19 @@ python3 setup_lsemb_instance.py --project emlakai
 python3 setup_lsemb_instance.py --project bookie
 ```
 
+**For IMSDB/Scriptus project**:
+```bash
+python3 setup_lsemb_instance.py --project scriptus
+```
+
 ## Default Configuration
 
-| Project  | Frontend | Backend | Python | Redis DB | Domain              |
-|----------|----------|---------|--------|----------|---------------------|
-| lsemb    | 3002     | 8083    | 8001   | 2        | lsemb.luwi.dev      |
-| emlakai  | 3003     | 8084    | 8002   | 3        | emlakai.luwi.dev    |
-| bookie   | 3004     | 8085    | 8003   | 4        | bookie.luwi.dev     |
+| Project  | Code Name | Frontend | Backend | Python | Redis DB | Domain              |
+|----------|-----------|----------|---------|--------|----------|---------------------|
+| lsemb    | lsemb     | 3002     | 8083    | 8001   | 2        | lsemb.luwi.dev      |
+| emlakai  | emlakai   | 3003     | 8084    | 8002   | 3        | emlakai.luwi.dev    |
+| bookie   | bookie    | 3004     | 8085    | 8003   | 4        | bookie.luwi.dev     |
+| imsdb    | scriptus  | 3005     | 8086    | 8004   | 5        | scriptus.luwi.dev   |
 
 ## What Gets Created
 

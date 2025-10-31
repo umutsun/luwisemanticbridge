@@ -100,8 +100,8 @@ class LSEMBSetup:
         config['domain'] = input(f"Domain name [{self.project_name}.luwi.dev]: ").strip() or f"{self.project_name}.luwi.dev"
 
         # Ports
-        port_bases = {'lsemb': (3002, 8083, 8001), 'emlakai': (3003, 8084, 8002), 'bookie': (3004, 8085, 8003)}
-        default_ports = port_bases.get(self.project_name, (3005, 8086, 8004))
+        port_bases = {'lsemb': (3002, 8083, 8001), 'emlakai': (3003, 8084, 8002), 'bookie': (3004, 8085, 8003), 'scriptus': (3005, 8086, 8004)}
+        default_ports = port_bases.get(self.project_name, (3006, 8087, 8005))
 
         config['frontend_port'] = input(f"Frontend port [{default_ports[0]}]: ").strip() or str(default_ports[0])
         config['backend_port'] = input(f"Backend port [{default_ports[1]}]: ").strip() or str(default_ports[1])
@@ -132,10 +132,11 @@ class LSEMBSetup:
         port_bases = {
             'lsemb': (3002, 8083, 8001, 2),
             'emlakai': (3003, 8084, 8002, 3),
-            'bookie': (3004, 8085, 8003, 4)
+            'bookie': (3004, 8085, 8003, 4),
+            'scriptus': (3005, 8086, 8004, 5)
         }
 
-        defaults = port_bases.get(self.project_name, (3005, 8086, 8004, 5))
+        defaults = port_bases.get(self.project_name, (3006, 8087, 8005, 6))
 
         return {
             'domain': f"{self.project_name}.luwi.dev",
@@ -158,8 +159,8 @@ class LSEMBSetup:
 
     def get_redis_db_number(self) -> int:
         """Get Redis DB number based on project"""
-        db_map = {'lsemb': 2, 'emlakai': 3, 'bookie': 4}
-        return db_map.get(self.project_name, 5)
+        db_map = {'lsemb': 2, 'emlakai': 3, 'bookie': 4, 'scriptus': 5}
+        return db_map.get(self.project_name, 6)
 
     def setup_repository(self):
         """Clone or update Git repository"""
@@ -702,8 +703,8 @@ PORT={self.config['python_port']}
 
 def main():
     parser = argparse.ArgumentParser(description='LSEMB Multi-Tenant Setup')
-    parser.add_argument('--project', required=True, choices=['lsemb', 'emlakai', 'bookie'],
-                       help='Project name to setup')
+    parser.add_argument('--project', required=True, choices=['lsemb', 'emlakai', 'bookie', 'scriptus'],
+                       help='Project name to setup (scriptus = IMSDB)')
     parser.add_argument('--interactive', action='store_true',
                        help='Run interactive configuration wizard')
 
