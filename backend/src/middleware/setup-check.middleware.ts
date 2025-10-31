@@ -29,11 +29,10 @@ export function checkSetupRequired(req: Request, res: Response, next: NextFuncti
   if (!needsSetup && fs.existsSync(envFile)) {
     const envContent = fs.readFileSync(envFile, 'utf8');
     const requiredVars = ['POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD'];
-    const allConfigured = requiredVars.every(var =>
-      envContent.includes(`${var}=`) &&
-      !envContent.includes(`${var}=your_`) &&
-      !envContent.includes(`${var}=`) === false || envContent.includes(`${var}=""`) === false
-    );
+    const allConfigured = requiredVars.every(v => {
+      const regex = new RegExp(`^${v}=.+$`, 'm');
+      return regex.test(envContent) && !envContent.includes(`${v}=your_`);
+    });
 
     needsSetup = !allConfigured;
   } else if (!fs.existsSync(envFile)) {

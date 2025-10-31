@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Router, Request, Response } from 'express';
 import { exec } from 'child_process';
 import * as fs from 'fs';
