@@ -67,10 +67,13 @@ class LSEMBSetup:
             # Step 7: Install dependencies
             self.install_dependencies()
 
-            # Step 8: Build frontend
+            # Step 8: Compile backend
+            self.build_backend()
+
+            # Step 9: Build frontend
             self.build_frontend()
 
-            # Step 9: Launch services
+            # Step 10: Launch services
             self.launch_services()
 
             print("\n✅ Setup completed successfully!")
@@ -656,6 +659,34 @@ PORT={self.config['python_port']}
             print("✓ Frontend built successfully")
         else:
             print(f"⚠ Frontend build had warnings (continuing anyway)")
+
+    def build_backend(self):
+        """Compile TypeScript backend"""
+        print("\n🔧 Compiling Backend")
+        print("-" * 60)
+
+        # Try npm run build first
+        result = subprocess.run(
+            ["npm", "run", "build"],
+            cwd=self.base_path / "backend",
+            capture_output=True,
+            text=True
+        )
+
+        # If npm build doesn't work, try tsc directly
+        if result.returncode != 0 or not (self.base_path / "backend" / "dist").exists():
+            print("  npm build failed, trying tsc...")
+            result = subprocess.run(
+                ["npx", "tsc"],
+                cwd=self.base_path / "backend",
+                capture_output=True,
+                text=True
+            )
+
+        if (self.base_path / "backend" / "dist" / "server.js").exists():
+            print("✓ Backend compiled successfully")
+        else:
+            print(f"⚠ Backend compilation had issues")
 
     def launch_services(self):
         """Launch services with PM2"""
