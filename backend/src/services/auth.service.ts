@@ -9,7 +9,8 @@ import {
   UserSession,
   JwtPayload,
 } from "../types/user.types";
-import { redis } from "../config/redis";
+// Temporarily disabled to prevent hanging on authentication
+// import { redis } from "../config/redis";
 
 export class AuthService {
   private pool: Pool;
@@ -258,9 +259,10 @@ export class AuthService {
       [userId, accessToken, refreshToken, expiresAt]
     );
 
-    // Also save to Redis for faster access and extended session management
+    // Redis temporarily disabled to prevent authentication hanging
+    // TODO: Re-enable Redis once authentication issues are resolved
+    /*
     try {
-      // Redis is already imported as a singleton
       const sessionData = {
         userId,
         accessToken,
@@ -269,12 +271,10 @@ export class AuthService {
         createdAt: new Date().toISOString(),
       };
 
-      // Wrap Redis operations with timeout to prevent hanging
       const redisTimeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Redis operation timeout')), 2000)
       );
 
-      // Store session in Redis with 30 days expiration (in seconds)
       await Promise.race([
         redis.setex(
           `session:${userId}`,
@@ -284,7 +284,6 @@ export class AuthService {
         redisTimeout
       ]);
 
-      // Store a mapping from token to userId for quick token validation
       await Promise.race([
         redis.setex(`token:${accessToken}`, 30 * 24 * 60 * 60, userId),
         redisTimeout
@@ -293,17 +292,18 @@ export class AuthService {
       console.log(`[AuthService] Session saved to Redis for user ${userId}`);
     } catch (error) {
       console.error("[AuthService] Failed to save session to Redis:", error);
-      // Continue without Redis - not critical for authentication
     }
+    */
   }
 
   async verifyToken(token: string): Promise<JwtPayload> {
     try {
       const decoded = jwt.verify(token, this.jwtSecret) as JwtPayload;
 
-      // First check Redis for faster validation
+      // Redis temporarily disabled - use PostgreSQL only
+      // TODO: Re-enable Redis once authentication issues are resolved
+      /*
       try {
-        // Redis is already imported as a singleton
         const redisTimeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Redis operation timeout')), 2000)
         );
@@ -314,15 +314,14 @@ export class AuthService {
         ]) as string | null;
 
         if (userId && userId === decoded.userId.toString()) {
-          // Token found in Redis, return decoded payload
           return decoded;
         }
       } catch (redisError) {
         console.error("[AuthService] Redis verification failed:", redisError);
-        // Continue with PostgreSQL check if Redis fails
       }
+      */
 
-      // Fallback to PostgreSQL check
+      // Use PostgreSQL for session validation
       const sessionResult = await this.pool.query(
         "SELECT id FROM user_sessions WHERE token = $1 AND expires_at > NOW()",
         [token]
@@ -332,9 +331,9 @@ export class AuthService {
         throw new Error("Session not found or expired");
       }
 
-      // If found in PostgreSQL, update Redis for future requests
+      // Redis update disabled
+      /*
       try {
-        // Redis is already imported as a singleton
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30);
 
@@ -356,6 +355,7 @@ export class AuthService {
       } catch (redisError) {
         console.error("[AuthService] Failed to update Redis:", redisError);
       }
+      */
 
       return decoded;
     } catch (error) {
