@@ -843,7 +843,7 @@ export default function ChatInterface() {
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
         {/* Header */}
         <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="max-w-6xl mx-auto w-[95%] md:w-full px-2 md:px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 {settingsLoaded && chatbotSettings.logoUrl ? (
@@ -995,7 +995,7 @@ export default function ChatInterface() {
         </header>
 
         {/* Main Chat Area */}
-        <div className="pt-20 pb-32 max-w-4xl mx-auto px-5">
+        <div className="pt-20 pb-32 max-w-4xl mx-auto w-[95%] md:w-full px-2 md:px-5">
           <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
             <div className="space-y-4 py-4 pr-2">
               {/* Suggestions skeleton loader */}
@@ -1316,7 +1316,7 @@ export default function ChatInterface() {
 
         {/* Input Area */}
         <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md border-t">
-          <div className="max-w-4xl mx-auto p-4">
+          <div className="max-w-4xl mx-auto w-[95%] md:w-full px-2 md:px-4 py-3 md:py-4">
             <div className="flex gap-2">
               <Textarea
                 ref={textareaRef}
