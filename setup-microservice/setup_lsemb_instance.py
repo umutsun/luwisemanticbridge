@@ -76,6 +76,12 @@ class LSEMBSetup:
             # Step 10: Launch services
             self.launch_services()
 
+            # Step 11: Configure nginx
+            self.configure_nginx()
+
+            # Step 12: Setup SSL certificate
+            self.setup_ssl()
+
             print("\n✅ Setup completed successfully!")
             self.print_summary()
 
@@ -709,6 +715,143 @@ PORT={self.config['python_port']}
             print("✓ PM2 configuration saved")
         else:
             print(f"⚠ PM2 launch warning: {result.stderr}")
+
+    def configure_nginx(self):
+        """Configure nginx reverse proxy"""
+        print("\n🌐 Nginx Configuration")
+        print("-" * 60)
+
+        nginx_config = f"""# {self.project_name.upper()} - LSEMB Instance
+server {{
+    listen 80;
+    server_name {self.config['domain']};
+
+    # Frontend
+    location / {{
+        proxy_pass http://localhost:{self.config['frontend_port']};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }}
+
+    # Backend API
+    location /api {{
+        proxy_pass http://localhost:{self.config['backend_port']};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }}
+
+    # WebSocket
+    location /socket.io {{
+        proxy_pass http://localhost:{self.config['backend_port']};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+
+    # Python Microservice
+    location /python-api {{
+        proxy_pass http://localhost:{self.config['python_port']};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+}}
+"""
+
+        # Write nginx config
+        config_path = Path(f"/etc/nginx/conf.d/{self.project_name}.conf")
+        try:
+            config_path.write_text(nginx_config)
+            print(f"✓ Created {config_path}")
+
+            # Test nginx configuration
+            result = subprocess.run(
+                ["nginx", "-t"],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                print("✓ Nginx configuration valid")
+
+                # Reload nginx
+                subprocess.run(["systemctl", "reload", "nginx"], capture_output=True)
+                print("✓ Nginx reloaded")
+            else:
+                print(f"⚠ Nginx test failed: {result.stderr}")
+
+        except PermissionError:
+            print(f"⚠ Permission denied. Run with sudo or manually create:")
+            print(f"   sudo nano /etc/nginx/conf.d/{self.project_name}.conf")
+        except Exception as e:
+            print(f"⚠ Nginx configuration error: {str(e)}")
+
+    def setup_ssl(self):
+        """Setup SSL certificate with certbot"""
+        print("\n🔒 SSL Certificate Setup")
+        print("-" * 60)
+
+        try:
+            # Check if certbot is installed
+            result = subprocess.run(
+                ["which", "certbot"],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode != 0:
+                print("⚠ Certbot not installed. Install with:")
+                print("   sudo yum install certbot python3-certbot-nginx")
+                return
+
+            # Run certbot
+            print(f"  Requesting SSL certificate for {self.config['domain']}...")
+            result = subprocess.run(
+                [
+                    "certbot", "--nginx",
+                    "-d", self.config['domain'],
+                    "--non-interactive",
+                    "--agree-tos",
+                    "--redirect",
+                    "-m", self.config['admin_email']
+                ],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                print(f"✓ SSL certificate installed for {self.config['domain']}")
+                print("✓ HTTPS enabled with auto-redirect")
+            else:
+                print("⚠ SSL setup failed. Run manually:")
+                print(f"   sudo certbot --nginx -d {self.config['domain']}")
+
+        except Exception as e:
+            print(f"⚠ SSL setup error: {str(e)}")
+            print("  You can setup SSL manually later with:")
+            print(f"  sudo certbot --nginx -d {self.config['domain']}")
 
     def print_summary(self):
         """Print setup summary"""
