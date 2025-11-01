@@ -1805,32 +1805,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
    */
   async getPopularQuestions(): Promise<string[]> {
     try {
-      // 1. PRIORITY: Get generated questions from recent assistant messages
-      const generatedQuestionsQuery = `
-        SELECT DISTINCT jsonb_array_elements(sources::jsonb)->>'question' as question
-        FROM messages
-        WHERE role = 'assistant'
-          AND sources IS NOT NULL
-          AND sources::text != '[]'
-          AND created_at > NOW() - INTERVAL '30 days'
-          AND jsonb_array_elements(sources::jsonb)->>'question' IS NOT NULL
-        ORDER BY RANDOM()
-        LIMIT 20
-      `;
+      // NOTE: Generated questions query (jsonb_array_elements) is too slow on large datasets
+      // Using direct unified_embeddings query for better performance
 
-      const generatedResult = await this.pool.query(generatedQuestionsQuery);
-      const generatedQuestions = generatedResult.rows
-        .map(r => r.question)
-        .filter((q: string) => q && q.length > 15 && q.length < 150);
-
-      console.log(`✨ Found ${generatedQuestions.length} generated questions from recent searches`);
-
-      // If we have enough generated questions, use them
-      if (generatedQuestions.length >= 4) {
-        return generatedQuestions.slice(0, 4);
-      }
-
-      // 2. Fallback: Get most searched questions from recent messages (randomized)
+      // 1. Fallback: Get most searched questions from recent messages (randomized)
       const recentSearchesQuery = `
         SELECT content, COUNT(*) as count
         FROM messages
@@ -1847,6 +1825,8 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       const recentResult = await this.pool.query(recentSearchesQuery);
       const recentQuestions = recentResult.rows.map(r => r.content);
 
+      console.log(`✨ Found ${recentQuestions.length} recent questions from user searches`);
+
       // 2. Get interesting titles from unified_embeddings (actual soru-cevap, makaleler, etc.)
       const unifiedQuestionsQuery = `
         SELECT DISTINCT
@@ -1859,7 +1839,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           AND LENGTH(COALESCE(metadata->>'title', content)) > 20
           AND LENGTH(COALESCE(metadata->>'title', content)) < 200
         ORDER BY RANDOM()
-        LIMIT 10
+        LIMIT 15
       `;
 
       const unifiedResult = await this.pool.query(unifiedQuestionsQuery);
@@ -1887,12 +1867,13 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         unifiedQuestions.push(questionText);
       }
 
-      // 3. Combine all questions, prioritize generated questions
+      console.log(`✨ Found ${unifiedQuestions.length} questions from database content`);
+
+      // 3. Combine all questions, prioritize recent searches
       const allQuestions = [
         ...new Set([
-          ...generatedQuestions, // Generated questions first (most relevant)
-          ...recentQuestions.slice(0, 2), // Max 2 recent searches
-          ...unifiedQuestions.slice(0, 6) // Max 6 from database
+          ...recentQuestions.slice(0, 2), // Max 2 recent searches (most relevant)
+          ...unifiedQuestions.slice(0, 10) // Max 10 from database
         ])
       ];
 
