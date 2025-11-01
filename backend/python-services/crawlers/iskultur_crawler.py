@@ -17,6 +17,7 @@ REDIS_PORT = 6379
 REDIS_DB = 0
 BACKEND_URL = 'http://localhost:3001'
 default_start_url = "https://www.iskultur.com.tr/kitap/cocuk-okul-oncesi/"
+HEADLESS = False  # Set to False for debugging with visible browser
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
@@ -246,7 +247,18 @@ async def main():
         failed_urls = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        # Launch browser with production-ready settings
+        browser = await p.chromium.launch(
+            headless=HEADLESS,
+            args=[
+                '--no-sandbox',  # Required for running as root
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',  # Overcome limited resource problems
+                '--disable-gpu',  # Not needed in headless mode
+                '--disable-software-rasterizer',
+                '--disable-extensions'
+            ]
+        )
         page = await browser.new_page()
 
         try:

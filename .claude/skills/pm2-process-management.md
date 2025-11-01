@@ -302,14 +302,66 @@ Services are now running and managed by PM2. You can monitor them with:
 - pm2 monit: Real-time monitoring dashboard
 ```
 
+## Python-Specific Commands
+
+### Python Service Management
+```bash
+# Start Python microservices
+pm2 start ecosystem.config.js --only lsemb-python
+
+# Restart Python service
+pm2 restart lsemb-python
+
+# View Python logs
+pm2 logs lsemb-python --lines 100
+
+# Check Python service status
+pm2 list | grep python
+```
+
+### Python Service Troubleshooting
+```bash
+# 1. Check if venv exists
+dir backend\python-services\venv\Scripts\python.exe
+
+# 2. Check logs for Python errors
+pm2 logs lsemb-python --err --lines 50
+
+# 3. Test Python service manually (ONLY for debugging, not production!)
+cd backend/python-services
+.\venv\Scripts\activate
+python main.py  # Quick test, then Ctrl+C
+deactivate
+
+# 4. Restart with PM2 (production)
+pm2 restart lsemb-python
+```
+
+### Python + Node.js Integration Check
+```bash
+# Start backend first (Node.js)
+pm2 start ecosystem.config.js --only lsemb-backend
+
+# Then Python services
+pm2 start ecosystem.config.js --only lsemb-python
+
+# Check both are running
+pm2 list
+
+# Test connection from Node to Python
+curl http://localhost:8001/health  # Python health
+curl http://localhost:8083/health  # Node health
+```
+
 ## Integration with Other Skills
 
-- **backend-service**: After creating service, update ecosystem.config.js
-- **quick-debug**: Use `pm2 logs` for debugging
-- **database-operations**: Check `pm2 logs lsemb-backend` for DB errors
+- **backend-service**: After creating Node.js service, update ecosystem.config.js
+- **python-microservice**: After creating Python service, add to ecosystem.config.js
+- **quick-debug**: Use `pm2 logs` for debugging both Node and Python
+- **database-operations**: Check `pm2 logs lsemb-backend` or `pm2 logs lsemb-python` for DB errors
 
 ---
 
 **Token Savings**: ~60%
-**Use Case**: All service management operations
+**Use Case**: All service management operations (Node.js + Python)
 **Priority**: CRITICAL - Always use PM2, never direct starts

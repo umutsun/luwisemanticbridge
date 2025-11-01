@@ -170,11 +170,28 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
       type: 'crawler'
     }));
 
+    // Get running crawlers
+    const runningKeys = await crawl4aiRedis.keys('crawler_running:*');
+    const runningCrawlers = await Promise.all(
+      runningKeys.map(async (key) => {
+        const data = await crawl4aiRedis.get(key);
+        if (data) {
+          const parsed = JSON.parse(data);
+          return {
+            crawlerName: key.replace('crawler_running:', ''),
+            ...parsed
+          };
+        }
+        return null;
+      })
+    ).then(results => results.filter(Boolean));
+
     res.json({
       success: true,
       directories,
       totalDirectories: directories.length,
-      totalItems: keys.length
+      totalItems: keys.length,
+      runningCrawlers
     });
   } catch (error: any) {
     console.error('Failed to fetch crawler directories:', error);
@@ -1054,6 +1071,18 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     const jobId = `script_run_${crawlerName}_${Date.now()}`;
     console.log(`📊 Job ID: ${jobId}`);
 
+    // Mark crawler as running in Redis
+    await crawl4aiRedis.set(
+      `crawler_running:${crawlerName}`,
+      JSON.stringify({
+        jobId,
+        startedAt: new Date().toISOString(),
+        url,
+        status: 'running'
+      })
+    );
+    console.log(`✅ Marked ${crawlerName} as running in Redis`);
+
     // Start Python process with URL as argument
     const pythonProcess = spawn(pythonPath, [scriptPath, url]);
 
@@ -1115,8 +1144,12 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     });
 
     // Handle process completion
-    pythonProcess.on('close', (code: number) => {
+    pythonProcess.on('close', async (code: number) => {
       console.log(`✅ Script finished with code: ${code}`);
+
+      // Remove from running crawlers
+      await crawl4aiRedis.del(`crawler_running:${crawlerName}`);
+      console.log(`✅ Removed ${crawlerName} from running crawlers`);
 
       // Publish completion status
       crawl4aiRedis.publish(
@@ -1212,6 +1245,10 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
       });
     }
 
+    // Remove from running crawlers
+    await crawl4aiRedis.del(`crawler_running:${crawlerName}`);
+    console.log(`✅ Removed ${crawlerName} from running crawlers`);
+
     // Publish stop event
     if (jobId) {
       crawl4aiRedis.publish(
@@ -1284,15 +1321,33 @@ router.post('/crawler-directories/:crawlerName/notify-item-added', async (req: R
     const { crawlerName } = req.params;
     const { itemKey, totalCount } = req.body;
 
-    // Fetch the item from Redis
-    const redisKey = `crawl4ai:${crawlerName}:${itemKey}`;
-    const itemData = await crawl4aiRedis.get(redisKey);
+    console.log(`📡 [Notify Item Added] Crawler: ${crawlerName}, Key: ${itemKey}, Total: ${totalCount}`);
+
+    // Fetch the item from Redis - try multiple key patterns
+    let redisKey = `crawl4ai:${crawlerName}:kitaplar:${itemKey}`;
+    let itemData = await crawl4aiRedis.get(redisKey);
+
+    // Fallback: try without 'kitaplar' subdirectory
+    if (!itemData) {
+      redisKey = `crawl4ai:${crawlerName}:${itemKey}`;
+      itemData = await crawl4aiRedis.get(redisKey);
+    }
 
     if (!itemData) {
+      console.warn(`⚠️ Item not found in Redis: ${redisKey}`);
       return res.status(404).json({ success: false, error: 'Item not found in Redis' });
     }
 
     const item = JSON.parse(itemData);
+    console.log(`✅ Found item in Redis: ${item.product_name || item.title || 'Untitled'}`);
+
+    // Transform to CrawledItem format expected by frontend
+    const crawledItem = {
+      key: redisKey,
+      title: item.product_name || item.title || 'Untitled',
+      data: item,
+      timestamp: new Date().toISOString()
+    };
 
     // Broadcast via WebSocket
     const { LiveDataBroadcastService } = require('../services/live-data-broadcast.service');
@@ -1300,12 +1355,14 @@ router.post('/crawler-directories/:crawlerName/notify-item-added', async (req: R
     const wsService = WebSocketConnectionService.getInstance();
     const broadcastService = LiveDataBroadcastService.getInstance(wsService);
 
+    console.log(`📡 Broadcasting to WebSocket clients...`);
     broadcastService.broadcastCrawlerItemAdded({
       directoryName: crawlerName,
-      item,
+      item: crawledItem,
       totalItems: totalCount || 0,
       timestamp: new Date().toISOString()
     });
+    console.log(`✅ WebSocket broadcast sent`);
 
     res.json({ success: true, message: 'Item broadcast sent' });
   } catch (error: any) {

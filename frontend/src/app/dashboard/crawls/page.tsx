@@ -384,6 +384,13 @@ export default function CrawlerDataPage() {
         totalDirectories: data.totalDirectories || 0,
         totalItems: data.totalItems || 0
       }));
+
+      // Fetch running crawlers status
+      if (data.runningCrawlers && Array.isArray(data.runningCrawlers)) {
+        const running = new Set(data.runningCrawlers.map((rc: { crawlerName: string }) => rc.crawlerName));
+        setRunningScripts(running);
+        console.log(`[Init] Found ${running.size} running crawlers:`, Array.from(running));
+      }
     } catch (error: any) {
       console.error('Failed to fetch directories:', error);
       toast({
