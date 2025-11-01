@@ -79,12 +79,12 @@ class LSEMBSetup:
         banner = f"""
 {Colors.CYAN}╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                      ║
-║   {Colors.BOLD}{Colors.MAGENTA}██╗     ███████╗███████╗███╗   ███╗██████╗{Colors.RESET}{Colors.CYAN}                         ║
-║   {Colors.BOLD}{Colors.MAGENTA}██║     ██╔════╝██╔════╝████╗ ████║██╔══██╗{Colors.RESET}{Colors.CYAN}                        ║
-║   {Colors.BOLD}{Colors.MAGENTA}██║     ███████╗█████╗  ██╔████╔██║██████╔╝{Colors.RESET}{Colors.CYAN}                        ║
-║   {Colors.BOLD}{Colors.MAGENTA}██║     ╚════██║██╔══╝  ██║╚██╔╝██║██╔══██╗{Colors.RESET}{Colors.CYAN}                        ║
-║   {Colors.BOLD}{Colors.MAGENTA}███████╗███████║███████╗██║ ╚═╝ ██║██████╔╝{Colors.RESET}{Colors.CYAN}                        ║
-║   {Colors.BOLD}{Colors.MAGENTA}╚══════╝╚══════╝╚══════╝╚═╝     ╚═╝╚═════╝{Colors.RESET}{Colors.CYAN}                         ║
+║                        {Colors.BOLD}{Colors.MAGENTA}┌─────────────────────┐{Colors.RESET}{Colors.CYAN}                       ║
+║                        {Colors.BOLD}{Colors.MAGENTA}│                     │{Colors.RESET}{Colors.CYAN}                       ║
+║                        {Colors.BOLD}{Colors.MAGENTA}│  {Colors.WHITE}Luwi Context{Colors.MAGENTA}    │{Colors.RESET}{Colors.CYAN}                       ║
+║                        {Colors.BOLD}{Colors.MAGENTA}│  {Colors.WHITE}Engine{Colors.MAGENTA}          │{Colors.RESET}{Colors.CYAN}                       ║
+║                        {Colors.BOLD}{Colors.MAGENTA}│                     │{Colors.RESET}{Colors.CYAN}                       ║
+║                        {Colors.BOLD}{Colors.MAGENTA}└─────────────────────┘{Colors.RESET}{Colors.CYAN}                       ║
 ║                                                                      ║
 ║            {Colors.BOLD}{Colors.WHITE}Multi-Tenant Setup Microservice{Colors.RESET}{Colors.CYAN}                       ║
 ║            {Colors.WHITE}Automated Deployment System{Colors.RESET}{Colors.CYAN}                            ║
