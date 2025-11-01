@@ -931,6 +931,11 @@ server {{
     def setup_ssl(self):
         """Setup SSL certificate with certbot"""
         try:
+            # Ensure /tmp directory exists (certbot requirement)
+            self.print_substep("Ensuring /tmp directory exists", "working")
+            subprocess.run(["mkdir", "-p", "/tmp"], capture_output=True)
+            subprocess.run(["chmod", "1777", "/tmp"], capture_output=True)
+
             # Check if certbot is installed
             self.print_substep("Checking for certbot installation", "working")
             result = subprocess.run(
