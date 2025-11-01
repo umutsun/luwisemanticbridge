@@ -393,13 +393,13 @@ NEXT_PUBLIC_API_URL=https://{self.config['domain']}
         """Generate backend .env file"""
         # Backend uses .env.lsemb, so we just symlink it
         backend_env = self.base_path / "backend" / ".env"
-        lsemb_env = self.base_path / ".env.lsemb"
 
-        if backend_env.exists():
+        if backend_env.exists() or backend_env.is_symlink():
             backend_env.unlink()
 
-        backend_env.symlink_to(lsemb_env)
-        print(f"✓ Linked backend/.env -> .env.lsemb")
+        # Use relative path for symlink
+        backend_env.symlink_to("../.env.lsemb")
+        self.print_substep("Backend environment configured", "success")
 
     def generate_frontend_env(self):
         """Generate frontend environment file"""
