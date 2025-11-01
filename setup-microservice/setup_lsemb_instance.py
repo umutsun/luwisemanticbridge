@@ -25,10 +25,43 @@ import argparse
 import subprocess
 import hashlib
 import secrets
+import time
 from pathlib import Path
 from typing import Dict, Optional
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+# ANSI Color Codes
+class Colors:
+    RESET = '\033[0m'
+    BOLD = '\033[1m'
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    WHITE = '\033[97m'
+
+    @staticmethod
+    def success(text):
+        return f"{Colors.GREEN}{text}{Colors.RESET}"
+
+    @staticmethod
+    def error(text):
+        return f"{Colors.RED}{text}{Colors.RESET}"
+
+    @staticmethod
+    def warning(text):
+        return f"{Colors.YELLOW}{text}{Colors.RESET}"
+
+    @staticmethod
+    def info(text):
+        return f"{Colors.CYAN}{text}{Colors.RESET}"
+
+    @staticmethod
+    def bold(text):
+        return f"{Colors.BOLD}{text}{Colors.RESET}"
 
 class LSEMBSetup:
     """LSEMB Instance Setup Manager"""
@@ -38,68 +71,136 @@ class LSEMBSetup:
         self.interactive = interactive
         self.config: Dict = {}
         self.base_path = Path(f"/var/www/{project_name}")
+        self.current_step = 0
+        self.total_steps = 12
+
+    def print_banner(self):
+        """Print ASCII art banner"""
+        banner = f"""
+{Colors.CYAN}╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║   {Colors.BOLD}{Colors.MAGENTA}██╗     ███████╗███████╗███╗   ███╗██████╗{Colors.RESET}{Colors.CYAN}                         ║
+║   {Colors.BOLD}{Colors.MAGENTA}██║     ██╔════╝██╔════╝████╗ ████║██╔══██╗{Colors.RESET}{Colors.CYAN}                        ║
+║   {Colors.BOLD}{Colors.MAGENTA}██║     ███████╗█████╗  ██╔████╔██║██████╔╝{Colors.RESET}{Colors.CYAN}                        ║
+║   {Colors.BOLD}{Colors.MAGENTA}██║     ╚════██║██╔══╝  ██║╚██╔╝██║██╔══██╗{Colors.RESET}{Colors.CYAN}                        ║
+║   {Colors.BOLD}{Colors.MAGENTA}███████╗███████║███████╗██║ ╚═╝ ██║██████╔╝{Colors.RESET}{Colors.CYAN}                        ║
+║   {Colors.BOLD}{Colors.MAGENTA}╚══════╝╚══════╝╚══════╝╚═╝     ╚═╝╚═════╝{Colors.RESET}{Colors.CYAN}                         ║
+║                                                                      ║
+║            {Colors.BOLD}{Colors.WHITE}Multi-Tenant Setup Microservice{Colors.RESET}{Colors.CYAN}                       ║
+║            {Colors.WHITE}Automated Deployment System{Colors.RESET}{Colors.CYAN}                            ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝{Colors.RESET}
+"""
+        print(banner)
+
+    def print_progress_bar(self, percentage, width=50):
+        """Print a progress bar"""
+        filled = int(width * percentage / 100)
+        bar = '█' * filled + '░' * (width - filled)
+        print(f"\r{Colors.CYAN}[{bar}] {percentage}%{Colors.RESET}", end='', flush=True)
+
+    def print_step_header(self, step_name):
+        """Print step header with progress"""
+        self.current_step += 1
+        percentage = int((self.current_step / self.total_steps) * 100)
+
+        print(f"\n{Colors.BOLD}{Colors.BLUE}{'─' * 70}{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.WHITE}[{self.current_step}/{self.total_steps}] {step_name}{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.BLUE}{'─' * 70}{Colors.RESET}")
+        self.print_progress_bar(percentage)
+        print()  # New line after progress bar
+
+    def print_substep(self, message, status="info"):
+        """Print a substep with status icon"""
+        icons = {
+            "info": f"{Colors.CYAN}ℹ{Colors.RESET}",
+            "success": f"{Colors.GREEN}✓{Colors.RESET}",
+            "warning": f"{Colors.YELLOW}⚠{Colors.RESET}",
+            "error": f"{Colors.RED}✗{Colors.RESET}",
+            "working": f"{Colors.YELLOW}⟳{Colors.RESET}"
+        }
+        icon = icons.get(status, icons["info"])
+        print(f"  {icon} {message}")
 
     def run(self):
         """Main setup workflow"""
-        print(f"\n🚀 LSEMB Setup Microservice")
-        print(f"📦 Project: {self.project_name}")
-        print("=" * 60)
+        # Print banner
+        self.print_banner()
+
+        print(f"{Colors.BOLD}{Colors.WHITE}Project: {Colors.MAGENTA}{self.project_name.upper()}{Colors.RESET}")
+        print(f"{Colors.WHITE}Mode: {Colors.CYAN}{'Interactive' if self.interactive else 'Automated'}{Colors.RESET}\n")
 
         try:
             # Step 1: Collect configuration
+            self.print_step_header("📋 Configuration Collection")
             self.collect_configuration()
 
             # Step 2: Clone/Update repository
+            self.print_step_header("📦 Repository Setup")
             self.setup_repository()
 
             # Step 3: Generate environment files
+            self.print_step_header("📝 Environment Files Generation")
             self.generate_env_files()
 
             # Step 4: Initialize databases
+            self.print_step_header("🗄️  Database Initialization")
             self.initialize_databases()
 
             # Step 5: Create admin user
+            self.print_step_header("👤 Admin User Creation")
             self.create_admin_user()
 
             # Step 6: Generate ecosystem.config.js
+            self.print_step_header("⚙️  PM2 Configuration")
             self.generate_ecosystem_config()
 
             # Step 7: Install dependencies
+            self.print_step_header("📦 Dependencies Installation")
             self.install_dependencies()
 
             # Step 8: Compile backend
+            self.print_step_header("🔨 Backend Compilation")
             self.build_backend()
 
             # Step 9: Build frontend
+            self.print_step_header("🏗️  Frontend Build")
             self.build_frontend()
 
             # Step 10: Launch services
+            self.print_step_header("🚀 Services Launch")
             self.launch_services()
 
             # Step 11: Configure nginx
+            self.print_step_header("🌐 Nginx Configuration")
             self.configure_nginx()
 
             # Step 12: Setup SSL certificate
+            self.print_step_header("🔒 SSL Certificate Setup")
             self.setup_ssl()
 
-            print("\n✅ Setup completed successfully!")
+            # Final progress bar
+            print()
+            self.print_progress_bar(100)
+            print(f"\n\n{Colors.BOLD}{Colors.GREEN}✅ Setup completed successfully!{Colors.RESET}")
             self.print_summary()
 
         except Exception as e:
-            print(f"\n❌ Setup failed: {str(e)}")
+            print(f"\n{Colors.BOLD}{Colors.RED}❌ Setup failed: {str(e)}{Colors.RESET}")
             sys.exit(1)
 
     def collect_configuration(self):
         """Collect configuration from user or config file"""
-        print("\n📋 Configuration")
-        print("-" * 60)
-
         if self.interactive:
+            self.print_substep("Starting interactive configuration wizard", "working")
             self.config = self.interactive_config()
         else:
+            self.print_substep("Loading default configuration", "working")
             self.config = self.load_default_config()
 
-        print(f"✓ Configuration loaded for {self.project_name}")
+        self.print_substep(f"Configuration loaded for {self.project_name}", "success")
+        self.print_substep(f"Domain: {self.config['domain']}", "info")
+        self.print_substep(f"Ports: Frontend={self.config['frontend_port']}, Backend={self.config['backend_port']}, Python={self.config['python_port']}", "info")
 
     def interactive_config(self) -> Dict:
         """Interactive configuration wizard"""
@@ -173,12 +274,9 @@ class LSEMBSetup:
 
     def setup_repository(self):
         """Clone or update Git repository"""
-        print("\n📦 Repository Setup")
-        print("-" * 60)
-
         if self.base_path.exists():
-            print(f"✓ Directory exists: {self.base_path}")
-            print("  Pulling latest changes...")
+            self.print_substep(f"Directory exists: {self.base_path}", "info")
+            self.print_substep("Pulling latest changes from GitHub", "working")
             result = subprocess.run(
                 ["git", "pull", "origin", "main"],
                 cwd=self.base_path,
@@ -186,39 +284,42 @@ class LSEMBSetup:
                 text=True
             )
             if result.returncode == 0:
-                print("✓ Repository updated")
+                self.print_substep("Repository updated successfully", "success")
             else:
-                print(f"⚠ Git pull failed: {result.stderr}")
+                self.print_substep(f"Git pull failed: {result.stderr}", "warning")
         else:
-            print(f"  Cloning repository to {self.base_path}...")
+            self.print_substep(f"Cloning repository to {self.base_path}", "working")
             result = subprocess.run(
                 ["git", "clone", "https://github.com/umutsun/asemb.git", str(self.base_path)],
                 capture_output=True,
                 text=True
             )
             if result.returncode == 0:
-                print("✓ Repository cloned")
+                self.print_substep("Repository cloned successfully", "success")
             else:
                 raise Exception(f"Git clone failed: {result.stderr}")
 
     def generate_env_files(self):
         """Generate all environment files"""
-        print("\n📝 Environment Files")
-        print("-" * 60)
-
         # .env.lsemb (main settings DB)
+        self.print_substep("Generating .env.lsemb (main configuration)", "working")
         self.generate_env_lsemb()
+        self.print_substep(".env.lsemb created", "success")
 
         # Backend .env
+        self.print_substep("Generating backend/.env", "working")
         self.generate_backend_env()
+        self.print_substep("Backend environment configured", "success")
 
         # Frontend .env.production.local
+        self.print_substep("Generating frontend/.env.production.local", "working")
         self.generate_frontend_env()
+        self.print_substep("Frontend environment configured", "success")
 
         # Python services .env
+        self.print_substep("Generating python-services/.env", "working")
         self.generate_python_env()
-
-        print("✓ All environment files generated")
+        self.print_substep("Python environment configured", "success")
 
     def generate_env_lsemb(self):
         """Generate .env.lsemb file"""
@@ -310,20 +411,22 @@ PORT={self.config['python_port']}
 
     def initialize_databases(self):
         """Initialize PostgreSQL databases and schema"""
-        print("\n🗄️  Database Initialization")
-        print("-" * 60)
-
         # Create databases if they don't exist
+        self.print_substep(f"Creating settings database: {self.config['lsemb_db']}", "working")
         self.create_database(self.config['lsemb_db'])
+
+        self.print_substep(f"Creating source database: {self.config['source_db']}", "working")
         self.create_database(self.config['source_db'])
 
         # Initialize schema
+        self.print_substep("Initializing database schema", "working")
         self.initialize_schema()
+        self.print_substep("Schema created (users, sessions, settings, embeddings)", "success")
 
         # Insert default settings
+        self.print_substep("Inserting default application settings", "working")
         self.insert_default_settings()
-
-        print("✓ Databases initialized")
+        self.print_substep("Default settings configured", "success")
 
     def create_database(self, db_name: str):
         """Create PostgreSQL database if it doesn't exist"""
@@ -345,9 +448,9 @@ PORT={self.config['python_port']}
 
             if not exists:
                 cur.execute(f'CREATE DATABASE {db_name}')
-                print(f"✓ Created database: {db_name}")
+                self.print_substep(f"Database {db_name} created", "success")
             else:
-                print(f"✓ Database exists: {db_name}")
+                self.print_substep(f"Database {db_name} already exists", "info")
 
             cur.close()
             conn.close()
@@ -492,13 +595,11 @@ PORT={self.config['python_port']}
 
     def create_admin_user(self):
         """Create admin user"""
-        print("\n👤 Admin User")
-        print("-" * 60)
-
         try:
             import bcrypt
 
             # Hash password
+            self.print_substep("Hashing admin password with bcrypt (12 rounds)", "working")
             password_hash = bcrypt.hashpw(
                 self.config['admin_password'].encode('utf-8'),
                 bcrypt.gensalt(rounds=12)
@@ -518,6 +619,7 @@ PORT={self.config['python_port']}
             exists = cur.fetchone()
 
             if not exists:
+                self.print_substep(f"Creating admin user: {self.config['admin_email']}", "working")
                 cur.execute("""
                     INSERT INTO users (username, email, password, name, role, status, email_verified)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -531,20 +633,19 @@ PORT={self.config['python_port']}
                     True
                 ))
                 conn.commit()
-                print(f"✓ Created admin user: {self.config['admin_email']}")
+                self.print_substep(f"Admin user created: {self.config['admin_email']}", "success")
+                self.print_substep(f"Role: admin, Status: active, Email verified: Yes", "info")
             else:
-                print(f"✓ Admin user exists: {self.config['admin_email']}")
+                self.print_substep(f"Admin user already exists: {self.config['admin_email']}", "info")
 
             cur.close()
             conn.close()
 
         except Exception as e:
-            print(f"⚠ Admin user creation error: {str(e)}")
+            self.print_substep(f"Admin user creation error: {str(e)}", "error")
 
     def generate_ecosystem_config(self):
         """Generate PM2 ecosystem.config.js"""
-        print("\n⚙️  PM2 Configuration")
-        print("-" * 60)
 
         config_content = f"""module.exports = {{
   apps: [
@@ -608,52 +709,49 @@ PORT={self.config['python_port']}
 """
 
         # Create logs directory
+        self.print_substep("Creating logs directory", "working")
         logs_dir = self.base_path / "logs"
         logs_dir.mkdir(exist_ok=True)
 
+        self.print_substep("Generating ecosystem.config.js for PM2", "working")
         config_path = self.base_path / "ecosystem.config.js"
         config_path.write_text(config_content)
-        print(f"✓ Created ecosystem.config.js")
+        self.print_substep(f"PM2 config created with 3 services ({self.project_name}-backend, -frontend, -python)", "success")
 
     def install_dependencies(self):
         """Install npm dependencies"""
-        print("\n📦 Installing Dependencies")
-        print("-" * 60)
-
         # Backend
-        print("  Installing backend dependencies...")
+        self.print_substep("Installing backend npm packages", "working")
         subprocess.run(
             ["npm", "install"],
             cwd=self.base_path / "backend",
             capture_output=True
         )
-        print("✓ Backend dependencies installed")
+        self.print_substep("Backend dependencies installed", "success")
 
         # Frontend
-        print("  Installing frontend dependencies...")
+        self.print_substep("Installing frontend npm packages", "working")
         subprocess.run(
             ["npm", "install"],
             cwd=self.base_path / "frontend",
             capture_output=True
         )
-        print("✓ Frontend dependencies installed")
+        self.print_substep("Frontend dependencies installed", "success")
 
         # Python
         python_services = self.base_path / "backend" / "python-services"
         if python_services.exists():
-            print("  Installing Python dependencies...")
+            self.print_substep("Installing Python packages (pip3)", "working")
             subprocess.run(
                 ["pip3", "install", "-r", "requirements.txt"],
                 cwd=python_services,
                 capture_output=True
             )
-            print("✓ Python dependencies installed")
+            self.print_substep("Python dependencies installed", "success")
 
     def build_frontend(self):
         """Build Next.js frontend"""
-        print("\n🏗️  Building Frontend")
-        print("-" * 60)
-
+        self.print_substep("Running Next.js production build (this may take a few minutes)", "working")
         result = subprocess.run(
             ["npm", "run", "build"],
             cwd=self.base_path / "frontend",
@@ -662,14 +760,13 @@ PORT={self.config['python_port']}
         )
 
         if result.returncode == 0:
-            print("✓ Frontend built successfully")
+            self.print_substep("Frontend built successfully", "success")
         else:
-            print(f"⚠ Frontend build had warnings (continuing anyway)")
+            self.print_substep("Frontend build completed with warnings", "warning")
 
     def build_backend(self):
         """Compile TypeScript backend"""
-        print("\n🔧 Compiling Backend")
-        print("-" * 60)
+        self.print_substep("Compiling TypeScript to JavaScript", "working")
 
         # Try npm run build first
         result = subprocess.run(
@@ -681,7 +778,7 @@ PORT={self.config['python_port']}
 
         # If npm build doesn't work, try tsc directly
         if result.returncode != 0 or not (self.base_path / "backend" / "dist").exists():
-            print("  npm build failed, trying tsc...")
+            self.print_substep("npm build failed, trying tsc directly", "warning")
             result = subprocess.run(
                 ["npx", "tsc"],
                 cwd=self.base_path / "backend",
@@ -690,14 +787,13 @@ PORT={self.config['python_port']}
             )
 
         if (self.base_path / "backend" / "dist" / "server.js").exists():
-            print("✓ Backend compiled successfully")
+            self.print_substep("Backend compiled successfully (dist/server.js created)", "success")
         else:
-            print(f"⚠ Backend compilation had issues")
+            self.print_substep("Backend compilation had issues", "error")
 
     def launch_services(self):
         """Launch services with PM2"""
-        print("\n🚀 Launching Services")
-        print("-" * 60)
+        self.print_substep(f"Starting {self.project_name}-backend, {self.project_name}-frontend, {self.project_name}-python", "working")
 
         # Start with PM2
         result = subprocess.run(
@@ -708,18 +804,16 @@ PORT={self.config['python_port']}
         )
 
         if result.returncode == 0:
-            print("✓ Services launched with PM2")
+            self.print_substep("All services launched with PM2", "success")
 
             # Save PM2 configuration
             subprocess.run(["pm2", "save"], capture_output=True)
-            print("✓ PM2 configuration saved")
+            self.print_substep("PM2 configuration saved for startup persistence", "success")
         else:
-            print(f"⚠ PM2 launch warning: {result.stderr}")
+            self.print_substep(f"PM2 launch warning: {result.stderr}", "warning")
 
     def configure_nginx(self):
         """Configure nginx reverse proxy"""
-        print("\n🌐 Nginx Configuration")
-        print("-" * 60)
 
         nginx_config = f"""# {self.project_name.upper()} - LSEMB Instance
 server {{
@@ -783,10 +877,12 @@ server {{
         # Write nginx config
         config_path = Path(f"/etc/nginx/conf.d/{self.project_name}.conf")
         try:
+            self.print_substep(f"Creating nginx configuration at /etc/nginx/conf.d/{self.project_name}.conf", "working")
             config_path.write_text(nginx_config)
-            print(f"✓ Created {config_path}")
+            self.print_substep("Nginx configuration file created", "success")
 
             # Test nginx configuration
+            self.print_substep("Testing nginx configuration syntax", "working")
             result = subprocess.run(
                 ["nginx", "-t"],
                 capture_output=True,
@@ -794,27 +890,26 @@ server {{
             )
 
             if result.returncode == 0:
-                print("✓ Nginx configuration valid")
+                self.print_substep("Nginx configuration syntax is valid", "success")
 
                 # Reload nginx
+                self.print_substep("Reloading nginx service", "working")
                 subprocess.run(["systemctl", "reload", "nginx"], capture_output=True)
-                print("✓ Nginx reloaded")
+                self.print_substep(f"Nginx reloaded - {self.config['domain']} is now accessible", "success")
             else:
-                print(f"⚠ Nginx test failed: {result.stderr}")
+                self.print_substep(f"Nginx test failed: {result.stderr}", "error")
 
         except PermissionError:
-            print(f"⚠ Permission denied. Run with sudo or manually create:")
-            print(f"   sudo nano /etc/nginx/conf.d/{self.project_name}.conf")
+            self.print_substep("Permission denied - run script with sudo", "error")
+            self.print_substep(f"Manual setup: sudo nano /etc/nginx/conf.d/{self.project_name}.conf", "warning")
         except Exception as e:
-            print(f"⚠ Nginx configuration error: {str(e)}")
+            self.print_substep(f"Nginx configuration error: {str(e)}", "error")
 
     def setup_ssl(self):
         """Setup SSL certificate with certbot"""
-        print("\n🔒 SSL Certificate Setup")
-        print("-" * 60)
-
         try:
             # Check if certbot is installed
+            self.print_substep("Checking for certbot installation", "working")
             result = subprocess.run(
                 ["which", "certbot"],
                 capture_output=True,
@@ -822,12 +917,14 @@ server {{
             )
 
             if result.returncode != 0:
-                print("⚠ Certbot not installed. Install with:")
-                print("   sudo yum install certbot python3-certbot-nginx")
+                self.print_substep("Certbot not installed", "warning")
+                self.print_substep("Install with: sudo yum install certbot python3-certbot-nginx", "info")
                 return
 
+            self.print_substep("Certbot found", "success")
+
             # Run certbot
-            print(f"  Requesting SSL certificate for {self.config['domain']}...")
+            self.print_substep(f"Requesting Let's Encrypt SSL certificate for {self.config['domain']}", "working")
             result = subprocess.run(
                 [
                     "certbot", "--nginx",
@@ -842,37 +939,41 @@ server {{
             )
 
             if result.returncode == 0:
-                print(f"✓ SSL certificate installed for {self.config['domain']}")
-                print("✓ HTTPS enabled with auto-redirect")
+                self.print_substep(f"SSL certificate installed for {self.config['domain']}", "success")
+                self.print_substep("HTTPS auto-redirect enabled", "success")
             else:
-                print("⚠ SSL setup failed. Run manually:")
-                print(f"   sudo certbot --nginx -d {self.config['domain']}")
+                self.print_substep("SSL certificate request failed", "error")
+                self.print_substep(f"Manual setup: sudo certbot --nginx -d {self.config['domain']}", "warning")
 
         except Exception as e:
-            print(f"⚠ SSL setup error: {str(e)}")
-            print("  You can setup SSL manually later with:")
+            self.print_substep(f"SSL setup error: {str(e)}", "error")
+            self.print_substep("You can setup SSL manually later", "info")
             print(f"  sudo certbot --nginx -d {self.config['domain']}")
 
     def print_summary(self):
         """Print setup summary"""
-        print("\n" + "=" * 60)
-        print("📊 Setup Summary")
-        print("=" * 60)
-        print(f"Project:        {self.project_name}")
-        print(f"Domain:         https://{self.config['domain']}")
-        print(f"Frontend:       http://localhost:{self.config['frontend_port']}")
-        print(f"Backend API:    http://localhost:{self.config['backend_port']}")
-        print(f"Python Service: http://localhost:{self.config['python_port']}")
-        print(f"Database:       {self.config['lsemb_db']}")
-        print(f"Source DB:      {self.config['source_db']}")
-        print(f"Admin Email:    {self.config['admin_email']}")
-        print(f"Admin Password: {self.config['admin_password']}")
-        print("=" * 60)
-        print("\nNext steps:")
-        print(f"  1. Configure nginx proxy for https://{self.config['domain']}")
-        print(f"  2. Test the application at https://{self.config['domain']}")
-        print(f"  3. Change admin password after first login")
-        print("=" * 60)
+        print(f"\n{Colors.BOLD}{Colors.CYAN}{'═' * 70}{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.WHITE}📊 Setup Summary{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.CYAN}{'═' * 70}{Colors.RESET}\n")
+
+        print(f"{Colors.BOLD}Project:{Colors.RESET}        {Colors.MAGENTA}{self.project_name.upper()}{Colors.RESET}")
+        print(f"{Colors.BOLD}Domain:{Colors.RESET}         {Colors.GREEN}https://{self.config['domain']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Frontend:{Colors.RESET}       {Colors.CYAN}http://localhost:{self.config['frontend_port']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Backend API:{Colors.RESET}    {Colors.CYAN}http://localhost:{self.config['backend_port']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Python Service:{Colors.RESET} {Colors.CYAN}http://localhost:{self.config['python_port']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Database:{Colors.RESET}       {Colors.YELLOW}{self.config['lsemb_db']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Source DB:{Colors.RESET}      {Colors.YELLOW}{self.config['source_db']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Admin Email:{Colors.RESET}    {Colors.WHITE}{self.config['admin_email']}{Colors.RESET}")
+        print(f"{Colors.BOLD}Admin Password:{Colors.RESET} {Colors.RED}{self.config['admin_password']}{Colors.RESET} {Colors.YELLOW}(CHANGE IMMEDIATELY!){Colors.RESET}")
+
+        print(f"\n{Colors.BOLD}{Colors.WHITE}Next Steps:{Colors.RESET}")
+        print(f"  {Colors.GREEN}1.{Colors.RESET} Visit {Colors.CYAN}https://{self.config['domain']}{Colors.RESET}")
+        print(f"  {Colors.GREEN}2.{Colors.RESET} Login with admin credentials")
+        print(f"  {Colors.GREEN}3.{Colors.RESET} {Colors.RED}Change admin password immediately{Colors.RESET}")
+        print(f"  {Colors.GREEN}4.{Colors.RESET} Check PM2 status: {Colors.CYAN}pm2 list | grep {self.project_name}{Colors.RESET}")
+        print(f"  {Colors.GREEN}5.{Colors.RESET} View logs: {Colors.CYAN}pm2 logs {self.project_name}-backend{Colors.RESET}")
+
+        print(f"\n{Colors.BOLD}{Colors.CYAN}{'═' * 70}{Colors.RESET}\n")
 
 
 def main():
