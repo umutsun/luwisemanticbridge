@@ -1,8 +1,12 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import path from 'path';
 import { SettingsService, DatabaseConfig, RedisConfig } from '../services/settings.service';
 
-dotenv.config();
+// Load .env.lsemb from project root (multi-tenant support)
+dotenv.config({ path: path.resolve(__dirname, '../../.env.lsemb') });
+// Fallback to .env in backend directory
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 // LSEMB System Database - Get from .env file
 export const lsembDbConfig = {
