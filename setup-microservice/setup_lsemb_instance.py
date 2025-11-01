@@ -248,6 +248,29 @@ class LSEMBSetup:
 
         defaults = port_bases.get(self.project_name, (3006, 8087, 8005, 6))
 
+        # Try to read DB credentials from /var/www/lsemb/.env.lsemb if exists
+        db_host = os.getenv('DB_HOST', 'localhost')
+        db_port = os.getenv('DB_PORT', '5432')
+        db_user = os.getenv('DB_USER', 'postgres')
+        db_password = os.getenv('DB_PASSWORD', '')
+
+        # If not in env, try reading from lsemb's .env file
+        lsemb_env = Path('/var/www/lsemb/.env.lsemb')
+        if not db_password and lsemb_env.exists():
+            try:
+                with open(lsemb_env) as f:
+                    for line in f:
+                        if line.startswith('POSTGRES_PASSWORD='):
+                            db_password = line.split('=', 1)[1].strip()
+                        elif line.startswith('POSTGRES_HOST='):
+                            db_host = line.split('=', 1)[1].strip()
+                        elif line.startswith('POSTGRES_USER='):
+                            db_user = line.split('=', 1)[1].strip()
+                        elif line.startswith('POSTGRES_PORT='):
+                            db_port = line.split('=', 1)[1].strip()
+            except:
+                pass
+
         return {
             'domain': f"{self.project_name}.luwi.dev",
             'frontend_port': str(defaults[0]),
@@ -255,10 +278,10 @@ class LSEMBSetup:
             'python_port': str(defaults[2]),
             'lsemb_db': f"{self.project_name}_lsemb",
             'source_db': f"{self.project_name}_db",
-            'db_host': os.getenv('DB_HOST', 'localhost'),
-            'db_port': os.getenv('DB_PORT', '5432'),
-            'db_user': os.getenv('DB_USER', 'postgres'),
-            'db_password': os.getenv('DB_PASSWORD', ''),
+            'db_host': db_host,
+            'db_port': db_port,
+            'db_user': db_user,
+            'db_password': db_password,
             'redis_host': os.getenv('REDIS_HOST', 'localhost'),
             'redis_port': os.getenv('REDIS_PORT', '6379'),
             'redis_password': os.getenv('REDIS_PASSWORD', ''),
