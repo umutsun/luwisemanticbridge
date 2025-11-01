@@ -101,7 +101,7 @@ module.exports = {
       name: 'lsemb-python',
       script: 'main.py',
       interpreter: process.platform === 'win32'
-        ? './backend/python-services/venv/Scripts/python.exe'
+        ? 'c:\\xampp\\htdocs\\lsemb\\backend\\python-services\\venv\\Scripts\\python.exe'
         : 'python3',
       cwd: './backend/python-services',
       instances: 1,
