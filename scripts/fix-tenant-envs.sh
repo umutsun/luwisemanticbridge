@@ -22,9 +22,10 @@ DATABASE_URL=postgresql://postgres:Semsiye!22@91.99.229.96:5432/bookie_lsemb
 PORT=8085
 NODE_ENV=production
 
-# Redis
+# Redis - DB 3 for Bookie (LSEMB uses 2, EmlakAI uses 1)
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_DB=3
 REDIS_PASSWORD=Semsiye!22
 
 # CORS
@@ -57,9 +58,10 @@ DATABASE_URL=postgresql://postgres:Semsiye!22@91.99.229.96:5432/emlakai_lsemb
 PORT=8084
 NODE_ENV=production
 
-# Redis
+# Redis - DB 1 for EmlakAI (LSEMB uses 2, Bookie uses 3)
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_DB=1
 REDIS_PASSWORD=Semsiye!22
 
 # CORS
