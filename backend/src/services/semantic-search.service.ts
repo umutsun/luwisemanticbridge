@@ -1019,7 +1019,17 @@ export class SemanticSearchService {
         console.timeEnd(queryId);
       }
       console.error('[SemanticSearch] Semantic search error:', error);
-      return this.keywordSearch(query, limit);
+      console.log('🔄 DEBUG: Falling back to keyword search...');
+      const keywordResults = await this.keywordSearch(query, limit);
+      console.log(`📊 DEBUG: Keyword search returned ${keywordResults.length} results`);
+      if (keywordResults.length > 0) {
+        console.log(`📊 DEBUG: First keyword result:`, {
+          title: keywordResults[0].title,
+          score: keywordResults[0].score,
+          source_table: keywordResults[0].source_table
+        });
+      }
+      return keywordResults;
     }
   }
 

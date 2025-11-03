@@ -323,6 +323,15 @@ export class RAGChatService {
         allResults = await semanticSearch.hybridSearch(message, maxResults);
       }
 
+      console.log(`🔍 DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
+      if (allResults.length > 0) {
+        console.log(`📊 DEBUG: First raw result:`, {
+          title: allResults[0].title,
+          score: allResults[0].score,
+          similarity_score: allResults[0].similarity_score
+        });
+      }
+
       // Filter by threshold and sort by similarity score
       let searchResults = allResults
         .filter(result => {
@@ -397,10 +406,13 @@ export class RAGChatService {
         console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 10%)`);
 
         // Still show low-confidence results as reference (but with disclaimer)
+        console.log(`🔍 DEBUG: searchResults before formatSources: ${searchResults.length} results`);
         const processedSources = await this.formatSources(
           searchResults.slice(0, Math.min(searchResults.length, 5)),
           {} // No settings needed for low-confidence results
         );
+        console.log(`📦 DEBUG: processedSources after formatSources: ${processedSources.length} sources`);
+        console.log(`📊 DEBUG: First source:`, processedSources[0] ? { title: processedSources[0].title, score: processedSources[0].score } : 'NONE');
 
         return {
           response: noResultsMessage,
