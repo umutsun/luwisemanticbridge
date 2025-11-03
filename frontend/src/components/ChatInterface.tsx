@@ -207,12 +207,22 @@ export default function ChatInterface() {
   useEffect(() => {
     setIsClient(true);
 
-    // Fetch popular questions from backend
-    setIsSuggestionsLoading(true);
-    fetchSuggestedQuestions().then(questions => {
+    // Fetch popular questions from backend immediately
+    const loadSuggestions = async () => {
+      setIsSuggestionsLoading(true);
+      const questions = await fetchSuggestedQuestions();
       setSuggestedQuestions(questions);
       setIsSuggestionsLoading(false);
-    });
+    };
+
+    loadSuggestions();
+
+    // Refresh suggestions every 30 seconds for variety
+    const suggestionsInterval = setInterval(() => {
+      fetchSuggestedQuestions().then(questions => {
+        setSuggestedQuestions(questions);
+      });
+    }, 30000); // 30 seconds
 
     // Fetch chatbot settings, RAG settings, LLM settings, and active prompt
     Promise.all([
@@ -307,6 +317,11 @@ export default function ChatInterface() {
 
     // Fetch available models with force refresh to avoid caching
     fetchAvailableModels(true);
+
+    // Cleanup function to prevent memory leaks
+    return () => {
+      clearInterval(suggestionsInterval);
+    };
   }, []);
 
   // Update timer every second when streaming

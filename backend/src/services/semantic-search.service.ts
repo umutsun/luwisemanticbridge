@@ -547,8 +547,10 @@ export class SemanticSearchService {
       return embedding;
     } catch (error) {
       console.error('[SemanticSearch] Embedding generation failed:', error);
-      console.log('[SemanticSearch] Using mock embedding as fallback');
-      return this.generateMockEmbedding(text);
+      console.log('[SemanticSearch] ⚠️ CRITICAL: Embedding generation failed - will fall back to keyword search');
+      // IMPORTANT: Do NOT use mock embeddings - they produce misleading low similarity scores (10-15%)
+      // Instead, throw the error so semanticSearch() can fall back to keyword search
+      throw new Error(`Embedding generation failed: ${error.message}`);
     }
   }
 
