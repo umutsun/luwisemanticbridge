@@ -380,11 +380,11 @@ router.post('/', async (req: Request, res: Response) => {
     // Batch update
     for (const update of updates) {
       await lsembPool.query(
-        `INSERT INTO settings (key, value)
-         VALUES ($1, $2)
+        `INSERT INTO settings (key, value, category)
+         VALUES ($1, $2, $3)
          ON CONFLICT (key)
          DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-        [update.key, update.value]
+        [update.key, update.value, categoryName]
       );
     }
 
@@ -580,11 +580,11 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     // Batch update
     for (const update of updates) {
       await lsembPool.query(
-        `INSERT INTO settings (key, value)
-         VALUES ($1, $2)
+        `INSERT INTO settings (key, value, category)
+         VALUES ($1, $2, $3)
          ON CONFLICT (key)
          DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-        [update.key, update.value]
+        [update.key, update.value, categoryName]
       );
     }
 
@@ -648,11 +648,11 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
     // Batch update
     for (const update of updates) {
       await lsembPool.query(
-        `INSERT INTO settings (key, value)
-         VALUES ($1, $2)
+        `INSERT INTO settings (key, value, category)
+         VALUES ($1, $2, $3)
          ON CONFLICT (key)
          DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-        [update.key, update.value]
+        [update.key, update.value, categoryName]
       );
     }
 
