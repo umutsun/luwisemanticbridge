@@ -2117,9 +2117,9 @@ function RAGSettings() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
-                    <Label>Database Content (Unified)</Label>
+                    <Label>Database Content</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Includes: Soru-Cevap, Makaleler, Özelgeler, Danıştay Kararları
+                      Include content from your connected database
                     </p>
                   </div>
                   <Switch
