@@ -381,9 +381,11 @@ export class RAGChatService {
         return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
-      // Check if best result has low confidence (< 30% similarity)
+      // Check if best result has low confidence (< 15% similarity)
+      // NOTE: 15% is aggressive but allows more results through
+      // Similarity scores tend to be lower than expected, so this prevents false negatives
       const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
-      const hasLowConfidence = bestScore < 30;
+      const hasLowConfidence = bestScore < 15;
 
       // If no relevant context found or all results have low confidence
       if (!enhancedContext || enhancedContext.trim().length === 0 || searchResults.length === 0 || hasLowConfidence) {
@@ -391,7 +393,7 @@ export class RAGChatService {
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
 
-        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 30%)`);
+        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 15%)`);
 
         // Still show low-confidence results as reference (but with disclaimer)
         const processedSources = await this.formatSources(
