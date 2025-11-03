@@ -1192,9 +1192,9 @@ export default function EmbeddingsManagerPage() {
         setSelectedTableForSkipped(null);
         setSelectedSkippedIds(new Set());
       }}>
-        <DialogContent className="max-w-6xl max-h-[90vh] p-0 overflow-hidden">
+        <DialogContent className="max-w-6xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
           {/* Glassmorphic Header */}
-          <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50">
+          <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 flex-shrink-0">
             <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 dark:from-yellow-500/10 dark:to-orange-500/10" />
             <div className="relative px-6 py-4">
               <div className="flex items-center justify-between">
@@ -1211,40 +1211,26 @@ export default function EmbeddingsManagerPage() {
                     {skippedRecords.length} record{skippedRecords.length !== 1 ? 's' : ''} could not be embedded
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {selectedSkippedIds.size > 0 && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={deleteSkippedRecords}
-                      disabled={isDeletingSkipped}
-                      className="shadow-lg"
-                    >
-                      {isDeletingSkipped ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                          Deleting...
-                        </>
-                      ) : (
-                        <>
-                          Delete ({selectedSkippedIds.size})
-                        </>
-                      )}
-                    </Button>
-                  )}
+                {selectedSkippedIds.size > 0 && (
                   <Button
-                    variant="ghost"
+                    variant="destructive"
                     size="sm"
-                    onClick={() => {
-                      setShowSkippedModal(false);
-                      setSkippedRecords([]);
-                      setSelectedTableForSkipped(null);
-                      setSelectedSkippedIds(new Set());
-                    }}
+                    onClick={deleteSkippedRecords}
+                    disabled={isDeletingSkipped}
+                    className="shadow-lg"
                   >
-                    <X className="w-4 h-4" />
+                    {isDeletingSkipped ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        Delete ({selectedSkippedIds.size})
+                      </>
+                    )}
                   </Button>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -1261,7 +1247,7 @@ export default function EmbeddingsManagerPage() {
               <p className="text-xs mt-1">All records were successfully embedded</p>
             </div>
           ) : (
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-y-auto min-h-0">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
                   <tr>
@@ -1338,7 +1324,7 @@ export default function EmbeddingsManagerPage() {
 
           {/* Glassmorphic Footer */}
           {skippedRecords.length > 0 && (
-            <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50">
+            <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50 flex-shrink-0">
               <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 dark:from-yellow-500/10 dark:to-orange-500/10" />
               <div className="relative px-6 py-3">
                 <div className="flex items-center justify-between text-xs">
