@@ -289,8 +289,8 @@ export default function Header() {
           setSystemStatus({
             database: {
               connected: dbService?.status === 'connected' || dbService?.status === 'healthy',
-              size: 'N/A',
-              documents: 0,
+              size: dbData?.databaseSize || undefined,
+              documents: totalRecords || 0,
               responseTime: dbService?.responseTime || 0,
               databaseName: databaseName,
               tableCount: tableCount
@@ -300,9 +300,9 @@ export default function Header() {
                         redisService?.status === 'healthy' ||
                         healthData.serverStatus?.redis === 'connected' ||
                         (redisService && !redisService.status),
-              used_memory: 'N/A',
+              used_memory: redisData?.redis?.usedMemory || redisData?.used_memory || undefined,
               responseTime: redisService?.responseTime || 0,
-              keyCount: redisData?.redis?.keyCount || 108 // Use actual Redis keys or fallback
+              keyCount: redisData?.redis?.keyCount || redisData?.keyCount || undefined
             },
             llmModel: llmModelInfo,
             embedder: {
@@ -433,7 +433,7 @@ export default function Header() {
                   <div className="text-center">
                     <span className="text-xs font-medium">Redis</span>
                     <p className="text-xs text-muted-foreground">
-                      {systemStatus?.redis.keyCount || 0} keys
+                      {systemStatus?.redis.keyCount !== undefined ? `${systemStatus.redis.keyCount} keys` : '—'}
                     </p>
                   </div>
                   <div className="text-center">
@@ -610,7 +610,7 @@ export default function Header() {
                           <p className="text-sm font-medium">Redis</p>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {systemStatus?.redis.keyCount || 0} keys
+                          {systemStatus?.redis.keyCount !== undefined ? `${systemStatus.redis.keyCount} keys` : '—'}
                         </p>
                       </div>
 
