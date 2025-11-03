@@ -102,7 +102,7 @@ export default function ChatInterface() {
 
   // Cache for suggestions (2 minutes for more variety)
   const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
-  const SUGGESTIONS_CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+  const SUGGESTIONS_CACHE_TTL = 30 * 1000; // 30 seconds - refresh frequently for variety
 
   // Fetch popular questions from backend with cache
   const fetchSuggestedQuestions = async () => {
