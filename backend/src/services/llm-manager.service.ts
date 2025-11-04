@@ -58,10 +58,9 @@ export class LLMManager {
       };
     }
 
-    this.loadSettingsFromDatabase();
-    
-    // EMERGENCY FIX: Immediately check and fix deprecated Claude model
-    this.fixClaudeModel();
+    // DON'T load settings in constructor - database might not be ready yet!
+    // Call loadSettingsFromDatabase() after server initialization
+    console.log('⚠️ LLMManager created, will load settings from database later');
   }
 
   /**
@@ -101,6 +100,14 @@ export class LLMManager {
       isInitialized: false,
       supportsEmbeddings: false  // DeepSeek doesn't support embeddings
     });
+
+    this.providers.set('openrouter', {
+      name: 'openrouter',
+      apiKey: process.env.OPENROUTER_API_KEY || '',
+      model: '',  // NO default - will be set from database
+      isInitialized: false,
+      supportsEmbeddings: true  // FIXED: OpenRouter supports embeddings via OpenAI-compatible API
+    });
   }
 
   /**
@@ -130,10 +137,12 @@ export class LLMManager {
           'openai.apiKey',
           'google.apiKey', 'gemini.apiKey',
           'deepseek.apiKey',
+          'openrouter.apiKey',
           'llmSettings.claudeModel',
           'llmSettings.openaiModel',
           'llmSettings.geminiModel',
           'llmSettings.deepseekModel',
+          'llmSettings.openrouterModel',
           'llmSettings.activeChatModel',
           'embedding_provider', 'embedding_model',
           'embeddings.provider', 'embeddings.model',
@@ -169,7 +178,17 @@ export class LLMManager {
       }
 
       // Store the actual model name without provider prefix
-      this.actualModel = activeModel.includes('/') ? activeModel.split('/')[1] : activeModel;
+      // CRITICAL: OpenRouter models have format "openrouter/provider/model" (e.g., "openrouter/openai/gpt-4o-mini")
+      // For OpenRouter, we need "provider/model" (e.g., "openai/gpt-4o-mini")
+      // For other providers, we need just the model name (e.g., "claude-3-5-sonnet-20241022")
+      if (extractedProvider === 'openrouter' && activeModel.includes('/')) {
+        // OpenRouter: remove first part "openrouter/", keep "provider/model"
+        const parts = activeModel.split('/');
+        this.actualModel = parts.slice(1).join('/'); // "openai/gpt-4o-mini"
+      } else {
+        // Other providers: remove provider prefix, keep just model name
+        this.actualModel = activeModel.includes('/') ? activeModel.split('/')[1] : activeModel;
+      }
 
       // CRITICAL FIX: Remove -latest suffix from Gemini models (no longer supported)
       if (this.actualModel && this.actualModel.includes('gemini') && this.actualModel.includes('-latest')) {
@@ -270,14 +289,17 @@ export class LLMManager {
           ? this.actualModel
           : settings['llmSettings.openaiModel'];
 
-        if (!openaiModel) {
-          console.warn('⚠️ No OpenAI model configured in database! Skipping OpenAI provider initialization.');
-        } else {
-          this.updateProviderSettings('openai', {
-            apiKey: openaiApiKey,
-            model: openaiModel
-          });
+        // FIXED: Always load OpenAI API key even if OpenAI chat model is not configured
+        // This is required for embeddings which may use OpenAI
+        this.updateProviderSettings('openai', {
+          apiKey: openaiApiKey,
+          model: openaiModel || 'gpt-4o-mini'  // Default model for chat if none configured
+        });
+
+        if (openaiModel) {
           console.log(`✅ Updated OpenAI API key from database with model: ${openaiModel}`);
+        } else {
+          console.log('✅ Updated OpenAI API key from database (no chat model configured, but key loaded for embeddings)');
         }
       }
 
@@ -297,14 +319,17 @@ export class LLMManager {
           ? this.actualModel
           : settings['llmSettings.geminiModel'];
 
-        if (!geminiModel) {
-          console.warn('⚠️ No Gemini model configured in database! Skipping Gemini provider initialization.');
-        } else {
-          this.updateProviderSettings('gemini', {
-            apiKey: googleApiKey,
-            model: geminiModel
-          });
+        // FIXED: Always load Google API key even if Gemini chat model is not configured
+        // This is required for embeddings which may use Google/Gemini
+        this.updateProviderSettings('gemini', {
+          apiKey: googleApiKey,
+          model: geminiModel || 'gemini-1.5-flash'  // Default model for chat if none configured
+        });
+
+        if (geminiModel) {
           console.log(`✅ Updated Google/Gemini API key from database with model: ${geminiModel}`);
+        } else {
+          console.log('✅ Updated Google/Gemini API key from database (no chat model configured, but key loaded for embeddings)');
         }
       } else {
         console.warn('⚠️ No Google/Gemini API key found in database');
@@ -326,6 +351,25 @@ export class LLMManager {
             model: deepseekModel
           });
           console.log(`✅ Updated DeepSeek API key from database with model: ${deepseekModel}`);
+        }
+      }
+
+      const openrouterApiKey = settings['openrouter.apiKey'];
+      if (openrouterApiKey) {
+        // CRITICAL: If OpenRouter is the active provider, ALWAYS use this.actualModel from database
+        // NO fallback to hardcoded values
+        const openrouterModel = (this.defaultProvider === 'openrouter' && this.actualModel)
+          ? this.actualModel
+          : settings['llmSettings.openrouterModel'];
+
+        if (!openrouterModel) {
+          console.warn('⚠️ No OpenRouter model configured in database! Skipping OpenRouter provider initialization.');
+        } else {
+          this.updateProviderSettings('openrouter', {
+            apiKey: openrouterApiKey,
+            model: openrouterModel
+          });
+          console.log(`✅ Updated OpenRouter API key from database with model: ${openrouterModel}`);
         }
       }
 
@@ -366,6 +410,7 @@ export class LLMManager {
    * Extract provider name from model string (e.g., "anthropic/claude-3-sonnet" -> "claude")
    */
   private extractProviderFromModel(modelString: string): string {
+    if (modelString.includes('openrouter')) return 'openrouter';
     if (modelString.includes('claude') || modelString.includes('anthropic')) return 'claude';
     if (modelString.includes('openai') || modelString.includes('gpt')) return 'openai';
     if (modelString.includes('gemini') || modelString.includes('google')) return 'gemini';
@@ -378,6 +423,9 @@ export class LLMManager {
       return 'openai';
     }
     const normalized = provider.toLowerCase();
+    if (normalized.includes('openrouter')) {
+      return 'openrouter';
+    }
     if (normalized.includes('claude') || normalized.includes('anthropic')) {
       return 'claude';
     }
@@ -424,8 +472,8 @@ export class LLMManager {
 
   private getEmbeddingProviderOrder(preferredProvider?: string): string[] {
     // DeepSeek doesn't support embeddings, so exclude it from embeddings
-    // Use Google/Gemini first (more reliable), then OpenAI
-    const embeddingProviders = ['google', 'gemini', 'openai'];
+    // Use preferred provider first, then fallback to Google/Gemini, OpenRouter, OpenAI
+    const embeddingProviders = ['google', 'gemini', 'openrouter', 'openai'];
     const fallback = [...this.fallbackOrder].filter(p => embeddingProviders.includes(p));
     const normalizedPreferred = preferredProvider ? this.normalizeProviderName(preferredProvider) : undefined;
 
@@ -461,11 +509,11 @@ export class LLMManager {
   }
 
   /**
-   * Generate fallback order - Use Claude as primary fallback, then Gemini, OpenAI, DeepSeek
+   * Generate fallback order - Use Claude as primary fallback, then Gemini, OpenAI, OpenRouter, DeepSeek
    */
   private generateFallbackOrder(): string[] {
-    // Define fallback order with Claude first (production ready), then Gemini, OpenAI, DeepSeek last
-    const workingFallbacks = ['claude', 'gemini', 'openai', 'deepseek'];
+    // Define fallback order with Claude first (production ready), then Gemini, OpenAI, OpenRouter, DeepSeek last
+    const workingFallbacks = ['claude', 'gemini', 'openai', 'openrouter', 'deepseek'];
     const order = [this.defaultProvider];
 
     // Add all providers in order
@@ -558,6 +606,31 @@ export class LLMManager {
             });
           } catch (error) {
             console.error('❌ Failed to create DeepSeek client:', error);
+            return false;
+          }
+          break;
+        case 'openrouter':
+          console.log('🔧 Initializing OpenRouter provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          try {
+            const openrouterClient = new OpenAI({
+              apiKey: prov.apiKey,
+              baseURL: 'https://openrouter.ai/api/v1',
+              defaultHeaders: {
+                'HTTP-Referer': 'https://localhost:3000',
+                'X-Title': 'Alice Semantic Bridge'
+              }
+            });
+            prov.client = openrouterClient;
+            console.log('✅ OpenRouter client created successfully');
+            console.log('🔍 Verification - OpenRouter client:', {
+              hasClient: !!prov.client,
+              clientType: typeof prov.client,
+              hasChat: !!(prov.client && (prov.client as any).chat),
+              hasCompletions: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions),
+              model: prov.model
+            });
+          } catch (error) {
+            console.error('❌ Failed to create OpenRouter client:', error);
             return false;
           }
           break;
@@ -691,6 +764,14 @@ export class LLMManager {
       case 'openai': {
         const response = await prov.client.embeddings.create({
           model: model || prov.embeddingModel || 'text-embedding-3-small',
+          input: text
+        });
+        return response.data[0].embedding;
+      }
+      case 'openrouter': {
+        // OpenRouter uses OpenAI-compatible API for embeddings
+        const response = await prov.client.embeddings.create({
+          model: model || prov.embeddingModel || 'openai/text-embedding-3-small',
           input: text
         });
         return response.data[0].embedding;
@@ -968,6 +1049,44 @@ export class LLMManager {
             fallbackUsed: provider !== preferredProvider || activeProviderFailed
           };
 
+        case 'openrouter':
+          // Always try to initialize to ensure we have the latest client
+          const openrouterProvider = this.providers.get('openrouter');
+          if (!openrouterProvider || !this.initializeProvider(provider)) {
+            throw new Error('OpenRouter client is not initialized');
+          }
+          // Get fresh reference after initialization
+          const freshOpenrouterProv = this.providers.get(provider);
+          if (!freshOpenrouterProv?.client) {
+            console.error('❌ OpenRouter client is null after initialization');
+            throw new Error('OpenRouter client creation failed');
+          }
+          prov = freshOpenrouterProv; // Update reference to the freshly initialized provider
+          console.log('✅ OpenRouter client verified:', {
+            hasClient: !!prov!.client,
+            isInitialized: prov!.isInitialized,
+            hasChat: !!(prov!.client && (prov!.client as any).chat),
+            hasCompletions: !!(prov!.client && (prov!.client as any).chat && (prov!.client as any).chat.completions)
+          });
+          // OpenRouter model name should be in format "provider/model" (e.g., "openai/gpt-4o-mini")
+          const openrouterModel = prov!.model || 'openai/gpt-4o-mini';
+          console.log(`🤖 [CHAT REQUEST] Using OpenRouter | Model: ${openrouterModel} | Provider: ${provider} | Preferred: ${preferredProvider}`);
+          const openrouterResponse = await prov!.client.chat.completions.create({
+            model: openrouterModel,
+            max_tokens: maxTokens,
+            temperature: temperature,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: message }
+            ]
+          });
+          return {
+            content: openrouterResponse.choices[0].message.content || '',
+            provider: 'OpenRouter',
+            model: openrouterModel,
+            fallbackUsed: provider !== preferredProvider || activeProviderFailed
+          };
+
         default:
           throw new Error(`Unknown provider: ${provider}`);
       }
@@ -1101,6 +1220,19 @@ export class LLMManager {
   }
 
   /**
+   * Initialize after database is ready - CALL THIS FROM SERVER STARTUP
+   */
+  async initialize(): Promise<void> {
+    console.log('🚀 LLMManager initializing after database is ready...');
+    await this.loadSettingsFromDatabase();
+
+    // EMERGENCY FIX: Immediately check and fix deprecated Claude model
+    await this.fixClaudeModel();
+
+    console.log('✅ LLMManager initialized successfully');
+  }
+
+  /**
    * Force refresh of settings
    */
   async refreshSettings(): Promise<void> {
@@ -1158,4 +1290,4 @@ export class LLMManager {
   }
 }
 
-export default LLMManager.getInstance();
+export default LLMManager;

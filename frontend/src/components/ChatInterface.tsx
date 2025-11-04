@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { Card, CardContent } from '@/components/ui/card';
@@ -102,7 +102,7 @@ export default function ChatInterface() {
 
   // Cache for suggestions (2 minutes for more variety)
   const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
-  const SUGGESTIONS_CACHE_TTL = 30 * 1000; // 30 seconds - refresh frequently for variety
+  const SUGGESTIONS_CACHE_TTL = 60 * 60 * 1000; // 1 hour - no auto-refresh needed
 
   // Fetch popular questions from backend with cache
   const fetchSuggestedQuestions = async () => {
@@ -135,13 +135,8 @@ export default function ChatInterface() {
       console.error('Failed to fetch suggestions:', error);
     }
 
-    // Fallback: Default questions
-    return [
-      'KDV iade işlemleri nasıl yapılır?',
-      'Gelir vergisi matrah tespit yöntemleri nelerdir?',
-      'E-beyanname sistemi nasıl kullanılır?',
-      'Stopaj tevkifatı hangi durumlarda yapılır?'
-    ];
+    // No fallback - don't show anything if API fails
+    return [];
   };
 
   // Start with empty messages - no welcome message
@@ -203,6 +198,22 @@ export default function ChatInterface() {
     }
   }, [settingsLoaded]);
 
+  // Memoize suggestions to prevent unnecessary re-renders and flickering (limit to 4, randomized)
+  const memoizedSuggestions = useMemo(() => {
+    if (suggestedQuestions.length === 0) return [];
+
+    const unique = Array.from(new Set(suggestedQuestions));
+    // Deterministic shuffle using a fixed seed based on array length
+    // This ensures suggestions don't change on every render
+    const shuffled = [...unique];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      // Use array length as seed for deterministic shuffle
+      const j = Math.floor((i * 7) % shuffled.length);
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, 4);
+  }, [suggestedQuestions]);
+
   // Client-side'da olduğumuzu işaretle ve soruları yükle
   useEffect(() => {
     setIsClient(true);
@@ -217,12 +228,8 @@ export default function ChatInterface() {
 
     loadSuggestions();
 
-    // Refresh suggestions every 30 seconds for variety
-    const suggestionsInterval = setInterval(() => {
-      fetchSuggestedQuestions().then(questions => {
-        setSuggestedQuestions(questions);
-      });
-    }, 30000); // 30 seconds
+    // No auto-refresh - suggestions are stable and don't need frequent updates
+    // If user wants fresh suggestions, they can refresh the page
 
     // Fetch chatbot settings, RAG settings, LLM settings, and active prompt
     Promise.all([
@@ -240,24 +247,32 @@ export default function ChatInterface() {
         // Merge all settings
         const settingsData = {
           llmSettings: llmData.llmSettings || {},
+          openai: llmData.openai || {},
+          anthropic: llmData.anthropic || {},
+          google: llmData.google || {},
           ragSettings: ragData.ragSettings || {},
           prompts: promptsData.prompts || {}
         };
 
-        // Find active prompt
-        const activePromptId = Object.keys(settingsData.prompts).find(key =>
-          key.endsWith('.active') && settingsData.prompts[key] === true || settingsData.prompts[key] === 'true'
-        );
-        const promptId = activePromptId ? activePromptId.split('.')[1] : null;
+        // Find active prompt from prompts.list array (NEW FORMAT)
+        const promptsList = settingsData.prompts?.list || [];
+        const activePromptObj = promptsList.find((p: any) => p.isActive === true);
 
         let activePromptData = {};
-        if (promptId) {
+        if (activePromptObj) {
           activePromptData = {
-            content: settingsData.prompts[`${promptId}.content`] || '',
-            temperature: parseFloat(settingsData.prompts[`${promptId}.temperature`] || '0.7'),
-            maxTokens: parseInt(settingsData.prompts[`${promptId}.maxTokens`] || '2048'),
-            conversationTone: settingsData.prompts[`${promptId}.conversationTone`] || 'professional'
+            content: activePromptObj.systemPrompt || '',
+            temperature: parseFloat(activePromptObj.temperature || '0.7'),
+            maxTokens: parseInt(activePromptObj.maxTokens || '2048'),
+            conversationTone: activePromptObj.conversationTone || 'professional'
           };
+          console.log('✅ [ChatInterface] Active prompt loaded:', {
+            name: activePromptObj.name,
+            temperature: activePromptData.temperature,
+            maxTokens: activePromptData.maxTokens
+          });
+        } else {
+          console.log('⚠️ [ChatInterface] No active prompt found, using LLM defaults');
         }
 
         // CRITICAL: NO fallback defaults - use ONLY what's in database
@@ -284,7 +299,7 @@ export default function ChatInterface() {
         };
 
         // Get active prompt (already extracted above)
-        const prompt = promptId ? {
+        const prompt = activePromptObj ? {
           content: activePromptData.content || '',
           temperature: activePromptData.temperature || llm.temperature,
           maxTokens: activePromptData.maxTokens || llm.maxTokens,
@@ -318,10 +333,7 @@ export default function ChatInterface() {
     // Fetch available models with force refresh to avoid caching
     fetchAvailableModels(true);
 
-    // Cleanup function to prevent memory leaks
-    return () => {
-      clearInterval(suggestionsInterval);
-    };
+    // No interval to cleanup - suggestions are fetched once and cached
   }, []);
 
   // Update timer every second when streaming
@@ -645,6 +657,21 @@ export default function ChatInterface() {
           errorData = { error: errorText };
         }
 
+        // Handle authentication errors (401) - logout and redirect
+        if (response.status === 401 && (errorData.code === 'TOKEN_INVALID' || errorData.code === 'TOKEN_MISSING' || errorData.code === 'TOKEN_EXPIRED')) {
+          console.error('🔒 [ChatInterface] Authentication failed - token invalid or expired, logging out');
+
+          // Clear streaming message
+          setMessages(prev => prev.filter(msg => msg.id !== messageId));
+          setIsLoading(false);
+          setIsStreaming(false);
+          setStreamingMessageId(null);
+
+          // Logout will clear tokens and redirect to login page
+          logout();
+          return;
+        }
+
         // Handle subscription limit error specifically
         if (response.status === 429 && errorData.code === 'QUERY_LIMIT_EXCEEDED') {
           const subscriptionMessage = user?.role === 'admin'
@@ -710,6 +737,8 @@ export default function ChatInterface() {
             },
             body: JSON.stringify({
               message: messageContent,
+              conversationId: conversationId,
+              model: chatbotSettings.activeChatModel,
               temperature,
               maxTokens,
               systemPrompt,
@@ -1014,24 +1043,6 @@ export default function ChatInterface() {
           <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
             <div className="space-y-4 py-4 pr-2">
               {/* Suggestions skeleton loader */}
-              {isClient && showSuggestions && messages.length === 0 && isSuggestionsLoading && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                  className="my-8"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="p-4 bg-muted/50 rounded-lg">
-                        <Skeleton className="h-4 w-full mb-2" />
-                        <Skeleton className="h-4 w-3/4" />
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-
               {/* Welcome Message (only when no user interaction yet) */}
               {isClient && showSuggestions && messages.length === 0 && settingsLoaded && (
                 <motion.div
@@ -1056,7 +1067,7 @@ export default function ChatInterface() {
               )}
 
               {/* Suggestions for new conversations */}
-              {isClient && showSuggestions && messages.length === 0 && !isSuggestionsLoading && suggestedQuestions.length > 0 && (
+              {isClient && showSuggestions && messages.length === 0 && (
                 <motion.div
                   key="suggestions-container"
                   initial={settingsLoaded ? false : { opacity: 0 }}
@@ -1065,24 +1076,40 @@ export default function ChatInterface() {
                   className="my-8"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {suggestedQuestions.map((question, index) => (
-                      <motion.button
-                        key={`suggestion-${question.substring(0, 20)}-${index}`}
-                        initial={settingsLoaded ? false : { opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: settingsLoaded ? 0 : index * 0.1 }}
-                        onClick={() => handleSuggestionClick(question)}
-                        className="text-left p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
-                      >
-                        <div className="flex items-center justify-between">
+                    {isSuggestionsLoading ? (
+                      // Loading skeleton
+                      Array.from({ length: 4 }).map((_, index) => (
+                        <div
+                          key={`skeleton-${index}`}
+                          className="text-left p-4 rounded-lg border bg-card"
+                        >
                           <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/60" />
-                            <span className="text-sm">{question}</span>
+                            <div className="w-2 h-2 rounded-full bg-muted animate-pulse" />
+                            <Skeleton className="h-4 w-3/4" />
                           </div>
-                          <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
-                      </motion.button>
-                    ))}
+                      ))
+                    ) : (
+                      // Actual suggestions - using memoized array to prevent flicker
+                      memoizedSuggestions.map((question, index) => (
+                        <motion.button
+                          key={`suggestion-${question.substring(0, 20)}-${index}`}
+                          initial={settingsLoaded ? false : { opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: settingsLoaded ? 0 : index * 0.05 }}
+                          onClick={() => handleSuggestionClick(question)}
+                          className="text-left p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/60" />
+                              <span className="text-sm">{question}</span>
+                            </div>
+                            <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </motion.button>
+                      ))
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -1178,6 +1205,14 @@ export default function ChatInterface() {
                                                           %{Math.min(100, Math.round(source.score))}
                                                         </span>
                                                       )}
+                                                    </div>
+                                                  )}
+                                                  {/* LLM-generated summary */}
+                                                  {source.summary && (
+                                                    <div className="mt-2 p-2 rounded bg-primary/5 border-l-2 border-primary/30">
+                                                      <p className="text-xs text-primary font-medium">
+                                                        💡 {source.summary}
+                                                      </p>
                                                     </div>
                                                   )}
                                                   {source.content && (

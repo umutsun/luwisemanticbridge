@@ -70,11 +70,11 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     const { category } = req.query;
 
     if (!category) {
-      // Return minimal full config if no category - include active models
+      // Return minimal full config if no category - include active models and app description
       const result = await lsembPool.query(
         `SELECT key, value FROM settings
-         WHERE key IN ($1, $2, $3, $4, $5)`,
-        ['app.name', 'app.version', 'app.locale', 'llmSettings.activeChatModel', 'llmSettings.activeEmbeddingModel']
+         WHERE key IN ($1, $2, $3, $4, $5, $6)`,
+        ['app.name', 'app.description', 'app.version', 'app.locale', 'llmSettings.activeChatModel', 'llmSettings.activeEmbeddingModel']
       );
 
       const config: any = {
@@ -286,11 +286,21 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
         }
       }
 
-      // CRITICAL: NO dynamic defaults - return what's in database OR null
+      // CRITICAL: NO dynamic defaults - return what's in database OR use environment variables
       // Frontend/User MUST configure the model in Settings UI
-      if (!config.llmSettings.activeChatModel) {
-        console.warn('⚠️ [Settings] No activeChatModel found in database! User must configure a model.');
-        config.llmSettings.activeChatModel = null;  // Explicitly return null, not a default
+      if (!config.llmSettings?.activeChatModel) {
+        const envModel = process.env.LLM_MODEL || 'anthropic/claude-3-5-sonnet-20241022';
+        console.warn('⚠️ [Settings] No activeChatModel found in database, using environment variable:', envModel);
+        config.llmSettings = config.llmSettings || {};
+        config.llmSettings.activeChatModel = envModel;
+      }
+
+      if (!config.llmSettings?.activeEmbeddingModel) {
+        // CORRECT: Use proper embedding model as fallback (NOT chat model!)
+        const envEmbed = process.env.EMBEDDING_MODEL || 'openai/text-embedding-3-small';
+        console.warn('⚠️ [Settings] No activeEmbeddingModel found in database, using environment variable:', envEmbed);
+        config.llmSettings = config.llmSettings || {};
+        config.llmSettings.activeEmbeddingModel = envEmbed;
       }
 
       // Log active models
@@ -371,20 +381,52 @@ router.post('/', async (req: Request, res: Response) => {
         return res.status(400).json({ error: `Invalid similarityThreshold value: ${value}. Must be between 0 and 1.` });
       }
 
+      // CRITICAL VALIDATION: Prevent chat models from being saved as embedding models
+      if ((key === 'llmSettings.activeEmbeddingModel' || key === 'llmSettings.embeddingModel') && typeof value === 'string') {
+        const chatModelPatterns = ['gpt-4o', 'gpt-4', 'gpt-3.5', 'claude', 'gemini'];
+        const isLikelyChatModel = chatModelPatterns.some(pattern =>
+          value.toLowerCase().includes(pattern)
+        ) && !value.toLowerCase().includes('embedding');
+
+        if (isLikelyChatModel) {
+          return res.status(400).json({
+            error: `Invalid embedding model: "${value}" is a chat model, not an embedding model. Please use a model that includes "embedding" in its name (e.g., text-embedding-3-small, text-embedding-004).`
+          });
+        }
+      }
+
       updates.push({
         key,
         value: typeof value === 'string' ? value : JSON.stringify(value)
       });
     }
 
-    // Batch update
+    // Batch update - determine category from key prefix
     for (const update of updates) {
+      // Extract category from key (e.g., "llmSettings.temperature" -> "llm")
+      const keyPrefix = update.key.split('.')[0];
+      const categoryMap: { [key: string]: string } = {
+        'llmSettings': 'llm',
+        'openai': 'llm',
+        'anthropic': 'llm',
+        'google': 'llm',
+        'deepseek': 'llm',
+        'ragSettings': 'rag',
+        'embeddings': 'embeddings',
+        'prompts': 'prompts',
+        'chatbot': 'chatbot',
+        'database': 'database',
+        'redis': 'redis',
+        'app': 'app'
+      };
+      const category = categoryMap[keyPrefix] || 'general';
+
       await lsembPool.query(
         `INSERT INTO settings (key, value, category)
          VALUES ($1, $2, $3)
          ON CONFLICT (key)
          DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-        [update.key, update.value, categoryName]
+        [update.key, update.value, category]
       );
     }
 
@@ -593,7 +635,8 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
 
     // Reload LLM Manager if llm settings were updated
     if (categoryName === 'llm') {
-      const { default: llmManager } = await import('../services/llm-manager.service');
+      const { default: LLMManager } = await import('../services/llm-manager.service');
+      const llmManager = LLMManager.getInstance();
       await llmManager.reloadSettings();
       console.log(`🔄 [Settings] LLM Manager reloaded`);
     }

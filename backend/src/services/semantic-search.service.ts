@@ -60,7 +60,6 @@ export class SemanticSearchService {
           indexdef,
           pg_size_pretty(pg_relation_size(indexrelid)) as index_size
         FROM pg_indexes
-        JOIN pg_stat_user_indexes USING (schemaname, tablename, indexname)
         WHERE tablename = 'unified_embeddings'
           AND indexname LIKE '%embedding%'
           AND indexname NOT LIKE '%record_type%'
@@ -89,6 +88,34 @@ export class SemanticSearchService {
       }
     } catch (error) {
       console.error('[SemanticSearch] Failed to verify vector index:', error);
+    }
+  }
+
+  /**
+   * Generate a brief LLM summary for a source
+   */
+  async generateSourceSummary(source: any): Promise<string> {
+    try {
+      const llmManager = LLMManager.getInstance();
+
+      const prompt = `
+        Aşağıdaki kaynak içeriğini kısaca özetleyin (maksimum 1 cümle):
+
+        Başlık: ${source.title || 'Başlık yok'}
+        İçerik: ${source.content || source.excerpt || 'İçerik yok'}
+
+        Özet:
+      `;
+
+      const response = await llmManager.generateText(prompt, {
+        temperature: 0.3,
+        maxTokens: 50
+      });
+
+      return response?.content?.trim() || 'Özet oluşturulamadı';
+    } catch (error) {
+      console.error('[SemanticSearch] Failed to generate source summary:', error);
+      return 'Özet oluşturulamadı';
     }
   }
 
@@ -438,8 +465,9 @@ export class SemanticSearchService {
       }, {});
 
       // Determine provider and model from settings
-      let providerFromSettings = settings.embedding_provider || settings.embeddingsprovider || 'google';
-      let modelFromSettings = settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
+      // FIXED: Check for llmSettingsembeddingProvider (after dot removal)
+      let providerFromSettings = settings.llmSettingsembeddingProvider || settings.embedding_provider || settings.embeddingsprovider || 'google';
+      let modelFromSettings = settings.llmSettingsembeddingModel || settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
 
       // Normalize provider name
       let provider = this.normalizeProvider(providerFromSettings);
@@ -976,7 +1004,8 @@ export class SemanticSearchService {
       ]);
       console.timeEnd(queryId);
 
-      return result.rows.map(row => {
+      // Map results first, then add summaries
+      const sources = result.rows.map(row => {
         // Smart truncate excerpt at sentence boundary
         const smartExcerpt = this.smartTruncate(row.excerpt || '', 1500);
 
@@ -1014,6 +1043,20 @@ export class SemanticSearchService {
           sourceType: this.getSourceDisplayName(row.source_table || row.record_type)
         };
       });
+
+      // Generate summaries for each source in parallel
+      console.log(`[SemanticSearch] Generating LLM summaries for ${sources.length} sources...`);
+      const summaryPromises = sources.map(source => this.generateSourceSummary(source));
+      const summaries = await Promise.all(summaryPromises);
+
+      // Add summaries to sources
+      sources.forEach((source, index) => {
+        source.summary = summaries[index];
+      });
+
+      console.log(`[SemanticSearch] ✅ Generated summaries for all ${sources.length} sources`);
+
+      return sources;
     } catch (error) {
       if (queryTimerStarted) {
         console.timeEnd(queryId);

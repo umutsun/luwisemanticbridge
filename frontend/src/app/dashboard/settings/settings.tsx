@@ -155,10 +155,32 @@ function LLMSettings() {
       // 1. Try activeChatModel (authoritative source)
       // 2. Fall back to llmSettings.provider/model if available
       // 3. Otherwise use sensible defaults
+      // CRITICAL: OpenRouter models have format "openrouter/provider/model" (e.g., "openrouter/openai/gpt-4o-mini")
+      // For OpenRouter: provider="openrouter", model="openai/gpt-4o-mini"
       const provider = activeChatParts?.[0] || data?.llmSettings?.provider || 'gemini';
-      const model = activeChatParts?.[1] || data?.llmSettings?.model || data?.[provider]?.model || 'gemini-1.5-flash';
+      let model;
+      if (provider === 'openrouter' && activeChatParts && activeChatParts.length >= 3) {
+        // OpenRouter: join remaining parts to get "provider/model" format
+        model = activeChatParts.slice(1).join('/'); // "openai/gpt-4o-mini"
+      } else {
+        model = activeChatParts?.[1] || data?.llmSettings?.model || data?.[provider]?.model || 'gemini-1.5-flash';
+      }
 
-      console.log('🎯 [LLM SETTINGS LOAD] Determined provider/model:', { provider, model });
+      console.log('🎯 [LLM SETTINGS LOAD] Determined provider/model:', { provider, model, activeChatModel: data?.llmSettings?.activeChatModel });
+
+      // CRITICAL: Parse embedding model with OpenRouter support (same as chat model)
+      console.log('🔧 [EMBEDDING SETTINGS] Raw activeEmbeddingModel:', data?.llmSettings?.activeEmbeddingModel);
+      // OpenRouter embeddings: "openrouter/openai/text-embedding-3-small"
+      const embeddingProvider = activeEmbeddingParts?.[0] || data?.llmSettings?.embeddingProvider || 'google';
+      let embeddingModel;
+      if (embeddingProvider === 'openrouter' && activeEmbeddingParts && activeEmbeddingParts.length >= 3) {
+        // OpenRouter: join remaining parts to get "provider/model" format
+        embeddingModel = activeEmbeddingParts.slice(1).join('/'); // "openai/text-embedding-3-small"
+      } else {
+        embeddingModel = activeEmbeddingParts?.[1] || data?.llmSettings?.embeddingModel || 'text-embedding-004';
+      }
+
+      console.log('🎯 [EMBEDDING SETTINGS] Determined:', { embeddingProvider, embeddingModel });
 
       const defaultConfig = {
         provider,
@@ -167,8 +189,8 @@ function LLMSettings() {
         maxTokens: data?.llmSettings?.maxTokens ?? 4096,
         // CRITICAL: Use activeEmbeddingModel first (authoritative source), then llmSettings fields
         // DO NOT use embeddings.* keys as they are legacy/unused
-        embeddingProvider: activeEmbeddingParts?.[0] || data?.llmSettings?.embeddingProvider || 'openai',
-        embeddingModel: activeEmbeddingParts?.[1] || data?.llmSettings?.embeddingModel || 'gpt-4o-mini',
+        embeddingProvider,
+        embeddingModel,
         translationProvider: data?.llmSettings?.translationProvider || 'deepseek',
         ocrProvider: data?.ocrSettings?.activeProvider || 'gemini-vision',
         ocrSettings: {
@@ -781,7 +803,7 @@ function LLMSettings() {
       anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
       deepseek: ['deepseek-chat', 'deepseek-coder'],
       huggingface: ['sentence-transformers/all-MiniLM-L6-v2', 'distilbert-base-uncased', 'bert-base-uncased'],
-      openrouter: ['openai/gpt-4o-mini', 'openai/gpt-4o', 'anthropic/claude-3-5-sonnet-20241022', 'meta-llama/llama-3-70b']
+      openrouter: ['openai/gpt-4o', 'openai/gpt-4o-mini', 'openai/gpt-4-turbo', 'anthropic/claude-3.5-sonnet', 'meta-llama/llama-3.1-8b-instruct', 'google/gemini-pro-1.5']
     };
 
     console.log(`⚠️ [${provider}] No verified models, using defaults`);
@@ -953,23 +975,14 @@ function LLMSettings() {
   };
 
   const getEmbeddingModelsForProvider = (provider: string) => {
-    // First, try to get verified models from API check results
-    const providerData = tempConfig?.[provider];
-    const modelResults = providerData?.modelResults;
+    // CRITICAL FIX: API check tests CHAT models, NOT embedding models!
+    // If we use API check results, chat models (gpt-4o-mini, claude, gemini)
+    // will appear in embedding selectbox, which is WRONG.
+    //
+    // Solution: Always use hardcoded embedding models, ignore API check results
 
-    if (modelResults && Array.isArray(modelResults)) {
-      const successfulModels = modelResults
-        .filter((result: any) => result.success === true)
-        .map((result: any) => result.model);
+    console.log(`📋 [Embedding ${provider}] Using hardcoded embedding models (API validation tests chat models only)`);
 
-      if (successfulModels.length > 0) {
-        console.log(`✅ [Embedding ${provider}] Using verified models:`, successfulModels);
-        return successfulModels;
-      }
-    }
-
-    // Fallback to hardcoded defaults if no API check results
-    console.log(`⚠️ [Embedding ${provider}] No verified models, using defaults`);
     const models: Record<string, string[]> = {
       openai: [
         'text-embedding-3-small',
@@ -1451,6 +1464,21 @@ function LLMSettings() {
                   <Select
                     value={tempConfig?.embeddingModel}
                     onValueChange={async (value) => {
+                      // CRITICAL VALIDATION: Prevent chat models from being selected as embedding models
+                      const chatModelPatterns = ['gpt-4o', 'gpt-4', 'gpt-3.5', 'claude', 'gemini'];
+                      const isLikelyChatModel = chatModelPatterns.some(pattern =>
+                        value.toLowerCase().includes(pattern)
+                      ) && !value.toLowerCase().includes('embedding');
+
+                      if (isLikelyChatModel) {
+                        toast({
+                          title: "Invalid Model",
+                          description: `"${value}" is a chat model, not an embedding model. Please select a model that includes "embedding" in its name.`,
+                          variant: "destructive",
+                        });
+                        return; // Don't save
+                      }
+
                       // Update embedding model in llmSettings
                       const updatedConfig = {
                         ...tempConfig,
