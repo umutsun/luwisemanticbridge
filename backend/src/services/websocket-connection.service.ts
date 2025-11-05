@@ -1,15 +1,9 @@
-import { Server as SocketServer } from 'socket.io';
+import { Server as SocketServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { authenticateToken } from '../middleware/auth.middleware';
 import { MessageStorageService } from './message-storage.service';
 
 interface AuthenticatedSocket extends Socket {
-  userId?: string;
-  userRole?: string;
-  sessionId?: string;
-}
-
-interface Socket extends Socket {
   userId?: string;
   userRole?: string;
   sessionId?: string;
@@ -108,8 +102,8 @@ export class WebSocketConnectionService {
       // Handle leaving a conversation session
       socket.on('leave:session', () => {
         if (socket.sessionId) {
-          socket.leave(`session:${sessionId}`);
-          socket.to(`session:${sessionId}`).emit('user:left', {
+          socket.leave(`session:${socket.sessionId}`);
+          socket.to(`session:${socket.sessionId}`).emit('user:left', {
             userId: socket.userId
           });
           socket.sessionId = undefined;
