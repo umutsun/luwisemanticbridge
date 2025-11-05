@@ -281,6 +281,7 @@ export class RAGChatService {
         'enable_parallel_llm',
         'parallel_llm_count',
         'ragSettings.similarityThreshold', 'similarityThreshold', 'semantic_search_threshold',
+        'ragSettings.lowConfidenceThreshold', 'lowConfidenceThreshold', 'databaseconfidence',
         'response_language',
         'llmSettings.activeChatModel'
       ];
@@ -312,6 +313,12 @@ export class RAGChatService {
       );
       const responseLanguage = settingsMap.get('response_language') || 'tr';
       const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
+      const lowConfidenceThreshold = parseFloat(
+        settingsMap.get('ragSettings.lowConfidenceThreshold') ||
+        settingsMap.get('lowConfidenceThreshold') ||
+        settingsMap.get('databaseconfidence') ||
+        '0.5'
+      );
 
       console.log(`⚙️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}`);
 
@@ -390,33 +397,27 @@ export class RAGChatService {
         return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
-      // Check if best result has low confidence (< 10% similarity)
-      // NOTE: 10% is very aggressive to maximize recall
-      // Similarity scores tend to be lower than expected, so this prevents false negatives
-      // LLM can still provide useful synthesis even with lower-scoring results
+      // Check confidence levels based on similarity scores
       const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
-      const hasLowConfidence = bestScore < 10;
+      const HIGH_CONFIDENCE_THRESHOLD = 0.75; // 75% similarity = strong match
 
-      // If no relevant context found or all results have low confidence
-      if (!enhancedContext || enhancedContext.trim().length === 0 || searchResults.length === 0 || hasLowConfidence) {
+      const hasHighConfidence = bestScore >= HIGH_CONFIDENCE_THRESHOLD;
+      const hasPartialMatch = bestScore > 0 && bestScore < HIGH_CONFIDENCE_THRESHOLD;
+      const hasNoResults = searchResults.length === 0 || !enhancedContext || enhancedContext.trim().length === 0;
+
+      console.log(`📊 Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, results=${searchResults.length}, high=${hasHighConfidence}, partial=${hasPartialMatch}`);
+
+      // CASE 1: No results at all - return "not found" message
+      if (hasNoResults) {
         const noResultsMessage = responseLanguage === 'en'
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
 
-        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore: ${bestScore}%, threshold: 10%)`);
-
-        // Still show low-confidence results as reference (but with disclaimer)
-        console.log(`🔍 DEBUG: searchResults before formatSources: ${searchResults.length} results`);
-        const processedSources = await this.formatSources(
-          searchResults.slice(0, Math.min(searchResults.length, 5)),
-          {} // No settings needed for low-confidence results
-        );
-        console.log(`📦 DEBUG: processedSources after formatSources: ${processedSources.length} sources`);
-        console.log(`📊 DEBUG: First source:`, processedSources[0] ? { title: processedSources[0].title, score: processedSources[0].score } : 'NONE');
+        console.log(`⚠️ No relevant context found for query: "${message}"`);
 
         return {
           response: noResultsMessage,
-          sources: processedSources, // Show them but with low scores
+          sources: [],
           relatedTopics: [],
           conversationId: convId,
           provider: 'system',
@@ -426,15 +427,31 @@ export class RAGChatService {
           fallbackUsed: false,
           originalModel: activeModel || 'none',
           actualProvider: 'system',
-          lowConfidence: true // Flag for frontend
+          lowConfidence: true
         };
       }
+
+      // CASE 2 & 3: Has results (either high confidence or partial match)
+      // Let LLM generate response, but add instruction for partial matches
 
       // Generate user message with context (NOT including system prompt - it goes separately)
       const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
       const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
 
-      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}`;
+      // Add partial match instruction for low-confidence results
+      let confidenceInstruction = '';
+      if (hasPartialMatch) {
+        confidenceInstruction = responseLanguage === 'en'
+          ? '\n\nIMPORTANT: The context sources have moderate relevance (similarity < 75%). Start your response with "I found some related information, though not a perfect match:" and then summarize the most relevant parts from the context.'
+          : '\n\nÖNEMLİ: Bağlam kaynakları orta düzeyde ilgili (benzerlik < %75). Yanıtınıza "Tam eşleşme bulamadım ancak benzer kayıtlara göre:" diyerek başlayın ve bağlamdaki en ilgili kısımları özetleyin.';
+      } else if (hasHighConfidence) {
+        confidenceInstruction = responseLanguage === 'en'
+          ? '\n\nThe context sources are highly relevant (similarity ≥ 75%). Provide a comprehensive answer based on this information.'
+          : '\n\nBağlam kaynakları yüksek düzeyde ilgili (benzerlik ≥ %75). Bu bilgilere dayanarak kapsamlı bir yanıt verin.';
+      }
+
+      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${confidenceInstruction}`;
+      console.log(`🤖 Confidence: ${hasHighConfidence ? 'HIGH (≥75%)' : hasPartialMatch ? 'PARTIAL (<75%)' : 'LOW'}, bestScore=${(bestScore * 100).toFixed(1)}%`);
       console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(`📝 Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
       console.log(`📝 System prompt length: ${systemPrompt?.length || 0} chars`);
@@ -631,6 +648,9 @@ export class RAGChatService {
    * Extract provider name from model string
    */
   private extractProviderFromModel(model: string): string {
+    // CRITICAL: Check OpenRouter first (before openai/gpt check)
+    // OpenRouter models: "openrouter/openai/gpt-4o-mini"
+    if (model.includes('openrouter')) return 'openrouter';
     if (model.includes('claude') || model.includes('anthropic')) return 'claude';
     if (model.includes('openai') || model.includes('gpt')) return 'openai';
     if (model.includes('gemini') || model.includes('google')) return 'gemini';
@@ -1842,9 +1862,9 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
       console.log(`✨ Found ${recentQuestions.length} recent questions from user searches`);
 
-      // 2. Get interesting titles from unified_embeddings (actual soru-cevap, makaleler, etc.)
+      // 2. Get interesting titles from unified_embeddings (actual sorucevap, makaleler, etc.)
       const unifiedQuestionsQuery = `
-        SELECT DISTINCT
+        SELECT
           COALESCE(metadata->>'title',
                    LEFT(content, 150)) as question_text,
           metadata->>'table' as source_type
