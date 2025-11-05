@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { fetchWithAuth, setStoredToken } from '@/lib/auth-fetch';
+import { fetchWithAuth, setStoredToken, getStoredToken } from '@/lib/auth-fetch';
 
 interface Config {
   app: {
@@ -132,7 +132,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       };
 
       // Add Authorization header if token exists
-      const token = authToken || storedToken;
+      const token = authToken || getStoredToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -336,18 +336,38 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       fetchConfig(token);
     } else {
       // Set loading to false if no token (user not authenticated)
-      setLoading(false);
-      // Set a default config for non-authenticated users (show app name, etc.)
-      setConfig({
-        app: {
-          name: 'Mali Müşavir Asistanı',
-          description: 'AI-Powered Knowledge Management System',
-          version: '1.0.0',
-          locale: 'tr'
-        }
+      // Fetch public chatbot settings instead of using hardcoded values
+      fetchPublicChatbotSettings().then((settings) => {
+        setConfig({
+          app: {
+            name: settings.name,
+            description: settings.description,
+            version: '1.0.0',
+            locale: 'tr'
+          }
+        });
+        setLoading(false);
       });
     }
   }, []);
+
+  // Helper function to fetch public chatbot settings for non-authenticated users
+  const fetchPublicChatbotSettings = async (): Promise<{ name: string; description: string }> => {
+    try {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`);
+      if (response.ok) {
+        const chatbotData = await response.json();
+        return {
+          name: chatbotData.title || 'LSEMB',
+          description: chatbotData.subtitle || 'AI-Powered Knowledge Management System'
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching public chatbot settings:', error);
+    }
+    return { name: 'LSEMB', description: 'AI-Powered Knowledge Management System' };
+  };
 
   // Listen for token changes to automatically refresh config
   useEffect(() => {
@@ -359,15 +379,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
           if (token) {
             fetchConfig(token);
           } else {
-            // Token removed - set default config
-            setLoading(false);
-            setConfig({
-              app: {
-                name: 'Mali Müşavir Asistanı',
-                description: 'AI-Powered Knowledge Management System',
-                version: '1.0.0',
-                locale: 'tr'
-              }
+            // Token removed - fetch public chatbot settings
+            fetchPublicChatbotSettings().then((settings) => {
+              setConfig({
+                app: {
+                  name: settings.name,
+                  description: settings.description,
+                  version: '1.0.0',
+                  locale: 'tr'
+                }
+              });
+              setLoading(false);
             });
           }
         }
@@ -377,14 +399,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         if (token) {
           fetchConfig(token);
         } else {
-          setLoading(false);
-          setConfig({
-            app: {
-              name: 'Mali Müşavir Asistanı',
-              description: 'AI-Powered Knowledge Management System',
-              version: '1.0.0',
-              locale: 'tr'
-            }
+          // Fetch public chatbot settings
+          fetchPublicChatbotSettings().then((settings) => {
+            setConfig({
+              app: {
+                name: settings.name,
+                description: settings.description,
+                version: '1.0.0',
+                locale: 'tr'
+              }
+            });
+            setLoading(false);
           });
         }
       }

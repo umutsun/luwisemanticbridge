@@ -2052,49 +2052,30 @@ function RAGSettings() {
               <h3 className="text-lg font-medium">Processing Parameters</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>Parallel LLM Count: {tempRAGConfig?.ragSettings?.parallelLLMCount ?? ragConfig?.ragSettings?.parallelLLMCount ?? 4}</Label>
-                  <Slider
-                    value={[tempRAGConfig?.ragSettings?.parallelLLMCount ?? ragConfig?.ragSettings?.parallelLLMCount ?? 4]}
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="mt-2"
-                    onValueChange={([value]) => updateRAGSetting('parallelLLMCount', value)}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Batch Size: {tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 100}</Label>
+                    <Label>Batch Size: {tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 3}</Label>
+                    <p className="text-xs text-muted-foreground mt-1">Number of items to load when clicking &quot;Load More&quot; (recommended: 3-5)</p>
                     <Slider
-                      value={[tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 100]}
-                      max={500}
-                      min={10}
-                      step={10}
+                      value={[tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 3]}
+                      max={10}
+                      min={1}
+                      step={1}
                       className="mt-2"
                       onValueChange={([value]) => updateRAGSetting('parallelLLMBatchSize', value)}
                     />
                   </div>
-                  <div>
-                    <Label>Chunk Overlap: {tempRAGConfig?.ragSettings?.chunkOverlap ?? ragConfig?.ragSettings?.chunkOverlap ?? 200}</Label>
-                    <Slider
-                      value={[tempRAGConfig?.ragSettings?.chunkOverlap ?? ragConfig?.ragSettings?.chunkOverlap ?? 200]}
-                      max={500}
-                      min={0}
-                      step={50}
-                      className="mt-2"
-                      onValueChange={([value]) => updateRAGSetting('chunkOverlap', value)}
-                    />
-                  </div>
+                  {/* Chunk Size & Overlap - Disabled (not currently used, reserved for future large document processing) */}
                 </div>
                 <div>
-                  <Label>Chunk Size: {tempRAGConfig?.ragSettings?.chunkSize || ragConfig?.ragSettings?.chunkSize || 1000}</Label>
+                  <Label>Summary Max Length: {tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800}</Label>
+                  <p className="text-xs text-muted-foreground mt-1">Maximum characters for AI-generated summaries (recommended: 800-1200 for markdown formatting)</p>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.chunkSize || ragConfig?.ragSettings?.chunkSize || 1000]}
+                    value={[tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800]}
                     max={2000}
                     min={100}
-                    step={100}
+                    step={50}
                     className="mt-2"
-                    onValueChange={([value]) => updateRAGSetting('chunkSize', value)}
+                    onValueChange={([value]) => updateRAGSetting('summaryMaxLength', value)}
                   />
                 </div>
               </div>
@@ -2111,7 +2092,7 @@ function RAGSettings() {
                     </p>
                   </div>
                   <Switch
-                    checked={tempRAGConfig?.ragSettings?.enableHybridSearch ?? ragConfig?.ragSettings?.enableHybridSearch}
+                    checked={tempRAGConfig?.ragSettings?.enableHybridSearch ?? ragConfig?.ragSettings?.enableHybridSearch ?? true}
                     onCheckedChange={(checked) => {
                       updateRAGSetting('enableHybridSearch', checked);
                       // When hybrid search is enabled, ensure semantic search is also enabled
@@ -2126,7 +2107,7 @@ function RAGSettings() {
                   <div className="flex-1">
                     <Label>Enable Keyword Boost</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Boosts exact keyword matches in search results
+                      Boosts exact keyword matches in search results. Highlighted keywords appear in yellow tags.
                     </p>
                   </div>
                   <Switch
@@ -2280,34 +2261,6 @@ function RAGSettings() {
 
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <Label>Use Keyword-Based Suggestions</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Enable to use keywords below for generating suggestions.
-                    When disabled, shows popular questions from database.
-                  </p>
-                </div>
-                <Switch
-                  checked={tempChatbotConfig?.chatbot?.useKeywordSuggestions ?? false}
-                  onCheckedChange={(checked) => updateChatbotSetting('useKeywordSuggestions', checked)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="suggestionKeywords">Suggestion Keywords</Label>
-                <Input
-                  id="suggestionKeywords"
-                  value={tempChatbotConfig?.chatbot?.suggestionKeywords || chatbotConfig?.chatbot?.suggestionKeywords || ""}
-                  onChange={(e) => updateChatbotSetting('suggestionKeywords', e.target.value)}
-                  placeholder="hukuk, sözleşme, dava, mahkeme, avukat..."
-                  disabled={!(tempChatbotConfig?.chatbot?.useKeywordSuggestions ?? false)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Enter keywords separated by commas. System will find suggestions based on these keywords.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
                   <Label>Enable Question Suggestions</Label>
                   <p className="text-xs text-muted-foreground mt-1">
                     Show suggested questions in chat interface
@@ -2319,17 +2272,22 @@ function RAGSettings() {
                 />
               </div>
 
-              <div className="flex items-center justify-between opacity-50 pointer-events-none">
+              {/* Keyword-Based Suggestions - Disabled (not implemented yet, reserved for future) */}
+              <div className="flex items-center justify-between opacity-50">
                 <div className="flex-1">
-                  <Label>Auto-Generate Suggestions (Deprecated)</Label>
+                  <Label>Use Keyword-Based Suggestions</Label>
                   <p className="text-xs text-muted-foreground mt-1">
-                    This option is now controlled by "Use Keyword-Based Suggestions" switch above.
+                    Enable to use keywords below for generating suggestions. When disabled, shows popular questions from database. (Feature will be implemented later)
                   </p>
                 </div>
-                <Switch
-                  checked={tempChatbotConfig?.chatbot?.autoGenerateSuggestions ?? true}
-                  onCheckedChange={(checked) => updateChatbotSetting('autoGenerateSuggestions', checked)}
-                />
+                <Switch disabled checked={false} />
+              </div>
+
+              {/* Suggestion Keywords - Disabled (not implemented yet) */}
+              <div className="space-y-2 opacity-50">
+                <Label htmlFor="suggestionKeywords">Suggestion Keywords</Label>
+                <Input disabled id="suggestionKeywords" value="" placeholder="Feature will be implemented later" />
+                <p className="text-xs text-muted-foreground">Reserved for future use</p>
               </div>
             </div>
 
@@ -2386,19 +2344,13 @@ function RAGSettings() {
                   </div>
                 </div>
 
+                {/* Question Template - Disabled (not currently used)
                 <div>
                   <Label htmlFor="questionTemplate">Question Template</Label>
-                  <Textarea
-                    id="questionTemplate"
-                    value={tempChatbotConfig?.chatbot?.questionTemplate || "Yaptığımız konuşmaya göre, şunu da merak ediyor olabilirsiniz: {question}"}
-                    onChange={(e) => updateChatbotSetting('questionTemplate', e.target.value)}
-                    placeholder="Enter template for generated questions..."
-                    rows={2}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Template for generating follow-up questions. Use {'{question}'} as placeholder.
-                  </p>
+                  <Textarea disabled id="questionTemplate" value="Future feature" rows={2} />
+                  <p className="text-xs text-muted-foreground mt-1">Reserved for future use</p>
                 </div>
+                */}
 
                 <div className="flex items-center justify-between">
                   <div className="flex-1">

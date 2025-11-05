@@ -846,6 +846,16 @@ async function startServer() {
       await syncAPIKeysToDatabase();
       console.log("✅ API keys: Synced");
 
+      // Initialize LLMManager with settings from database
+      try {
+        const { LLMManager } = await import('./services/llm-manager.service');
+        const llmManager = LLMManager.getInstance();
+        await llmManager.initialize();
+        console.log("✅ LLM Manager: Initialized with database settings");
+      } catch (error: any) {
+        console.error("❌ LLM Manager initialization failed:", error.message);
+      }
+
       // Update server status to indicate successful database connection
       (global as any).serverStatus = {
         database: "connected",

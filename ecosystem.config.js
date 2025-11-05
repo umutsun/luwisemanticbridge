@@ -51,7 +51,7 @@ module.exports = {
         : 'npm',
       args: process.platform === 'win32'
         ? 'dev'
-        : 'run dev',
+        : 'run start',
       cwd: './frontend',
       instances: 1,
       exec_mode: 'fork',

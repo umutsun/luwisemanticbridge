@@ -393,27 +393,56 @@ export class RAGChatService {
       const enhancedContext = searchResults.slice(0, initialDisplayCount).map((r, idx) => {
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
-        const content = this.truncateExcerpt(r.excerpt || r.content || '', 300);
+        // Get content - use excerpt, content, or title as fallback
+        let content = this.truncateExcerpt(r.excerpt || r.content || '', 300);
+        // If still empty after truncation, use title as content
+        if (!content || content.trim().length === 0) {
+          content = `Bu kaynak "${title}" başlıklı bir belgedir.`;
+        }
         return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
       }).join('\n');
 
       // Check confidence levels based on similarity scores
       const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
+
+      // Get threshold settings (0-1 range, e.g., 0.25 = 25%, 0.75 = 75%)
       const HIGH_CONFIDENCE_THRESHOLD = 0.75; // 75% similarity = strong match
+      const LOW_CONFIDENCE_THRESHOLD = parseFloat(
+        settingsMap.get('ragSettings.similarityThreshold') ||
+        settingsMap.get('similarityThreshold') ||
+        '0.25'
+      ); // Below this = "not found" message
 
+      // Check if we have actual content (not just empty strings or only titles)
+      const hasActualContent = searchResults.slice(0, initialDisplayCount).some(r =>
+        (r.excerpt && r.excerpt.trim().length > 0) || (r.content && r.content.trim().length > 0)
+      );
+
+      // Debug: Log content availability
+      console.log(`🔍 DEBUG - Content check:`, {
+        resultsCount: searchResults.length,
+        initialDisplayCount,
+        hasActualContent,
+        firstResultHasExcerpt: searchResults[0] ? !!(searchResults[0].excerpt && searchResults[0].excerpt.trim().length > 0) : false,
+        firstResultHasContent: searchResults[0] ? !!(searchResults[0].content && searchResults[0].content.trim().length > 0) : false,
+        firstResultTitle: searchResults[0]?.title?.substring(0, 50),
+        enhancedContextLength: enhancedContext.length
+      });
+
+      const hasNoResults = searchResults.length === 0 || !enhancedContext || enhancedContext.trim().length === 0 || !hasActualContent;
+      const isBelowThreshold = bestScore < LOW_CONFIDENCE_THRESHOLD; // Below minimum threshold
       const hasHighConfidence = bestScore >= HIGH_CONFIDENCE_THRESHOLD;
-      const hasPartialMatch = bestScore > 0 && bestScore < HIGH_CONFIDENCE_THRESHOLD;
-      const hasNoResults = searchResults.length === 0 || !enhancedContext || enhancedContext.trim().length === 0;
+      const hasPartialMatch = bestScore >= LOW_CONFIDENCE_THRESHOLD && bestScore < HIGH_CONFIDENCE_THRESHOLD;
 
-      console.log(`📊 Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, results=${searchResults.length}, high=${hasHighConfidence}, partial=${hasPartialMatch}`);
+      console.log(`📊 Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, results=${searchResults.length}, hasActualContent=${hasActualContent}, high=${hasHighConfidence}, partial=${hasPartialMatch}, belowThreshold=${isBelowThreshold}`);
 
-      // CASE 1: No results at all - return "not found" message
-      if (hasNoResults) {
+      // CASE 1: No results OR below minimum threshold - return "not found" message
+      if (hasNoResults || isBelowThreshold) {
         const noResultsMessage = responseLanguage === 'en'
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
 
-        console.log(`⚠️ No relevant context found for query: "${message}"`);
+        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore=${(bestScore * 100).toFixed(1)}% < threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%)`);
 
         return {
           response: noResultsMessage,
@@ -450,7 +479,25 @@ export class RAGChatService {
           : '\n\nBağlam kaynakları yüksek düzeyde ilgili (benzerlik ≥ %75). Bu bilgilere dayanarak kapsamlı bir yanıt verin.';
       }
 
-      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${confidenceInstruction}`;
+      // Add citation format instruction with STRONG emphasis on NO HEADINGS
+      // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
+      const citationInstruction = responseLanguage === 'en'
+        ? `\n\nCRITICAL FORMATTING RULES:\n` +
+          `✅ Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
+          `✅ Add citations at paragraph ends using ONLY source numbers 1-${initialDisplayCount}: **[1]**, **[2, 3]**, etc.\n` +
+          `❌ NEVER cite sources beyond number ${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+          `❌ NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
+          `❌ NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
+          `Just write flowing paragraphs with citation numbers at the end.`
+        : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
+          `✅ SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
+          `✅ Paragraf sonlarına SADECE 1-${initialDisplayCount} arası kaynak numarası kullan: **[1]**, **[2, 3]**, vb.\n` +
+          `❌ ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme (sadece ${initialDisplayCount} kaynak var)\n` +
+          `❌ ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
+          `❌ ASLA etiket ekleme\n` +
+          `Sadece akıcı paragraflar yaz, sonunda kaynak numaraları olsun.`;
+
+      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${confidenceInstruction}${citationInstruction}`;
       console.log(`🤖 Confidence: ${hasHighConfidence ? 'HIGH (≥75%)' : hasPartialMatch ? 'PARTIAL (<75%)' : 'LOW'}, bestScore=${(bestScore * 100).toFixed(1)}%`);
       console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(`📝 Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
@@ -471,6 +518,9 @@ export class RAGChatService {
           preferredProvider: providerFromModel  // Pass normalized provider name (claude/openai/gemini/deepseek)
         }
       );
+
+      // Clean response content - remove section headings that LLM might add despite instructions
+      response.content = this.stripSectionHeadings(response.content);
 
       // 5. Save messages to database with error handling
       try {
@@ -694,6 +744,67 @@ export class RAGChatService {
   }
 
   /**
+   * Strip section headings from LLM response
+   * Removes headings like "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:", etc.
+   */
+  private stripSectionHeadings(text: string): string {
+    if (!text) return '';
+
+    // Turkish headings (most common)
+    const turkishHeadings = [
+      /\*\*KISA GİRİŞ:\*\*/gi,
+      /\*\*ANA BİLGİ:\*\*/gi,
+      /\*\*UYGULAMA:\*\*/gi,
+      /\*\*KAYNAKÇA:\*\*/gi,
+      /\*\*GİRİŞ:\*\*/gi,
+      /\*\*SONUÇ:\*\*/gi,
+      /\*\*DETAYLAR:\*\*/gi,
+      /KISA GİRİŞ:/gi,
+      /ANA BİLGİ:/gi,
+      /UYGULAMA:/gi,
+      /KAYNAKÇA:/gi,
+      /GİRİŞ:/gi,
+      /SONUÇ:/gi,
+      /DETAYLAR:/gi
+    ];
+
+    // English headings
+    const englishHeadings = [
+      /\*\*INTRODUCTION:\*\*/gi,
+      /\*\*MAIN POINTS:\*\*/gi,
+      /\*\*APPLICATION:\*\*/gi,
+      /\*\*REFERENCES:\*\*/gi,
+      /\*\*SOURCES:\*\*/gi,
+      /\*\*CONCLUSION:\*\*/gi,
+      /INTRODUCTION:/gi,
+      /MAIN POINTS:/gi,
+      /APPLICATION:/gi,
+      /REFERENCES:/gi,
+      /SOURCES:/gi,
+      /CONCLUSION:/gi
+    ];
+
+    let cleanedText = text;
+
+    // Remove Turkish headings
+    turkishHeadings.forEach(heading => {
+      cleanedText = cleanedText.replace(heading, '');
+    });
+
+    // Remove English headings
+    englishHeadings.forEach(heading => {
+      cleanedText = cleanedText.replace(heading, '');
+    });
+
+    // Clean up excessive whitespace
+    cleanedText = cleanedText
+      .replace(/\n{3,}/g, '\n\n') // Max 2 consecutive newlines
+      .trim();
+
+    return cleanedText;
+  }
+
+  /**
    * Format sources for better UI display
    * Optimized with enhanced parallel LLM processing
    */
@@ -908,7 +1019,7 @@ export class RAGChatService {
 
       // Get settings once for all results
       const maxSummaryLength = parseInt(
-        await settingsService.getSetting('ragSettings.summaryMaxLength') || '500'
+        await settingsService.getSetting('ragSettings.summaryMaxLength') || '800'
       );
       const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
       const conversationTone = await settingsService.getSetting('llmSettings.conversationTone')
@@ -945,18 +1056,18 @@ You are a tax and legal expert. Process ALL items below in ONE response.
 TONE: ${toneInstruction}
 
 For EACH item, provide:
-1. A natural explanation (max ${maxSummaryLength} chars) - INTERPRET, don't copy
-2. A specific question (max 15 words)
+1. A natural explanation (max ${maxSummaryLength} chars) - INTERPRET, don't copy. Use **bold** for key terms.
+2. A brief summary (max 15 words) - Very short summary of the main topic (NOT a question)
 
 RESPOND IN THIS EXACT FORMAT:
 
 ITEM 1:
 CONTENT: [Your natural explanation]
-QUESTION: [Specific question]
+SUMMARY: [Brief topic summary - NOT a question]
 
 ITEM 2:
 CONTENT: [Your natural explanation]
-QUESTION: [Specific question]
+SUMMARY: [Brief topic summary - NOT a question]
 
 ... continue for all items ...
 
@@ -973,18 +1084,18 @@ Sen vergi ve hukuk uzmanısın. Aşağıdaki TÜM kayıtları TEK yanıtta işle
 ÜSLUBİN: ${toneInstruction}
 
 HER kayıt için ver:
-1. Doğal açıklama (maks ${maxSummaryLength} karakter) - YORUMLA, kopyalama
-2. Spesifik soru (maks 15 kelime)
+1. Doğal açıklama (maks ${maxSummaryLength} karakter) - YORUMLA, kopyalama. Anahtar terimler için **kalın** kullan.
+2. Kısa özet (maks 15 kelime) - Ana konunun çok kısa özeti (SORU FORMATINDA DEĞİL)
 
 TAM OLARAK BU FORMATTA YANITLA:
 
 KAYIT 1:
 İÇERİK: [Doğal açıklaman]
-SORU: [Spesifik soru]
+ÖZET: [Kısa konu özeti - SORU DEĞİL]
 
 KAYIT 2:
 İÇERİK: [Doğal açıklaman]
-SORU: [Spesifik soru]
+ÖZET: [Kısa konu özeti - SORU DEĞİL]
 
 ... tüm kayıtlar için devam et ...
 
@@ -1011,8 +1122,8 @@ Başlık: ${r.title}
       // Parse the batch response
       const parsed: Array<{ processedContent: string; generatedQuestion: string }> = [];
       const itemPattern = responseLanguage === 'en'
-        ? /ITEM \d+:[\s\S]*?CONTENT:\s*(.*?)[\s\S]*?QUESTION:\s*(.*?)(?=ITEM \d+:|$)/gi
-        : /KAYIT \d+:[\s\S]*?İÇERİK:\s*(.*?)[\s\S]*?SORU:\s*(.*?)(?=KAYIT \d+:|$)/gi;
+        ? /ITEM \d+:[\s\S]*?CONTENT:\s*(.*?)[\s\S]*?SUMMARY:\s*(.*?)(?=ITEM \d+:|$)/gi
+        : /KAYIT \d+:[\s\S]*?İÇERİK:\s*(.*?)[\s\S]*?ÖZET:\s*(.*?)(?=KAYIT \d+:|$)/gi;
 
       let match;
       while ((match = itemPattern.exec(response.content)) !== null) {
@@ -1068,7 +1179,7 @@ Başlık: ${r.title}
 
       // Get max length from settings
       const maxSummaryLength = parseInt(
-        await settingsService.getSetting('ragSettings.summaryMaxLength') || '500'
+        await settingsService.getSetting('ragSettings.summaryMaxLength') || '800'
       );
 
       // Get active system prompt from database
@@ -1130,6 +1241,7 @@ CRITICAL RULES:
 ❌ DO NOT preserve the original structure
 ✅ REWRITE in natural language matching the tone above
 ✅ EXPLAIN as if talking to someone who needs to understand quickly
+✅ USE MARKDOWN: **bold** for key terms, *italic* for emphasis, bullet points when appropriate
 
 TASK:
 Read the content below and create:
@@ -1140,18 +1252,18 @@ Read the content below and create:
    - How does it work? (procedure, calculation, conditions)
    - Write in the ${conversationTone} tone specified above
 
-2. A SPECIFIC QUESTION (max 15 words):
-   - About the actual topic (use specific terms from content)
-   - Natural conversation style matching the tone
-   - Something someone would really ask
+2. A BRIEF SUMMARY (max 15 words):
+   - Very short summary of the main topic (NOT a question)
+   - Use specific terms from content
+   - Natural summary style, not interrogative
 
 FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
 
-İYİLEŞTİRİLMİŞ İÇERİK:
+IMPROVED CONTENT:
 [Your interpretation - completely rewritten in ${conversationTone} tone, NOT copied]
 
-SORU:
-[Natural question about the topic]
+SUMMARY:
+[Brief topic summary - NOT a question]
 
 Title: ${title}
 Content: ${cleanExcerpt}
@@ -1168,6 +1280,7 @@ KRİTİK KURALLAR:
 ❌ Orijinal yapıyı KORUMA
 ✅ Yukarıdaki üsluba uygun doğal dilde YENİDEN YAZ
 ✅ Hızlıca anlaması gereken birine anlatır gibi AÇIKLA
+✅ MARKDOWN KULLAN: **kalın** anahtar terimler için, *italik* vurgu için, uygun yerlerde madde işareti
 
 GÖREV:
 Aşağıdaki içeriği oku ve oluştur:
@@ -1178,18 +1291,18 @@ Aşağıdaki içeriği oku ve oluştur:
    - Nasıl işliyor? (prosedür, hesaplama, koşullar)
    - Yukarıda belirtilen ${conversationTone} üslubunda yaz
 
-2. SPESİFİK BİR SORU (maksimum 15 kelime):
-   - Gerçek konu hakkında (içerikteki spesifik terimleri kullan)
-   - Üsluba uygun doğal konuşma tarzı
-   - Birinin gerçekten soracağı bir şey
+2. KISA BİR ÖZET (maksimum 15 kelime):
+   - Ana konunun çok kısa özeti (SORU FORMATINDA DEĞİL)
+   - İçerikteki spesifik terimleri kullan
+   - Doğal özet tarzı, soru tarzı değil
 
 YANITI TAM OLARAK BU FORMATTA VER:
 
 İYİLEŞTİRİLMİŞ İÇERİK:
 [Senin yorumun - ${conversationTone} üslubunda tamamen yeniden yazılmış, KOPYALANMAMIŞ]
 
-SORU:
-[Konu hakkında doğal soru]
+ÖZET:
+[Kısa konu özeti - SORU DEĞİL]
 
 Başlık: ${title}
 İçerik: ${cleanExcerpt}
@@ -1206,17 +1319,28 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         });
 
         if (response && response.content) {
+          // Debug: Log LLM response for troubleshooting empty summaries
+          console.log(`📝 LLM Response for "${title.substring(0, 50)}...": ${response.content.substring(0, 200)}...`);
+
           // Parse the response based on language
           const contentMatch = response.content.match(
             responseLanguage === 'en'
-              ? /IMPROVED CONTENT:\s*(.*?)(?=\nQUESTION:|$)/s
-              : /İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nSORU:|$)/s
+              ? /IMPROVED CONTENT:\s*(.*?)(?=\nSUMMARY:|$)/s
+              : /İYİLEŞTİRİLMİŞ İÇERİK:\s*(.*?)(?=\nÖZET:|$)/s
           );
           const questionMatch = response.content.match(
             responseLanguage === 'en'
-              ? /QUESTION:\s*(.*)/s
-              : /SORU:\s*(.*)/s
+              ? /SUMMARY:\s*(.*)/s
+              : /ÖZET:\s*(.*)/s
           );
+
+          // Debug: Log parsing results
+          if (!contentMatch) {
+            console.warn(`⚠️ Failed to parse content for "${title.substring(0, 50)}..." - using fallback`);
+          }
+          if (!questionMatch) {
+            console.warn(`⚠️ Failed to parse summary for "${title.substring(0, 50)}..." - using fallback`);
+          }
 
           // Clean the content
           let processedContent = contentMatch ? contentMatch[1].trim() : cleanExcerpt;
@@ -2106,8 +2230,16 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       // Get results from current offset in batch size chunks
       const newResults = filteredResults.slice(currentOffset, currentOffset + fetchCount);
 
-      // Format the results
-      const formattedResults = await this.formatSources(newResults);
+      // Get additional settings for LLM generation
+      const enableParallelLLM = await settingsService.getSetting('enable_parallel_llm') === 'true';
+      const parallelCount = Math.min(parseInt(await settingsService.getSetting('parallel_llm_count') || '3'), 5);
+
+      // Format the results with LLM generation enabled (same as initial results)
+      const formattedResults = await this.formatSources(newResults, {
+        enableParallelLLM,
+        parallelCount,
+        batchSize
+      });
 
       // Check if there are more results
       const hasMore = currentOffset + fetchCount < filteredResults.length;

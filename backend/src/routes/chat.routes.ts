@@ -14,7 +14,7 @@ const subscriptionService = new SubscriptionService();
 /**
  * Send a chat message - requires authentication and subscription
  */
-router.post('/api/v2/chat', authenticateToken, checkQueryLimits, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     console.log('Chat request received:', {
       body: req.body,

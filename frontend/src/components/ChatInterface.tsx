@@ -73,7 +73,12 @@ const getSourceTableName = (sourceTable?: string) => {
     .trim();
 };
 
-const getKeywordColor = (keyword: string): string => {
+const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
+  // Boosted keywords (from user query) get yellow highlighting - same style as others, no border
+  if (isBoosted) {
+    return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300';
+  }
+
   const colors = [
     'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400',
     'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400',
@@ -96,7 +101,8 @@ export default function ChatInterface() {
     logoUrl: '',
     placeholder: '',
     primaryColor: '',
-    activeChatModel: ''
+    activeChatModel: '',
+    enableSuggestions: true // Default to true, will be overridden by DB
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -155,6 +161,7 @@ export default function ChatInterface() {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<Array<{provider: string, model: string, displayName: string, description: string}>>([]);
   const [currentModel, setCurrentModel] = useState<string>('Claude');
+  const [lastUserQuery, setLastUserQuery] = useState<string>(''); // For keyword boost highlighting
 
   // RAG and LLM Settings from backend
   const [ragSettings, setRagSettings] = useState({
@@ -194,25 +201,33 @@ export default function ChatInterface() {
   // Initialize suggestions when settings are loaded
   useEffect(() => {
     if (settingsLoaded && messages.length === 0) {
-      setShowSuggestions(true);
+      setShowSuggestions(chatbotSettings.enableSuggestions);
     }
-  }, [settingsLoaded]);
+  }, [settingsLoaded, chatbotSettings.enableSuggestions]);
 
-  // Memoize suggestions to prevent unnecessary re-renders and flickering (limit to 4, randomized)
-  const memoizedSuggestions = useMemo(() => {
-    if (suggestedQuestions.length === 0) return [];
+  // Shuffle suggestions only once and keep them stable
+  const [shuffledSuggestions, setShuffledSuggestions] = useState<string[]>([]);
+
+  // When suggestedQuestions change, shuffle once and store
+  useEffect(() => {
+    if (suggestedQuestions.length === 0) {
+      setShuffledSuggestions([]);
+      return;
+    }
 
     const unique = Array.from(new Set(suggestedQuestions));
-    // Deterministic shuffle using a fixed seed based on array length
-    // This ensures suggestions don't change on every render
+    // Deterministic shuffle using first question's hash as seed
+    const seed = unique[0]?.charCodeAt(0) || 1;
     const shuffled = [...unique];
     for (let i = shuffled.length - 1; i > 0; i--) {
-      // Use array length as seed for deterministic shuffle
-      const j = Math.floor((i * 7) % shuffled.length);
+      const j = Math.floor(((i + 1) * seed * 7) % shuffled.length);
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    return shuffled.slice(0, 4);
+    setShuffledSuggestions(shuffled.slice(0, 4));
   }, [suggestedQuestions]);
+
+  // Use stable shuffled suggestions
+  const memoizedSuggestions = shuffledSuggestions;
 
   // Client-side'da olduğumuzu işaretle ve soruları yükle
   useEffect(() => {
@@ -282,7 +297,8 @@ export default function ChatInterface() {
           logoUrl: chatbotData.logoUrl || '',
           placeholder: chatbotData.placeholder || '',  // NO fallback
           primaryColor: chatbotData.primaryColor || '',  // NO fallback
-          activeChatModel: settingsData.llmSettings?.activeChatModel || ''  // NO fallback - must be configured
+          activeChatModel: settingsData.llmSettings?.activeChatModel || '',  // NO fallback - must be configured
+          enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true
         };
 
         // Extract RAG settings
@@ -515,13 +531,35 @@ export default function ChatInterface() {
   // Extract minimal meaningful keywords from title
   const getSemanticKeywords = (source: Record<string, unknown>) => {
     const keywords: string[] = [];
+    const boostedKeywords: string[] = []; // Keywords from user query (keyword boost)
 
-    // Add category as first tag
-    if (source.category) {
+    // Extract keywords from user's query for keyword boost highlighting
+    if (lastUserQuery) {
+      const queryWords = lastUserQuery.toLowerCase()
+        .split(/\s+/)
+        .filter(word => word.length > 2) // Ignore very short words
+        .filter(word => !['için', 'ile', 'var', 'yok', 'bir', 'olan', 'nedir', 'nasıl'].includes(word)); // Exclude stop words
+
+      const title = ((source.title as string) || '').toLowerCase();
+      const content = ((source.content as string) || (source.excerpt as string) || '').toLowerCase();
+      const text = title + ' ' + content;
+
+      queryWords.forEach(word => {
+        if (text.includes(word) && !boostedKeywords.includes(word)) {
+          boostedKeywords.push(word);
+        }
+      });
+    }
+
+    // Add boosted keywords first (these matched user's query)
+    keywords.push(...boostedKeywords.slice(0, 2));
+
+    // Add category as tag
+    if (source.category && !keywords.includes(source.category as string)) {
       keywords.push(source.category as string);
     }
 
-    // Add source table as second tag, but avoid duplicates
+    // Add source table as tag, but avoid duplicates
     if (source.sourceTable) {
       const tableName = getSourceTableName(source.sourceTable as string);
 
@@ -570,14 +608,12 @@ export default function ChatInterface() {
     return keywords.slice(0, 5);
   };
 
-  const handleKeywordClick = (source: Record<string, unknown>, keyword: string) => {
-    // Generate enhanced search query with specific source context
-    const searchQuery = `${keyword} ${source.title || ''}`.trim();
-
-    // Set the generated query and focus the input
-    setInputText(searchQuery);
-    textareaRef.current?.focus();
-  };
+  // Tag click disabled - only source click generates questions
+  // const handleKeywordClick = (source: Record<string, unknown>, keyword: string) => {
+  //   const searchQuery = `${keyword} ${source.title || ''}`.trim();
+  //   setInputText(searchQuery);
+  //   textareaRef.current?.focus();
+  // };
 
   const handleSendMessage = async (fromSource: boolean = false) => {
     if (!inputText.trim() || isLoading || isStreaming) return;
@@ -592,6 +628,7 @@ export default function ChatInterface() {
 
     setMessages(prev => [...prev, userMessage]);
     const messageContent = inputText;
+    setLastUserQuery(inputText); // Save for keyword boost highlighting
     setInputText('');
     setIsLoading(true);
     setShowSuggestions(false);
@@ -869,7 +906,7 @@ export default function ChatInterface() {
   const clearChat = () => {
     // Clear messages and reset to initial state
     setMessages([]);
-    setShowSuggestions(true);
+    setShowSuggestions(chatbotSettings.enableSuggestions);
     setConversationId(undefined); // Clear conversation ID for new session
 
     // Fetch new suggestions
@@ -1158,9 +1195,18 @@ export default function ChatInterface() {
                                   {message.role === 'user' && message.isFromSource && (
                                     <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                   )}
-                                  <p className="text-sm whitespace-pre-wrap flex-1">
-                                    {message.content}
-                                  </p>
+                                  <p
+                                    className="text-sm whitespace-pre-wrap flex-1"
+                                    dangerouslySetInnerHTML={{
+                                      __html: message.content
+                                        // Convert **[1]**, **[2, 5]** citations to bold
+                                        .replace(/\*\*\[([0-9,\s]+)\]\*\*/g, '<strong>[$1]</strong>')
+                                        // Convert plain [1], [2] to bold (fallback)
+                                        .replace(/(?<!\*\*)\[([0-9,\s]+)\](?!\*\*)/g, '<strong>[$1]</strong>')
+                                        // Preserve line breaks
+                                        .replace(/\n/g, '<br/>')
+                                    }}
+                                  />
                                 </div>
                               )}
 
@@ -1260,19 +1306,19 @@ export default function ChatInterface() {
                                                   )}
 
                                                   <div className="flex flex-wrap gap-1 mt-2">
-                                                    {getSemanticKeywords(source).slice(0, 4).map((keyword: string, idx: number) => (
-                                                      <button
-                                                        key={idx}
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          handleKeywordClick(source, keyword);
-                                                        }}
-                                                        className={`text-xs px-2 py-1 rounded-none font-medium transition-colors duration-200 ${getKeywordColor(keyword)}`}
-                                                        title={`"${keyword}" ile ilgili araştırma yap`}
-                                                      >
-                                                        {keyword}
-                                                      </button>
-                                                    ))}
+                                                    {getSemanticKeywords(source).slice(0, 4).map((keyword: string, idx: number) => {
+                                                      // First 2 keywords are from user query (boosted)
+                                                      const isBoosted = idx < 2 && lastUserQuery.length > 0;
+                                                      return (
+                                                        <span
+                                                          key={idx}
+                                                          className={`text-xs px-2 py-1 rounded-none font-medium ${getKeywordColor(keyword, isBoosted)}`}
+                                                          title={isBoosted ? `🔍 Arama sorgunuzdan: "${keyword}"` : `Anahtar kelime`}
+                                                        >
+                                                          {keyword}
+                                                        </span>
+                                                      );
+                                                    })}
                                                     {source.score && (
                                                       <div className="flex items-center gap-1 flex-shrink-0">
                                                         <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">

@@ -358,6 +358,28 @@ export class SettingsService {
     }
   }
 
+  // Get a single setting by key
+  async getSetting(key: string): Promise<string | null> {
+    try {
+      const client = await lsembPool.connect();
+
+      try {
+        const result = await client.query(
+          'SELECT value FROM settings WHERE key = $1',
+          [key]
+        );
+
+        return result.rows.length > 0 ? result.rows[0].value : null;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      logger.error(`Failed to get setting ${key}:`, error);
+      // Let the error propagate - don't return fallback values
+      throw error;
+    }
+  }
+
   // Get all API keys
   async getApiKeys(): Promise<Record<string, string>> {
     try {

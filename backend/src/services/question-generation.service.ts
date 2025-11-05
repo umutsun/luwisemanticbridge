@@ -29,7 +29,7 @@ class QuestionGenerationService {
   private cacheExpiry = 1800000; // 30 minutes
 
   constructor() {
-    this.llmManager = new LLMManager();
+    this.llmManager = LLMManager.getInstance();
   }
 
   /**
@@ -123,7 +123,7 @@ class QuestionGenerationService {
     const { language, type, hasPercentages, hasLegalRefs } = analysis;
 
     // Build dynamic prompt based on analysis
-    const prompt = this.buildDynamicPrompt(context, analysis);
+    const prompt = this.buildDynamicPrompt(context, analysis, count);
 
     try {
       // Generate questions using LLM
@@ -153,7 +153,7 @@ class QuestionGenerationService {
   /**
    * Build dynamic prompt based on content analysis
    */
-  private buildDynamicPrompt(context: QuestionGenerationContext, analysis: any): string {
+  private buildDynamicPrompt(context: QuestionGenerationContext, analysis: any, count: number): string {
     const { title, content, sourceTable } = context;
     const { language, type, complexity } = analysis;
 
