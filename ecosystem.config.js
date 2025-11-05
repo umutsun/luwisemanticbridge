@@ -113,12 +113,12 @@ module.exports = {
       env: {
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'development',
-        PORT: '8001'
+        PORT: '8002'
       },
       env_production: {
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'production',
-        PORT: '8001'
+        PORT: '8002'
       },
 
       // Logging

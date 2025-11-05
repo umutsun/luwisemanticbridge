@@ -35,7 +35,7 @@ export class WhisperIntegrationService {
   private apiKey: string;
 
   constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8001';
+    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8002';
     this.apiKey = process.env.INTERNAL_API_KEY || 'dev-api-key';
   }
 

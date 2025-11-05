@@ -22,6 +22,24 @@ export interface ServicePortConfig {
   grafana?: {
     port: number;
   };
+  python?: {
+    port: number;
+    host?: string;
+    services?: {
+      crawl4ai?: boolean;
+      whisper?: boolean;
+      pgai?: boolean;
+    };
+  };
+  whisper?: {
+    enabled: boolean;
+    model?: string;
+    language?: string;
+  };
+  pgai?: {
+    enabled: boolean;
+    autoEmbedding?: boolean;
+  };
 }
 
 export interface DatabaseConfig {

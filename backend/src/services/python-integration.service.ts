@@ -57,7 +57,7 @@ export class PythonIntegrationService {
   private healthCheckInterval: number = 30000; // 30 seconds
 
   private constructor() {
-    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8001';
+    this.pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8002';
     this.internalApiKey = process.env.INTERNAL_API_KEY || 'default-dev-key';
 
     this.axiosClient = axios.create({
