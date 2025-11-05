@@ -34,11 +34,15 @@ const upload = multer({
   }
 });
 
-// Create dedicated Redis client for Crawl4AI data (DB 0)
+// Create dedicated Redis client for Crawl4AI data (Tenant-aware DB)
+// Each tenant uses their own Redis DB for crawler data isolation:
+// - LSEMB: DB 2
+// - EmlakAI: DB 1
+// - Bookie: DB 3
 const crawl4aiRedis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: 6379,
-  db: 0, // Crawl4AI uses DB 0
+  db: parseInt(process.env.REDIS_DB || '2', 10), // Tenant-specific DB
   retryStrategy: (times: number) => {
     if (times > 3) return null;
     return Math.min(times * 200, 1000);
