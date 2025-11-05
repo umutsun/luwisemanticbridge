@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
-import llmManager from '../services/llm-manager.service';
+import { LLMManager } from '../services/llm-manager.service';
 import { lsembPool } from '../config/database.config';
 import { OpenAI } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = Router();
+const llmManager = LLMManager.getInstance();
 
 // Model pricing per 1M tokens (input/output) in USD
 const MODEL_PRICING: Record<string, Record<string, { input: number; output: number }>> = {

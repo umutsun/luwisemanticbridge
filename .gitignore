@@ -28,6 +28,14 @@ packages/dashboard/.next/
 *.env
 .env.*
 
+# Agent configuration folders
+.grok/
+.claude/
+.cursor/
+.windsurf/
+.codeium/
+.aider/
+
 # Logs
 *.log
 npm-debug.log*

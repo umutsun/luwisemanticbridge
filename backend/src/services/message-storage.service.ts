@@ -1,5 +1,5 @@
 import { pool, lsembPool } from '../config/database.config';
-import LLMManager from './llm-manager.service';
+import { LLMManager } from './llm-manager.service';
 import { redisClient } from '../config/redis';
 import { initializeRedis } from '../config/redis';
 import { logger } from '../utils/logger';
