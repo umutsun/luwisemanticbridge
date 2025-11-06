@@ -43,18 +43,35 @@ const crawl4aiRedis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: 6379,
   db: parseInt(process.env.REDIS_DB || '2', 10), // Tenant-specific DB
+  password: process.env.REDIS_PASSWORD,
   retryStrategy: (times: number) => {
-    if (times > 3) return null;
-    return Math.min(times * 200, 1000);
-  }
+    // Keep retrying with exponential backoff, max 5 seconds
+    return Math.min(times * 200, 5000);
+  },
+  enableOfflineQueue: false, // Don't queue commands when disconnected
+  maxRetriesPerRequest: 3 // Fail fast per request but keep connection alive
 });
 
 crawl4aiRedis.on('connect', () => {
-  console.log('✅ Crawl4AI Redis (DB 0) connected');
+  const dbNum = parseInt(process.env.REDIS_DB || '2', 10);
+  console.log(`✅ Crawl4AI Redis (DB ${dbNum}) connecting...`);
+});
+
+crawl4aiRedis.on('ready', () => {
+  const dbNum = parseInt(process.env.REDIS_DB || '2', 10);
+  console.log(`✅ Crawl4AI Redis (DB ${dbNum}) ready for commands`);
+});
+
+crawl4aiRedis.on('close', () => {
+  console.warn('⚠️ Crawl4AI Redis connection closed');
+});
+
+crawl4aiRedis.on('reconnecting', () => {
+  console.log('🔄 Crawl4AI Redis reconnecting...');
 });
 
 crawl4aiRedis.on('error', (err: any) => {
-  console.error('❌ Crawl4AI Redis connection error:', err);
+  console.error('❌ Crawl4AI Redis error:', err.message || err);
 });
 
 // ============================================================================
