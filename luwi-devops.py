@@ -59,6 +59,17 @@ TENANTS = {
         'url': 'https://bookie.luwi.dev',
         'services': ['bookie-backend', 'bookie-frontend', 'bookie-python']
     },
+    'scriptus': {
+        'name': 'Scriptus',
+        'path': '/var/www/scriptus',
+        'db': 'scriptus_lsemb',
+        'redis_db': 4,
+        'backend_port': 8086,
+        'frontend_port': 3005,
+        'python_port': 8004,
+        'url': 'https://scriptus.luwi.dev',
+        'services': ['scriptus-backend', 'scriptus-frontend', 'scriptus-python']
+    },
     'luwi-dev': {
         'name': 'Luwi.dev Website',
         'path': '/var/www/luwi-dev',
@@ -719,7 +730,7 @@ def system_resource_check():
     run_command("ps aux | head -10")
 
     print(f"\n{Colors.OKGREEN}Network Ports:{Colors.ENDC}")
-    run_command("ss -tulpn | grep -E ':(3002|3003|3004|8083|8084|8085|8001|8002|8003)'")
+    run_command("ss -tulpn | grep -E ':(3002|3003|3004|3005|8083|8084|8085|8086|8001|8002|8003|8004)'")
 
     input(f"\n{Colors.OKBLUE}Press Enter to continue...{Colors.ENDC}")
 
