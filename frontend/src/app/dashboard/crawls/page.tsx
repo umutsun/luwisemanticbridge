@@ -54,8 +54,7 @@ import {
   Pause,
   Clock,
   MousePointer2,
-  Square,
-  FolderPlus
+  Square
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -165,10 +164,11 @@ export default function CrawlerDataPage() {
   const [scriptUrls, setScriptUrls] = useState<Map<string, string>>(new Map()); // directory -> URL
   const [crawlerStates, setCrawlerStates] = useState<Map<string, any>>(new Map()); // directory -> state.json
 
-  // Add Crawler Modal states
-  const [showAddCrawlerModal, setShowAddCrawlerModal] = useState(false);
-  const [newCrawlerName, setNewCrawlerName] = useState('');
-  const [isCreatingCrawler, setIsCreatingCrawler] = useState(false);
+  // Inline new source editing
+  const [isAddingNewSource, setIsAddingNewSource] = useState(false);
+  const [newSourceName, setNewSourceName] = useState('');
+  const [newSourceScript, setNewSourceScript] = useState<File | null>(null);
+  const [isSavingNewSource, setIsSavingNewSource] = useState(false);
 
   // Stats
   const [stats, setStats] = useState<Stats>({
@@ -974,62 +974,82 @@ export default function CrawlerDataPage() {
     }
   };
 
-  const handleCreateCrawlerSource = async () => {
-    if (!newCrawlerName.trim()) {
+  const handleSaveNewSource = async () => {
+    if (!newSourceName.trim()) {
       toast({
         title: 'Missing Information',
-        description: 'Please provide crawler source name',
+        description: 'Please provide source name',
         variant: 'destructive'
       });
       return;
     }
 
     try {
-      setIsCreatingCrawler(true);
+      setIsSavingNewSource(true);
 
-      // Create crawler directory
+      // 1. Create directory
       const createResponse = await fetchWithAuth(
         `${config.api.baseUrl}/api/v2/crawler/crawler-directories`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: newCrawlerName.trim() })
+          body: JSON.stringify({ name: newSourceName.trim() })
         }
       );
 
       if (!createResponse.ok) {
         const errorData = await createResponse.json();
-        throw new Error(errorData.error || 'Failed to create crawler source');
+        throw new Error(errorData.error || 'Failed to create source');
       }
 
       const createResult = await createResponse.json();
+      const crawlerName = createResult.directory.name;
+
+      // 2. Upload script if provided
+      if (newSourceScript) {
+        const formData = new FormData();
+        formData.append('script', newSourceScript);
+
+        const uploadResponse = await fetchWithAuth(
+          `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/script`,
+          { method: 'POST', body: formData }
+        );
+
+        if (!uploadResponse.ok) {
+          throw new Error('Failed to upload script');
+        }
+
+        // Update python scripts map
+        setPythonScripts(prev => new Set([...prev, crawlerName]));
+      }
 
       // Update UI
       setDirectories(prev => [...prev, createResult.directory]);
 
       toast({
         title: 'Success',
-        description: `Crawler source "${createResult.directory.displayName}" created! You can now upload a Python script.`,
+        description: `Source "${createResult.directory.displayName}" created!${newSourceScript ? ' Script uploaded.' : ''}`,
       });
 
-      // Close modal and reset
-      setShowAddCrawlerModal(false);
-      setNewCrawlerName('');
+      // Reset
+      setIsAddingNewSource(false);
+      setNewSourceName('');
+      setNewSourceScript(null);
 
-      // Refresh directories
+      // Refresh
       setTimeout(() => {
         fetchDirectories();
       }, 1000);
 
     } catch (error: any) {
-      console.error('❌ [Create Crawler Source] Error:', error);
+      console.error('❌ [Save New Source] Error:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create crawler source',
+        description: error.message || 'Failed to create source',
         variant: 'destructive'
       });
     } finally {
-      setIsCreatingCrawler(false);
+      setIsSavingNewSource(false);
     }
   };
 
@@ -1313,7 +1333,7 @@ export default function CrawlerDataPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 w-7 p-0"
-                        onClick={() => setShowAddCrawlerModal(true)}
+                        onClick={() => setIsAddingNewSource(true)}
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
@@ -1330,6 +1350,82 @@ export default function CrawlerDataPage() {
                         </div>
                       ) : (
                         <div className="space-y-2 pr-1">
+                          {/* Inline New Source Card */}
+                          {isAddingNewSource && (
+                            <div className="p-3 rounded-md border-2 border-purple-400 bg-purple-50 dark:bg-purple-950/30 shadow-md">
+                              <div className="space-y-3">
+                                <div>
+                                  <Label htmlFor="new-source-name" className="text-xs font-medium mb-1 block">
+                                    Source Name
+                                  </Label>
+                                  <Input
+                                    id="new-source-name"
+                                    placeholder="e.g., emlakai, yky_data"
+                                    value={newSourceName}
+                                    onChange={(e) => setNewSourceName(e.target.value)}
+                                    disabled={isSavingNewSource}
+                                    className="h-8 text-sm font-mono"
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div>
+                                  <Label htmlFor="new-source-script" className="text-xs font-medium mb-1 block">
+                                    Python Script <span className="text-muted-foreground">(optional)</span>
+                                  </Label>
+                                  <Input
+                                    id="new-source-script"
+                                    type="file"
+                                    accept=".py"
+                                    onChange={(e) => setNewSourceScript(e.target.files?.[0] || null)}
+                                    disabled={isSavingNewSource}
+                                    className="h-8 text-xs cursor-pointer"
+                                  />
+                                  {newSourceScript && (
+                                    <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
+                                      <CheckCircle className="w-3 h-3" />
+                                      {newSourceScript.name}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1">
+                                  <Button
+                                    onClick={handleSaveNewSource}
+                                    disabled={isSavingNewSource || !newSourceName.trim()}
+                                    size="sm"
+                                    className="flex-1 h-7 text-xs bg-purple-600 hover:bg-purple-700"
+                                  >
+                                    {isSavingNewSource ? (
+                                      <>
+                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                        Saving...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        Save
+                                      </>
+                                    )}
+                                  </Button>
+                                  <Button
+                                    onClick={() => {
+                                      setIsAddingNewSource(false);
+                                      setNewSourceName('');
+                                      setNewSourceScript(null);
+                                    }}
+                                    disabled={isSavingNewSource}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {directories.map(directory => (
                             <div
                               key={directory.id}
@@ -2459,67 +2555,6 @@ export default function CrawlerDataPage() {
               className="relative z-10"
             >
               Save Changes
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Crawler Modal */}
-      <Dialog open={showAddCrawlerModal} onOpenChange={setShowAddCrawlerModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FolderPlus className="h-5 w-5 text-purple-600" />
-              Add Crawler Source
-            </DialogTitle>
-            <DialogDescription className="text-sm">
-              Create a new crawler source. You can upload Python script later.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="crawler-name" className="text-sm font-medium">
-                Source Name
-              </Label>
-              <Input
-                id="crawler-name"
-                placeholder="e.g., emlakai, yky_data"
-                value={newCrawlerName}
-                onChange={(e) => setNewCrawlerName(e.target.value)}
-                disabled={isCreatingCrawler}
-                className="font-mono text-sm"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newCrawlerName.trim()) {
-                    handleCreateCrawlerSource();
-                  }
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Redis key: <code className="font-mono">crawl4ai/{newCrawlerName || '...'}</code>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-center">
-            <Button
-              onClick={handleCreateCrawlerSource}
-              disabled={isCreatingCrawler || !newCrawlerName.trim()}
-              className="min-w-[180px]"
-              size="lg"
-            >
-              {isCreatingCrawler ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Add Source
-                </>
-              )}
             </Button>
           </div>
         </DialogContent>
