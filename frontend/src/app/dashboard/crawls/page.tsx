@@ -183,6 +183,11 @@ export default function CrawlerDataPage() {
     fetchSourceTables();
   }, []);
 
+  // Debug: Track isAddingNewSource state changes
+  useEffect(() => {
+    console.log('🟡 [DEBUG] isAddingNewSource state changed to:', isAddingNewSource);
+  }, [isAddingNewSource]);
+
   // Load Python scripts for all directories
   useEffect(() => {
     if (directories.length > 0) {
@@ -1333,7 +1338,11 @@ export default function CrawlerDataPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 w-7 p-0"
-                        onClick={() => setIsAddingNewSource(true)}
+                        onClick={() => {
+                          console.log('🔵 [DEBUG] + button clicked');
+                          console.log('🔵 [DEBUG] Setting isAddingNewSource to true');
+                          setIsAddingNewSource(true);
+                        }}
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
@@ -1352,7 +1361,8 @@ export default function CrawlerDataPage() {
                         <div className="space-y-2 pr-1">
                           {/* Inline New Source Card */}
                           {isAddingNewSource && (
-                            <div className="p-3 rounded-md border-2 border-purple-400 bg-purple-50 dark:bg-purple-950/30 shadow-md">
+                            <div className="p-3 rounded-md border-2 border-purple-400 bg-purple-50 dark:bg-purple-950/30 shadow-md" data-debug="inline-card">
+                              {console.log('🟢 [DEBUG] Inline card is rendering! isAddingNewSource:', isAddingNewSource)}
                               <div className="space-y-3">
                                 <div>
                                   <Label htmlFor="new-source-name" className="text-xs font-medium mb-1 block">
