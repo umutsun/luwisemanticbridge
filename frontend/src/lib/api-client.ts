@@ -182,7 +182,7 @@ export const api = {
 
   // Analytics endpoints
   analytics: {
-    get: () => apiGet('/api/v2/lightrag/analytics'),
+    get: () => apiGet('/api/v2/analytics'),
   },
 
   // Cache endpoints

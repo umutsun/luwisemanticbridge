@@ -437,6 +437,31 @@ export class MessageStorageService {
   }
 
   /**
+   * Save quality feedback for a message
+   */
+  static async saveQualityFeedback(
+    userId: string,
+    messageId: string,
+    rating: number,
+    comment?: string
+  ): Promise<void> {
+    try {
+      // Store feedback in database
+      await lsembPool.query(`
+        INSERT INTO message_feedback (user_id, message_id, rating, comment, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (user_id, message_id)
+        DO UPDATE SET rating = $3, comment = $4, updated_at = NOW()
+      `, [userId, messageId, rating, comment]);
+
+      logger.info(`Quality feedback saved for message ${messageId} by user ${userId}`);
+    } catch (error) {
+      logger.error('Error saving quality feedback:', error);
+      // Don't throw - feedback is not critical
+    }
+  }
+
+  /**
    * Get message statistics for dashboard
    */
   static async getMessageStats(userId?: string): Promise<any> {

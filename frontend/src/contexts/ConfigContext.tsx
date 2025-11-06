@@ -103,6 +103,7 @@ interface ConfigContextType {
   config: Config | null;
   loading: boolean;
   error: string | null;
+  backendDown: boolean; // Flag to indicate backend/database is down
   refreshConfig: () => Promise<void>;
   updateConfig: (newConfig: Config) => Promise<void>;
   isConfigurationComplete: (config: Config | null) => boolean;
@@ -114,6 +115,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<Config | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [backendDown, setBackendDown] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
 
   const fetchConfig = async (authToken?: string) => {
     try {
@@ -259,6 +263,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
       setConfig(transformedConfig);
       setError(null);
+      setBackendDown(false);
+      setRetryCount(0);
       setLoading(false); // Backend başarıyla yüklendi, loading'i kapat
     } catch (err) {
       console.error('Error fetching config:', err);
@@ -266,15 +272,24 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
       // Check if it's a connection error (backend not ready)
       if (errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) {
-        console.log('⏳ Backend not ready yet, will retry...');
+        console.log(`⏳ Backend not ready yet (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
         setError('Backend bağlantısı bekleniyor...');
-        // Loading state'i TRUE tutuyoruz - backend hazır olana kadar initial screen gösterilecek
 
-        // Retry after 2 seconds
-        setTimeout(() => {
-          console.log('🔄 Retrying backend connection...');
-          fetchConfig(authToken);
-        }, 2000);
+        // Retry with exponential backoff
+        if (retryCount < MAX_RETRIES) {
+          const delay = Math.min(2000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
+          setTimeout(() => {
+            console.log(`🔄 Retrying backend connection (attempt ${retryCount + 2}/${MAX_RETRIES})...`);
+            setRetryCount(prev => prev + 1);
+            fetchConfig(authToken);
+          }, delay);
+        } else {
+          // Max retries reached - backend is definitely down
+          console.error('❌ Backend/Database is down after multiple retries');
+          setBackendDown(true);
+          setError('Backend veya veritabanı bağlantısı başarısız. Lütfen sunucuyu kontrol edin.');
+          setLoading(false);
+        }
       } else {
         setError(errorMessage);
         setLoading(false);
@@ -436,6 +451,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         config,
         loading,
         error,
+        backendDown,
         refreshConfig: (authToken?: string) => fetchConfig(authToken),
         updateConfig,
         isConfigurationComplete

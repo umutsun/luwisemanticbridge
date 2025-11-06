@@ -20,6 +20,8 @@ export interface TableCreationProgress {
   progress: number;
   rowsInserted: number;
   totalRows: number;
+  currentBatch?: number;
+  totalBatches?: number;
   errors: string[];
   startedAt: Date;
   completedAt?: Date;

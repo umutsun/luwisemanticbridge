@@ -158,9 +158,11 @@ export class WebSocketConnectionService {
           // Save message to storage
           await MessageStorageService.saveChatInteraction(
             socket.sessionId,
+            socket.userId,
             data.type === 'question' ? data.content : '',
             data.type === 'answer' ? data.content : '',
-            socket.userId,
+            [],
+            [],
             {
               streaming: true,
               timestamp: new Date().toISOString(),

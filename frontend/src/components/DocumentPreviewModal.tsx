@@ -127,7 +127,68 @@ export default function DocumentPreviewModal({
   };
 
   const parseCSV = () => {
-    const lines = document!.content.split('\n').filter(line => line.trim());
+    let content = document!.content;
+
+    // Check if content is in processed format (from contextual-document-processor)
+    if (content.includes('Tabular Data Overview:') && content.includes('Data Records:')) {
+      console.log('[CSV Parser] Detected processed CSV format, extracting data...');
+
+      // Extract data records section
+      const dataRecordsIndex = content.indexOf('Data Records:');
+      if (dataRecordsIndex !== -1) {
+        const dataSection = content.substring(dataRecordsIndex);
+        const recordLines = dataSection.split('\n').filter(line => {
+          const trimmed = line.trim();
+          // Match lines like: "1: {header1=value1, header2=value2}"
+          return /^\d+:\s*\{/.test(trimmed);
+        });
+
+        if (recordLines.length > 0) {
+          // Parse first record to get headers
+          const firstRecord = recordLines[0].match(/\{(.+)\}/)?.[1];
+          if (firstRecord) {
+            const pairs = firstRecord.split(/,\s*(?![^{]*\})/); // Split by comma but not inside nested objects
+            const headers = pairs.map(pair => pair.split('=')[0].trim());
+            setCsvHeaders(headers);
+
+            // Parse all records
+            const data = recordLines.slice(0, 10).map(line => {
+              const recordContent = line.match(/\{(.+)\}/)?.[1];
+              if (!recordContent) return null;
+
+              const obj: any = {};
+              const pairs = recordContent.split(/,\s*(?![^{]*\})/);
+              pairs.forEach(pair => {
+                const [key, ...valueParts] = pair.split('=');
+                const value = valueParts.join('=').trim(); // Rejoin in case value contains '='
+                obj[key.trim()] = value;
+              });
+              return obj;
+            }).filter(Boolean);
+
+            setTotalRowCount(recordLines.length);
+            setParsedData(data);
+            console.log('[CSV Parser] Successfully parsed processed CSV:', {
+              headers: headers.length,
+              rows: data.length,
+              totalRows: recordLines.length
+            });
+            return;
+          }
+        }
+      }
+
+      // If we couldn't extract from processed format, try to extract from metadata
+      console.log('[CSV Parser] Could not extract from processed format, checking metadata...');
+      if (document!.metadata?.dataStructure?.headers) {
+        setCsvHeaders(document!.metadata.dataStructure.headers);
+        console.log('[CSV Parser] Using headers from metadata');
+      }
+    }
+
+    // Standard CSV parsing (for raw CSV or fallback)
+    console.log('[CSV Parser] Using standard CSV parsing...');
+    const lines = content.split('\n').filter(line => line.trim());
     if (lines.length === 0) return;
 
     const parseCSVLine = (line: string): string[] => {
@@ -177,6 +238,10 @@ export default function DocumentPreviewModal({
     });
 
     setParsedData(data);
+    console.log('[CSV Parser] Standard CSV parse complete:', {
+      headers: headers.length,
+      rows: data.length
+    });
   };
 
   const parseJSON = () => {

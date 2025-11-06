@@ -980,10 +980,12 @@ export default function CrawlerDataPage() {
   };
 
   const handleSaveNewSource = async () => {
-    if (!newSourceName.trim()) {
+    const trimmedName = newSourceName.trim();
+
+    if (!trimmedName) {
       toast({
         title: 'Missing Information',
-        description: 'Please provide source name',
+        description: 'Please provide a source name',
         variant: 'destructive'
       });
       return;
@@ -992,7 +994,7 @@ export default function CrawlerDataPage() {
     try {
       setIsSavingNewSource(true);
 
-      // 1. Create directory
+      // Create crawler directory
       const createResponse = await fetchWithAuth(
         `${config.api.baseUrl}/api/v2/crawler/crawler-directories`,
         {
@@ -1008,43 +1010,29 @@ export default function CrawlerDataPage() {
       }
 
       const createResult = await createResponse.json();
-      const crawlerName = createResult.directory.name;
 
-      // 2. Upload script if provided
-      if (newSourceScript) {
-        const formData = new FormData();
-        formData.append('script', newSourceScript);
-
-        const uploadResponse = await fetchWithAuth(
-          `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/script`,
-          { method: 'POST', body: formData }
-        );
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload script');
-        }
-
-        // Update python scripts map
-        setPythonScripts(prev => new Set([...prev, crawlerName]));
-      }
-
-      // Update UI
+      // Update UI - add new directory to list
       setDirectories(prev => [...prev, createResult.directory]);
+
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        totalDirectories: prev.totalDirectories + 1
+      }));
 
       toast({
         title: 'Success',
-        description: `Source "${createResult.directory.displayName}" created!${newSourceScript ? ' Script uploaded.' : ''}`,
+        description: `Crawler source "${createResult.directory.displayName}" created successfully!`,
       });
 
-      // Reset
+      // Reset form
       setIsAddingNewSource(false);
       setNewSourceName('');
-      setNewSourceScript(null);
 
-      // Refresh
+      // Refresh directories list
       setTimeout(() => {
         fetchDirectories();
-      }, 1000);
+      }, 500);
 
     } catch (error: any) {
       console.error('❌ [Save New Source] Error:', error);
@@ -1352,87 +1340,68 @@ export default function CrawlerDataPage() {
                     <ScrollArea className="h-full pr-2">
                       {loading ? (
                         <ListSkeleton count={5} />
-                      ) : directories.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <Database className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                          <p className="text-sm">No crawler sources found</p>
-                        </div>
                       ) : (
                         <div className="space-y-2 pr-1">
-                          {/* Inline New Source Card */}
+                          {/* Inline New Source Card - Minimal Design */}
                           {isAddingNewSource && (
-                            <div className="p-3 rounded-md border-2 border-purple-400 bg-purple-50 dark:bg-purple-950/30 shadow-md" data-debug="inline-card">
-                              {console.log('🟢 [DEBUG] Inline card is rendering! isAddingNewSource:', isAddingNewSource)}
-                              <div className="space-y-3">
-                                <div>
-                                  <Label htmlFor="new-source-name" className="text-xs font-medium mb-1 block">
-                                    Source Name
-                                  </Label>
+                            <div className="p-3 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/70 shadow-md animate-in fade-in-50 duration-200 min-h-[68px] flex items-center">
+                              <div className="flex items-center gap-2 w-full">
+                                <div className="flex-1">
                                   <Input
-                                    id="new-source-name"
-                                    placeholder="e.g., emlakai, yky_data"
+                                    placeholder="Source name"
                                     value={newSourceName}
                                     onChange={(e) => setNewSourceName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && newSourceName.trim()) {
+                                        handleSaveNewSource();
+                                      } else if (e.key === 'Escape') {
+                                        setIsAddingNewSource(false);
+                                        setNewSourceName('');
+                                      }
+                                    }}
                                     disabled={isSavingNewSource}
-                                    className="h-8 text-sm font-mono"
+                                    className="h-9 text-sm font-mono border-slate-300 dark:border-slate-600 focus:border-slate-500 dark:focus:border-slate-500"
                                     autoFocus
                                   />
                                 </div>
 
-                                <div>
-                                  <Label htmlFor="new-source-script" className="text-xs font-medium mb-1 block">
-                                    Python Script <span className="text-muted-foreground">(optional)</span>
-                                  </Label>
-                                  <Input
-                                    id="new-source-script"
-                                    type="file"
-                                    accept=".py"
-                                    onChange={(e) => setNewSourceScript(e.target.files?.[0] || null)}
-                                    disabled={isSavingNewSource}
-                                    className="h-8 text-xs cursor-pointer"
-                                  />
-                                  {newSourceScript && (
-                                    <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
-                                      <CheckCircle className="w-3 h-3" />
-                                      {newSourceScript.name}
-                                    </p>
+                                {/* Save Button - Direct without tooltip */}
+                                <Button
+                                  onClick={handleSaveNewSource}
+                                  size="sm"
+                                  disabled={isSavingNewSource || !newSourceName.trim()}
+                                  className="h-9 w-9 p-0 bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600"
+                                >
+                                  {isSavingNewSource ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-4 h-4" />
                                   )}
-                                </div>
+                                </Button>
 
-                                <div className="flex items-center gap-2 pt-1">
-                                  <Button
-                                    onClick={handleSaveNewSource}
-                                    disabled={isSavingNewSource || !newSourceName.trim()}
-                                    size="sm"
-                                    className="flex-1 h-7 text-xs bg-purple-600 hover:bg-purple-700"
-                                  >
-                                    {isSavingNewSource ? (
-                                      <>
-                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                        Saving...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                        Save
-                                      </>
-                                    )}
-                                  </Button>
-                                  <Button
-                                    onClick={() => {
-                                      setIsAddingNewSource(false);
-                                      setNewSourceName('');
-                                      setNewSourceScript(null);
-                                    }}
-                                    disabled={isSavingNewSource}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                </div>
+                                {/* Cancel Button */}
+                                <Button
+                                  onClick={() => {
+                                    setIsAddingNewSource(false);
+                                    setNewSourceName('');
+                                  }}
+                                  disabled={isSavingNewSource}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-9 w-9 p-0 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                >
+                                  <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                </Button>
                               </div>
+                            </div>
+                          )}
+
+                          {/* Show empty state if no directories and not adding new */}
+                          {directories.length === 0 && !isAddingNewSource && (
+                            <div className="text-center py-12 text-muted-foreground">
+                              <Database className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                              <p className="text-sm">No crawler sources found</p>
+                              <p className="text-xs mt-2">Click + to add a new source</p>
                             </div>
                           )}
 

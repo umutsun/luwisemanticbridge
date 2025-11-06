@@ -155,8 +155,14 @@ export class SiteConfigurationService {
     };
   }
 
-  async createConfig(config: SiteConfiguration): Promise<SiteConfiguration> {
+  async createConfig(config: Partial<SiteConfiguration> & { baseUrl: string }): Promise<SiteConfiguration> {
     try {
+      // Ensure we have a name
+      if (!config.name) {
+        const url = new URL(config.baseUrl);
+        config.name = url.hostname;
+      }
+
       // Auto-detect if not provided
       if (!config.type || config.type === 'custom') {
         const detected = await this.detectSiteStructure(config.baseUrl);
@@ -237,16 +243,17 @@ export class SiteConfigurationService {
       const wikiUrl = await this.searchWikipedia(query);
       const wikiConfig = await this.detectSiteStructure(wikiUrl);
       wikiConfig.category = category;
-      configs.push(await this.createConfig(wikiConfig));
+      // detectSiteStructure always returns baseUrl, so we can safely cast
+      configs.push(await this.createConfig(wikiConfig as Partial<SiteConfiguration> & { baseUrl: string }));
     } catch (error) {
       console.error('Failed to create Wikipedia config:', error);
     }
 
     // Add other predefined configs based on category
     for (const predefined of this.predefinedConfigs) {
-      if (predefined.type !== 'wiki') {
+      if (predefined.type !== 'wiki' && predefined.baseUrl) {
         predefined.category = category;
-        configs.push(await this.createConfig(predefined as SiteConfiguration));
+        configs.push(await this.createConfig(predefined as Partial<SiteConfiguration> & { baseUrl: string }));
       }
     }
 

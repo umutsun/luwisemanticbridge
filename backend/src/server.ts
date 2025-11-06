@@ -368,10 +368,6 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
           status: redisStatus,
           responseTime: redisResponseTime
         },
-        lightrag: {
-          status: "disabled",
-          reason: "LightRAG service intentionally disabled for performance"
-        }
       },
       performance: {
         memory: {
@@ -765,8 +761,6 @@ app.use(errorHandler);
 // 404 handler
 app.use(notFoundHandler);
 
-// LightRAG service disabled
-export let lightRAGService = null;
 
 // Import embeddings progress loader
 import { loadProgressFromRedis } from "./routes/embeddings.routes";
@@ -991,9 +985,6 @@ async function startServer() {
     console.log("📦 Provider: OpenAI (default)");
   }
 
-  // LightRAG service disabled
-  console.log("\n🔍 LightRAG: Disabled");
-  lightRAGService = null;
 
   // Load migration progress from Redis (only if Redis is available)
   if (redis) {

@@ -13,12 +13,11 @@ module.exports = {
     },
     {
       name: 'lsemb-frontend',
-      script: 'npm',
-      args: 'start',
-      cwd: 'c:/xampp/htdocs/lsemb/frontend',
+      script: 'start-frontend.js',
+      cwd: 'c:/xampp/htdocs/lsemb',
       env: {
         PORT: 3002,
-        NODE_ENV: 'production'
+        NODE_ENV: 'development'
       }
     },
     {

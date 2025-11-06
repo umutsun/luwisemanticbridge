@@ -1,0 +1,147 @@
+name: LSEMB Multi-Tenant Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target'
+        required: true
+        default: 'frontends'
+        type: choice
+        options:
+          - frontends
+          - backends
+          - all
+          - lsemb
+          - emlakai
+          - bookie
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup SSH Key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+    - name: Deploy to Server
+      env:
+        TARGET: ${{ github.event.inputs.target || 'frontends' }}
+      run: |
+        ssh root@91.99.229.96 << 'ENDSSH'
+
+        echo "=== LSEMB Multi-Tenant Deployment ==="
+        echo "Target: ${{ env.TARGET }}"
+
+        # Pull latest changes
+        cd /var/www/lsemb && git pull origin main
+        cd /var/www/emlakai && git pull origin main
+        cd /var/www/bookie && git pull origin main
+
+        # Deploy frontends
+        if [[ "${{ env.TARGET }}" == "frontends" || "${{ env.TARGET }}" == "all" ]]; then
+          echo "=== Building and deploying frontends ==="
+
+          # LSEMB Frontend
+          cd /var/www/lsemb/frontend
+          npm install --production
+          npm run build
+          pm2 restart lsemb-frontend
+
+          # EmlakAI Frontend
+          cd /var/www/emlakai/frontend
+          sed -i 's/"start": "next start.*"/"start": "next start -p 3003"/' package.json
+          npm install --production
+          npm run build
+          pm2 restart emlakai-frontend
+
+          # Bookie Frontend
+          cd /var/www/bookie/frontend
+          sed -i 's/"start": "next start.*"/"start": "next start -p 3004"/' package.json
+          npm install --production
+          npm run build
+          pm2 restart bookie-frontend
+        fi
+
+        # Deploy backends
+        if [[ "${{ env.TARGET }}" == "backends" || "${{ env.TARGET }}" == "all" ]]; then
+          echo "=== Building and deploying backends ==="
+
+          # LSEMB Backend
+          cd /var/www/lsemb/backend
+          npm install --production
+          npx tsc || true
+          pm2 restart lsemb-backend
+
+          # EmlakAI Backend
+          cd /var/www/emlakai/backend
+          npm install --production
+          npx tsc || true
+          pm2 restart emlakai-backend
+
+          # Bookie Backend
+          cd /var/www/bookie/backend
+          npm install --production
+          npx tsc || true
+          pm2 restart bookie-backend
+        fi
+
+        # Deploy specific tenant
+        case "${{ env.TARGET }}" in
+          lsemb)
+            cd /var/www/lsemb
+            cd backend && npm install && npx tsc && pm2 restart lsemb-backend
+            cd ../frontend && npm install && npm run build && pm2 restart lsemb-frontend
+            ;;
+          emlakai)
+            cd /var/www/emlakai
+            cd backend && npm install && npx tsc && pm2 restart emlakai-backend
+            cd ../frontend && npm install && npm run build && pm2 restart emlakai-frontend
+            ;;
+          bookie)
+            cd /var/www/bookie
+            cd backend && npm install && npx tsc && pm2 restart bookie-backend
+            cd ../frontend && npm install && npm run build && pm2 restart bookie-frontend
+            ;;
+        esac
+
+        pm2 save
+        echo "=== Deployment complete ==="
+        pm2 list
+
+        ENDSSH
+
+    - name: Verify Deployment
+      run: |
+        ssh root@91.99.229.96 << 'ENDSSH'
+
+        echo "=== Verifying deployment ==="
+
+        # Check services
+        echo "Backend health checks:"
+        curl -s http://localhost:8083/api/v2/health | grep -o '"status":"[^"]*"' || echo "LSEMB: Failed"
+        curl -s http://localhost:8084/api/v2/health | grep -o '"status":"[^"]*"' || echo "EmlakAI: Failed"
+        curl -s http://localhost:8085/api/v2/health | grep -o '"status":"[^"]*"' || echo "Bookie: Failed"
+
+        echo ""
+        echo "Port bindings:"
+        ss -tulpn | grep -E ':(3002|3003|3004|8083|8084|8085)' | grep LISTEN
+
+        ENDSSH
+
+    - name: Notify Success
+      if: success()
+      run: echo "✅ Deployment successful for ${{ env.TARGET }}"
+
+    - name: Notify Failure
+      if: failure()
+      run: echo "❌ Deployment failed for ${{ env.TARGET }}"

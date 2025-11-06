@@ -4,16 +4,74 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { ConfigProvider } from '@/contexts/ConfigContext';
+import { ConfigProvider, useConfig } from '@/contexts/ConfigContext';
 import config from '@/config/api.config';
 import { setStoredToken } from '@/lib/auth-fetch';
-import { Circle } from 'lucide-react';
+import { Circle, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface User {
   id: string;
   name: string;
   email: string;
   role: string;
+}
+
+// Inner component that has access to ConfigContext
+function DashboardContent({ children }: { children: React.ReactNode }) {
+  const { backendDown, error, refreshConfig } = useConfig();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (backendDown) {
+      console.warn('⚠️ Backend/Database is down, redirecting to setup page...');
+      router.push('/setup');
+    }
+  }, [backendDown, router]);
+
+  // Show error state when backend is down
+  if (backendDown) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20">
+        <div className="max-w-md w-full bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 text-center space-y-6">
+          <div className="relative">
+            <AlertCircle className="h-20 w-20 text-red-600 dark:text-red-400 mx-auto" />
+            <Circle className="h-20 w-20 text-red-600/20 absolute top-0 left-1/2 -translate-x-1/2 animate-ping" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Backend Bağlantısı Kurulamadı
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              {error || 'Veritabanı veya backend servisi şu anda çalışmıyor.'}
+            </p>
+          </div>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                console.log('🔄 Retrying connection...');
+                refreshConfig();
+              }}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+            >
+              <RefreshCw className="h-5 w-5" />
+              Yeniden Dene
+            </button>
+            <button
+              onClick={() => router.push('/setup')}
+              className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 font-medium rounded-lg transition-colors"
+            >
+              Kurulum Sayfasına Git
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-500">
+            Setup sayfasına otomatik olarak yönlendiriliyorsunuz...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 export default function DashboardLayout({
@@ -108,12 +166,14 @@ export default function DashboardLayout({
   return (
     <ProtectedRoute requireAdmin={true}>
       <ConfigProvider>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-          <Header />
-          <main className="container mx-auto px-4">
-            {children}
-          </main>
-        </div>
+        <DashboardContent>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+            <Header />
+            <main className="container mx-auto px-4">
+              {children}
+            </main>
+          </div>
+        </DashboardContent>
       </ConfigProvider>
     </ProtectedRoute>
   );

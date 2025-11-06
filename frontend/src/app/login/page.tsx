@@ -78,7 +78,7 @@ export default function LoginPage() {
   // This prevents the loader from appearing when clicking login button
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4 overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4 overflow-hidden" style={{backgroundColor: '#0f172a'}}>
       {/* 3D Cube */}
       <div className="absolute top-20 left-1/2 transform -translate-x-1/2 pointer-events-none">
         <style jsx>{`
@@ -86,6 +86,7 @@ export default function LoginPage() {
             width: 40px;
             height: 40px;
             perspective: 600px;
+            will-change: transform;
           }
 
           .cube {
@@ -94,6 +95,10 @@ export default function LoginPage() {
             position: relative;
             transform-style: preserve-3d;
             animation: rotateCube 30s infinite linear;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            transform: translate3d(0, 0, 0);
+            will-change: transform;
           }
 
           .cube-face {
@@ -104,7 +109,10 @@ export default function LoginPage() {
             border: 2px solid rgba(99, 102, 241, 0.6);
             backdrop-filter: blur(5px);
             box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.2), 0 0 30px rgba(99, 102, 241, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
-            animation: cubeGlow 4s ease-in-out infinite alternate;
+            animation: cubeGlow 4s ease-in-out infinite alternate, fadeInCube 0.8s ease-out forwards;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            will-change: opacity;
           }
 
           @keyframes cubeGlow {
@@ -129,6 +137,17 @@ export default function LoginPage() {
           @keyframes rotateCube {
             0% { transform: rotateX(0deg) rotateY(0deg); }
             100% { transform: rotateX(360deg) rotateY(360deg); }
+          }
+
+          @keyframes fadeInCube {
+            0% {
+              opacity: 0;
+              box-shadow: inset 0 0 20px rgba(99, 102, 241, 0), 0 0 30px rgba(99, 102, 241, 0), 0 0 40px rgba(139, 92, 246, 0);
+            }
+            100% {
+              opacity: 1;
+              box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.2), 0 0 30px rgba(99, 102, 241, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+            }
           }
 
           .cube-face:nth-child(1) { transform: translateZ(20px); }
