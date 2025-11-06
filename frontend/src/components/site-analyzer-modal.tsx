@@ -21,7 +21,7 @@ import config from '@/config/api.config';
 
 interface SiteAnalysis {
   baseUrl: string;
-  siteType: 'ecommerce' | 'blog' | 'news' | 'forum' | 'portfolio' | 'corporate' | 'directory';
+  siteType: 'ecommerce' | 'blog' | 'news' | 'forum' | 'portfolio' | 'corporate' | 'directory' | 'website';
   confidence: number;
   selectors: {
     title: string[];
@@ -892,13 +892,10 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={onClose}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateSite}>
+                <div className="flex justify-center">
+                  <Button onClick={handleCreateSite} className="min-w-[200px]" size="lg">
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    Create Site
+                    Add Site
                   </Button>
                 </div>
               </CardContent>

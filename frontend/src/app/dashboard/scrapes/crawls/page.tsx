@@ -38,7 +38,10 @@ import {
   Loader2,
   CheckCircle,
   BarChart3,
-  Activity
+  Activity,
+  Play,
+  Upload,
+  Code2
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -83,6 +86,9 @@ export default function CrawlsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItem, setSelectedItem] = useState<CrawledItem | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [pythonScriptFile, setPythonScriptFile] = useState<File | null>(null);
+  const [crawlerName, setCrawlerName] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   const [stats, setStats] = useState<Stats>({
     totalDirectories: 0,
@@ -256,6 +262,75 @@ export default function CrawlsPage() {
     item.key.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleRunPythonScript = async () => {
+    if (!pythonScriptFile || !crawlerName.trim()) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please provide both crawler name and Python script file',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+
+      // First, upload the script
+      const formData = new FormData();
+      formData.append('script', pythonScriptFile);
+
+      const uploadResponse = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/script`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload script');
+      }
+
+      // Then, run the script
+      const runResponse = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/run`,
+        {
+          method: 'POST'
+        }
+      );
+
+      if (!runResponse.ok) {
+        throw new Error('Failed to run script');
+      }
+
+      const result = await runResponse.json();
+
+      toast({
+        title: 'Success',
+        description: `Python script started successfully. Job ID: ${result.jobId}`,
+      });
+
+      // Reset form
+      setPythonScriptFile(null);
+      setCrawlerName('');
+
+      // Refresh directories
+      setTimeout(() => {
+        fetchDirectories();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Failed to run Python script:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to run Python script',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900">
       <div className="w-[90%] mx-auto">
@@ -344,6 +419,69 @@ export default function CrawlsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Python Script Upload Card */}
+        <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border-2 border-purple-200 dark:border-purple-800">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-6">
+              <div className="flex-shrink-0 p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                <Code2 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1 space-y-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    Python Script Crawler
+                    <Badge variant="outline" className="text-xs">
+                      Tenant-Aware
+                    </Badge>
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Upload and run custom Python crawl scripts. Data will be stored in Redis at crawl4ai/{'{crawler_name}'}/{'{data}'}
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-1">
+                    <Input
+                      placeholder="Crawler name (e.g., yky_crawler)"
+                      value={crawlerName}
+                      onChange={(e) => setCrawlerName(e.target.value)}
+                      disabled={isUploading}
+                      className="bg-white dark:bg-gray-900"
+                    />
+                  </div>
+                  <div className="md:col-span-1">
+                    <Input
+                      type="file"
+                      accept=".py"
+                      onChange={(e) => setPythonScriptFile(e.target.files?.[0] || null)}
+                      disabled={isUploading}
+                      className="bg-white dark:bg-gray-900"
+                    />
+                  </div>
+                  <div className="md:col-span-1">
+                    <Button
+                      onClick={handleRunPythonScript}
+                      disabled={isUploading || !pythonScriptFile || !crawlerName.trim()}
+                      className="w-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Running...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4 mr-2" />
+                          Run Script
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 h-14">
