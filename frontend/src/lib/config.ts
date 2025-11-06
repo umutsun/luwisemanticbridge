@@ -67,7 +67,7 @@ export const API_CONFIG = {
     chatbotSettings: '/api/v2/chatbot/settings',
 
     // GraphQL
-    graphql: '/graphql'
+    graphql: '/api/graphql'
   }
 };
 

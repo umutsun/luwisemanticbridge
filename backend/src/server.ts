@@ -461,7 +461,7 @@ app.use("/api/whisper", whisperRoutes);
 // GraphQL server
 try {
   createGraphQLServer(app);
-  console.log("✅ GraphQL server initialized at /graphql");
+  console.log("✅ GraphQL server initialized at /api/graphql");
 } catch (gqlError: any) {
   console.error("❌ GraphQL server failed:", gqlError.message);
 }

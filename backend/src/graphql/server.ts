@@ -78,7 +78,7 @@ export function createGraphQLServer(app: Application) {
     context: createContext,
 
     // GraphQL endpoint
-    graphqlEndpoint: '/graphql',
+    graphqlEndpoint: '/api/graphql',
 
     // GraphiQL playground
     graphiql: {
@@ -170,14 +170,14 @@ export function createGraphQLServer(app: Application) {
     ],
 
     // Health check endpoint
-    healthCheckEndpoint: '/graphql/health',
+    healthCheckEndpoint: '/api/graphql/health',
 
     // Landing page configuration
     landingPage: process.env.NODE_ENV === 'production' ? false : true,
   });
 
   // Express'e GraphQL endpoint'i ekle
-  app.use('/graphql', yoga);
+  app.use('/api/graphql', yoga);
 
   // Subscription'lar için WebSocket server (opsiyonel)
   if (process.env.ENABLE_SUBSCRIPTIONS === 'true') {
