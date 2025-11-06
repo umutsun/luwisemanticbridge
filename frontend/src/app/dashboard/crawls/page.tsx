@@ -54,7 +54,8 @@ import {
   Pause,
   Clock,
   MousePointer2,
-  Square
+  Square,
+  FolderPlus
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -167,8 +168,6 @@ export default function CrawlerDataPage() {
   // Add Crawler Modal states
   const [showAddCrawlerModal, setShowAddCrawlerModal] = useState(false);
   const [newCrawlerName, setNewCrawlerName] = useState('');
-  const [newCrawlerScript, setNewCrawlerScript] = useState<File | null>(null);
-  const [newCrawlerStartPage, setNewCrawlerStartPage] = useState('');
   const [isCreatingCrawler, setIsCreatingCrawler] = useState(false);
 
   // Stats
@@ -975,11 +974,11 @@ export default function CrawlerDataPage() {
     }
   };
 
-  const handleCreateAndRunCrawler = async () => {
-    if (!newCrawlerName.trim() || !newCrawlerScript) {
+  const handleCreateCrawlerSource = async () => {
+    if (!newCrawlerName.trim()) {
       toast({
         title: 'Missing Information',
-        description: 'Please provide crawler name and Python script',
+        description: 'Please provide crawler source name',
         variant: 'destructive'
       });
       return;
@@ -988,7 +987,7 @@ export default function CrawlerDataPage() {
     try {
       setIsCreatingCrawler(true);
 
-      // 1. Create crawler directory
+      // Create crawler directory
       const createResponse = await fetchWithAuth(
         `${config.api.baseUrl}/api/v2/crawler/crawler-directories`,
         {
@@ -1000,74 +999,33 @@ export default function CrawlerDataPage() {
 
       if (!createResponse.ok) {
         const errorData = await createResponse.json();
-        throw new Error(errorData.error || 'Failed to create crawler');
+        throw new Error(errorData.error || 'Failed to create crawler source');
       }
 
       const createResult = await createResponse.json();
-      const crawlerName = createResult.directory.name;
-
-      // 2. Upload script
-      const formData = new FormData();
-      formData.append('script', newCrawlerScript);
-
-      const uploadResponse = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/script`,
-        {
-          method: 'POST',
-          body: formData
-        }
-      );
-
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload script');
-      }
-
-      // 3. Run script with start page if provided
-      const runPayload: any = {};
-      if (newCrawlerStartPage.trim()) {
-        runPayload.startUrl = newCrawlerStartPage.trim();
-      }
-
-      const runResponse = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/run`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(runPayload)
-        }
-      );
-
-      if (!runResponse.ok) {
-        throw new Error('Failed to run script');
-      }
-
-      const runResult = await runResponse.json();
 
       // Update UI
       setDirectories(prev => [...prev, createResult.directory]);
-      setRunningScripts(prev => new Set([...prev, crawlerName]));
 
       toast({
         title: 'Success',
-        description: `Crawler "${createResult.directory.displayName}" created and started! Job ID: ${runResult.jobId}`,
+        description: `Crawler source "${createResult.directory.displayName}" created! You can now upload a Python script.`,
       });
 
       // Close modal and reset
       setShowAddCrawlerModal(false);
       setNewCrawlerName('');
-      setNewCrawlerScript(null);
-      setNewCrawlerStartPage('');
 
-      // Refresh directories after 2 seconds
+      // Refresh directories
       setTimeout(() => {
         fetchDirectories();
-      }, 2000);
+      }, 1000);
 
     } catch (error: any) {
-      console.error('❌ [Create and Run Crawler] Error:', error);
+      console.error('❌ [Create Crawler Source] Error:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create and run crawler',
+        description: error.message || 'Failed to create crawler source',
         variant: 'destructive'
       });
     } finally {
@@ -2508,104 +2466,58 @@ export default function CrawlerDataPage() {
 
       {/* Add Crawler Modal */}
       <Dialog open={showAddCrawlerModal} onOpenChange={setShowAddCrawlerModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Play className="h-5 w-5 text-purple-600" />
-              Add New Crawler Source
+              <FolderPlus className="h-5 w-5 text-purple-600" />
+              Add Crawler Source
             </DialogTitle>
-            <DialogDescription>
-              Create a new crawler source with Python script. The script will run automatically and store data in Redis.
+            <DialogDescription className="text-sm">
+              Create a new crawler source. You can upload Python script later.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Crawler Name */}
             <div className="space-y-2">
               <Label htmlFor="crawler-name" className="text-sm font-medium">
-                Crawler Name <span className="text-red-500">*</span>
+                Source Name
               </Label>
               <Input
                 id="crawler-name"
-                placeholder="e.g., emlakai_crawler, yky_crawler"
+                placeholder="e.g., emlakai, yky_data"
                 value={newCrawlerName}
                 onChange={(e) => setNewCrawlerName(e.target.value)}
                 disabled={isCreatingCrawler}
                 className="font-mono text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newCrawlerName.trim()) {
+                    handleCreateCrawlerSource();
+                  }
+                }}
               />
               <p className="text-xs text-muted-foreground">
-                This will be used as the Redis directory name
+                Redis key: <code className="font-mono">crawl4ai/{newCrawlerName || '...'}</code>
               </p>
             </div>
-
-            {/* Python Script Upload */}
-            <div className="space-y-2">
-              <Label htmlFor="crawler-script" className="text-sm font-medium">
-                Python Script <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="crawler-script"
-                type="file"
-                accept=".py"
-                onChange={(e) => setNewCrawlerScript(e.target.files?.[0] || null)}
-                disabled={isCreatingCrawler}
-                className="cursor-pointer"
-              />
-              {newCrawlerScript && (
-                <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                  <CheckCircle className="h-3 w-3" />
-                  <span>{newCrawlerScript.name} selected</span>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Upload your Crawl4AI Python script
-              </p>
-            </div>
-
-            {/* Start Page (Optional) */}
-            <div className="space-y-2">
-              <Label htmlFor="crawler-start-page" className="text-sm font-medium">
-                Start Page URL <span className="text-muted-foreground text-xs">(optional)</span>
-              </Label>
-              <Input
-                id="crawler-start-page"
-                type="url"
-                placeholder="https://example.com/start"
-                value={newCrawlerStartPage}
-                onChange={(e) => setNewCrawlerStartPage(e.target.value)}
-                disabled={isCreatingCrawler}
-              />
-              <p className="text-xs text-muted-foreground">
-                The initial URL to start crawling from
-              </p>
-            </div>
-
-            {/* Info Banner */}
-            <Alert className="border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20">
-              <Activity className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-xs">
-                After clicking Run, your crawler will be created and started immediately.
-                Data will be stored at: <code className="font-mono">crawl4ai/{newCrawlerName || 'crawler_name'}/*</code>
-              </AlertDescription>
-            </Alert>
           </div>
 
-          <div className="flex justify-center pt-2">
+          <div className="flex justify-center">
             <Button
-              onClick={handleCreateAndRunCrawler}
-              disabled={isCreatingCrawler || !newCrawlerName.trim() || !newCrawlerScript}
-              className="min-w-[200px] bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
+              onClick={handleCreateCrawlerSource}
+              disabled={isCreatingCrawler || !newCrawlerName.trim()}
+              className="min-w-[180px]"
               size="lg"
             >
               {isCreatingCrawler ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating & Running...
+                  Creating...
                 </>
               ) : (
                 <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Run Crawler
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Add Source
                 </>
               )}
             </Button>
