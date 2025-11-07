@@ -54,7 +54,8 @@ import {
   Pause,
   Clock,
   MousePointer2,
-  Square
+  Square,
+  RefreshCw
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -148,6 +149,7 @@ export default function CrawlerDataPage() {
   const [hasMoreItems, setHasMoreItems] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [totalItemsCount, setTotalItemsCount] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [scriptLogs, setScriptLogs] = useState<Map<string, string[]>>(new Map()); // jobId -> logs
   const [showUrlDialog, setShowUrlDialog] = useState(false);
   const [urlDialogDirectory, setUrlDialogDirectory] = useState<CrawlerDirectory | null>(null);
@@ -487,6 +489,35 @@ export default function CrawlerDataPage() {
     fetchCrawledItems(directory.name, 0, false);
     setWorkflowStep('preview-data');
     setSelectedItems(new Set());
+  };
+
+  const handleRefresh = async () => {
+    if (!selectedDirectory || isRefreshing) return;
+
+    try {
+      setIsRefreshing(true);
+
+      // Refresh both directories (to update card counts) and items (to update right panel)
+      await Promise.all([
+        fetchDirectories(),
+        fetchCrawledItems(selectedDirectory.name, 0, false)
+      ]);
+
+      toast({
+        title: 'Refreshed',
+        description: 'Data has been updated',
+        duration: 2000
+      });
+    } catch (error: any) {
+      console.error('Failed to refresh:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to refresh data',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleItemToggle = (itemKey: string) => {
@@ -1728,10 +1759,24 @@ export default function CrawlerDataPage() {
                 {workflowStep === 'preview-data' && selectedDirectory && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Preview Data - {selectedDirectory.displayName}</CardTitle>
-                      <CardDescription>
-                        View, edit and manage crawler data ({crawledItems.length} of {totalItemsCount} loaded)
-                      </CardDescription>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>Preview Data - {selectedDirectory.displayName}</CardTitle>
+                          <CardDescription>
+                            View, edit and manage crawler data ({crawledItems.length} of {totalItemsCount} loaded)
+                          </CardDescription>
+                        </div>
+                        <Button
+                          onClick={handleRefresh}
+                          disabled={isRefreshing || itemsLoading}
+                          variant="outline"
+                          size="sm"
+                          className="flex-shrink-0"
+                        >
+                          <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">

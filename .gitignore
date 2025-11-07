@@ -370,3 +370,9 @@ new-test-upload.txt
 sample-data.csv
 sample-data.json
 test-upload.txt
+
+# Tenant-specific crawler scripts (uploaded via panel, each tenant has their own)
+# These crawlers read tenant config from .env.lsemb (Redis DB, PostgreSQL DB, etc.)
+backend/python-services/crawlers/*_crawler.py
+backend/python-services/crawlers/*_crawler_state.json
+backend/python-services/crawlers/output/

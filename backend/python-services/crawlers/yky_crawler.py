@@ -2,23 +2,42 @@ import asyncio
 import json
 import re
 import sys
+import os
 import random
 from urllib.parse import urljoin, urlparse
+from pathlib import Path
 
 import redis
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from dotenv import load_dotenv
+
+# Load .env.lsemb from root directory
+env_path = Path(__file__).parent.parent.parent.parent / '.env.lsemb'
+load_dotenv(dotenv_path=env_path)
 
 # --- YKY Specific Configuration ---
 STATE_FILE = "yky_crawler_state.json"
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
-REDIS_DB = 0
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+REDIS_DB = int(os.getenv('REDIS_DB', '2'))  # Read from .env.lsemb
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 HTML_DEBUG_FILE = "yky_debug_html.txt"
 html_debug_done = False
 default_start_url = "https://www.yapikrediyayinlari.com.tr/kitap/dogan-kardes"
 # --- End of Configuration ---
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+# Redis connection with password support
+redis_config = {
+    'host': REDIS_HOST,
+    'port': REDIS_PORT,
+    'db': REDIS_DB,
+    'decode_responses': True
+}
+if REDIS_PASSWORD:
+    redis_config['password'] = REDIS_PASSWORD
+
+r = redis.Redis(**redis_config)
+print(f"✅ Connected to Redis at {REDIS_HOST}:{REDIS_PORT} DB {REDIS_DB}")
 
 async def get_text_or_none(locator, timeout=5000):
     try:

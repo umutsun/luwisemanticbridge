@@ -3,24 +3,43 @@ import asyncio
 import json
 import re
 import sys
+import os
 import random
 import aiohttp
 from urllib.parse import urljoin, urlparse, urlunparse, parse_qs, urlencode
+from pathlib import Path
 
 import redis
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from dotenv import load_dotenv
+
+# Load .env.lsemb from root directory
+env_path = Path(__file__).parent.parent.parent.parent / '.env.lsemb'
+load_dotenv(dotenv_path=env_path)
 
 # --- Configuration ---
 STATE_FILE = "iskultur_crawler_state.json"
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
-REDIS_DB = 0
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+REDIS_DB = int(os.getenv('REDIS_DB', '2'))  # Read from .env.lsemb
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 BACKEND_URL = 'http://localhost:3001'
 default_start_url = "https://www.iskultur.com.tr/kitap/cocuk-okul-oncesi/"
 HEADLESS = False  # Set to False for debugging with visible browser
 # --- End of Configuration ---
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+# Redis connection with password support
+redis_config = {
+    'host': REDIS_HOST,
+    'port': REDIS_PORT,
+    'db': REDIS_DB,
+    'decode_responses': True
+}
+if REDIS_PASSWORD:
+    redis_config['password'] = REDIS_PASSWORD
+
+r = redis.Redis(**redis_config)
+print(f"✅ Connected to Redis at {REDIS_HOST}:{REDIS_PORT} DB {REDIS_DB}")
 
 async def notify_backend_item_added(item_key, total_count):
     """Notify Node.js backend that a new item was added"""

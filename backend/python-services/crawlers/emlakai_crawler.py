@@ -5,6 +5,7 @@ import sys
 import random
 import os
 from urllib.parse import urljoin, urlparse
+from pathlib import Path
 
 # Set UTF-8 encoding for Windows
 if os.name == 'nt':
@@ -12,16 +13,33 @@ if os.name == 'nt':
 
 import redis
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from dotenv import load_dotenv
+
+# Load .env.lsemb from root directory
+env_path = Path(__file__).parent.parent.parent.parent / '.env.lsemb'
+load_dotenv(dotenv_path=env_path)
 
 # --- Emlak Mevzuatı Configuration ---
 STATE_FILE = "emlakai_crawler_state.json"
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
-REDIS_DB = 0
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+REDIS_DB = int(os.getenv('REDIS_DB', '2'))  # Read from .env.lsemb
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 default_start_url = "https://emlakmevzuati.com/category/tuzukler/"
 # --- End of Configuration ---
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+# Redis connection with password support
+redis_config = {
+    'host': REDIS_HOST,
+    'port': REDIS_PORT,
+    'db': REDIS_DB,
+    'decode_responses': True
+}
+if REDIS_PASSWORD:
+    redis_config['password'] = REDIS_PASSWORD
+
+r = redis.Redis(**redis_config)
+print(f"✅ Connected to Redis at {REDIS_HOST}:{REDIS_PORT} DB {REDIS_DB}")
 
 def capitalize_title(text):
     """Convert UPPERCASE text to Title Case (Capital case)"""

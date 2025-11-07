@@ -12,6 +12,7 @@ if os.name == 'nt':
     os.system('chcp 65001')
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from dotenv import load_dotenv
 
 try:
     import redis
@@ -20,14 +21,19 @@ except ImportError:
     REDIS_AVAILABLE = False
     print("[WARNING] Redis not installed. Install with: pip install redis")
 
+# Load .env.lsemb from root directory
+env_path = Path(__file__).parent.parent.parent.parent / '.env.lsemb'
+load_dotenv(dotenv_path=env_path)
+
 # --- IMSDB Configuration ---
 STATE_FILE = "imsdb_crawler_state.json"
 OUTPUT_DIR = Path("output/imsdb")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-REDIS_HOST = 'localhost'
-REDIS_PORT = 6379
-REDIS_DB = 0
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+REDIS_DB = int(os.getenv('REDIS_DB', '2'))  # Read from .env.lsemb
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 REDIS_PREFIX = "crawl4ai:imsdb_crawler"
 
 default_start_url = "https://imsdb.com/all-scripts.html"
@@ -37,9 +43,18 @@ default_start_url = "https://imsdb.com/all-scripts.html"
 redis_client = None
 if REDIS_AVAILABLE:
     try:
-        redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
+        redis_config = {
+            'host': REDIS_HOST,
+            'port': REDIS_PORT,
+            'db': REDIS_DB,
+            'decode_responses': True
+        }
+        if REDIS_PASSWORD:
+            redis_config['password'] = REDIS_PASSWORD
+
+        redis_client = redis.Redis(**redis_config)
         redis_client.ping()
-        print("[REDIS] Connected successfully")
+        print(f"✅ Connected to Redis at {REDIS_HOST}:{REDIS_PORT} DB {REDIS_DB}")
     except Exception as e:
         print(f"[WARNING] Redis connection failed: {e} - continuing with file-only output")
         redis_client = None
