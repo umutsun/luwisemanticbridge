@@ -422,6 +422,75 @@ def sync_tenants_from_lsemb():
     print(f"\n{Colors.OKGREEN}✅ Sync completed!{Colors.ENDC}")
     input("\nPress Enter to continue...")
 
+def fix_nginx_bad_gateway():
+    """Fix Nginx and Bad Gateway issues for all tenants"""
+    print(f"\n{Colors.OKCYAN}🔧 Fixing Nginx & Bad Gateway Issues:{Colors.ENDC}\n")
+
+    print(f"{Colors.WARNING}This will:{Colors.ENDC}")
+    print("• Check and fix .env.lsemb files")
+    print("• Verify nginx configurations")
+    print("• Restart all services")
+    print("• Test all endpoints")
+
+    confirm = input(f"\n{Colors.WARNING}Continue? (y/N): {Colors.ENDC}").lower()
+    if confirm != 'y':
+        return
+
+    # Run the fix script
+    print(f"\n{Colors.OKGREEN}Running nginx fix script...{Colors.ENDC}")
+    result = run_command("bash /var/www/lsemb/fix-nginx-bad-gateway.sh", capture_output=False)
+
+    # Additional fixes for .env.lsemb files
+    print(f"\n{Colors.OKCYAN}Checking .env.lsemb files...{Colors.ENDC}")
+
+    for tenant_id, tenant in TENANTS.items():
+        if tenant['db'] and tenant_id != 'luwi-dev':
+            env_path = f"{tenant['path']}/backend/.env.lsemb"
+            print(f"\nChecking {tenant['name']}...")
+
+            # Create .env.lsemb if doesn't exist
+            cmd = f"""
+            if [ ! -f {env_path} ]; then
+                echo 'Creating {tenant_id} .env.lsemb...'
+                cat > {env_path} << EOF
+DATABASE_URL=postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{tenant['db']}
+REDIS_DB={tenant['redis_db']}
+EOF
+            else
+                echo '{tenant_id} .env.lsemb exists'
+                grep -E '(DATABASE_URL|REDIS_DB)' {env_path} | head -2
+            fi
+            """
+            run_command(cmd)
+
+    # Restart all services
+    print(f"\n{Colors.OKGREEN}Restarting all services...{Colors.ENDC}")
+    run_command("pm2 restart all")
+
+    # Test endpoints
+    print(f"\n{Colors.OKCYAN}Testing endpoints...{Colors.ENDC}")
+    time.sleep(5)  # Wait for services to start
+
+    for tenant_id, tenant in TENANTS.items():
+        if tenant['backend_port']:
+            print(f"\n{tenant['name']}:")
+            # Test backend health
+            cmd = f"curl -s http://localhost:{tenant['backend_port']}/api/v2/health | grep -q 'healthy' && echo '  ✅ Backend OK' || echo '  ❌ Backend Failed'"
+            run_command(cmd)
+
+        if tenant['frontend_port']:
+            # Test frontend
+            cmd = f"curl -I http://localhost:{tenant['frontend_port']} 2>/dev/null | head -1 | grep -q '200\\|304' && echo '  ✅ Frontend OK' || echo '  ❌ Frontend Failed'"
+            run_command(cmd)
+
+    print(f"\n{Colors.OKGREEN}✅ Fix completed!{Colors.ENDC}")
+    print(f"\nTest URLs:")
+    for tenant_id, tenant in TENANTS.items():
+        if tenant['url']:
+            print(f"  • {tenant['url']}")
+
+    input(f"\n{Colors.OKBLUE}Press Enter to continue...{Colors.ENDC}")
+
 def devops_operations():
     """DevOps operations menu"""
     while True:
@@ -436,9 +505,10 @@ def devops_operations():
         print("6. Redis operations")
         print("7. PM2 save & startup")
         print("8. System resource check")
+        print("9. 🔧 Fix Nginx & Bad Gateway issues")
         print("0. Back")
 
-        choice = input(f"\n{Colors.OKBLUE}Select operation (0-8): {Colors.ENDC}")
+        choice = input(f"\n{Colors.OKBLUE}Select operation (0-9): {Colors.ENDC}")
 
         if choice == '0':
             break
@@ -458,6 +528,8 @@ def devops_operations():
             pm2_save_startup()
         elif choice == '8':
             system_resource_check()
+        elif choice == '9':
+            fix_nginx_bad_gateway()
 
 def build_all_typescript():
     """Build TypeScript for all projects"""
