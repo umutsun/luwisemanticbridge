@@ -327,6 +327,10 @@ async def main():
                         if link:
                             # Convert relative URLs to absolute
                             absolute_link = urljoin(current_url, link)
+
+                            # Convert old domain to new domain (YKY changed their website)
+                            absolute_link = absolute_link.replace('www.yapikrediyayinlari.com.tr', 'kitap.ykykultur.com.tr')
+
                             if absolute_link not in visited and not any(q_url == absolute_link for q_url, _ in queue):
                                 # Only add links that don't have pagination parameters (actual product pages)
                                 if '?sayfa=' not in link and '?page=' not in link:
