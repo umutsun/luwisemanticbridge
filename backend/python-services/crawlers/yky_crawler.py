@@ -248,8 +248,18 @@ async def main():
         queue = [(start_url_param, [])] # Start with no category path
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        # Launch browser with args to avoid bot detection
+        browser = await p.chromium.launch(
+            headless=True,
+            args=['--disable-blink-features=AutomationControlled']
+        )
+        # Create page with realistic user agent and viewport
+        page = await browser.new_page(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport={'width': 1920, 'height': 1080}
+        )
+        # Remove webdriver property
+        await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         try:
             print(f"Tarama dongusu baslatiliyor.")
@@ -260,9 +270,12 @@ async def main():
                 visited.add(current_url)
                 
                 print(f"Sayfa ziyaret ediliyor: {current_url} (Kuyruk: {len(queue)}, Ziyaret Edilen: {len(visited)})")
-                
+
                 try:
-                    await page.goto(current_url, wait_until="domcontentloaded", timeout=120000)
+                    # Use networkidle to handle Cloudflare's "Just a moment" redirects
+                    await page.goto(current_url, wait_until="networkidle", timeout=120000)
+                    # Give Cloudflare extra time to complete any JS challenges
+                    await asyncio.sleep(2)
                 except PlaywrightTimeoutError:
                     print(f"  - Zaman asimi: Sayfa yuklenemedi {current_url}. Atlanıyor.")
                     continue
@@ -271,10 +284,11 @@ async def main():
                 is_product_page = False
 
                 # Check by URL pattern - product pages don't have ?sayfa= parameter
-                if '?sayfa=' not in current_url and '#' not in current_url:
+                if '?sayfa=' not in current_url and '?page=' not in current_url and '#' not in current_url:
                     # Try to detect product page by looking for the bookDetailDiv or div#bookDetail
                     try:
-                        is_product_page = await page.locator('.bookDetailDiv, div#bookDetail').is_visible(timeout=3000)
+                        # Increase timeout to allow for Cloudflare delays
+                        is_product_page = await page.locator('.bookDetailDiv, div#bookDetail').is_visible(timeout=5000)
                     except:
                         is_product_page = False
 
