@@ -285,6 +285,10 @@ async def main():
             print(f"Tarama dongusu baslatiliyor.")
             while queue:
                 current_url, current_category_path = queue.pop(0)
+
+                # Convert old domain to new domain for queued URLs
+                current_url = current_url.replace('www.yapikrediyayinlari.com.tr', 'kitap.ykykultur.com.tr')
+
                 if current_url in visited:
                     continue
                 visited.add(current_url)
