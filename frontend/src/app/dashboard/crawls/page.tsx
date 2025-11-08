@@ -1589,8 +1589,8 @@ export default function CrawlerDataPage() {
 
                                         {/* Inline URL Input or Script Name */}
                                         {showUrlInput === directory.name ? (
-                                          <div className="flex items-center gap-1 flex-1">
-                                            <div className="relative flex-1 max-w-full overflow-hidden">
+                                          <div className="flex items-center gap-1 flex-1 min-w-0">
+                                            <div className="relative flex-1 min-w-0 overflow-hidden">
                                               <MousePointer2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                                               <Input
                                                 type="url"
@@ -1637,7 +1637,7 @@ export default function CrawlerDataPage() {
                                             </Button>
                                           </div>
                                         ) : (
-                                          <div className="relative flex items-center justify-between flex-1 px-2 py-1 rounded-md bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+                                          <div className="relative flex items-center justify-between flex-1 min-w-0 px-2 py-1 rounded-md bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
                                             {/* Animated background when running */}
                                             {runningScripts.has(directory.name) && (
                                               <div className="absolute inset-0 bg-gradient-to-r from-green-500/30 via-green-400/20 to-transparent animate-pulse" style={{ animationDuration: '2s' }} />
@@ -1790,7 +1790,7 @@ export default function CrawlerDataPage() {
                           />
                         </div>
 
-                        <div className="border rounded-lg">
+                        <div className="border rounded-lg overflow-x-auto">
                           <ScrollArea className="h-[500px]">
                             {itemsLoading ? (
                               <div className="p-4"><ListSkeleton count={5} /></div>
