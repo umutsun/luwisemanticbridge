@@ -241,11 +241,24 @@ def load_state():
         return [], set()
 
 async def main():
+    # DEBUG: Log script start and arguments
+    print(f"[DEBUG] Script started")
+    print(f"[DEBUG] sys.argv: {sys.argv}")
+    print(f"[DEBUG] Working directory: {os.getcwd()}")
+
     start_url_param = sys.argv[1] if len(sys.argv) > 1 else default_start_url
-    
+    print(f"[DEBUG] Start URL: {start_url_param}")
+
     queue, visited = load_state()
+    print(f"[DEBUG] Loaded state - Queue length: {len(queue)}, Visited length: {len(visited)}")
+
     if not queue and start_url_param not in visited:
         queue = [(start_url_param, [])] # Start with no category path
+        print(f"[DEBUG] Initialized queue with start URL")
+    else:
+        print(f"[DEBUG] Using existing state or URL already visited")
+        print(f"[DEBUG] Queue: {queue[:3] if len(queue) > 3 else queue}")  # Show first 3 items
+        print(f"[DEBUG] Start URL in visited: {start_url_param in visited}")
 
     async with async_playwright() as p:
         # Launch browser with args to avoid bot detection
@@ -262,6 +275,13 @@ async def main():
         await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         try:
+            print(f"[DEBUG] About to start crawling loop")
+            print(f"[DEBUG] Queue length before loop: {len(queue)}")
+            if queue:
+                print(f"[DEBUG] First item in queue: {queue[0]}")
+            else:
+                print(f"[DEBUG] Queue is empty! Loop will not run.")
+
             print(f"Tarama dongusu baslatiliyor.")
             while queue:
                 current_url, current_category_path = queue.pop(0)
