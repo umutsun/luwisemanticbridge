@@ -1103,7 +1103,10 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     console.log(`✅ Marked ${crawlerName} as running in Redis`);
 
     // Start Python process with URL as argument
-    const pythonProcess = spawn(pythonPath, [scriptPath, url]);
+    // Set PYTHONUNBUFFERED=1 to disable stdout buffering for immediate output
+    const pythonProcess = spawn(pythonPath, [scriptPath, url], {
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
 
     let outputBuffer = '';
     let errorBuffer = '';
