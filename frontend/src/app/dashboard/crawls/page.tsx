@@ -1590,12 +1590,12 @@ export default function CrawlerDataPage() {
                                         {/* Inline URL Input or Script Name */}
                                         {showUrlInput === directory.name ? (
                                           <div className="flex items-center gap-1 flex-1">
-                                            <div className="relative flex-1">
+                                            <div className="relative flex-1 max-w-full overflow-hidden">
                                               <MousePointer2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                                               <Input
                                                 type="url"
                                                 placeholder="https://example.com"
-                                                className="h-6 text-xs pl-7 pr-2 border-slate-300 dark:border-slate-600"
+                                                className="h-6 text-xs pl-7 pr-2 border-slate-300 dark:border-slate-600 w-full truncate"
                                                 autoFocus
                                                 value={scriptUrls.get(directory.name) || ''}
                                                 onChange={(e) => {
