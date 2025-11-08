@@ -310,30 +310,33 @@ async def main():
                     await extract_product_details(page, current_url, current_category_path)
                 else:
                     print(f"[LINKS] Scanning category/pagination links...")
-                    all_links = await page.locator("a").evaluate_all("(elements) => elements.map(el => ({href: el.href, text: el.innerText}))")
 
-                    print(f"  - Found {len(all_links)} potential links.")
+                    # Extract product links from div.products
+                    product_link_elements = await page.locator("div.products a").all()
+                    print(f"  - Found {len(product_link_elements)} product links in div.products.")
 
-                    # First pass: collect product links and find max page number
-                    max_page = 1
-                    pagination_links_found = []
-
-                    for link_info in all_links:
-                        link = link_info.get('href', '')
-                        text = link_info.get('text', '').strip()
-
-                        is_product_link = link.endswith('.aspx') and text
-                        is_pagination_link = '?sayfa=' in link
-
-                        if is_product_link:
-                            cleaned_link = clean_url(link)
+                    for link_elem in product_link_elements:
+                        link = await link_elem.get_attribute('href')
+                        if link and link.endswith('.aspx'):
+                            # Convert relative URLs to absolute
+                            absolute_link = urljoin(current_url, link)
+                            cleaned_link = clean_url(absolute_link)
                             if cleaned_link and cleaned_link not in visited and not any(q_url == cleaned_link for q_url, _ in queue):
                                 link_path_segments = [s for s in urlparse(cleaned_link).path.split('/') if s]
                                 new_category_path = link_path_segments[1:-1] if cleaned_link.endswith(".aspx") else current_category_path
                                 queue.append((cleaned_link, new_category_path))
                                 print(f"  [PRODUCT] Product added to queue: {cleaned_link[:60]}...")
 
-                        elif is_pagination_link:
+                    # Extract pagination links from div.pagination or .pagination
+                    pagination_links_found = []
+                    max_page = 1
+
+                    pagination_link_elements = await page.locator("div.pagination a, .pagination a").all()
+                    print(f"  - Found {len(pagination_link_elements)} pagination links.")
+
+                    for link_elem in pagination_link_elements:
+                        link = await link_elem.get_attribute('href')
+                        if link and '?sayfa=' in link:
                             # Extract page number from URL to find max
                             try:
                                 page_num = int(link.split('?sayfa=')[1].split('&')[0])
