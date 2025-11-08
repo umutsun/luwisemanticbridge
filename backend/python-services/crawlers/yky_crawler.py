@@ -288,7 +288,8 @@ async def main():
                     # Try to detect product page by looking for the bookDetailDiv or div#bookDetail
                     try:
                         # Increase timeout to allow for Cloudflare delays
-                        is_product_page = await page.locator('.bookDetailDiv, div#bookDetail').is_visible(timeout=5000)
+                        # Use .first to handle multiple matches
+                        is_product_page = await page.locator('.bookDetailDiv, div#bookDetail').first.is_visible(timeout=5000)
                     except:
                         is_product_page = False
 
