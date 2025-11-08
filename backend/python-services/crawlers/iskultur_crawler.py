@@ -25,7 +25,7 @@ REDIS_DB = int(os.getenv('REDIS_DB', '2'))  # Read from .env.lsemb
 REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 BACKEND_URL = 'http://localhost:3001'
 default_start_url = "https://www.iskultur.com.tr/kitap/cocuk-okul-oncesi/"
-HEADLESS = False  # Set to False for debugging with visible browser
+HEADLESS = True  # Set to False for debugging with visible browser
 # --- End of Configuration ---
 
 # Redis connection with password support

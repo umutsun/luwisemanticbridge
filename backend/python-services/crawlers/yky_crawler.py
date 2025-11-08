@@ -23,7 +23,7 @@ REDIS_DB = int(os.getenv('REDIS_DB', '2'))  # Read from .env.lsemb
 REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
 HTML_DEBUG_FILE = "yky_debug_html.txt"
 html_debug_done = False
-default_start_url = "https://www.yapikrediyayinlari.com.tr/kitap/dogan-kardes"
+default_start_url = "https://kitap.ykykultur.com.tr/kitaplar/konu-dizini/dogan-kardes"
 # --- End of Configuration ---
 
 # Redis connection with password support
@@ -248,7 +248,7 @@ async def main():
         queue = [(start_url_param, [])] # Start with no category path
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
 
         try:
@@ -267,14 +267,14 @@ async def main():
                     print(f"  - Zaman asimi: Sayfa yuklenemedi {current_url}. Atlanıyor.")
                     continue
 
-                # Check if it's a book page by URL or by looking for div#bookDetail h1
+                # Check if it's a book page by URL or by looking for .bookDetailDiv or div#bookDetail
                 is_product_page = False
 
                 # Check by URL pattern - product pages don't have ?sayfa= parameter
                 if '?sayfa=' not in current_url and '#' not in current_url:
-                    # Try to detect product page by looking for the div#bookDetail h1
+                    # Try to detect product page by looking for the bookDetailDiv or div#bookDetail
                     try:
-                        is_product_page = await page.locator('div#bookDetail h1').is_visible(timeout=3000)
+                        is_product_page = await page.locator('.bookDetailDiv, div#bookDetail').is_visible(timeout=3000)
                     except:
                         is_product_page = False
 
@@ -283,8 +283,8 @@ async def main():
                 else: # Category or Pagination Page
                     print(f"Kategori/Sayfalama linkleri taraniyor...")
 
-                    # Find product links from product cards (div.urunList a)
-                    product_links = await page.locator("div.urunList a").all()
+                    # Find product links from product cards (div.content-detail a)
+                    product_links = await page.locator("div.content-detail a").all()
                     print(f"  - {len(product_links)} urun linki bulundu.")
 
                     for link_elem in product_links:
@@ -295,14 +295,14 @@ async def main():
                                 queue.append((link, current_category_path))
                                 print(f"  -> Urun kuyruga eklendi: {link}")
 
-                    # Find pagination links - YKY uses div.paging
+                    # Find pagination links - YKY uses div.pagination-container
                     # Strategy: Extract all explicit links and find max page number to generate all missing pages
 
                     pagination_links_found = []
                     max_page = 1
 
-                    # Get all links from div.paging
-                    paging_div = await page.locator("div.paging a").all()
+                    # Get all links from div.pagination-container
+                    paging_div = await page.locator("div.pagination-container a").all()
                     if paging_div:
                         for link_elem in paging_div:
                             link = await link_elem.get_attribute('href')
