@@ -13,20 +13,23 @@ module.exports = {
     },
     {
       name: 'lsemb-frontend',
-      script: 'start-frontend.js',
-      cwd: 'c:/xampp/htdocs/lsemb',
+      script: 'node',
+      args: 'node_modules/next/dist/bin/next start -p 3002',
+      cwd: 'c:/xampp/htdocs/lsemb/frontend',
       env: {
         PORT: 3002,
-        NODE_ENV: 'development'
-      }
+        NODE_ENV: 'production'
+      },
+      node_args: '--max-old-space-size=2048'
     },
     {
       name: 'lsemb-python',
-      script: 'python',
+      script: 'C:/Users/umut.demirci/AppData/Local/Programs/Python/Python313/python.exe',
       args: 'main.py',
       cwd: 'c:/xampp/htdocs/lsemb/backend/python-services',
       env: {
         PORT: 8002,
+        PYTHON_SERVICE_PORT: '8002',
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'production'
       }

@@ -248,11 +248,111 @@ async def get_crawl_status(job_id: str) -> Dict[str, Any]:
 
     return response
 
+class RecrawlRequest(BaseModel):
+    """Request model for re-crawling specific URLs"""
+    crawler_name: str = Field(..., description="Crawler name (e.g., 'emlakai', 'yky')")
+    urls: List[str] = Field(..., min_items=1, max_items=100, description="URLs to re-crawl")
+
 class ExtractRequest(BaseModel):
     """Request model for HTML extraction"""
     html: str = Field(..., description="HTML content")
     extraction_prompt: str = Field(..., description="Extraction instructions")
     model: str = Field("gpt-4", description="LLM model")
+
+@router.post("/recrawl")
+async def recrawl_urls(request: RecrawlRequest) -> Dict[str, Any]:
+    """
+    Re-crawl specific URLs by removing them from visited set and adding to queue
+
+    This endpoint allows you to re-crawl pages that were already crawled,
+    useful for updating content or fixing incomplete crawls.
+    """
+    import json
+    from pathlib import Path
+
+    try:
+        # Construct state file path (go up to backend/ directory)
+        # Handle both formats: "emlakai" and "emlakai_crawler"
+        crawler_base = request.crawler_name.replace("_crawler", "") if "_crawler" in request.crawler_name else request.crawler_name
+        state_file = Path(__file__).parent.parent.parent / f"{crawler_base}_crawler_state.json"
+
+        if not state_file.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Crawler '{request.crawler_name}' hasn't been run yet or state file is missing. Please run the crawler first to generate the state file."
+            )
+
+        # Read state file
+        with open(state_file, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+
+        queue = state.get('queue', [])
+        visited = set(state.get('visited', []))
+        failed_urls = state.get('failed_urls', [])
+
+        # Get URLs already in queue (queue items are tuples: (url, category_path))
+        queue_urls = set(item[0] if isinstance(item, (list, tuple)) else item for item in queue)
+
+        # Process URLs for re-crawling
+        added = []
+        not_found = []
+        already_in_queue = []
+
+        for url in request.urls:
+            # Check if URL is already in queue
+            if url in queue_urls:
+                already_in_queue.append(url)
+                logger.warning(f"⚠️ Already in queue: {url}")
+            elif url in visited:
+                # Remove from visited and add to queue
+                visited.remove(url)
+                queue.append((url, []))  # Add with empty category path
+                queue_urls.add(url)  # Update the set
+                added.append(url)
+                logger.info(f"✅ Re-queued: {url}")
+            else:
+                not_found.append(url)
+                logger.warning(f"⚠️ URL not in visited set: {url}")
+
+        # Remove from failed_urls if present
+        if failed_urls:
+            for url in added:
+                if url in failed_urls:
+                    failed_urls.remove(url)
+
+        # Update state
+        state['queue'] = queue
+        state['visited'] = list(visited)
+        if failed_urls:
+            state['failed_urls'] = failed_urls
+
+        # Save state file
+        with open(state_file, 'w', encoding='utf-8') as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"🎉 Re-crawl: {len(added)} URLs added to queue")
+
+        return {
+            "success": True,
+            "crawler_name": request.crawler_name,
+            "added_count": len(added),
+            "not_found_count": len(not_found),
+            "already_queued_count": len(already_in_queue),
+            "queue_size": len(queue),
+            "visited_size": len(visited),
+            "added_urls": added,
+            "not_found_urls": not_found,
+            "already_queued_urls": already_in_queue
+        }
+
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to parse state file. File may be corrupted."
+        )
+    except Exception as e:
+        logger.error(f"Re-crawl failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/extract")
 async def extract_from_html(request: ExtractRequest) -> Dict[str, Any]:

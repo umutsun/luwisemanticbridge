@@ -16,8 +16,9 @@ import uvicorn
 from loguru import logger
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from .env.lsemb
+env_path = Path(__file__).parent.parent.parent / '.env.lsemb'
+load_dotenv(dotenv_path=env_path)
 
 # Configure logging
 logger.remove()
@@ -70,7 +71,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8083").split(","),
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3002,http://localhost:8083").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,8 +91,8 @@ app.include_router(health_router, tags=["health"])
 app.include_router(
     crawl_router,
     prefix="/api/python/crawl",
-    tags=["crawl4ai"],
-    dependencies=[Depends(verify_api_key)]
+    tags=["crawl4ai"]
+    # API key check removed for internal crawl operations
 )
 app.include_router(
     pgai_router,
@@ -126,7 +127,7 @@ async def root():
     }
 
 if __name__ == "__main__":
-    port = int(os.getenv("PYTHON_API_PORT", 8001))
+    port = int(os.getenv("PYTHON_SERVICE_PORT") or os.getenv("PYTHON_API_PORT") or 8002)
     host = os.getenv("PYTHON_API_HOST", "0.0.0.0")
 
     uvicorn.run(

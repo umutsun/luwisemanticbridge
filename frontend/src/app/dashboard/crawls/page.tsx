@@ -55,7 +55,8 @@ import {
   Clock,
   MousePointer2,
   Square,
-  RefreshCw
+  RefreshCw,
+  Radar
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -165,6 +166,7 @@ export default function CrawlerDataPage() {
   const [runningScripts, setRunningScripts] = useState<Set<string>>(new Set()); // running directory names
   const [scriptUrls, setScriptUrls] = useState<Map<string, string>>(new Map()); // directory -> URL
   const [crawlerStates, setCrawlerStates] = useState<Map<string, any>>(new Map()); // directory -> state.json
+  const [recrawlingItems, setRecrawlingItems] = useState<Set<string>>(new Set()); // URL being recrawled
 
   // Inline new source editing
   const [isAddingNewSource, setIsAddingNewSource] = useState(false);
@@ -1144,6 +1146,75 @@ export default function CrawlerDataPage() {
     }
   };
 
+  const handleRecrawl = async (item: CrawledItem) => {
+    if (!selectedDirectory || !item.url) {
+      toast({
+        title: 'Error',
+        description: 'URL not found for this item',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setRecrawlingItems(prev => new Set(prev).add(item.url!));
+
+      console.log('🔄 [Recrawl] Starting recrawl...');
+      console.log('📁 Crawler:', selectedDirectory.name);
+      console.log('🔗 URL:', item.url);
+
+      const response = await fetchWithAuth(
+        `http://localhost:8002/api/python/crawl/recrawl`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            crawler_name: selectedDirectory.name,
+            urls: [item.url]
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to queue URL for recrawl');
+      }
+
+      const result = await response.json();
+      console.log('✅ Recrawl queued:', result);
+
+      // Build toast message based on result
+      let message = '';
+      if (result.already_queued_count > 0) {
+        message = `URL already in queue. Queue size: ${result.queue_size}`;
+      } else if (result.added_count > 0) {
+        message = `URL queued for recrawl. Queue size: ${result.queue_size}`;
+      } else {
+        message = `URL not found in crawled data.`;
+      }
+
+      toast({
+        title: result.already_queued_count > 0 ? 'Already Queued' : 'Success',
+        description: message,
+        variant: result.already_queued_count > 0 ? 'default' : 'default'
+      });
+
+    } catch (error: any) {
+      console.error('❌ [Recrawl] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to queue URL for recrawl',
+        variant: 'destructive'
+      });
+    } finally {
+      setRecrawlingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.url!);
+        return newSet;
+      });
+    }
+  };
+
   const handleImport = async () => {
     setImporting(true);
     setImportProgress(0);
@@ -1643,7 +1714,7 @@ export default function CrawlerDataPage() {
                                               <div className="absolute inset-0 bg-gradient-to-r from-green-500/30 via-green-400/20 to-transparent animate-pulse" style={{ animationDuration: '2s' }} />
                                             )}
 
-                                            <div className="text-[10px] font-medium truncate text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2">
+                                            <div className="text-[10px] font-medium text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2 flex-1 min-w-0">
                                               {runningScripts.has(directory.name) ? (
                                                 // Show queue/progress from Redis when running
                                                 (() => {
@@ -1661,11 +1732,12 @@ export default function CrawlerDataPage() {
                                                       </>
                                                     );
                                                   }
-                                                  return scriptUrls.get(directory.name) || pythonScripts.get(directory.name)?.name;
+                                                  const url = scriptUrls.get(directory.name) || pythonScripts.get(directory.name)?.name || '';
+                                                  return <span className="truncate block">{url}</span>;
                                                 })()
                                               ) : (
                                                 // Show script name when idle
-                                                pythonScripts.get(directory.name)?.name
+                                                <span className="truncate block">{pythonScripts.get(directory.name)?.name}</span>
                                               )}
                                             </div>
 
@@ -1816,6 +1888,20 @@ export default function CrawlerDataPage() {
                                         title="View/Edit"
                                       >
                                         <Eye className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleRecrawl(item)}
+                                        disabled={recrawlingItems.has(item.url || '') || !item.url}
+                                        className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
+                                        title="Re-crawl this URL"
+                                      >
+                                        {recrawlingItems.has(item.url || '') ? (
+                                          <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
+                                        ) : (
+                                          <Radar className="w-4 h-4 text-slate-600 dark:text-slate-300 hover:text-blue-600" />
+                                        )}
                                       </Button>
                                       <ConfirmTooltip
                                         onConfirm={() => handleDeleteItem(item.key)}
