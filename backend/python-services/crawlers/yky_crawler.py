@@ -289,32 +289,46 @@ async def main():
 
                     for link_elem in product_links:
                         link = await link_elem.get_attribute('href')
-                        if link and link not in visited and not any(q_url == link for q_url, _ in queue):
-                            # Only add links that don't have ?sayfa= (actual product pages)
-                            if '?sayfa=' not in link:
-                                queue.append((link, current_category_path))
-                                print(f"  -> Urun kuyruga eklendi: {link}")
+                        if link:
+                            # Convert relative URLs to absolute
+                            absolute_link = urljoin(current_url, link)
+                            if absolute_link not in visited and not any(q_url == absolute_link for q_url, _ in queue):
+                                # Only add links that don't have pagination parameters (actual product pages)
+                                if '?sayfa=' not in link and '?page=' not in link:
+                                    queue.append((absolute_link, current_category_path))
+                                    print(f"  -> Urun kuyruga eklendi: {absolute_link}")
 
                     # Find pagination links - YKY uses div.pagination-container
                     # Strategy: Extract all explicit links and find max page number to generate all missing pages
 
                     pagination_links_found = []
                     max_page = 1
+                    page_param = 'page'  # Default to 'page'
 
                     # Get all links from div.pagination-container
                     paging_div = await page.locator("div.pagination-container a").all()
                     if paging_div:
                         for link_elem in paging_div:
                             link = await link_elem.get_attribute('href')
-                            if link and '?sayfa=' in link:
-                                # Extract page number from URL
-                                try:
-                                    page_num = int(link.split('?sayfa=')[1].split('&')[0])
-                                    if page_num > max_page:
-                                        max_page = page_num
+                            if link:
+                                # Check for both ?sayfa= and ?page= parameters
+                                page_num = None
+                                if '?sayfa=' in link:
+                                    try:
+                                        page_num = int(link.split('?sayfa=')[1].split('&')[0])
+                                        page_param = 'sayfa'
+                                    except (ValueError, IndexError):
+                                        pass
+                                elif '?page=' in link:
+                                    try:
+                                        page_num = int(link.split('?page=')[1].split('&')[0])
+                                        page_param = 'page'
+                                    except (ValueError, IndexError):
+                                        pass
+
+                                if page_num and page_num > max_page:
+                                    max_page = page_num
                                     pagination_links_found.append(link)
-                                except (ValueError, IndexError):
-                                    pass
 
                     # Generate ALL page links from 1 to max_page if we found pages
                     if max_page > 1:
@@ -324,13 +338,15 @@ async def main():
                         base_url = current_url
                         if '?sayfa=' in current_url:
                             base_url = current_url.split('?sayfa=')[0]
+                        elif '?page=' in current_url:
+                            base_url = current_url.split('?page=')[0]
 
                         # Generate all page numbers from 1 to max_page
                         for page_num in range(1, max_page + 1):
-                            pagination_url = f"{base_url}?sayfa={page_num}"
+                            pagination_url = urljoin(current_url, f"{base_url}?{page_param}={page_num}")
                             if pagination_url not in visited and not any(q_url == pagination_url for q_url, _ in queue):
                                 queue.append((pagination_url, current_category_path))
-                                print(f"  -> Sayfalama kuyruga eklendi: ?sayfa={page_num}")
+                                print(f"  -> Sayfalama kuyruga eklendi: ?{page_param}={page_num}")
                     else:
                         print(f"  - Sayfalama linki bulunamadi.")
 
