@@ -266,9 +266,11 @@ async def recrawl_urls(request: RecrawlRequest) -> Dict[str, Any]:
 
     This endpoint allows you to re-crawl pages that were already crawled,
     useful for updating content or fixing incomplete crawls.
+    Also removes the item from Redis to avoid confusion.
     """
     import json
     from pathlib import Path
+    from services.redis_client import get_redis
 
     try:
         # Construct state file path (go up to backend/ directory)
@@ -293,6 +295,10 @@ async def recrawl_urls(request: RecrawlRequest) -> Dict[str, Any]:
         # Get URLs already in queue (queue items are tuples: (url, category_path))
         queue_urls = set(item[0] if isinstance(item, (list, tuple)) else item for item in queue)
 
+        # Get Redis client for deleting cached data
+        redis_client = await get_redis()
+        deleted_from_redis = []
+
         # Process URLs for re-crawling
         added = []
         not_found = []
@@ -310,6 +316,31 @@ async def recrawl_urls(request: RecrawlRequest) -> Dict[str, Any]:
                 queue_urls.add(url)  # Update the set
                 added.append(url)
                 logger.info(f"✅ Re-queued: {url}")
+
+                # Delete from Redis to avoid showing stale data
+                if redis_client:
+                    try:
+                        # Find Redis keys matching this URL
+                        # Extract slug from URL for pattern matching
+                        url_slug = url.rstrip('/').split('/')[-1]
+                        pattern = f"crawl4ai:{request.crawler_name}:*{url_slug}*"
+
+                        # Find all matching keys
+                        matching_keys = []
+                        cursor = 0
+                        while True:
+                            cursor, keys = await redis_client.scan(cursor, match=pattern, count=100)
+                            matching_keys.extend(keys)
+                            if cursor == 0:
+                                break
+
+                        # Delete all matching keys
+                        if matching_keys:
+                            await redis_client.delete(*matching_keys)
+                            deleted_from_redis.extend(matching_keys)
+                            logger.info(f"🗑️ Deleted {len(matching_keys)} Redis keys for {url}")
+                    except Exception as redis_error:
+                        logger.warning(f"⚠️ Failed to delete from Redis: {redis_error}")
             else:
                 not_found.append(url)
                 logger.warning(f"⚠️ URL not in visited set: {url}")
@@ -330,7 +361,7 @@ async def recrawl_urls(request: RecrawlRequest) -> Dict[str, Any]:
         with open(state_file, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
 
-        logger.info(f"🎉 Re-crawl: {len(added)} URLs added to queue")
+        logger.info(f"🎉 Re-crawl: {len(added)} URLs added to queue, {len(deleted_from_redis)} Redis keys deleted")
 
         return {
             "success": True,
@@ -342,7 +373,8 @@ async def recrawl_urls(request: RecrawlRequest) -> Dict[str, Any]:
             "visited_size": len(visited),
             "added_urls": added,
             "not_found_urls": not_found,
-            "already_queued_urls": already_in_queue
+            "already_queued_urls": already_in_queue,
+            "deleted_from_redis_count": len(deleted_from_redis)
         }
 
     except json.JSONDecodeError:
