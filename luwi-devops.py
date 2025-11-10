@@ -11,6 +11,12 @@ import json
 import time
 from typing import Optional, Dict, List
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load sensitive config from a file outside the repo
+# Make sure to create this file on your server at /etc/lsemb/.devops.env
+# with the content: DB_PASSWORD="YourSecretPassword"
+load_dotenv('/etc/lsemb/.devops.env')
 
 # ANSI Colors
 class Colors:
@@ -87,7 +93,7 @@ TENANTS = {
 DB_CONFIG = {
     'host': '91.99.229.96',
     'user': 'postgres',
-    'password': 'Semsiye!22',
+    'password': os.getenv('DB_PASSWORD', 'Semsiye!22'),
     'port': 5432
 }
 
@@ -506,9 +512,10 @@ def devops_operations():
         print("7. PM2 save & startup")
         print("8. System resource check")
         print("9. 🔧 Fix Nginx & Bad Gateway issues")
+        print("10. 🕵️ Audit .env Consistency")
         print("0. Back")
 
-        choice = input(f"\n{Colors.OKBLUE}Select operation (0-9): {Colors.ENDC}")
+        choice = input(f"\n{Colors.OKBLUE}Select operation (0-10): {Colors.ENDC}")
 
         if choice == '0':
             break
@@ -530,6 +537,8 @@ def devops_operations():
             system_resource_check()
         elif choice == '9':
             fix_nginx_bad_gateway()
+        elif choice == '10':
+            audit_env_consistency()
 
 def build_all_typescript():
     """Build TypeScript for all projects"""
@@ -846,6 +855,81 @@ def quick_actions():
 
     if choice != '0':
         input(f"\n{Colors.OKBLUE}Press Enter to continue...{Colors.ENDC}")
+
+def audit_env_consistency():
+    """Audits all tenant .env files for consistency against the central config."""
+    print(f"\n{Colors.OKCYAN}🕵️  Auditing .env Consistency for Data Isolation...{Colors.ENDC}\n")
+
+    def parse_env_file(file_path: str) -> Dict[str, str]:
+        """Parses a .env file and returns a dictionary of key-value pairs."""
+        env_vars = {}
+        try:
+            with open(file_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        # Remove potential quotes from value
+                        if (value.startswith('"') and value.endswith('"')) or \
+                           (value.startswith("'") and value.endswith("'")):
+                            value = value[1:-1]
+                        env_vars[key.strip()] = value.strip()
+        except FileNotFoundError:
+            return {}
+        return env_vars
+
+    all_consistent = True
+    for tenant_id, tenant in TENANTS.items():
+        if not tenant.get('backend_port'):
+            continue
+
+        print(f"{Colors.BOLD}Checking {tenant['name']}...{Colors.ENDC}")
+
+        # 1. Generate expected configuration
+        expected_db_url = f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{tenant['db']}"
+        expected_redis_db = str(tenant['redis_db'])
+
+        # 2. Get actual configuration
+        env_path = f"{tenant['path']}/backend/.env"
+        if not os.path.exists(env_path):
+            print(f"  {Colors.FAIL}❌ .env file not found at {env_path}{Colors.ENDC}")
+            all_consistent = False
+            continue
+
+        actual_env_vars = parse_env_file(env_path)
+        actual_db_url = actual_env_vars.get('DATABASE_URL')
+        actual_redis_db = actual_env_vars.get('REDIS_DB')
+
+        # 3. Compare and report
+        errors = []
+        if actual_db_url != expected_db_url:
+            errors.append(
+                f"  {Colors.FAIL}DATABASE_URL mismatch!{Colors.ENDC}\n"
+                f"    - Expected: {expected_db_url}\n"
+                f"    - Actual:   {actual_db_url}"
+            )
+        
+        if actual_redis_db != expected_redis_db:
+            errors.append(
+                f"  {Colors.FAIL}REDIS_DB mismatch!{Colors.ENDC}\n"
+                f"    - Expected: {expected_redis_db}\n"
+                f"    - Actual:   {actual_redis_db}"
+            )
+
+        if not errors:
+            print(f"  {Colors.OKGREEN}✅ OK: DATABASE_URL and REDIS_DB are consistent.{Colors.ENDC}")
+        else:
+            all_consistent = False
+            for error in errors:
+                print(error)
+        print("-" * 40)
+
+    if all_consistent:
+        print(f"\n{Colors.OKGREEN}{Colors.BOLD}🎉 All checked tenants are consistent with the central configuration!{Colors.ENDC}")
+    else:
+        print(f"\n{Colors.WARNING}{Colors.BOLD}Found inconsistencies. Please review the logs above.{Colors.ENDC}")
+
+    input(f"\n{Colors.OKBLUE}Press Enter to continue...{Colors.ENDC}")
 
 def main_menu():
     """Enhanced main menu"""
