@@ -516,9 +516,10 @@ def devops_operations():
         print("9. 🔧 Fix Nginx & Bad Gateway issues")
         print("10. 🕵️ Audit .env Consistency")
         print("11. 🛠️ Fix Stuck Merge (Scriptus)")
+        print("12. 💣 Force Sync Tenant (Reset)")
         print("0. Back")
 
-        choice = input(f"\n{Colors.OKBLUE}Select operation (0-11): {Colors.ENDC}")
+        choice = input(f"\n{Colors.OKBLUE}Select operation (0-12): {Colors.ENDC}")
 
         if choice == '0':
             break
@@ -544,6 +545,8 @@ def devops_operations():
             audit_env_consistency()
         elif choice == '11':
             fix_scriptus_merge()
+        elif choice == '12':
+            force_sync_tenant()
 
 def build_all_typescript():
     """Build TypeScript for all projects"""
@@ -941,6 +944,58 @@ def fix_scriptus_merge():
     print(f"\n{Colors.WARNING}Attempting to abort merge in /var/www/scriptus...{Colors.ENDC}")
     run_command("git merge --abort", cwd="/var/www/scriptus")
     print(f"\n{Colors.OKGREEN}✅ Done. If no error appeared, the merge lock should be released.{Colors.ENDC}")
+    input("\nPress Enter to continue...")
+
+def force_sync_tenant():
+    """
+    Forces a tenant's local repository to match the remote origin/main.
+    This is a destructive operation and will delete any local-only changes.
+    """
+    print_header()
+    print(f"{Colors.FAIL}{Colors.BOLD}💣 Force Sync Tenant (Reset) 💣{Colors.ENDC}")
+    print(f"{Colors.WARNING}This tool will reset a tenant's local folder to be an exact copy of the GitHub 'main' branch.")
+    print(f"All local changes in that folder that have not been pushed to GitHub will be PERMANENTLY DELETED.{Colors.ENDC}\n")
+
+    tenants_to_reset = {i: (tid, t) for i, (tid, t) in enumerate(TENANTS.items()) if tid != 'lsemb'}
+    
+    for i, (tenant_id, tenant) in tenants_to_reset.items():
+        print(f"{i+1}. {tenant['name']}")
+    print("0. Cancel")
+
+    try:
+        choice = int(input(f"\n{Colors.OKBLUE}Select tenant to reset (0-{len(tenants_to_reset)}): {Colors.ENDC}")) - 1
+        if choice < 0 or choice not in tenants_to_reset:
+            print(f"\n{Colors.OKGREEN}Cancelled.{Colors.ENDC}")
+            input("\nPress Enter to continue...")
+            return
+    except ValueError:
+        print(f"\n{Colors.FAIL}Invalid selection.{Colors.ENDC}")
+        input("\nPress Enter to continue...")
+        return
+
+    tenant_id, tenant = tenants_to_reset[choice]
+
+    print(f"\n{Colors.FAIL}You are about to reset the '{tenant['name']}' tenant at {tenant['path']}.")
+    confirm = input(f"To confirm, please type the tenant id '{tenant_id}': {Colors.ENDC}")
+
+    if confirm != tenant_id:
+        print(f"\n{Colors.OKGREEN}Confirmation failed. Operation cancelled.{Colors.ENDC}")
+        input("\nPress Enter to continue...")
+        return
+
+    print(f"\n{Colors.WARNING}Resetting '{tenant['name']}'...{Colors.ENDC}")
+    
+    commands = [
+        "git merge --abort",
+        "git fetch origin",
+        "git reset --hard origin/main"
+    ]
+
+    for cmd in commands:
+        print(f"  Running: {cmd}")
+        run_command(cmd, cwd=tenant['path'])
+
+    print(f"\n{Colors.OKGREEN}✅ Tenant '{tenant['name']}' has been successfully synced with origin/main.{Colors.ENDC}")
     input("\nPress Enter to continue...")
 
 def main_menu():
