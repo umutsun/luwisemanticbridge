@@ -304,12 +304,14 @@ CORS_ORIGIN={tenant['url']}
 """
         env_path = f"{tenant['path']}/backend/.env"
 
-        # Create .env.lsemb for tenant-specific config
-        env_lsemb_path = f"{tenant['path']}/.env.{tenant_id}"
-
-        print(f"Creating {env_lsemb_path}...")
-        # This would write to server, showing preview instead
-        print(env_content)
+        # Write the content to the backend .env file
+        print(f"Writing configuration to {env_path}...")
+        try:
+            with open(env_path, 'w') as f:
+                f.write(env_content)
+            print(f"{Colors.OKGREEN}  -> Successfully wrote .env file.{Colors.ENDC}")
+        except Exception as e:
+            print(f"{Colors.FAIL}  -> Error writing to {env_path}: {e}{Colors.ENDC}")
 
     print(f"{Colors.OKGREEN}✅ Configuration updated!{Colors.ENDC}")
     input("\nPress Enter to continue...")
