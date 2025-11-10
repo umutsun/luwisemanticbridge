@@ -513,9 +513,10 @@ def devops_operations():
         print("8. System resource check")
         print("9. 🔧 Fix Nginx & Bad Gateway issues")
         print("10. 🕵️ Audit .env Consistency")
+        print("11. 🛠️ Fix Stuck Merge (Scriptus)")
         print("0. Back")
 
-        choice = input(f"\n{Colors.OKBLUE}Select operation (0-10): {Colors.ENDC}")
+        choice = input(f"\n{Colors.OKBLUE}Select operation (0-11): {Colors.ENDC}")
 
         if choice == '0':
             break
@@ -539,6 +540,8 @@ def devops_operations():
             fix_nginx_bad_gateway()
         elif choice == '10':
             audit_env_consistency()
+        elif choice == '11':
+            fix_scriptus_merge()
 
 def build_all_typescript():
     """Build TypeScript for all projects"""
@@ -930,6 +933,13 @@ def audit_env_consistency():
         print(f"\n{Colors.WARNING}{Colors.BOLD}Found inconsistencies. Please review the logs above.{Colors.ENDC}")
 
     input(f"\n{Colors.OKBLUE}Press Enter to continue...{Colors.ENDC}")
+
+def fix_scriptus_merge():
+    """Aborts a pending merge in the Scriptus repository."""
+    print(f"\n{Colors.WARNING}Attempting to abort merge in /var/www/scriptus...{Colors.ENDC}")
+    run_command("git merge --abort", cwd="/var/www/scriptus")
+    print(f"\n{Colors.OKGREEN}✅ Done. If no error appeared, the merge lock should be released.{Colors.ENDC}")
+    input("\nPress Enter to continue...")
 
 def main_menu():
     """Enhanced main menu"""
