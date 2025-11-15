@@ -369,8 +369,8 @@ export default function DocumentPreviewModal({
 
   const fetchAnalysisTemplates = async () => {
     try {
-      console.log('[DocumentPreviewModal] Loading templates...');
-      const response = await fetch('/api/v2/pdf/analysis-templates', {
+      console.log('[DocumentPreviewModal] Loading templates from database...');
+      const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/templates?active=true`, {
         method: 'GET',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
@@ -379,8 +379,18 @@ export default function DocumentPreviewModal({
       console.log('[DocumentPreviewModal] Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('[DocumentPreviewModal] Templates loaded:', data.templates?.length || 0, data.templates);
-        setAnalysisTemplates(data.templates || []);
+        console.log('[DocumentPreviewModal] Templates loaded from database:', data.templates?.length || 0, data.templates);
+        // Map database templates to expected format
+        const mappedTemplates = (data.templates || []).map((t: any) => ({
+          id: t.template_id,
+          name: t.name,
+          category: t.category,
+          focus_keywords: t.focus_keywords,
+          subcategories: t.subcategories,
+          target_fields: t.target_fields,
+          extraction_prompt: t.extraction_prompt
+        }));
+        setAnalysisTemplates(mappedTemplates);
       } else {
         console.error('[DocumentPreviewModal] Failed to fetch analysis templates, status:', response.status);
         loadFallbackTemplates();
@@ -1096,11 +1106,12 @@ export default function DocumentPreviewModal({
         console.log('[Template Detection] Visual types:', visualElements.map((v: any) => v.type).join(', '));
       }
 
-      const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/pdf/detect-template`, {
+      const response = await fetch(`${config?.backendUrl || 'http://localhost:8083'}/api/v2/templates/detect`, {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
-          text: text.substring(0, 5000), // Send first 5000 chars
+          content: text.substring(0, 5000), // Send first 5000 chars
+          filePath: document?.filePath || document?.metadata?.originalPath,
           visualElements: visualElements, // Include OCR visual elements
           language: detectedLanguage // Include detected language for better template selection
         })
@@ -1112,14 +1123,21 @@ export default function DocumentPreviewModal({
 
       const data = await response.json();
 
-      if (data.success && data.detection) {
-        console.log('[Template Detection] Detected:', data.detection);
-        setDetectedTemplate(data.detection);
-        setSelectedTemplate(data.detection.templateId);
+      if (data.success && data.template) {
+        console.log('[Template Detection] Detected:', data.template);
+        const detectionInfo = {
+          templateId: data.template.template_id,
+          templateName: data.template.name,
+          confidence: 85, // Default confidence
+          reason: `Detected via ${data.detection_method}`,
+          method: data.detection_method
+        };
+        setDetectedTemplate(detectionInfo);
+        setSelectedTemplate(data.template.template_id);
 
         toast({
           title: "Template Auto-Detected",
-          description: `${data.detection.templateId} (${data.detection.confidence}% confidence) - ${data.detection.reason}`,
+          description: `${data.template.name} (${data.detection_method} method)`,
         });
       }
     } catch (error: any) {
