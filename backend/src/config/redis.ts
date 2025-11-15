@@ -30,7 +30,7 @@ async function createRedisConnection() {
   };
 
   // Debug log for Redis configuration
-  console.log("🔍 Redis Configuration:", {
+  console.log(" Redis Configuration:", {
     host: config.host,
     port: config.port,
     db: config.db,
@@ -65,7 +65,7 @@ export async function initializeRedis() {
   initPromise = (async () => {
     try {
       // Try with password first, then without password if NOAUTH error
-      console.log("🔄 Attempting Redis connection with password...");
+      console.log(" Attempting Redis connection with password...");
       const redisConn = await createRedisConnection();
       const subscriberConn = redisConn.duplicate();
 
@@ -81,7 +81,7 @@ export async function initializeRedis() {
           err.message.includes("ECONNREFUSED")
         ) {
           console.log(
-            "🔄 NOAUTH/ECONNREFUSED error detected, trying without password..."
+            " NOAUTH/ECONNREFUSED error detected, trying without password..."
           );
           fallbackToNoAuth();
         }
@@ -107,11 +107,11 @@ export async function initializeRedis() {
       });
 
       redisInstance.on("connect", () => {
-        console.log("✅ Redis connected successfully.");
+        console.log(" Redis connected successfully.");
       });
 
       subscriberInstance.on("connect", () => {
-        console.log("✅ Redis subscriber connected successfully.");
+        console.log(" Redis subscriber connected successfully.");
       });
 
       // Try to establish connection
@@ -120,7 +120,7 @@ export async function initializeRedis() {
 
       return redisInstance;
     } catch (error) {
-      console.error("❌ Failed to initialize Redis connections:", error);
+      console.error(" Failed to initialize Redis connections:", error);
       // Check if it's a NOAUTH or connection error and try without password
       if (
         error instanceof Error &&
@@ -128,7 +128,7 @@ export async function initializeRedis() {
           error.message.includes("ECONNREFUSED"))
       ) {
         console.log(
-          "🔄 NOAUTH/ECONNREFUSED error in initial connection, trying without password..."
+          " NOAUTH/ECONNREFUSED error in initial connection, trying without password..."
         );
         return fallbackToNoAuth();
       }
@@ -147,7 +147,7 @@ export async function initializeRedis() {
 
 // Fallback function to try without password
 function fallbackToNoAuth() {
-  console.log("🔄 Creating Redis connection without password...");
+  console.log(" Creating Redis connection without password...");
   try {
     const noAuthConfig = {
       host: process.env.REDIS_HOST || "localhost",
@@ -165,7 +165,7 @@ function fallbackToNoAuth() {
       enableOfflineQueue: false,
     };
 
-    console.log("🔍 Redis No-Auth Configuration:", {
+    console.log(" Redis No-Auth Configuration:", {
       host: noAuthConfig.host,
       port: noAuthConfig.port,
       db: noAuthConfig.db,
@@ -184,11 +184,11 @@ function fallbackToNoAuth() {
     });
 
     redisInstance.on("connect", () => {
-      console.log("✅ Redis no-auth connection successful.");
+      console.log(" Redis no-auth connection successful.");
     });
 
     subscriberInstance.on("connect", () => {
-      console.log("✅ Redis subscriber no-auth connection successful.");
+      console.log(" Redis subscriber no-auth connection successful.");
     });
 
     // Try to connect
@@ -201,7 +201,7 @@ function fallbackToNoAuth() {
 
     return redisInstance;
   } catch (error) {
-    console.error("❌ No-auth fallback also failed:", error);
+    console.error(" No-auth fallback also failed:", error);
     redisInstance = createFallbackRedis();
     subscriberInstance = createFallbackRedis();
     return redisInstance;

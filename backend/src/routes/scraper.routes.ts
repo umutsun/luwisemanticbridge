@@ -275,7 +275,7 @@ router.post('/sites/analyze-enhanced', async (req: Request, res: Response) => {
 
 // Analyze URL for automatic selector detection
 router.post('/analyze', async (req: Request, res: Response) => {
-  console.log('🔍 BASIC ANALYZE ENDPOINT HIT!', req.body);
+  console.log(' BASIC ANALYZE ENDPOINT HIT!', req.body);
   try {
     const { url, useCache = true } = req.body;
 
@@ -2158,7 +2158,7 @@ router.put('/sites/:siteId/config', async (req: Request, res: Response) => {
 
 // Enhanced Site Analysis with AI
 router.post('/sites/analyze-enhanced', async (req: Request, res: Response) => {
-  console.log('🚀 ENHANCED ANALYSIS ENDPOINT HIT!', req.body);
+  console.log(' ENHANCED ANALYSIS ENDPOINT HIT!', req.body);
   try {
     const { url, siteId } = req.body;
     if (!url) {

@@ -136,6 +136,6 @@ export const settingsCache = new SettingsCache();
 setInterval(() => {
   const cleaned = settingsCache.cleanup();
   if (cleaned > 0) {
-    console.log(`🗑️ [CACHE] Cleaned ${cleaned} expired entries`);
+    console.log(`️ [CACHE] Cleaned ${cleaned} expired entries`);
   }
 }, 300000);

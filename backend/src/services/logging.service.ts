@@ -140,22 +140,22 @@ export class LoggingService {
 
     switch (entry.level) {
       case 'error':
-        console.error(`\x1b[31m${prefix} ❌ ${entry.message}\x1b[0m`);
+        console.error(`\x1b[31m${prefix}  ${entry.message}\x1b[0m`);
         if (entry.metadata) console.error('  Metadata:', entry.metadata);
         break;
       case 'warn':
-        console.warn(`\x1b[33m${prefix} ⚠️  ${entry.message}\x1b[0m`);
+        console.warn(`\x1b[33m${prefix} ️  ${entry.message}\x1b[0m`);
         if (entry.metadata) console.warn('  Metadata:', entry.metadata);
         break;
       case 'success':
-        console.log(`\x1b[32m${prefix} ✅ ${entry.message}\x1b[0m`);
+        console.log(`\x1b[32m${prefix}  ${entry.message}\x1b[0m`);
         if (entry.metadata) console.log('  Metadata:', entry.metadata);
         break;
       case 'info':
         console.log(`\x1b[36m${prefix} ℹ️  ${entry.message}\x1b[0m`);
         break;
       case 'debug':
-        console.debug(`\x1b[90m${prefix} 🔍 ${entry.message}\x1b[0m`);
+        console.debug(`\x1b[90m${prefix}  ${entry.message}\x1b[0m`);
         break;
       default:
         console.log(`${prefix} ${entry.message}`);

@@ -1,0 +1,153 @@
+{
+  "templates": [
+    {
+      "id": "default",
+      "name": "Varsayılan Template",
+      "description": "Klasik chat arayüzü",
+      "isActive": true,
+      "isDefault": true,
+
+      "layout": "default",
+
+      "theme": {
+        "primaryColor": "#000000",
+        "secondaryColor": "#666666",
+        "backgroundColor": "#ffffff",
+        "panelBackground": "#f5f5f5",
+        "textColor": "#000000",
+        "borderRadius": "12px",
+        "fontFamily": "Inter, sans-serif",
+        "messageSpacing": "1rem",
+        "headerHeight": "60px"
+      },
+
+      "features": {
+        "showLogo": true,
+        "showSuggestions": true,
+        "showSources": true,
+        "showTimestamp": true,
+        "showAvatar": true,
+        "enableFullPage": true,
+        "enableVoiceInput": false,
+        "enableFileUpload": true
+      },
+
+      "widget": {
+        "enabled": true,
+        "position": "bottom-right",
+        "buttonIcon": "💬",
+        "buttonColor": "#000000",
+        "buttonSize": 60,
+        "panelWidth": 400,
+        "panelHeight": 600,
+        "autoOpen": false,
+        "autoOpenDelay": 3000,
+        "showOnPages": ["*"],
+        "hideOnPages": []
+      },
+
+      "customCSS": "",
+      "customHooks": {}
+    },
+
+    {
+      "id": "modern",
+      "name": "Modern Template",
+      "description": "Gradient ve yuvarlak köşeler",
+      "isActive": false,
+      "isDefault": false,
+
+      "layout": "modern",
+
+      "theme": {
+        "primaryColor": "#6366f1",
+        "secondaryColor": "#8b5cf6",
+        "backgroundColor": "#ffffff",
+        "panelBackground": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        "textColor": "#1f2937",
+        "borderRadius": "24px",
+        "fontFamily": "Poppins, sans-serif",
+        "messageSpacing": "1.25rem",
+        "headerHeight": "70px"
+      },
+
+      "features": {
+        "showLogo": true,
+        "showSuggestions": true,
+        "showSources": true,
+        "showTimestamp": false,
+        "showAvatar": true,
+        "enableFullPage": true,
+        "enableVoiceInput": true,
+        "enableFileUpload": true
+      },
+
+      "widget": {
+        "enabled": true,
+        "position": "bottom-right",
+        "buttonIcon": "🚀",
+        "buttonColor": "#6366f1",
+        "buttonSize": 70,
+        "panelWidth": 450,
+        "panelHeight": 650,
+        "autoOpen": false,
+        "autoOpenDelay": 5000,
+        "showOnPages": ["*"],
+        "hideOnPages": []
+      },
+
+      "customCSS": ".chat-message { box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1); }",
+      "customHooks": {}
+    },
+
+    {
+      "id": "minimal",
+      "name": "Minimal Template",
+      "description": "Sade ve hızlı",
+      "isActive": false,
+      "isDefault": false,
+
+      "layout": "minimal",
+
+      "theme": {
+        "primaryColor": "#0f172a",
+        "secondaryColor": "#64748b",
+        "backgroundColor": "#ffffff",
+        "panelBackground": "#f8fafc",
+        "textColor": "#0f172a",
+        "borderRadius": "8px",
+        "fontFamily": "system-ui, sans-serif",
+        "messageSpacing": "0.75rem",
+        "headerHeight": "50px"
+      },
+
+      "features": {
+        "showLogo": false,
+        "showSuggestions": false,
+        "showSources": true,
+        "showTimestamp": false,
+        "showAvatar": false,
+        "enableFullPage": false,
+        "enableVoiceInput": false,
+        "enableFileUpload": false
+      },
+
+      "widget": {
+        "enabled": true,
+        "position": "bottom-right",
+        "buttonIcon": "?",
+        "buttonColor": "#0f172a",
+        "buttonSize": 50,
+        "panelWidth": 350,
+        "panelHeight": 500,
+        "autoOpen": false,
+        "autoOpenDelay": 0,
+        "showOnPages": ["*"],
+        "hideOnPages": []
+      },
+
+      "customCSS": "",
+      "customHooks": {}
+    }
+  ]
+}

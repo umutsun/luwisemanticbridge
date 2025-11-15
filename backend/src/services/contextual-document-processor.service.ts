@@ -117,8 +117,57 @@ export class ContextualDocumentProcessorService {
       switch (ext) {
         case '.pdf':
           content = await this.processPDF(filePath);
+
+          // Analyze PDF to detect if OCR is needed
+          const pdfAnalysis = await this.analyzePDFForOCR(filePath);
           metadata.type = 'pdf';
-          metadata.content_type = 'structured_text';
+          metadata.content_type = pdfAnalysis.contentType;
+          metadata.needsOCR = pdfAnalysis.needsOCR;
+          metadata.pdfStats = {
+            numPages: pdfAnalysis.numPages,
+            textLength: pdfAnalysis.textLength,
+            charsPerPage: pdfAnalysis.charsPerPage
+          };
+
+          console.log(` PDF Analysis: ${filename}`, {
+            pages: pdfAnalysis.numPages,
+            chars: pdfAnalysis.textLength,
+            charsPerPage: pdfAnalysis.charsPerPage,
+            needsOCR: pdfAnalysis.needsOCR,
+            contentType: pdfAnalysis.contentType
+          });
+
+          // Auto-trigger Vision OCR for image-heavy documents
+          if (pdfAnalysis.needsOCR && process.env.GEMINI_API_KEY) {
+            try {
+              console.log(` [Auto-OCR] Triggering Vision OCR for: ${filename}`);
+              const { visionOCRService } = await import('./vision-ocr.service');
+
+              const visionResult = await visionOCRService.processPDFWithVision(filePath, {
+                template: 'general',
+                language: 'auto'
+              });
+
+              // Enhance content with Vision OCR results
+              content = visionResult.text;
+              metadata.visionOCR = {
+                processed: true,
+                confidence: visionResult.confidence,
+                visualElements: visionResult.visualElements,
+                analysis: visionResult.analysis
+              };
+
+              console.log(` [Auto-OCR] Vision OCR completed`);
+              console.log(`   Extracted: ${visionResult.text.length} chars`);
+              console.log(`   Visual elements: ${visionResult.visualElements.length}`);
+            } catch (error) {
+              console.error(` [Auto-OCR] Vision OCR failed:`, error.message);
+              metadata.visionOCR = {
+                processed: false,
+                error: error.message
+              };
+            }
+          }
           break;
 
         case '.csv':
@@ -264,10 +313,60 @@ export class ContextualDocumentProcessorService {
     try {
       const dataBuffer = fs.readFileSync(filePath);
       const data = await pdf(dataBuffer);
-      return data.text;
+
+      // Ensure text is properly encoded (handle Turkish characters, etc.)
+      const text = data.text || '';
+
+      // Replace problematic characters that might cause encoding issues
+      return text
+        .replace(/\0/g, '') // Remove null bytes
+        .trim();
     } catch (error) {
       console.error('Error processing PDF:', error);
-      throw new Error('Failed to process PDF file');
+      // Return empty string instead of throwing - let the document be saved with empty content
+      // This allows the PDF to be stored and processed later with OCR
+      return '';
+    }
+  }
+
+  /**
+   * Analyze PDF to detect if OCR is needed
+   * Returns metadata about text density
+   */
+  private async analyzePDFForOCR(filePath: string): Promise<{
+    textLength: number;
+    numPages: number;
+    charsPerPage: number;
+    needsOCR: boolean;
+    contentType: string;
+  }> {
+    try {
+      const dataBuffer = fs.readFileSync(filePath);
+      const data = await pdf(dataBuffer);
+      const textLength = data.text.length;
+      const numPages = data.numpages;
+      const charsPerPage = numPages > 0 ? textLength / numPages : 0;
+
+      // If average characters per page < 100, it's likely image-heavy (music sheets, scanned docs, etc.)
+      const needsOCR = charsPerPage < 100;
+      const contentType = needsOCR ? 'image_heavy_document' : 'structured_text';
+
+      return {
+        textLength,
+        numPages,
+        charsPerPage: Math.round(charsPerPage),
+        needsOCR,
+        contentType
+      };
+    } catch (error) {
+      console.error('Error analyzing PDF for OCR:', error);
+      return {
+        textLength: 0,
+        numPages: 0,
+        charsPerPage: 0,
+        needsOCR: true,
+        contentType: 'image_heavy_document'
+      };
     }
   }
 

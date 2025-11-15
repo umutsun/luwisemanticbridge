@@ -376,3 +376,10 @@ test-upload.txt
 backend/python-services/crawlers/*_crawler.py
 backend/python-services/crawlers/*_crawler_state.json
 backend/python-services/crawlers/output/
+
+# Custom Chat Templates (customer-specific, not in version control)
+# Only base template is versioned, custom templates are deployed separately
+frontend/src/templates/custom-*
+frontend/src/templates/example-*
+!frontend/src/templates/base/
+*.template.zip

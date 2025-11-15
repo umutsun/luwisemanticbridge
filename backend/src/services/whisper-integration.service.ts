@@ -119,7 +119,7 @@ export class WhisperIntegrationService {
         throw new Error(`Transcription failed: ${result.error || 'Unknown error'}`);
       }
 
-      console.log(`[WhisperIntegration] ✅ Transcription completed: ${result.text.length} characters`);
+      console.log(`[WhisperIntegration]  Transcription completed: ${result.text.length} characters`);
 
       return result;
 

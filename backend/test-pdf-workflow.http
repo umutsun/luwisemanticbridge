@@ -1,0 +1,238 @@
+###
+# PDF Batch Processing Workflow - API Test
+# Use with REST Client extension in VS Code
+###
+
+@baseUrl = http://localhost:8086
+@token = YOUR_AUTH_TOKEN_HERE
+
+### STEP 0: Login (Get Token)
+POST {{baseUrl}}/api/v2/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "your_password"
+}
+
+### STEP 1: Analyze Batch (Detect Scanned PDFs)
+POST {{baseUrl}}/api/v2/pdf/analyze-batch
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "documentIds": ["1", "2", "3", "4", "5"]
+}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "analysis": {
+#     "scannedPDFs": [
+#       {
+#         "documentId": "1",
+#         "filename": "scanned_invoice.pdf",
+#         "recommendation": "needs_ocr",
+#         "confidence": 0.95,
+#         "stats": {
+#           "totalPages": 3,
+#           "totalText": 45,
+#           "avgTextPerPage": 15
+#         }
+#       }
+#     ],
+#     "textPDFs": [
+#       {
+#         "documentId": "2",
+#         "filename": "text_report.pdf",
+#         "recommendation": "text_ready",
+#         "confidence": 0.9,
+#         "stats": {
+#           "totalPages": 5,
+#           "totalText": 8500,
+#           "avgTextPerPage": 1700
+#         }
+#       }
+#     ],
+#     "summary": {
+#       "total": 5,
+#       "scanned": 2,
+#       "textBased": 3,
+#       "uncertain": 0
+#     }
+#   }
+# }
+
+### STEP 2a: Start OCR Queue (For Scanned PDFs)
+POST {{baseUrl}}/api/v2/pdf/batch-ocr
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "documentIds": ["1"]
+}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "jobId": "550e8400-e29b-41d4-a716-446655440000",
+#   "status": "processing",
+#   "message": "OCR job started for 1 documents"
+# }
+
+### STEP 2b: Check OCR Job Status
+GET {{baseUrl}}/api/v2/pdf/job-status/550e8400-e29b-41d4-a716-446655440000
+Authorization: Bearer {{token}}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "jobId": "550e8400-e29b-41d4-a716-446655440000",
+#   "progress": {
+#     "type": "ocr",
+#     "status": "processing",
+#     "current": 1,
+#     "total": 1,
+#     "percentage": 100,
+#     "currentFile": "scanned_invoice.pdf",
+#     "successCount": 1,
+#     "errorCount": 0
+#   }
+# }
+
+### STEP 3a: Start Metadata Analysis
+POST {{baseUrl}}/api/v2/pdf/batch-metadata
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "documentIds": ["1", "2", "3", "4", "5"]
+}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "jobId": "660f9511-f30c-52e5-b827-557766551111",
+#   "status": "processing",
+#   "message": "Metadata extraction started for 5 documents"
+# }
+
+### STEP 3b: Check Metadata Job Status
+GET {{baseUrl}}/api/v2/pdf/job-status/660f9511-f30c-52e5-b827-557766551111
+Authorization: Bearer {{token}}
+
+### STEP 4a: Preview Transform
+POST {{baseUrl}}/api/v2/pdf/preview-transform
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "documentIds": ["1", "2", "3", "4", "5"],
+  "tableStructure": "entity-based"
+}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "preview": {
+#     "columns": ["document_name", "entity_type", "entity_value", "confidence"],
+#     "sampleRows": [
+#       {
+#         "document_name": "invoice.pdf",
+#         "entity_type": "ORGANIZATION",
+#         "entity_value": "ABC Ltd.",
+#         "confidence": 0.9
+#       },
+#       {
+#         "document_name": "invoice.pdf",
+#         "entity_type": "MONEY",
+#         "entity_value": "$5,000",
+#         "confidence": 0.95
+#       }
+#     ],
+#     "totalRows": 47
+#   }
+# }
+
+### STEP 4b: Transform to Source DB
+POST {{baseUrl}}/api/v2/pdf/transform-to-sourcedb
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "documentIds": ["1", "2", "3", "4", "5"],
+  "sourceDbId": "your_source_db_id",
+  "tableName": "pdf_extracted_data",
+  "tableStructure": "entity-based",
+  "createNewTable": true
+}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "jobId": "770g0622-g41d-63f6-c938-668877662222",
+#   "status": "processing",
+#   "message": "Transform job started for 5 documents"
+# }
+
+### STEP 4c: Check Transform Job Status
+GET {{baseUrl}}/api/v2/pdf/job-status/770g0622-g41d-63f6-c938-668877662222
+Authorization: Bearer {{token}}
+
+###
+# Expected Response (Completed):
+# {
+#   "success": true,
+#   "jobId": "770g0622-g41d-63f6-c938-668877662222",
+#   "progress": {
+#     "type": "transform",
+#     "status": "completed",
+#     "current": 5,
+#     "total": 5,
+#     "percentage": 100,
+#     "rowsInserted": 47,
+#     "tableName": "pdf_extracted_data",
+#     "completedAt": "2025-01-07T10:30:00.000Z",
+#     "result": {
+#       "jobId": "770g0622-g41d-63f6-c938-668877662222",
+#       "tableName": "pdf_extracted_data",
+#       "rowsInserted": 47,
+#       "documentsProcessed": 5,
+#       "status": "success"
+#     }
+#   }
+# }
+
+### STEP 5: Cancel Job (Optional)
+POST {{baseUrl}}/api/v2/pdf/cancel-job/770g0622-g41d-63f6-c938-668877662222
+Authorization: Bearer {{token}}
+
+###
+# Expected Response:
+# {
+#   "success": true,
+#   "message": "Job cancelled successfully"
+# }
+
+###
+# ALTERNATIVE: Document-based Transform
+###
+POST {{baseUrl}}/api/v2/pdf/transform-to-sourcedb
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "documentIds": ["1", "2", "3", "4", "5"],
+  "sourceDbId": "your_source_db_id",
+  "tableName": "pdf_documents_analyzed",
+  "tableStructure": "document-based",
+  "createNewTable": true
+}
+
+###

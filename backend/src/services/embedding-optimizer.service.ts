@@ -313,7 +313,7 @@ export class EmbeddingOptimizer {
         ON rag_data.embedding_cache(created_at DESC)
       `);
       
-      console.log('✅ Embedding cache table initialized');
+      console.log(' Embedding cache table initialized');
     } catch (error) {
       console.error('Failed to initialize cache table:', error);
     }
@@ -328,7 +328,7 @@ export class EmbeddingOptimizer {
         RETURNING content_hash
       `);
       
-      console.log(`🧹 Cleaned ${result.rowCount} old cache entries`);
+      console.log(` Cleaned ${result.rowCount} old cache entries`);
       
       // Clear memory cache
       this.embeddingCache.clear();
@@ -362,7 +362,7 @@ export class EmbeddingOptimizer {
         }
       }
       
-      console.log(`🔥 Pre-warmed cache with ${result.rowCount} frequently accessed embeddings`);
+      console.log(` Pre-warmed cache with ${result.rowCount} frequently accessed embeddings`);
       
     } catch (error) {
       console.error('Cache pre-warm error:', error);

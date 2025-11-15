@@ -1,0 +1,5779 @@
+=== Testing Turkish Tax Law PDF Analysis ===
+
+File path: C:\xampp\htdocs\lsemb\docs\213-Vergi Usul Kanunu.pdf
+Document ID: test-1762849704843
+Filename: 213-Vergi Usul Kanunu.pdf
+
+--- Testing LEGAL template with local analysis ---
+[Local Metadata Extractor] Processing: 213-Vergi Usul Kanunu.pdf
+[Local Metadata Extractor] Original path: C:\xampp\htdocs\lsemb\docs\213-Vergi Usul Kanunu.pdf
+[Local Metadata Extractor] Adjusted path: C:\xampp\htdocs\lsemb\docs\213-Vergi Usul Kanunu.pdf
+[Local Metadata Extractor] Using local algorithms
+[Character Extraction] Top characters with scores: [
+  'Resm: 60.0 (freq:10, poss:0, dial:0, samples:5)',
+  'Gazete: 60.0 (freq:10, poss:0, dial:0, samples:5)',
+  'Kanunun: 122.0 (freq:52, poss:0, dial:4, samples:6)',
+  'Madde: 373.5 (freq:311, poss:0, dial:1, samples:6)',
+  'Kanuna: 71.0 (freq:31, poss:0, dial:0, samples:4)',
+  'Vergi: 85.0 (freq:35, poss:0, dial:0, samples:5)',
+  'Hazine: 60.0 (freq:10, poss:0, dial:0, samples:5)',
+  'Maliye  Bakanl: 66.0 (freq:16, poss:0, dial:0, samples:5)',
+  'Gelir: 66.0 (freq:11, poss:0, dial:2, samples:5)',
+  'Ancak: 71.0 (freq:11, poss:0, dial:0, samples:6)',
+  'Maliye Bakanl: 68.0 (freq:18, poss:0, dial:0, samples:5)',
+  'Tebli: 103.0 (freq:53, poss:0, dial:0, samples:5)'
+]
+[Content Analysis] Running advanced table extraction
+[Table Extraction] Starting analysis for C:\xampp\htdocs\lsemb\docs\213-Vergi Usul Kanunu.pdf
+[Table Extraction] Method 1: Local regex-based extraction
+[Table Extraction] Complete: 813 tables found (71ms)
+[Content Analysis] Found 813 tables using regex
+[Language Detection] Matches: TR=43, EN=0, DE=0, VI=NaN, FR=3, ES=3
+
+=== ANALYSIS RESULTS ===
+Processing time: 2607ms
+Tokens used: 0
+
+--- LANGUAGE DETECTION ---
+Detected language: tr
+
+--- CONTENT ANALYSIS ---
+Category: Other
+Document type: general_document
+Genre: general
+
+--- STATISTICS ---
+Page count: 200
+Word count: 64118
+Character count: 519184
+
+--- TABLE EXTRACTION ---
+Has structured data: true
+Table count: 813
+Extracted tables: 813
+
+--- TABLE DETAILS ---
+
+Table 1:
+  Headers: Madde 6 – (Değişik: 23/6/1982-2686/2 md.)
+  Rows: 10
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 2:
+  Headers: Vergi ehliyeti:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 3:
+  Headers: Vergi kesenlerin sorumluluğu:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 4:
+  Headers: Bu fıkrada yer alan, "..alım satıma taraf olanlar ile hizmetten yararlanan lar, aralarında zımnen dahi | olsa
+  Rows: 2
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 5:
+  Headers: Kanuni ve idari süreler:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 6:
+  Headers: Ölüm halinde sürenin uzaması:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 7:
+  Headers: Vergiyi doğuran olay:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 8:
+  Headers: Tahakkuku tahsile bağlı vergiler:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 9:
+  Headers: Tahakkuk fişinin muhteviyatı:
+  Rows: 13
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 10:
+  Headers: İkmalen vergi tarhı:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 11:
+  Headers: Re'sen tarhta mahsup:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 12:
+  Headers: İhbarname esası:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 13:
+  Headers: İhbarnamenin muhteviyatı:
+  Rows: 15
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 14:
+  Headers: Tahrire göre vergi tarhı:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 15:
+  Headers: Tahrir ihbarnamesi:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 16:
+  Headers: İhbarnamenin muhteviyatı:
+  Rows: 15
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 17:
+  Headers: Uygulama süresi:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 18:
+  Headers: Ziraat birimleri:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 19:
+  Headers: Emlak vergisine ait bedel ve değerlerin tespiti, ilanı ve kesinleşmesi:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 20:
+  Headers: c) Yukarıdaki fıkralara göre, Danıştay ve vergi mahkemelerinde dava açılması halinde,
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 21:
+  Headers: Arazinin hal ve heyetinde değişiklik:
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 22:
+  Headers: Mevzii ve ferdi tadilat:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 23:
+  Headers: 2. Şehir ve kasabalardaki tadilat için belediye encümeninin, köylerdeki tadilat için köy
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 24:
+  Headers: Ferdi tadilat isteği:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 25:
+  Headers: İfraz ve birleştirme:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 26:
+  Headers: 1. Yetkili makamlar tarafından istenilen matrah ve servet takdirlerini yapmak;
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 27:
+  Headers: Beyana bağlılık:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 28:
+  Headers: Madde 79 – Tahrir komisyonları:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 29:
+  Headers: Çalışma saatleri dışında veya tatil günlerinde, bina ve arazi, bunları işgal edenlerin
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 30:
+  Headers: Üyelerin seçilmesi:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 31:
+  Headers: Belediyeler ve belediye teşkilatı bulunmıyan köy ihtiyar meclisleri mahallin en büyük
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 32:
+  Headers: Zirai Kazançlar İl Komisyonu:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 33:
+  Headers: Üyelerin seçilmesi:
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 34:
+  Headers: Komisyonların yetkileri:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 35:
+  Headers: Madde 89 – (Değişik: 30/12/1980-2365/15 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 36:
+  Headers: Veli, vasi ve kayyımlara tebliğ:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 37:
+  Headers: Vasıtalı tebliğ:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 38:
+  Headers: Kapalı zarf esası:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 39:
+  Headers: Bilinen adreslere tebliğ:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 40:
+  Headers: 2. Yoklama fişinde veya ilgilinin imzası bulunmak şartıyla yetkili memurlar tarafından
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 41:
+  Headers: Tebliğ evrakının teslimi:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 42:
+  Headers: Tebliğin ilanla yapılacağı haller:
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 43:
+  Headers: İlanın muhteviyatı:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 44:
+  Headers: Verginin terkini:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 45:
+  Headers: Vergi hatası:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 46:
+  Headers: Hataların meydana çıkarılması:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 47:
+  Headers: Düzeltme talebi:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 48:
+  Headers: Düzeltme şümulü:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 49:
+  Headers: Yoklamaya yetkililer:
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 50:
+  Headers: Yoklama zamanı:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 51:
+  Headers: Yoklama neticelerinin bildirilmesi:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 52:
+  Headers: Toplu yoklama:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 53:
+  Headers: İncelemenin bitmesi:
+  Rows: 11
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 54:
+  Headers: 4. Ceza Muhakemeleri Usulü Kanununun 88 inci maddesi gereğince gösterilmesi veya
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 55:
+  Headers: 15/7/2016 tarihli ve 6728 sayılı Kanunun 19 uncu maddesiyle, bu fıkranın birinci cümlesinde yer alan “30
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 56:
+  Headers: 1. Bir iş yeri açmak (İş yeri açmaktan maksat, belli bir yerde bilfiil ticari veya sınai
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 57:
+  Headers: yeri adreslerini değiştiren
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 58:
+  Headers: İşi bırakmanın tarifi:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 59:
+  Headers: Tasfiye ve İflas:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 60:
+  Headers: Madde | 164 – Ölüm işi bırakma hükmündedir. Ölüm mükellefin mirası reddetmemiş
+  Rows: 2
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 61:
+  Headers: Tahrirde unutulan bina ve arazi:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 62:
+  Headers: Yeni İnşaat:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 63:
+  Headers: Bina ve arazideki değişikliklerin bildirilmesi:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 64:
+  Headers: Posta ile gönderme:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 65:
+  Headers: Defter tutacaklar:
+  Rows: 10
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 66:
+  Headers: Tüccar sınıfları:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 67:
+  Headers: İkinci sınıf tüccarlar:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 68:
+  Headers: Madde 179 – a) (I) inciden (II) nciye geçiş: İş hacmı bakımından I inci sıfa dahil olan
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 69:
+  Headers: Bilanço esasında tutulacak defterler:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 70:
+  Headers: Envanter çıkarmak:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 71:
+  Headers: İşletme hesabı esasında tutulacak defterler:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 72:
+  Headers: İşletme hesabı:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 73:
+  Headers: İşletme hesabı esasında envanter:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 74:
+  Headers: şartiyle yeniden işe başlama halinde işletme defterinin baş tarafına, mütaakıben de her hesap
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 75:
+  Headers: Kombine imalat:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 76:
+  Headers: (Mülga üçüncü fıkra: 4/12/1985-3239/136 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 77:
+  Headers: Serbest meslek kazanç defteri:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 78:
+  Headers: Defterlerin mürekkeple yazılacağı:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 79:
+  Headers: Boş satır bırakılamıyacağı, sayfaların yok edilmiyeceği:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 80:
+  Headers: Kayıt zamanı:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 81:
+  Headers: Defter tasdikine ait bordrolar:
+  Rows: 10
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 82:
+  Headers: belgelere uygun olmamasından dolayı ortaya çıkan vergi ziyaına bağlı olarak salınacak vergi,
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 83:
+  Headers: Faturanın tarifi:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 84:
+  Headers: Faturanın şekli:
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 85:
+  Headers: 22/7/1998 tarih ve 4369 sayılı Kanunun 81 inci maddesiyle bu maddenin 1 inci fıkrasında yer alan "ikinci sınıf
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 86:
+  Headers: gider pusulası yerine geçer.
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 87:
+  Headers: Müstahsil makbuzunda en az aşağıda yazılı bilgiler bulunur:
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 88:
+  Headers: Makbuz muhteviyatı:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 89:
+  Headers: 2. Müşterinin soyadı, adı veya unvanı ve adresi;
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 90:
+  Headers: 3. Taşıtın plaka numarası, sefer tarihi ve hareket saati.
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 91:
+  Headers: Mükelleflerin sattıkları emtia veya yaptıkları işler nedeniyle ortaya çıkan alacak ve
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 92:
+  Headers: BEŞİNCİ KISIM
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 93:
+  Headers: Değerleme günü:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 94:
+  Headers: 2. Borsa rayici;
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 95:
+  Headers: Tasarruf değeri:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 96:
+  Headers: Mukayyet değer:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 97:
+  Headers: Rayiç bedel:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 98:
+  Headers: İkinci sıra: (Maliyet bedeli esası) Emsal bedeli belli | edilecek malın, maliyet bedeli
+  Rows: 2
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 99:
+  Headers: Vergi değeri:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 100:
+  Headers: Alış bedeli:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 101:
+  Headers: Bu kanuna göre, aşağıda yazılı kıymetler gayrimenkuller gibi değerlenir:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 102:
+  Headers: Demirbaş eşya:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 103:
+  Headers: İlk tesis ve taazzuv giderleri ve peştemallıklar:
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 104:
+  Headers: Menkul mallar ve gemiler:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 105:
+  Headers: 5. Ömür boyunca aylık gelir şeklinde vakı ivazsız intikallerde bu gelirin ödeneceği
+  Rows: 10
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 106:
+  Headers: Madde 298 – (Değişik: 23/6/1982-2686/36 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 107:
+  Headers: d) Ortalama ticarî kredi faiz oranının tespitine ilişkin usul ve esasları tespit etmeye,
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 108:
+  Headers: Döşemesiz tahmin:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 109:
+  Headers: İrat ve kıymet münasebeti:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 110:
+  Headers: Arazi kıymeti:
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 111:
+  Headers: Normal amortisman:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 112:
+  Headers: Fevkalade amortisman:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 113:
+  Headers: Amortisman uygulama sureti:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 114:
+  Headers: süresine göre eşit yüzdelerle itfa edilir. Kira veya işletme hakkı süresi dolmadan, kiralanan
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 115:
+  Headers: Veraset ve intikal vergisinde ek süre:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 116:
+  Headers: Usulsüzlüğün tarifi:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 117:
+  Headers: 6. Bu Kanunun kayıt nizamına ait hükümlerine (Madde 215 - 219 ile mükerrer madde
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 118:
+  Headers: Tebliği ile 1/1/2025 tarihinden geçerli olmak üzere tespit edilen miktarlar metne parantez içinde siyah punto ile
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 119:
+  Headers: Bu maddenin “Bilgi vermekten çekinenler ile 256, 257, mükerrer 257 nci madde ve Gelir Vergisi Kanununun
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 120:
+  Headers: Mükelleflerin özel işlerini yapan memurlar:
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 121:
+  Headers: Ceza kesme yetkisi:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 122:
+  Headers: Ceza ihbarnamesi:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 123:
+  Headers: 7/7/2011 tarihli ve 646 sayılı KHK’nin 4 üncü maddesiyle, bu maddenin birinci fıkrasında yer alan “maliye
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 124:
+  Headers: 359 uncu maddede yazılı suçlardan dolayı cezaya hükmedilmesi, vergi ziyaı cezası
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 125:
+  Headers: Vergi cezalarının ödenme zamanı:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 126:
+  Headers: Mücbir sebepler:
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 127:
+  Headers: Mükellef veya vergi sorumlusu ödeyeceğini bildirdiği vergi ve vergi cezasını yukarıda
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 128:
+  Headers: cezaların | ödeme
+  Rows: 6
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 129:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 14 üncü maddesi ile bu maddenin birinci ve ikinci fıkralarında yer
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 130:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 14 üncü maddesi ile bu maddede | yer alan “vergi ve” ibareleri
+  Rows: 2
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 131:
+  Headers: cezanın
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 132:
+  Headers: 20/2/2008 tarihli ve 5736 sayılı Kanunun 6 ncı maddesiyle; bu fıkrada bulunan | "(344 üncü maddenin üçüncü
+  Rows: 3
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 133:
+  Headers: Ücretlilere vergi iadesinde uzlaşma:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 134:
+  Headers: Madde | 380 – 412 – (6/1/1982 tarihli ve 2577 sayılı Kanunun 63 üncü maddesi
+  Rows: 2
+  Columns: 2
+  Confidence: 1
+  Extraction method: regex
+
+Table 135:
+  Headers: Götürü matrahlar:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 136:
+  Headers: Ceza hükümlerinin şümulü:
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 137:
+  Headers: Kazanç sayılmıyacak farklar:
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 138:
+  Headers: Geçici Madde 13 – (Ek: 4/12/1985-3239/38 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 139:
+  Headers: Geçici Madde 18 – (Ek: 24/6/1994-4008/23 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 140:
+  Headers: Bu kısımda yer alan “Şu kadar ki, bu Kanunun yürürlüğe girmesinden önce kesinleşmiş mahkumiyet kararları
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 141:
+  Headers: Geçici Madde 26 – (Ek: 17/12/2003-5024/5 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 142:
+  Headers: Bu maddenin birinci, ikinci ve üçüncü fıkrası hükümleri, mükerrer 298 inci maddenin
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 143:
+  Headers: Ceza hükümlerinde uygulama:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 144:
+  Headers: Ceza kesmede zaman aşımı:
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 145:
+  Headers: Ek Geçici Madde 4 – (Ek: 30/12/1980-2365/97 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 146:
+  Headers: Ek Geçici Madde 8 – (Ek: 30/12/1980-2365/97 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 147:
+  Headers: Ek Geçici Madde 11 – (Ek: 23/6/1982-2686/52 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 148:
+  Headers: İkinci derece usulsüzlükler
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 149:
+  Headers: Sermaye şirketleri dışında
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 150:
+  Headers: Yukardakiler dışında kalıp
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 151:
+  Headers: 353 üncü Maddenin Birinci 353 üncü Maddenin Birinci
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 152:
+  Headers: 5. Tespit
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 153:
+  Headers: 213 SAYILI KANUNUN ÇEŞİTLİ MADDELERİNDEKİ
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 154:
+  Headers: Resmî Gazete'nin
+  Rows: 28
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 155:
+  Headers: 104, 232, 313, 344, 345,
+  Rows: 11
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 156:
+  Headers: Resmî Gazete'nin
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 157:
+  Headers: Mükerrer 115, 347, 353,
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 158:
+  Headers: 104, Mükerrer 115, 177, 232,
+  Rows: 9
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 159:
+  Headers: Mükerrer 355
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 160:
+  Headers: Mükerrer 355
+  Rows: 18
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 161:
+  Headers: Resmî Gazete'nin
+  Rows: 30
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 162:
+  Headers: (6. Mükerrer)
+  Rows: 10
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 163:
+  Headers: (4. Mükerrer)
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 164:
+  Headers: 104, Mükerrer 115, 153/A, 177,
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 165:
+  Headers: Resmî Gazete'nin
+  Rows: 22
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 166:
+  Headers: 104, Mükerrer 115, 153/A, 177,
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 167:
+  Headers: 104, Mükerrer Madde 115,
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 168:
+  Headers: 104, Mükerrer Madde 115,
+  Rows: 12
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 169:
+  Headers: (2. Mükerrer)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 170:
+  Headers: 104, Mükerrer Madde 115,
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 171:
+  Headers: 104, Mükerrer Madde 115,
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 172:
+  Headers: 213 SAYILI KANUNA EK VE DEĞİŞİKLİK GETİREN MEVZUATIN VEYA
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 173:
+  Headers: veya İptal Eden
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 174:
+  Headers: 277, Geçici Madde 10 1/1/1962
+  Rows: 9
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 175:
+  Headers: 488 112, 205, 220, 356 1/11/1964
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 176:
+  Headers: 247 nci Maddenin 3 üncü Bendi, 255 1/1/1982
+  Rows: 20
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 177:
+  Headers: 379, 380, 381, 382, 383, 384, 385, 386, 387, 388,
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 178:
+  Headers: 45, 248, 249, 255, 367, 374
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 179:
+  Headers: 257, 298
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 180:
+  Headers: 5, 6, 14, 16, 26, Mükerrer Madde 30, 35, 41, 101,
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 181:
+  Headers: Birinci Kitap İkinci Kısım Beşinci Bölüm başlığı,
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 182:
+  Headers: 30, 40, 112, 177, Mükerrer Madde 257, 313, 315,
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 183:
+  Headers: 2995 91, 113, 114, 115, 116, Mükerrer Madde 116, 358 27/4/1983
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 184:
+  Headers: 5, 11, 49, Mükerrer Madde 49, 72, 74, 75, 104,
+  Rows: 9
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 185:
+  Headers: 3332 Mükerrer Madde 298 (Geçici Madde 11) 1/1/1987
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 186:
+  Headers: 4, 227, 352, 358, Ek Madde 11 10/12/1988
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 187:
+  Headers: 3689 4, Geçici Madde 17 1/1/1991
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 188:
+  Headers: 3824 Mükerrer Madde 298
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 189:
+  Headers: 8, 135, 220, Mükerrer Madde 227, Mükerrer
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 190:
+  Headers: 30, Mükerrer Madde 196, Mükerrer Madde 298,
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 191:
+  Headers: Mükerrer Madde 227, 344
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 192:
+  Headers: 30, 163, 175, 320, 353, 359, 367 2/6/1995
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 193:
+  Headers: 4315 Ek Madde 13
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 194:
+  Headers: 5 inci maddenin 4 üncü fıkrası ve 6 ncı fıkrası ile
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 195:
+  Headers: 279 31/12/1998
+  Rows: 7
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 196:
+  Headers: 335, 336, 337, 338, 339, 340, 344, 345, 346, 347,
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 197:
+  Headers: 86, 112, Mükerrer Madde 115, 232, 235, 242,
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 198:
+  Headers: 74, Mükerrer Madde 249, 352 9/4/2002
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 199:
+  Headers: Mükerrer Madde 290
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 200:
+  Headers: Ek Madde 13
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 201:
+  Headers: 274, Mükerrer 298 inci Maddenin (A) fıkrasının 8
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 202:
+  Headers: 120, Birinci Kitabın Altıncı Kısmının Üçüncü
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 203:
+  Headers: 281, Mükerrer Madde 298’in (A) fıkrasının (2), (5)
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 204:
+  Headers: 15, 17, 28, 111, 114, 160, 204, 215, Mükerrer
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 205:
+  Headers: Mükerrer Madde 355
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 206:
+  Headers: 5234 13 21/9/2004
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 207:
+  Headers: 5479 Mükerrer Madde 298, 344, Geçici Madde 27
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 208:
+  Headers: 5615 Mükerrer Madde 28, 120, 353, 367, 377 4/4/2007
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 209:
+  Headers: 72, 359 3/7/2009
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 210:
+  Headers: 114, Geçici Madde 28
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 211:
+  Headers: 140, 367 1/1/2011
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 212:
+  Headers: Ek Madde 13’ün 4 üncü fıkrasının (b), (c) ve (d)
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 213:
+  Headers: Ek Madde 13’ün 4 üncü fıkrasının (a) bendi, aynı
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 214:
+  Headers: 6322 112, 325/A, Geçici Madde 29 15/6/2012
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 215:
+  Headers: Ek Madde 13 10/10/2013
+  Rows: 5
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 216:
+  Headers: 157, Mükerrer Madde 257 5/12/2017
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 217:
+  Headers: 27/3/2018 tarihinden
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 218:
+  Headers: Ek Madde 11
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 219:
+  Headers: Anayasa Mahkemesinin 26/1/2012 tarihli ve E.: 2011/74, K.: 2012/15 sayılı Kararı ile; 23/7/2010 tarihli ve
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 220:
+  Headers: uzlaşma talep
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 221:
+  Headers: 11, 48, Mükerrer Madde 49, 74, 92, 127, 140, 215,
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 222:
+  Headers: 7153 Ek Madde 1 10/12/2018
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 223:
+  Headers: 4, 5, 97, 120, 170/A, 226/A, 227, Mükerrer Madde
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 224:
+  Headers: Dördüncü Bölüm Başlığı, Ek Madde 14, Ek Madde
+  Rows: 4
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 225:
+  Headers: Mükerrer Madde 298, Geçici Madde 32 1/1/2022
+  Rows: 9
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 226:
+  Headers: Mükerrer Madde 257 5/7/2022
+  Rows: 2
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 227:
+  Headers: 7421 Mükerrer Madde 257, Mükerrer Madde 355 26/11/2022
+  Rows: 12
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 228:
+  Headers: Geçici Madde 30, Geçici Madde 33 28/12/2023
+  Rows: 6
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 229:
+  Headers: Anayasa Mahkemesinin
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 230:
+  Headers: 112, 153/A, Mükerrer Madde 257, 263, 274/A,
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 231:
+  Headers: 7529 Mükerrer Madde 298, Geçici Madde 33
+  Rows: 8
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 232:
+  Headers: 131 24/7/2025
+  Rows: 3
+  Columns: 1
+  Confidence: 1
+  Extraction method: regex
+
+Table 233:
+  Headers: Madde 177 – (Değişik 30/12/1980-2365/26 md.)
+  Rows: 16
+  Columns: 1
+  Confidence: 0.9375
+  Extraction method: regex
+
+Table 234:
+  Headers: Madde | 232 – Birinci ve ikinci sınıf tüccarlar, kazancı basit usulde tespit edilenlerle
+  Rows: 14
+  Columns: 2
+  Confidence: 0.9285714285714286
+  Extraction method: regex
+
+Table 235:
+  Headers: 1. Yevmiye ve envanter defterleri:
+  Rows: 12
+  Columns: 1
+  Confidence: 0.9166666666666666
+  Extraction method: regex
+
+Table 236:
+  Headers: Ücret bordrolarına en az aşağıdaki malümat yazılır.
+  Rows: 12
+  Columns: 1
+  Confidence: 0.9166666666666666
+  Extraction method: regex
+
+Table 237:
+  Headers: Finansal kiralama işlemlerinde değerleme:
+  Rows: 23
+  Columns: 1
+  Confidence: 0.9130434782608695
+  Extraction method: regex
+
+Table 238:
+  Headers: Vergi Kanunlarının uygulanması ve ispat:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.9090909090909091
+  Extraction method: regex
+
+Table 239:
+  Headers: Takdir kararı:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.9090909090909091
+  Extraction method: regex
+
+Table 240:
+  Headers: 3. İlgililerin soyadı, adı ve unvanı;
+  Rows: 11
+  Columns: 1
+  Confidence: 0.9090909090909091
+  Extraction method: regex
+
+Table 241:
+  Headers: Geçici Madde 25 | – (Ek: 17/12/2003-5024/5 md.)
+  Rows: 11
+  Columns: 2
+  Confidence: 0.9090909090909091
+  Extraction method: regex
+
+Table 242:
+  Headers: İşletme hesabı hulasası:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.9
+  Extraction method: regex
+
+Table 243:
+  Headers: Sürelerin hesaplanması:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.8888888888888888
+  Extraction method: regex
+
+Table 244:
+  Headers: Tekalif cetveli:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.8888888888888888
+  Extraction method: regex
+
+Table 245:
+  Headers: Çiftçi işletme defteri:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.8888888888888888
+  Extraction method: regex
+
+Table 246:
+  Headers: Karşılıklı anlaşma usulü ve dava açma:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.8888888888888888
+  Extraction method: regex
+
+Table 247:
+  Headers: Tahakkuk fişi esası:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.875
+  Extraction method: regex
+
+Table 248:
+  Headers: Ödeme zamanı:
+  Rows: 16
+  Columns: 1
+  Confidence: 0.875
+  Extraction method: regex
+
+Table 249:
+  Headers: Bilgi verme:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.875
+  Extraction method: regex
+
+Table 250:
+  Headers: Vergi ziyaı, usulsüzlük ve özel usulsüzlük cezalarında indirme
+  Rows: 8
+  Columns: 1
+  Confidence: 0.875
+  Extraction method: regex
+
+Table 251:
+  Headers: Mühlet verme:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 252:
+  Headers: 1. Posta, Telgraf ve Telefon İdaresinin muhabereler hakkında tutmaya mecbur olduğu
+  Rows: 7
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 253:
+  Headers: Sınıf değiştirme:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 254:
+  Headers: 1. Çiftçinin soyadı ve adı;
+  Rows: 7
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 255:
+  Headers: Karne mecburiyeti:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 256:
+  Headers: e) Ortalama düzeltme katsayısı; malî tabloların ait olduğu aya ilişkin fiyat endeksinin,
+  Rows: 7
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 257:
+  Headers: Madde 300 – Bir binanın yıllık gayrisafi iradı, o binanın bulunduğu mahalde cari olan
+  Rows: 14
+  Columns: 1
+  Confidence: 0.8571428571428571
+  Extraction method: regex
+
+Table 258:
+  Headers: İncelemede usul:
+  Rows: 13
+  Columns: 1
+  Confidence: 0.8461538461538461
+  Extraction method: regex
+
+Table 259:
+  Headers: Görev süresi:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 260:
+  Headers: İş değişikliklerinin bildirilmesi:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 261:
+  Headers: Bilançonun tanziminde envanter listeleri:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 262:
+  Headers: İmalat defteri:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 263:
+  Headers: 5. (Değişik: 4/12/1985-3239/20 | md.) Fatura, malın teslimi veya hizmetin yapıldığı
+  Rows: 6
+  Columns: 2
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 264:
+  Headers: Ücret ve sorumluluk:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 265:
+  Headers: İmal edilen emtia:
+  Rows: 12
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 266:
+  Headers: Esham, tahvilat ve yabancı paralar:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 267:
+  Headers: a) Mükellef veya meslek grupları ya da mükelleflerin aktif toplamları veya ciroları
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 268:
+  Headers: Değersiz alacaklar:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 269:
+  Headers: Suçlarda birleşme:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 270:
+  Headers: kesilen
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 271:
+  Headers: Geçici Madde 12 – (Ek: 4/12/1985-3239/38 md.)
+  Rows: 12
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 272:
+  Headers: Geçici Madde 17 – (Ek: 15/12/1990-3689/2 md.)
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 273:
+  Headers: Geçici Madde 27 – (Ek: 30/3/2006-5479/13 md.)
+  Rows: 6
+  Columns: 1
+  Confidence: 0.8333333333333334
+  Extraction method: regex
+
+Table 274:
+  Headers: mahalle ve köy muhtarlıkları ile belediyelere, araziye ait olanlar il merkezlerindeki ticaret ve
+  Rows: 17
+  Columns: 1
+  Confidence: 0.8235294117647058
+  Extraction method: regex
+
+Table 275:
+  Headers: Madde 168 – Bildirmeler aşağıda yazılı süre içinde yapılır:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.8181818181818182
+  Extraction method: regex
+
+Table 276:
+  Headers: Envanterde amortisman kayıtları:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.8181818181818182
+  Extraction method: regex
+
+Table 277:
+  Headers: a) Alınan sigorta tazminatı ile tamamen veya kısmen zarar gören amortismana tabi
+  Rows: 11
+  Columns: 1
+  Confidence: 0.8181818181818182
+  Extraction method: regex
+
+Table 278:
+  Headers: Kanun Numarası | : 213
+  Rows: 5
+  Columns: 2
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 279:
+  Headers: Madde 1 – Bu kanun hükümleri ikinci maddede yazılı olanlar dışında, genel bütçeye
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 280:
+  Headers: (Değişik: 30/12/1980-2365/6 md.) Ortalama Kar Hadleri Merkez Komisyonu, Maliye
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 281:
+  Headers: Görev ve kuruluş:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 282:
+  Headers: İlanın neticeleri:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 283:
+  Headers: Düzeltme talebinin incelenmesi:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 284:
+  Headers: Şikayet yolu ile müracaat:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 285:
+  Headers: Hüviyet ibrazı mecburiyeti:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 286:
+  Headers: Madde 134 – (Değişik birinci fıkra: 30/12/1980-2365/22 md.) Vergi incelemesinden
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 287:
+  Headers: İncelemeye yetkililer:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 288:
+  Headers: Hesap dönemi:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 289:
+  Headers: Kombine imalatta imalat defterleri:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 290:
+  Headers: Bitim işleri defteri:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 291:
+  Headers: Tasdik makamı:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 292:
+  Headers: Tasdik şerhi:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 293:
+  Headers: Tasdik şekli:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 294:
+  Headers: Fatura nizamı:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 295:
+  Headers: b) İlk madde ve malzeme, ticari mallar, yarı mamul ve mamul stokların maliyetine
+  Rows: 15
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 296:
+  Headers: Özel fon hesabında bulunan bu tutarlar, yatırımın tamamlanarak ilgili iktisadi kıymetin
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 297:
+  Headers: Şüpheli alacaklar:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 298:
+  Headers: yer alan tutar, her yıl bir önceki yıla ilişkin olarak bu Kanun uyarınca belirlenen yeniden
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 299:
+  Headers: 3. Hiç verilmemiş olan vergi beyannamelerinin mükellefin haber verme dilekçesinin
+  Rows: 10
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 300:
+  Headers: Geçici Madde 31 – (Ek: 16/5/2018-7144/5 md.)
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 301:
+  Headers: ödemelere ilişkin taksitlerini vadesinde ödemeyen mükellefler hakkında 15/4/1982 tarihine
+  Rows: 5
+  Columns: 1
+  Confidence: 0.8
+  Extraction method: regex
+
+Table 302:
+  Headers: Mücbir sebepler:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 303:
+  Headers: ve arazinin kıymeti yeniden takdir edilmeyip vergide kayıtlı gayrısafi irat veya kıymet müfrez
+  Rows: 9
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 304:
+  Headers: Tadilat neticelerinin uygulanması:
+  Rows: 18
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 305:
+  Headers: İspat edici kağıtlar:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 306:
+  Headers: Emsal bedeli ve emsal ücreti:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 307:
+  Headers: Maliye Bakanlığı; bu Kanunun 26,35 ve 366 ncı maddelerinde yer alan tahakku fişi ile
+  Rows: 9
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 308:
+  Headers: Geçici Madde 24 – (Ek: 27/1/2000-4503/10 md.)
+  Rows: 18
+  Columns: 1
+  Confidence: 0.7777777777777778
+  Extraction method: regex
+
+Table 309:
+  Headers: Zirai kazançlar il komisyonları, zirai kazanç ölçülerinin takdir ve tesbitinde aşağıdaki
+  Rows: 22
+  Columns: 1
+  Confidence: 0.7727272727272727
+  Extraction method: regex
+
+Table 310:
+  Headers: Madde 413 – (Değişik: 23/7/2010-6009/15 md.)
+  Rows: 17
+  Columns: 1
+  Confidence: 0.7647058823529411
+  Extraction method: regex
+
+Table 311:
+  Headers: bilançolarına kayıtlı bulunan taşınmazlar ile amortismana tabi diğer iktisadi kıymetlerini | (bu
+  Rows: 37
+  Columns: 2
+  Confidence: 0.7567567567567568
+  Extraction method: regex
+
+Table 312:
+  Headers: Gümrük ve tekel vergileri:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 313:
+  Headers: Mücbir sebeplerle gecikme:
+  Rows: 20
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 314:
+  Headers: 2. Vergi beyannamesi kanuni veya ek süreler içinde verilmekle beraber beyannamede
+  Rows: 24
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 315:
+  Headers: 16/6/2009 tarihli ve 5904 sayılı Kanunun 21 inci maddesiyle; | bu fıkrada yer alan “tapu sicil müdürü veya
+  Rows: 4
+  Columns: 2
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 316:
+  Headers: Komisyonun yetkileri:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 317:
+  Headers: Tebliğ esasları:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 318:
+  Headers: Re'sen düzeltme:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 319:
+  Headers: Arama yapıldığı sırada zaman müsaadesizliği ve sair sebeplerle bu tutanağın tanzimi
+  Rows: 12
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 320:
+  Headers: Büyük mağazalarda envanter:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 321:
+  Headers: Yabancı nakliyat kurumlarının hasılat defteri:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 322:
+  Headers: Madde 215- (Değişik: 16/7/2004-5228/7 md.) 1. Bu Kanuna göre tutulacak defter ve
+  Rows: 12
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 323:
+  Headers: Elektronik olarak tutulan defterlerde tasdik:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 324:
+  Headers: Perakende satış vesikaları:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 325:
+  Headers: 1. Perakende satış fişleri;
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 326:
+  Headers: Makbuz mecburiyeti:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 327:
+  Headers: 1. Müteselsil seri ve sıra numarası.
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 328:
+  Headers: Ekim ve sayım ilmühaberi:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 329:
+  Headers: Karne alınması:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 330:
+  Headers: Madde 256 – (Değişik: 22/7/1998-4369/4 md.)
+  Rows: 12
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 331:
+  Headers: Diğer ödevler:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 332:
+  Headers: Mükerrer Madde 257 – (Ek: 30/12/1980-2365/45 md.)
+  Rows: 8
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 333:
+  Headers: 3. Tutulması ve düzenlenmesi zorunlu defter, kayıt ve belgelerin mikro film, mikro fiş
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 334:
+  Headers: Madde 277 – (Değişik: 19/2/1963-205/18 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 335:
+  Headers: Kıymeti düşen mallar:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 336:
+  Headers: “Borçlar mukayyet değerleriyle değerlenir.” şeklindeki bu fıkra; 16/7/2004 tarihli ve 5228 sayılı Kanunun 59
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 337:
+  Headers: 30/11/2018 | tarihli ve 30611 sayılı Resmi Gazete’de yayımlanan Hazine ve Maliye Bakanlığı (Gelir İdaresi
+  Rows: 4
+  Columns: 2
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 338:
+  Headers: 23/12/2019 tarihli ve 30987 sayılı Resmî Gazete’de yayımlanan Hazine ve Maliye Bakanlığı (Gelir İdaresi
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 339:
+  Headers: ç) Tazminatın alındığı yılı takip eden üçüncü takvim yılının sonundan önce işin terki,
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 340:
+  Headers: Küçüklerin ve kısıtlıların ceza muhatabı olmadığı haller:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 341:
+  Headers: Damga vergisi ve damga resminde sorumluluk:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 342:
+  Headers: Fiil ayrılığı:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 343:
+  Headers: Vergi ziyaı cezası
+  Rows: 16
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 344:
+  Headers: 2. İkinci sınıf tüccarlar, defter tutan çiftçiler ile kazancı basıt usulde tespit edilenler
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 345:
+  Headers: Madde 369 – (Değişik: 23/7/2010-6009/14 md.)
+  Rows: 8
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 346:
+  Headers: Ceza indiriminden faydalanacak olanlar:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 347:
+  Headers: maddenin (A) fıkrası gereğince enflasyon düzeltmesi yapılmasına | ilişkin şartların oluşması
+  Rows: 4
+  Columns: 2
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 348:
+  Headers: Ek Geçici Madde 5 – (Ek: 30/12/1980-2365/97 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 349:
+  Headers: Ek Geçici Madde 6 – (Ek: 30/12/1980-2365/97 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.75
+  Extraction method: regex
+
+Table 350:
+  Headers: Mükerrer Madde 227 – (Ek: 24/6/1994-4008/6 md.)
+  Rows: 15
+  Columns: 1
+  Confidence: 0.7333333333333333
+  Extraction method: regex
+
+Table 351:
+  Headers: Madde | 296 – Tescile tabi bilümum hakların değeri, tesisleri sırasında Tapu siciline
+  Rows: 15
+  Columns: 2
+  Confidence: 0.7333333333333333
+  Extraction method: regex
+
+Table 352:
+  Headers: takdirde tebliğ evrakını almaktan kaçınırsa bu hususta düzenlenecek tutanak tarihinde tebliğ
+  Rows: 11
+  Columns: 1
+  Confidence: 0.7272727272727273
+  Extraction method: regex
+
+Table 353:
+  Headers: Ölüm vakalarını ve intikalleri bildirme:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.7272727272727273
+  Extraction method: regex
+
+Table 354:
+  Headers: Ambar defteri:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.7272727272727273
+  Extraction method: regex
+
+Table 355:
+  Headers: c) Amortisman usulünü seçme bakımından:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.7272727272727273
+  Extraction method: regex
+
+Table 356:
+  Headers: 4. (Değişik: 25/5/1995-4108/8 | md.) Günlük kasa defteri, günlük perakende satış ve
+  Rows: 36
+  Columns: 2
+  Confidence: 0.7222222222222222
+  Extraction method: regex
+
+Table 357:
+  Headers: b) Vergi kanunları uyarınca tutulan veya düzenlenen ve saklama ve ibraz mecburiyeti
+  Rows: 18
+  Columns: 1
+  Confidence: 0.7222222222222222
+  Extraction method: regex
+
+Table 358:
+  Headers: Mükellef ve vergi sorumlusu:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 359:
+  Headers: Bu sorumluluk, bunların ödedikleri vergilerden dolayı asıl mükelleflere rücu etmek
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 360:
+  Headers: Madde 28 – Beyannamenin posta ile gönderilmesi halinde de tahakkuk fişi kesilir. Bu
+  Rows: 14
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 361:
+  Headers: re'sen gerekli tarhiyat yapılır ve bu beyannameler re'sen takdir için takdir komisyonuna sevk
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 362:
+  Headers: Uygulama süresi:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 363:
+  Headers: Yüz ölçümü fazla veya noksan tesbit edilen arazi:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 364:
+  Headers: Zirai kazançlar merkez komisyonu:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 365:
+  Headers: Madde 104- (Değişik: 25/12/2003-5035/1 md.)
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 366:
+  Headers: Madde 131 – Yoklama neticeleri tutanak mahiyetinde olan "yoklama fişine" geçirilir.
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 367:
+  Headers: 1. Gelir vergisinden muaf olan esnaf ve gerçek usulde vergiye tabi olmayan çiftçiler;
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 368:
+  Headers: Tahkik ve ihbar ödevi:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 369:
+  Headers: (Değişik: 21/1/1983-2791/5 md.) Bu Kanuna göre düzenlenecek belgelerle bunlara ek
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 370:
+  Headers: Vadesi gelmemiş olan senede bağlı borçlar değerleme günü kıymetine irca olunabilir.
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 371:
+  Headers: Mükerrer Madde 298- (19/2/1963 tarihli ve 205 sayılı Kanunun 26 ncı maddesi ile
+  Rows: 21
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 372:
+  Headers: h) Parasal olmayan karşılıklar için; ilgili olduğu kıymetin düzeltmeye esas tarihi.
+  Rows: 14
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 373:
+  Headers: Yatırım döneminde veya iktisadi kıymetin aktifleştirilmesinden sonra işin bırakılması
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 374:
+  Headers: Tüzel kişilerin sorumluluğu:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 375:
+  Headers: raporu | ibraz şartı getirilen mükellef adına 50.000 (330.000) Türk lirasından az ve 500.000
+  Rows: 7
+  Columns: 2
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 376:
+  Headers: Başvuru öncesi açılan davalar ve uzlaşma talebi:
+  Rows: 14
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 377:
+  Headers: İlk tatbik yılında komisyonların teşkili ve ödevleri:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 378:
+  Headers: Geçici Madde 4 – Bu kanunun yürürlüğe girdiği tarihte veya sonraki yıllarda bilanço
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 379:
+  Headers: Ek Geçici Madde 13 – (Ek: 23/6/1982-2686/52 md.)
+  Rows: 7
+  Columns: 1
+  Confidence: 0.7142857142857143
+  Extraction method: regex
+
+Table 380:
+  Headers: Tadilat sebepleri:
+  Rows: 27
+  Columns: 1
+  Confidence: 0.7037037037037037
+  Extraction method: regex
+
+Table 381:
+  Headers: Kıymetli madenler:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.7
+  Extraction method: regex
+
+Table 382:
+  Headers: genel yönetim kapsamındaki kamu idareleri dışındaki kamu kurum ve kuruluşları ve tüzel
+  Rows: 20
+  Columns: 1
+  Confidence: 0.7
+  Extraction method: regex
+
+Table 383:
+  Headers: Geçici Madde 1 – Bu Kanunun yürürlüğe girdiği tarihe kadar (bu tarih dahil) her bir
+  Rows: 23
+  Columns: 1
+  Confidence: 0.6956521739130435
+  Extraction method: regex
+
+Table 384:
+  Headers: Elektronik yoklama
+  Rows: 13
+  Columns: 1
+  Confidence: 0.6923076923076923
+  Extraction method: regex
+
+Table 385:
+  Headers: Pişmanlık ve ıslah:
+  Rows: 13
+  Columns: 1
+  Confidence: 0.6923076923076923
+  Extraction method: regex
+
+Table 386:
+  Headers: Kanun yolundan vazgeçme:
+  Rows: 26
+  Columns: 1
+  Confidence: 0.6923076923076923
+  Extraction method: regex
+
+Table 387:
+  Headers: Verginin idarece tarhı:
+  Rows: 16
+  Columns: 1
+  Confidence: 0.6875
+  Extraction method: regex
+
+Table 388:
+  Headers: g) | 31.12.2003 tarihli bilançonun düzeltilmiş aktif toplamından düzeltilmiş sermaye,
+  Rows: 16
+  Columns: 2
+  Confidence: 0.6875
+  Extraction method: regex
+
+Table 389:
+  Headers: Geçici Madde 1 – Bu Kanunun 6, 7, 8 ve 9 uncu maddeleriyle Vergi Usul Kanununun
+  Rows: 19
+  Columns: 1
+  Confidence: 0.6842105263157895
+  Extraction method: regex
+
+Table 390:
+  Headers: yapılması halinde en fazla altı ay, katma değer vergisi iade incelemelerinde ise en fazla üç ay
+  Rows: 22
+  Columns: 1
+  Confidence: 0.6818181818181818
+  Extraction method: regex
+
+Table 391:
+  Headers: izin verilenler hariç) bu maddenin yürürlüğe girdiği tarih itibarıyla aktiflerine kayıtlı bulunan
+  Rows: 37
+  Columns: 1
+  Confidence: 0.6756756756756757
+  Extraction method: regex
+
+Table 392:
+  Headers: Vergi dairesi:
+  Rows: 21
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 393:
+  Headers: Madde | 7 – Bilümum | mülkiye | amirleri, | emniyet | amir | ve | memurları, | belediye
+  Rows: 3
+  Columns: 9
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 394:
+  Headers: Kanuni temsilcilerin ödevi:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 395:
+  Headers: (Ek: 4/12/1985-3239/2 md.) Ancak üçüncü fıkrada belirtilen müteselsilen sorumluluk
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 396:
+  Headers: belirlenen safhadan önceki safhalarda tevkif yoluyla alınan vergiler iade edilmez ve süresinde
+  Rows: 12
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 397:
+  Headers: Mirasçıların sorumluluğu:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 398:
+  Headers: 3. Mühletin verilmesi halinde verginin alınması tehlikeye girmemelidir.
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 399:
+  Headers: Madde 27 – Vergi beyannamesini ilgili vergi dairesine tevdi eden kimsenin kendisine
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 400:
+  Headers: Ortalama kar hadlerinin tespiti:
+  Rows: 18
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 401:
+  Headers: Ölçüler ve tarifleri:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 402:
+  Headers: Madde 46 – (Değişik: 19/2/1963-205/4 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 403:
+  Headers: Madde | 52 – Tadilat, iki genel tahrir arasında, bu kanunda yazılı sebeplerden dolayı
+  Rows: 3
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 404:
+  Headers: Komisyonlara seçilecek üyelerde aranacak vasıflar:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 405:
+  Headers: Kamu idare ve müesseselerine tebliğ:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 406:
+  Headers: Bilinen adresler:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 407:
+  Headers: 4. (Ek:14/10/2021-7338/15 | md.) İlan yolu ile yapılan tebliğin konusu her biri için
+  Rows: 9
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 408:
+  Headers: Memur vasıtasiyle tebliğ:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 409:
+  Headers: Madde 107/A – (Ek: 23/7/2010-6009/7 md.)
+  Rows: 9
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 410:
+  Headers: Hatalı tebliğler:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 411:
+  Headers: Vergi karneye yazıldığı tarihte tebliğ edilmiş sayılır.
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 412:
+  Headers: Zamanaşımının mahiyeti:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 413:
+  Headers: Zamanaşımı süreleri:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 414:
+  Headers: Düzeltme yetkisi ve reddiyat:
+  Rows: 12
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 415:
+  Headers: Düzeltmede zamanaşımı:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 416:
+  Headers: Hüviyet ibrazı:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 417:
+  Headers: İncelemeye tabi olanlar:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 418:
+  Headers: İnceleme zamanı:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 419:
+  Headers: Madde 139 – Vergi incelemeleri, esas itibariyle dairede yapılır.
+  Rows: 12
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 420:
+  Headers: Kayıtların yeniden işlenmesi:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 421:
+  Headers: Teminat uygulaması:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 422:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 5 inci maddesi ile bu fıkranın üçüncü cümlesinde yer alan
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 423:
+  Headers: Madde | 192 – Bilanço, envanterde gösterilen kıymetlerin tasnifli ve karşılıklı olarak
+  Rows: 3
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 424:
+  Headers: Aktif toplamı ile borçlar arasındaki fark, müteşebbisin işletmeye mevzu varlığını (Öz
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 425:
+  Headers: 2. Yukarda yazılı maddelerden imalata sarf olunan veya aynen satılanlar;
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 426:
+  Headers: Sınai müesseselerde kayıt serbestliği:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 427:
+  Headers: Damga resmi kayıtlar:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 428:
+  Headers: Amortisman kayıtları:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 429:
+  Headers: Tasdik zamanı:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 430:
+  Headers: 2. Hesap dönemleri Maliye Bakanlığı tarafından tesbit edilenler, defterin kullanılacağı
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 431:
+  Headers: 2. Vesikasının teminine imkan olmıyan giderler;
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 432:
+  Headers: Madde | 252 – Vergi karnesinin şekli ve ihtiva edeceği bilgiler Maliye Bakanlığınca
+  Rows: 3
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 433:
+  Headers: Defter ve vesikaları muhafaza:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 434:
+  Headers: Karnelerin muhafazası:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 435:
+  Headers: 29/3/2018 tarihli ve 7104 sayılı Kanunun 20 nci maddesiyle bu maddenin son cümlesinde yer alan; “tasdike”
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 436:
+  Headers: Değerlemede esas:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 437:
+  Headers: Değerleme ölçüleri:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 438:
+  Headers: Zirai mahsuller:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 439:
+  Headers: “Alacaklar | mukayyet değerleriyle değerlenir.”şeklindeki bu fıkra; 16/7/2004 tarihli ve 5228 sayılı Kanunun
+  Rows: 3
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 440:
+  Headers: Pasif geçici hesap kıymetleri:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 441:
+  Headers: Özel haller:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 442:
+  Headers: Kiralamada | Kullanılan Faiz Oranı: Kira ödemeleri ile garanti edilmemiş kalan değer
+  Rows: 3
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 443:
+  Headers: 9. (Ek: 16/7/2004-5228/9 md.) Münhasıran sürekli olarak işlenmiş; altın, gümüş alım-
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 444:
+  Headers: 13. Yeniden değerlemenin herhangi bir yılda yapılmaması durumunda, sonraki hesap
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 445:
+  Headers: Kıymet - kira münasebeti:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 446:
+  Headers: Özel maliyet bedellerinin itfası:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 447:
+  Headers: Amortismana tabi malların satılması:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 448:
+  Headers: Madde 336 – (Değişik : 30/12/1980-2365/62 md.)
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 449:
+  Headers: Madde 339 – (Değişik:14/10/2021-7338/38 md.)
+  Rows: 9
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 450:
+  Headers: Özel usulsüzlükler ve cezaları:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 451:
+  Headers: Madde 360 – (Değişik: 23/1/2008-5728/277 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 452:
+  Headers: Ceza kesmede zamanaşımı:
+  Rows: 12
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 453:
+  Headers: 20/2/2008 tarihli ve 5736 sayılı Kanunun 6 ncı maddesiyle; bu fıkrada bulunan “(344 üncü maddenin üçüncü
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 454:
+  Headers: Uzlaşma komisyonu muamelelerinin kesinliği:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 455:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 14 üncü maddesi ile bu maddenin birinci fıkrasında yer | alan
+  Rows: 3
+  Columns: 2
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 456:
+  Headers: Madde 378 – (Değişik: 23/6/1982-2686/51 md.)
+  Rows: 6
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 457:
+  Headers: Bu Kanunun belediye vergi ve resimlerine uygulanacağı tarih:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 458:
+  Headers: Müdevver mahsullerin değerlenmesi:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 459:
+  Headers: Geçici Madde 20 – (Ek: 22/7/1998-4369/20 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 460:
+  Headers: Geçici Madde 22 – (Ek: 22/7/1998-4369/20 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 461:
+  Headers: Fazla veya yersiz tahsilatta faiz ödemesi:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 462:
+  Headers: Geçici Madde 32 – (Ek:14/10/2021-7338/52 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 463:
+  Headers: Geçici Madde 35- (Ek:28/7/2024-7524/16 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 464:
+  Headers: Ek Geçici Madde 7 – (Ek: 30/12/1980-2365/97 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 465:
+  Headers: Geçici Madde 1 – Bu Kanunun yürürlüğe girdiği tarihe kadar (bu tarih dahil) her bir
+  Rows: 12
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 466:
+  Headers: Bu maddenin uygulanması bakımından, döviz kazandırıcı faaliyetlerin neler olduğu ve
+  Rows: 3
+  Columns: 1
+  Confidence: 0.6666666666666666
+  Extraction method: regex
+
+Table 467:
+  Headers: Bu hükmün uygulanması için, bilgi ve ibraz ödevinin yerine getirilmesiyle ilgili olarak
+  Rows: 29
+  Columns: 1
+  Confidence: 0.6551724137931034
+  Extraction method: regex
+
+Table 468:
+  Headers: uygulanan faiz oranı kullanılarak hesaplanan vade farkı tutarının reel olmayan kısımları bu
+  Rows: 37
+  Columns: 1
+  Confidence: 0.6486486486486487
+  Extraction method: regex
+
+Table 469:
+  Headers: ortamında verilmesine, beyanname, bildirim, yazı, dilekçe, tutanak, rapor ve diğer belgelerin
+  Rows: 14
+  Columns: 1
+  Confidence: 0.6428571428571429
+  Extraction method: regex
+
+Table 470:
+  Headers: gerçekleştirilen tahsilatların, kendi mükellefiyeti adına kayıtlı olmayan ödeme sistemleri veya
+  Rows: 14
+  Columns: 1
+  Confidence: 0.6428571428571429
+  Extraction method: regex
+
+Table 471:
+  Headers: h) Toplulaştırılmış yöntemler;
+  Rows: 25
+  Columns: 1
+  Confidence: 0.64
+  Extraction method: regex
+
+Table 472:
+  Headers: Madde | 370 – (Mülga: 30/12/1980-2365/89 md.; Yeniden düzenleme: 15/7/2016-
+  Rows: 36
+  Columns: 2
+  Confidence: 0.6388888888888888
+  Extraction method: regex
+
+Table 473:
+  Headers: Azalan bakiyeler usulüyle amortisman:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.6363636363636364
+  Extraction method: regex
+
+Table 474:
+  Headers: 1) Defter ve kayıtlarda hesap ve muhasebe hileleri yapanlar, gerçek olmayan veya
+  Rows: 11
+  Columns: 1
+  Confidence: 0.6363636363636364
+  Extraction method: regex
+
+Table 475:
+  Headers: Elektronik cihazların belirlenen niteliklere uygunluğu 6.12.1984 gün ve 3100 sayılı
+  Rows: 38
+  Columns: 1
+  Confidence: 0.631578947368421
+  Extraction method: regex
+
+Table 476:
+  Headers: İmha edilmesi gereken mallar:
+  Rows: 19
+  Columns: 1
+  Confidence: 0.631578947368421
+  Extraction method: regex
+
+Table 477:
+  Headers: İşi bırakmanın bildirilmesi:
+  Rows: 24
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 478:
+  Headers: Bina ve arazinin envantere alınması:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 479:
+  Headers: aşağıda yazılı belgeleri düzenlemek zorundadırlar.
+  Rows: 16
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 480:
+  Headers: Vergi ziyaı:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 481:
+  Headers: Kaldırılan hükümler:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 482:
+  Headers: Geçici Madde 16 – (Ek: 24/3/1988-3418/33 md.)
+  Rows: 8
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 483:
+  Headers: Geçici Madde 2 – a) İhracat,
+  Rows: 8
+  Columns: 1
+  Confidence: 0.625
+  Extraction method: regex
+
+Table 484:
+  Headers: Devir ve trampa satış hükmündedir.
+  Rows: 21
+  Columns: 1
+  Confidence: 0.6190476190476191
+  Extraction method: regex
+
+Table 485:
+  Headers: Madde 280/A- (Ek: 21/3/2018-7103/11 md.)
+  Rows: 13
+  Columns: 1
+  Confidence: 0.6153846153846154
+  Extraction method: regex
+
+Table 486:
+  Headers: ı) Yıllara sarî inşaat ve onarma işlerine ait maliyet ve istihkak tutarları ile ilgili olarak
+  Rows: 13
+  Columns: 1
+  Confidence: 0.6153846153846154
+  Extraction method: regex
+
+Table 487:
+  Headers: değerlerini, 1/1/2014 tarihinden itibaren yurt içi üretici fiyat endeksi (Yİ-ÜFE) değerlerini
+  Rows: 38
+  Columns: 1
+  Confidence: 0.6052631578947368
+  Extraction method: regex
+
+Table 488:
+  Headers: Re'sen vergi tarhı:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 489:
+  Headers: Tebliğ yerine geçen muameleler:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 490:
+  Headers: düzeltme yetkisi vergi dairesi başkanına ait olup, başkan bu yetkisini ilgili grup müdürlerine
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 491:
+  Headers: İnceleme tutanakları:
+  Rows: 10
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 492:
+  Headers: Madde | 153 – Aşağıda yazılı mükelleflerden işe başlıyanlar keyfiyeti vergi dairesine
+  Rows: 15
+  Columns: 2
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 493:
+  Headers: 3568 sayılı Kanun kapsamında faaliyette bulunan meslek mensuplarından dördüncü
+  Rows: 15
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 494:
+  Headers: 1. Muayenehane, yazıhane, atelye gibi özel iş yerleri açmak;
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 495:
+  Headers: İş yeri:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 496:
+  Headers: Kamu kurum ve kuruluşları tarafından yapılan bildirim:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 497:
+  Headers: Yevmiye defteri:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 498:
+  Headers: Perakende satış fişi ile giriş ve yolcu taşıma biletleri seri ve sıra numarası dahilinde
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 499:
+  Headers: (Ek fıkra: 19/2/1963-205/15 | md.) Gelir Vergisi Kanununun 54 üncü maddesinin 2
+  Rows: 5
+  Columns: 2
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 500:
+  Headers: Mükerrer Madde 242 – (Ek: 28/8/1991-3762/3 md.)
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 501:
+  Headers: Yıllık irat:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 502:
+  Headers: b) Süre bakımından:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 503:
+  Headers: Sermayenin itfası:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 504:
+  Headers: Amortismana tabi malların sigorta tazminatı:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 505:
+  Headers: 7. İşe başlamanın zamanında bildirilmemesi;
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 506:
+  Headers: 28/7/2024 | tarihli ve 7524 sayılı Kanunun 14 üncü maddesi ile bu maddenin birinci fıkrasının
+  Rows: 5
+  Columns: 2
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 507:
+  Headers: Karşılıklı anlaşma usulü başvurusunun neticelendirilmesi:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 508:
+  Headers: Bu Kanunun; 104, mükerrer 115, 177, 352 (Kanuna bağlı cetvel), 353 ve 356 ncı
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 509:
+  Headers: Geçici Madde 28 – (Ek: 23/7/2010-6009/16 md.)
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 510:
+  Headers: Birinci fıkra hükümleri bu maddeyi ihdas eden Kanunun yayımı tarihinde soruşturma
+  Rows: 10
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 511:
+  Headers: Ek Geçici Madde 9 – (Ek: 23/6/1982-2686/52 md.)
+  Rows: 5
+  Columns: 1
+  Confidence: 0.6
+  Extraction method: regex
+
+Table 512:
+  Headers: 8. (Ek:29/4/2021-7318/2 md.) 4/12/2003 tarihli ve 5015 sayılı Petrol Piyasası Kanunu
+  Rows: 17
+  Columns: 1
+  Confidence: 0.5882352941176471
+  Extraction method: regex
+
+Table 513:
+  Headers: Girişim sermayesi fonu:
+  Rows: 17
+  Columns: 1
+  Confidence: 0.5882352941176471
+  Extraction method: regex
+
+Table 514:
+  Headers: Fazla çalışma ücreti:
+  Rows: 17
+  Columns: 1
+  Confidence: 0.5882352941176471
+  Extraction method: regex
+
+Table 515:
+  Headers: sağlayıcılara, başkalarına ait iktisadi ve ticari faaliyetlerin yapılmasına ortam sağlayan gerçek
+  Rows: 12
+  Columns: 1
+  Confidence: 0.5833333333333334
+  Extraction method: regex
+
+Table 516:
+  Headers: 10. (Mülga: 18/4/1984-2995/4 md.)
+  Rows: 12
+  Columns: 1
+  Confidence: 0.5833333333333334
+  Extraction method: regex
+
+Table 517:
+  Headers: a) Dava konusu yapılmaksızın kesinleşen vergilere, kendi vergi kanunlarında belirtilen
+  Rows: 26
+  Columns: 1
+  Confidence: 0.5769230769230769
+  Extraction method: regex
+
+Table 518:
+  Headers: Vergilendirme hataları:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 519:
+  Headers: ilişkin görüşü ve ilgisine göre vergi dairesi başkanı veya defterdarın onayı ile mükellefiyet
+  Rows: 35
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 520:
+  Headers: Maliyet bedeli:
+  Rows: 14
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 521:
+  Headers: 2. Bu maddenin uygulanmasında;
+  Rows: 7
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 522:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 11 inci maddesi ile birinci fıkranın (1) numaralı bendinde yer alan
+  Rows: 7
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 523:
+  Headers: 2. (Değişik: 21/3/2018-7103/12 md.) Elektronik belge olarak düzenlenmesi gerekenler
+  Rows: 35
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 524:
+  Headers: Geçici Madde 36- (Ek:25/12/2024-7537/9 md.)
+  Rows: 7
+  Columns: 1
+  Confidence: 0.5714285714285714
+  Extraction method: regex
+
+Table 525:
+  Headers: Maksat ve yetki:
+  Rows: 16
+  Columns: 1
+  Confidence: 0.5625
+  Extraction method: regex
+
+Table 526:
+  Headers: Mükellefiyet kaydının analiz ve değerlendirme sonuçlarına bağlı olarak terkini:
+  Rows: 9
+  Columns: 1
+  Confidence: 0.5555555555555556
+  Extraction method: regex
+
+Table 527:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 6 ncı maddesi ile bu bende “Elektronik ticarette” ibaresinden sonra
+  Rows: 9
+  Columns: 1
+  Confidence: 0.5555555555555556
+  Extraction method: regex
+
+Table 528:
+  Headers: Tebliğ yapılacak kimseler:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.5454545454545454
+  Extraction method: regex
+
+Table 529:
+  Headers: 1. (Değişik: 21/3/2018-7103/12 md.) Elektronik belge olarak düzenlenmesi gerekenler
+  Rows: 26
+  Columns: 1
+  Confidence: 0.5384615384615384
+  Extraction method: regex
+
+Table 530:
+  Headers: Ortalama kar hadlerinin kesinleşmesi ve ilanı:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.5333333333333333
+  Extraction method: regex
+
+Table 531:
+  Headers: Vergi mahkemesinde dava açmaya yetkili olanlar:
+  Rows: 15
+  Columns: 1
+  Confidence: 0.5333333333333333
+  Extraction method: regex
+
+Table 532:
+  Headers: Gider pusulası:
+  Rows: 17
+  Columns: 1
+  Confidence: 0.5294117647058824
+  Extraction method: regex
+
+Table 533:
+  Headers: Madde 272 – (Değişik: 3/7/2005-5398/24 md.)
+  Rows: 17
+  Columns: 1
+  Confidence: 0.5294117647058824
+  Extraction method: regex
+
+Table 534:
+  Headers: Muhatap imza edecek kadar yazı bilmez veya herhangi bir sebeple imza edemeyecek
+  Rows: 21
+  Columns: 1
+  Confidence: 0.5238095238095238
+  Extraction method: regex
+
+Table 535:
+  Headers: 1. Vergi muameleleri ve incelemeleri ile uğraşan memurlar;
+  Rows: 23
+  Columns: 1
+  Confidence: 0.5217391304347826
+  Extraction method: regex
+
+Table 536:
+  Headers: Vergi mahremiyeti:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 537:
+  Headers: 30/7/2003 tarihli ve 4962 sayılı Kanunun 17 nci maddesiyle, bu fıkrada yer alan “Ayrca, kamu görevlilerince
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 538:
+  Headers: Beyanname verme ve ödeme sürelerinde yetki
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 539:
+  Headers: Mevzii tadilat kararı:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 540:
+  Headers: Araziye ait asgari ölçüde birim değer tespitinde takdir komisyonu, valinin başkanlığı
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 541:
+  Headers: Komisyonların görevleri:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 542:
+  Headers: b) 72 nci maddenin ikinci fıkrasına göre kurulan takdir komisyonu: 1319 sayılı Emlak
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 543:
+  Headers: Madde 92 – (Değişik: 23/6/1982-2686/17 md.)
+  Rows: 10
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 544:
+  Headers: Yabancı memlekette bulunanlara tebliğ:
+  Rows: 12
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 545:
+  Headers: Mükellef vergi borcunun vergi dairesinin bulunduğu belediye sınırlarının dışındaki
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 546:
+  Headers: Bu | bentte | öngörülen | gecikme | faizinin | 1/1/1986 | tarihinden | önceki | vergilendirme dönemlerine | ait | tarhlara
+  Rows: 2
+  Columns: 11
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 547:
+  Headers: 1. Varlıklarının en az üçte birini kaybeden mükelleflerin bu afetlerin zarar verdiği gelir
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 548:
+  Headers: Yeminli mali muşavirlik:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 549:
+  Headers: Bilgi vermekten imtina edememek:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 550:
+  Headers: 24/5/2013 tarihli ve 6487 sayılı Kanunun | 8 | inci maddesiyle bu bentte yer alan “giderlerine” ibaresinden
+  Rows: 2
+  Columns: 3
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 551:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 5 inci maddesi ile bu fıkranın birinci cümlesinde yer alan
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 552:
+  Headers: Serbest meslek erbabında işe başlamanın belirtileri:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 553:
+  Headers: İşletmede değişikliğin bildirilmesi:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 554:
+  Headers: 5. (Değişik: 30/12/1980-2365/23 | md.) Mükellefin hesap ve kayıtlarının yardımıyla
+  Rows: 2
+  Columns: 2
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 555:
+  Headers: 22/7/1998 tarih ve 4369 sayılı Kanunun 81 inci maddesiyle bu fıkranın 1 sayılı bendinde yer alan "muaf olan
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 556:
+  Headers: Envantere alınan kıymetleri değerleme:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 557:
+  Headers: Tüccarlar | bu | kayıtları | muhasebe | defterlerinde | tuttukları | hesaplarda | gösterebilirler.
+  Rows: 2
+  Columns: 8
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 558:
+  Headers: Bu fıkrada yer alan "Banka, banker ve sigorta şirketleri" ibaresi, 16/7/2004 tarihli ve 5228 sayılı Kanunun 59
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 559:
+  Headers: Özel defterler:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 560:
+  Headers: Yanlış kayıtların düzeltilmesi:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 561:
+  Headers: Tasdiki yenileme:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 562:
+  Headers: Tevsiki zaruri olmıyan kayıtlar:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 563:
+  Headers: 14/10/2021 tarihli ve 7338 sayılı Kanunun 22 nci maddesiyle bu fıkranın birinci cümlesinde yer alan “tasdik
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 564:
+  Headers: Müstahsil makbuzu:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 565:
+  Headers: Bu fıkrada yer alan "götürü usule tabi veya vergiden muaf çiftçilerden” ibaresi, 22/7/1998 tarih ve 4369 sayılı
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 566:
+  Headers: Bordro yerine geçen vesikalar:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 567:
+  Headers: Hüviyet tasdiki:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 568:
+  Headers: Doğruluk Sorumluluğu:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 569:
+  Headers: 2. Mükelleflere ve mükellef olmayanlara, muameleleri ile ilgili tahsilat ve ödemelerini
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 570:
+  Headers: (Ek fıkra: 16/7/2004-5228/8 md.) Birinci fıkranın (4) numaralı bendi uyarınca Maliye
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 571:
+  Headers: Değerlemenin tarifi:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 572:
+  Headers: İtibari değer:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 573:
+  Headers: İnşa ve imal giderleri:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 574:
+  Headers: borsa rayicinin muvazaalı bir şekilde oluştuğu anlaşılırsa değerlemeye | esas | bedel, | menkul
+  Rows: 4
+  Columns: 4
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 575:
+  Headers: Kasa mevcudu:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 576:
+  Headers: Serbest meslek erbabının tesisleri:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 577:
+  Headers: Bina ve arazi:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 578:
+  Headers: Tahmin esası:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 579:
+  Headers: Ancak | komisyonlarca | kira | mukavelelerinin | incelenmesi | sırasında | su | ve | elektrik
+  Rows: 2
+  Columns: 9
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 580:
+  Headers: İfraz ve şüyu:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 581:
+  Headers: Kıymet rayiçleri:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 582:
+  Headers: Arazide kira:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 583:
+  Headers: Bu bentte yer alan "amortisman oranı normal amortisman oranının iki katıdır." ibaresi, 16/7/2004 tarihli ve
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 584:
+  Headers: Menkul | ve | gayrimenkullerle | haklara, | mükelleflerin | müracaatları | üzerine | ve ilgili
+  Rows: 2
+  Columns: 8
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 585:
+  Headers: Şüpheli alacak sayılır.
+  Rows: 10
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 586:
+  Headers: İlk tesis ve taazzuv giderlerinin ve peştemallıkların itfası:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 587:
+  Headers: Emtia sigorta tazminatı:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 588:
+  Headers: Madde 331 – (Değişik: 30/12/1980-2365/58 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 589:
+  Headers: 1/7/2022 tarihli ve 7417 sayılı Kanunun 27 nci maddesiyle bu maddenin birinci fıkrasının;(1) ve (2) numaralı
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 590:
+  Headers: c) Damga vergisinde:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 591:
+  Headers: Bilgi | vermekten | çekinenler | ile | 107/A, 152/A, | 153/A, mükerrer | 242, | 256, 257,
+  Rows: 2
+  Columns: 8
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 592:
+  Headers: 14/10/2021 | tarihli ve 7338 sayılı Kanunun 41 inci maddesiyle bu madde başlığına “107/A,” ibaresinden
+  Rows: 2
+  Columns: 2
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 593:
+  Headers: 15/7/2016 | tarihli | ve | 6728 | sayılı | Kanunun | 21 | inci maddesiyle, | bu | maddenin | birinci | fıkrasında | yer | alan
+  Rows: 2
+  Columns: 14
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 594:
+  Headers: (Ek cümle:1/7/2022-7417/28 | md.) 152/A | maddesi | veya mükerrer 257 | nci | maddenin
+  Rows: 2
+  Columns: 6
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 595:
+  Headers: Cezayı gerektiren olayın tesbiti:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 596:
+  Headers: Madde 367 – (Değişik: 23/1/2008-5728/280 md.)
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 597:
+  Headers: Bu fıkra, 22/7/1998 tarih ve 4369 sayılı Kanunun 16 ncı maddesiyle eklenmiş, ancak 1/1/2003 | tarihinde
+  Rows: 2
+  Columns: 2
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 598:
+  Headers: No.’lu Tebliği | ile | 1/1/2025 tarihinden geçerli olmak üzere tespit edilen miktarlar metne parantez içinde siyah
+  Rows: 2
+  Columns: 3
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 599:
+  Headers: Vergi cezalarında yapılan hatalar:
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 600:
+  Headers: Mükellef tarafından, ikmalen, re'sen veya idarece tarh edilen vergilere ilişkin vergi
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 601:
+  Headers: 5/12/2019 tarihli ve 7194 sayılı Kanunun 28 inci maddesiyle, bu parantez içi hükümde yer alan “kesilen ceza
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 602:
+  Headers: cezalar | için | bu | bölüm | hükümleri | uygulanmaz. | Mükellefin | uzlaşma tutanağını
+  Rows: 2
+  Columns: 8
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 603:
+  Headers: Diğer hususlar:
+  Rows: 6
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 604:
+  Headers: Mükerrer Madde 378 – (Ek: 21/1/1983-2791/13 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 605:
+  Headers: Kanun | yolundan vazgeçilen vergi ve vergi ziyaı cezası için bu maddeye göre yapılan
+  Rows: 2
+  Columns: 2
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 606:
+  Headers: Amortismana tabi iktisadi kıymetlerin değerlenmesi:
+  Rows: 8
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 607:
+  Headers: Yukarıki fıkra hükmü, bu kanunun yürürlüğe girdiği tarihten önce kesilmiş olup da
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 608:
+  Headers: Geçici Madde 21 – (Ek: 22/7/1998-4369/20 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 609:
+  Headers: Bu maddenin yürürlüğe girdiği tarihten sonra, 17/4/1957 tarihli ve 6948 sayılı Sanayi
+  Rows: 20
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 610:
+  Headers: Geçici Madde 34- (Ek:8/4/2022-7394/6 md.)
+  Rows: 8
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 611:
+  Headers: Ek Geçici Madde 3 – (Ek: 30/12/1980-2365/97 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 612:
+  Headers: Ek Geçici Madde 12 – (Ek: 23/6/1982-2686/52 md.)
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 613:
+  Headers: 28/7/2024 tarihli ve 7524 sayılı Kanunun 10 | uncu maddesi ile Kanuna bağlı “Usulsüzlük Cezalarına Ait
+  Rows: 2
+  Columns: 2
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 614:
+  Headers: - 1.1.1990 tarihi itibariyle asıl addolunan miktarların % 20'sinin; yarısının 31.12.1990,
+  Rows: 2
+  Columns: 1
+  Confidence: 0.5
+  Extraction method: regex
+
+Table 615:
+  Headers: veya vergi sorumlusu ile gönderme işini yapacak kişiler arasında özel sözleşme düzenlenmek
+  Rows: 11
+  Columns: 1
+  Confidence: 0.45454545454545453
+  Extraction method: regex
+
+Table 616:
+  Headers: Kredilerin amaç dışı kullanılması, taahhüt edilen ihracatın gerçekleştirilmemesi veya
+  Rows: 11
+  Columns: 1
+  Confidence: 0.45454545454545453
+  Extraction method: regex
+
+Table 617:
+  Headers: teşekküllerce kendi üyeleri arasından veya hariçten seçilir. Bu teşekküller, Takdir Komisyonu
+  Rows: 7
+  Columns: 1
+  Confidence: 0.42857142857142855
+  Extraction method: regex
+
+Table 618:
+  Headers: Bu fıkrada yazılı tahsil süreleri Amme Alacaklarının Tahsil Usulü Hakkında Kanun
+  Rows: 7
+  Columns: 1
+  Confidence: 0.42857142857142855
+  Extraction method: regex
+
+Table 619:
+  Headers: Hesap hataları:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.42857142857142855
+  Extraction method: regex
+
+Table 620:
+  Headers: Karşılıklı anlaşma usulüne başvuru:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.42857142857142855
+  Extraction method: regex
+
+Table 621:
+  Headers: (Ek altıncı fıkra:14/10/2021-7338/13 md.) Gelir İdaresi Başkanlığının görev alanına
+  Rows: 10
+  Columns: 1
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 622:
+  Headers: Arsalara ait asgari ölçüde birim değer tespitinde takdir komisyonu; belediye başkanı
+  Rows: 5
+  Columns: 1
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 623:
+  Headers: Devamlı bilgi verme:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 624:
+  Headers: Uluslararası anlaşmalar gereğince bilgi değişimi:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 625:
+  Headers: Banka, banker ve sigorta şirketlerinin gider vergisine ait kayıtları:
+  Rows: 5
+  Columns: 1
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 626:
+  Headers: Vadesi | gelmemiş | olan | senede | bağlı | alacaklar | değerleme | gününün | kıymetine | irca
+  Rows: 5
+  Columns: 10
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 627:
+  Headers: 3239 sayılı Kanunun 144 uncu maddesi uyarınca söz konusu Kanunun; 213 sayılı Kanunun değiştirilmesine
+  Rows: 5
+  Columns: 1
+  Confidence: 0.4
+  Extraction method: regex
+
+Table 628:
+  Headers: döneme ilişkin normal vade tarihinden itibaren, mükellefin karşılıklı anlaşma sonucunu kabul
+  Rows: 8
+  Columns: 1
+  Confidence: 0.375
+  Extraction method: regex
+
+Table 629:
+  Headers: Muhasebe usulünü seçmekte serbestlik:
+  Rows: 11
+  Columns: 1
+  Confidence: 0.36363636363636365
+  Extraction method: regex
+
+Table 630:
+  Headers: Türkiye | Ticaret, | Sanayi, | Deniz | Ticaret | Odaları | ve | Ticaret | Borsaları | Birliği | bu
+  Rows: 6
+  Columns: 11
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 631:
+  Headers: Diğer tadilatın yapılması:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 632:
+  Headers: Madde 72 – (Değişik: 4/12/1985-3239/5 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 633:
+  Headers: iştirak | eder. | Ticaret | Odası | ve | mesleki | teşekkül | bulunmayan | yerlerde | bunlar | tarafından
+  Rows: 3
+  Columns: 11
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 634:
+  Headers: Madde | 90 – Komisyon | toplantılarında | her | hangi | bir | sebeple | olursa | olsun
+  Rows: 3
+  Columns: 9
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 635:
+  Headers: 3. | İlan ile | yapılan tebliğin konusu birmilyar ila | yüzmilyar lira arasındaki (24.000-
+  Rows: 3
+  Columns: 4
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 636:
+  Headers: 14/10/2021 tarihli | ve | 7338 | sayılı | Kanunun | 17 | nci | maddesiyle bu | maddenin | birinci | fıkrasında | yer alan
+  Rows: 3
+  Columns: 12
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 637:
+  Headers: (Ek | fıkra: | 23/7/2010-6009/9 | md.) 135 | inci | madde | ile | vergi | incelemesi | yapmaya
+  Rows: 12
+  Columns: 10
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 638:
+  Headers: Aramada bulunan defter ve vesikalar:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 639:
+  Headers: İstihbarat arşivi:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 640:
+  Headers: 28/7/2024 | tarihli | ve | 7524 | sayılı Kanunun 5 inci maddesi ile bu fıkrada yer | alan “ve düzenlenmiş
+  Rows: 3
+  Columns: 6
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 641:
+  Headers: Yazılı bildirme esası:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 642:
+  Headers: Envanter defteri ve bilanço günü:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 643:
+  Headers: Menkul ve gayrimenkul sermaye iradlarına ait kayıtlar:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 644:
+  Headers: Ücret bordrosu:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 645:
+  Headers: 4. (Değişik: 28/11/2017-7061/19 md.) Bu Kanunun 149 uncu maddesine göre devamlı
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 646:
+  Headers: (Ek fıkra:14/10/2021-7338/27 | md.) İktisadi kıymetin (emtia hariç) iktisap edilmesi
+  Rows: 3
+  Columns: 2
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 647:
+  Headers: Borsa rayici:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 648:
+  Headers: Ticari sermaye:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 649:
+  Headers: 5. | İktisadi | kıymetlerini | bu | fıkra | kapsamında | yeniden | değerlemeye | tabi | tutan
+  Rows: 15
+  Columns: 10
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 650:
+  Headers: 22/7/1998 | tarih ve 4369 sayılı Kanunun 81 inci maddesiyle, | bu | maddenin | birinci fıkrasında yer alan "...
+  Rows: 3
+  Columns: 5
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 651:
+  Headers: Madde 343 – (Değişik: 30/12/1980-2365/67 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 652:
+  Headers: Vergi mahremiyetinin ihlali:
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 653:
+  Headers: cezayı kabul
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 654:
+  Headers: (Değişik birinci fıkra: 11/8/1999-4444/7 | md.) Maliye Bakanlığı, vergi incelemesine
+  Rows: 3
+  Columns: 2
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 655:
+  Headers: kesilecek ceza ile bu fiillere iştirak
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 656:
+  Headers: Bu | madde | uyarınca istinaf ve temyiz yolundan vazgeçilen davaya ilişkin kararlarda
+  Rows: 3
+  Columns: 3
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 657:
+  Headers: Geçici Madde 19 – (Ek: 22/7/1998-4369/20 md.)
+  Rows: 3
+  Columns: 1
+  Confidence: 0.3333333333333333
+  Extraction method: regex
+
+Table 658:
+  Headers: Geçici Madde | 4 – Bu Kanunun yürürlüğe girdiği tarihte adlarına vergi ve ceza | tarh
+  Rows: 10
+  Columns: 3
+  Confidence: 0.3
+  Extraction method: regex
+
+Table 659:
+  Headers: Diğer vesikalar:
+  Rows: 7
+  Columns: 1
+  Confidence: 0.2857142857142857
+  Extraction method: regex
+
+Table 660:
+  Headers: a) 21/3/2018 | tarihli | ve | 7103 | sayılı | Kanunun | 93 | üncü | maddesi | uyarınca, | bu | madde yayım | tarihi | olan
+  Rows: 7
+  Columns: 14
+  Confidence: 0.2857142857142857
+  Extraction method: regex
+
+Table 661:
+  Headers: Mükerrer Madde 115 – (Ek: 4/12/1985-3239/10 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 662:
+  Headers: Ekim sayım beyanı:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 663:
+  Headers: Menkul kıymetler:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 664:
+  Headers: Madde | 291 – Bir | vergiye | matrah | olan | servetin | veya | servet | unsurlarının
+  Rows: 4
+  Columns: 9
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 665:
+  Headers: Madde 316 – İşletme sebebiyle içindeki cevherin azalmasından dolayı maddi değerini
+  Rows: 4
+  Columns: 1
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 666:
+  Headers: Amortisman nispetlerinin itibar tarihi:
+  Rows: 4
+  Columns: 1
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 667:
+  Headers: Bu | maddeye | kanunla | getirilen miktarlar aynen korunmuş olup, daha sonra 30/12/2024 tarihli | ve 32768 (2.
+  Rows: 4
+  Columns: 5
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 668:
+  Headers: Ek Geçici Madde 10 – (Ek: 23/6/1982-2686/52 md.)
+  Rows: 4
+  Columns: 1
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 669:
+  Headers: Bu | maddeye | kanunla | getirilen miktarlar aynen korunmuş olup, daha | sonra | 30/12/2024 tarihli | ve 32768 (2.
+  Rows: 4
+  Columns: 7
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 670:
+  Headers: lirayı | aşmayan | gecikme | zammı, | gecikme | faizi | ve | vergi cezalarının | % | 20'sinin; | yarısının
+  Rows: 4
+  Columns: 11
+  Confidence: 0.25
+  Extraction method: regex
+
+Table 671:
+  Headers: 8/4/2022 | tarihli | ve | 7394 | sayılı | Kanunun | 3 | üncü | maddesiyle | bu | fıkraya “usul | ve esasları | belirlemeye”
+  Rows: 5
+  Columns: 13
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 672:
+  Headers: Bu fıkrada yer alan 28/3/2013 tarihli ve 6455 sayılı Kanunun 1 inci maddesiyle düzenlenen miktar
+  Rows: 5
+  Columns: 1
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 673:
+  Headers: 14/10/2021 | tarihli | ve | 7338 | sayılı | Kanunun | 24 | üncü maddesiyle | bu | paragrafta yer | alan | “tutulması | ve
+  Rows: 5
+  Columns: 13
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 674:
+  Headers: 247 | nci | maddenin | 1 | inci | bendinde yazılı mükelleflerin doldurdukları karneyi vergi
+  Rows: 5
+  Columns: 6
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 675:
+  Headers: dönemi | sonu | itibarıyla | yasal | defter | kayıtlarında | yer | alan | değerleri | dikkate | alınır.
+  Rows: 20
+  Columns: 11
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 676:
+  Headers: Sürekli, | geçici | ve | merkezi | uzlaşma | komisyonlarının | teşkili, | uzlaşmaya | müracaat
+  Rows: 5
+  Columns: 9
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 677:
+  Headers: Vergilendirmenin | matrah | veya | vergi | farkları | itibarıyla | bölünebildiği | durumlarda
+  Rows: 10
+  Columns: 8
+  Confidence: 0.2
+  Extraction method: regex
+
+Table 678:
+  Headers: Temsilciler | veya | teşekkülü | idare | edenler | bu | suretle | ödedikleri | vergiler | için | asıl
+  Rows: 16
+  Columns: 11
+  Confidence: 0.1875
+  Extraction method: regex
+
+Table 679:
+  Headers: Madde | 142 – İhbar | veya | yapılan | incelemeler | dolayısiyle, | bir | mükellefin | vergi
+  Rows: 6
+  Columns: 9
+  Confidence: 0.16666666666666666
+  Extraction method: regex
+
+Table 680:
+  Headers: 9. (Ek: | 1/7/2022-7417/26 | md.) Tüzel kişiler ve tüzel kişiliği olmayan teşekküllerin
+  Rows: 19
+  Columns: 3
+  Confidence: 0.15789473684210525
+  Extraction method: regex
+
+Table 681:
+  Headers: Madde | 251 – Kazançları | basit | usulde | tesbit | edilen | ticaret | erbabı | ile götürü | gider
+  Rows: 13
+  Columns: 10
+  Confidence: 0.15384615384615385
+  Extraction method: regex
+
+Table 682:
+  Headers: d) | Nakil | vasıtalarını, | Maliye | ve | Gümrük | Bakanlığının | belirliyeceği | özel | işaretle
+  Rows: 14
+  Columns: 10
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 683:
+  Headers: sonucu | bulunacak | tutar | üzerinden | toplantı | ücreti | ödenir. | Bu | şekilde | ödenecek | toplantı
+  Rows: 7
+  Columns: 11
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 684:
+  Headers: Gayrimenkuller | ve | tesisat | gibi | amortismana | tabi | olan | kıymetler | işletme | hesabına
+  Rows: 7
+  Columns: 10
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 685:
+  Headers: ba) | Türk | para | birimiyle | yapılan | işlemler, | işlemin | gerçekleştiği | günün | Türkiye
+  Rows: 7
+  Columns: 10
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 686:
+  Headers: 4. (Değişik: 23/6/1982-2686/33 | md.) Bina | ve | arazinin | rayiç | bedelinin | tespitinde
+  Rows: 7
+  Columns: 7
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 687:
+  Headers: Ç) (Ek:14/10/2021-7338/31 | md.) Tam | mükellefiyete | tabi | ve | bilanço | esasına | göre
+  Rows: 14
+  Columns: 8
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 688:
+  Headers: (Ek fıkra: 16/6/2009-5904/22 | md.) | (Ek cümle:15/7/2016-6728/21 | md.) Elektronik
+  Rows: 7
+  Columns: 4
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 689:
+  Headers: kurum | ve | kuruluşlarına | elektronik | ortamda | iletilmesi | gereken | belge, | bilgi | veya | verilerin
+  Rows: 28
+  Columns: 11
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 690:
+  Headers: Mükellef, karşılıklı | anlaşmanın | sonucunu | kabul | ettiği | durumlar hariç | olmak
+  Rows: 7
+  Columns: 7
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 691:
+  Headers: Bu | maddede | yer | alan” Dileyen mükellefler, 2004 yılının (kendilerine özel hesap dönemi tayin edilenlerde
+  Rows: 7
+  Columns: 4
+  Confidence: 0.14285714285714285
+  Extraction method: regex
+
+Table 692:
+  Headers: Birinci | fıkrada | sayılanların | ortağı | oldukları | adi | ortaklıkların, | kanuni | temsilcisi,
+  Rows: 29
+  Columns: 9
+  Confidence: 0.13793103448275862
+  Extraction method: regex
+
+Table 693:
+  Headers: ve 2022 | hesap | dönemleri
+  Rows: 29
+  Columns: 3
+  Confidence: 0.13793103448275862
+  Extraction method: regex
+
+Table 694:
+  Headers: 5. | Vergi | kanunlarının | uygulanmasıyla ilgili | olarak levha | kullandırma | ve | asma
+  Rows: 22
+  Columns: 8
+  Confidence: 0.13636363636363635
+  Extraction method: regex
+
+Table 695:
+  Headers: (Ek | cümle: | 21/3/2018-7103/13 | md.) Bu | Kanunun
+  Rows: 15
+  Columns: 5
+  Confidence: 0.13333333333333333
+  Extraction method: regex
+
+Table 696:
+  Headers: kesilen | ceza | ile | bu | fiillere iştirak edenlere kesilen ceza ve 370 inci maddenin (b) fıkrası
+  Rows: 15
+  Columns: 5
+  Confidence: 0.13333333333333333
+  Extraction method: regex
+
+Table 697:
+  Headers: a) | Muamelelerin | işin | hacmine | ve | icabına | uygun | olarak | muhasebenin | intizam | ve
+  Rows: 8
+  Columns: 11
+  Confidence: 0.125
+  Extraction method: regex
+
+Table 698:
+  Headers: Birinci | fıkranın | (1) | ve | (2) | numaralı | bentlerinde | yazılı | bilinen | adreslerden | tarih
+  Rows: 9
+  Columns: 11
+  Confidence: 0.1111111111111111
+  Extraction method: regex
+
+Table 699:
+  Headers: (Değişik: | 23/6/1982-2686/35 | md.) Üçüncü | sıra: | (Takdir | esası) | Yukarıda | yazılı
+  Rows: 9
+  Columns: 8
+  Confidence: 0.1111111111111111
+  Extraction method: regex
+
+Table 700:
+  Headers: Madde | 140 – Vergi | incelemesi | yapanlar, | yaptıkları | inceleme | sırasında | aşağıdaki
+  Rows: 10
+  Columns: 8
+  Confidence: 0.1
+  Extraction method: regex
+
+Table 701:
+  Headers: Madde | 280 – (Değişik birinci fıkra: 26/6/1964-485/7 | md.) Yabancı paralar | borsa
+  Rows: 10
+  Columns: 4
+  Confidence: 0.1
+  Extraction method: regex
+
+Table 702:
+  Headers: yapıldığı dönemlerin | kazancı | ile | ilişkilendirilmeksizin, | bu | dönemde | vergiye | tabi | tutulur.
+  Rows: 10
+  Columns: 9
+  Confidence: 0.1
+  Extraction method: regex
+
+Table 703:
+  Headers: 9. | Hesap | dönemi | içinde | aktife | giren | iktisadi | kıymetler | için | aktife | girdiği | hesap
+  Rows: 20
+  Columns: 12
+  Confidence: 0.1
+  Extraction method: regex
+
+Table 704:
+  Headers: Madde | 313 – (Değişik birinci fıkra: 21/1/1983-2791/6 | md.) İşletmede bir yıldan
+  Rows: 10
+  Columns: 3
+  Confidence: 0.1
+  Extraction method: regex
+
+Table 705:
+  Headers: finansman | maliyeti, | ilgili varlığın maliyet veya alış bedelinden | düşülür. Mükelleflerin reel
+  Rows: 20
+  Columns: 4
+  Confidence: 0.1
+  Extraction method: regex
+
+Table 706:
+  Headers: uygulamasına | ilişkin | usul | ve | esasları | belirlemeye, | elektronik | ortamda tutulmasına,
+  Rows: 11
+  Columns: 8
+  Confidence: 0.09090909090909091
+  Extraction method: regex
+
+Table 707:
+  Headers: 359 | uncu | maddede | yazılı | suçların | işlendiğine | sair | suretlerle | ıttıla | hasıl | eden
+  Rows: 11
+  Columns: 11
+  Confidence: 0.09090909090909091
+  Extraction method: regex
+
+Table 708:
+  Headers: Geçici Madde | 1- 31.12.2003 | tarihi (kendilerine özel hesap dönemi tayin edilenlerde
+  Rows: 11
+  Columns: 3
+  Confidence: 0.09090909090909091
+  Extraction method: regex
+
+Table 709:
+  Headers: için hizmet verme | konusunda | yetkilendirilenler | ile sipariş, satış, muhasebe, stok takip ve
+  Rows: 25
+  Columns: 4
+  Confidence: 0.08
+  Extraction method: regex
+
+Table 710:
+  Headers: 1. (Değişik: | 1/5/1981-2455/6 | md.) Bu | cetvelde | mükellef | grubu: | Gelir, | Kurumlar
+  Rows: 13
+  Columns: 8
+  Confidence: 0.07692307692307693
+  Extraction method: regex
+
+Table 711:
+  Headers: gider | olarak kabul | edilmez. Beyanın zamanında yapılmaması ya | da | tahakkuk | eden | verginin
+  Rows: 32
+  Columns: 7
+  Confidence: 0.0625
+  Extraction method: regex
+
+Table 712:
+  Headers: Kiralayan | tarafından, finansal | kiralamaya konu | iktisadî | kıymetin | bu | maddenin (1)
+  Rows: 38
+  Columns: 7
+  Confidence: 0.05263157894736842
+  Extraction method: regex
+
+Table 713:
+  Headers: (Ek: | 26/6/1964-485/1 | md.; | Değişik: | 30/12/1980-2365/2 | md.) Gelir | Vergisi
+  Rows: 2
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 714:
+  Headers: (Ek: | 26/6/1964-485/1 | md.; | Değişik | altıncı | fıkra: | 23/1/2008-5728/272 | md.)
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 715:
+  Headers: 13/2/2011 | tarihli | ve | 6111 | sayılı | Kanunun | 82 | nci | maddesiyle, bu | fıkrada | yer | alan | “levhayı | merkezlerine,
+  Rows: 2
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 716:
+  Headers: (Ek: | 24/6/1994-4008/1 md.; Değişik: 25/5/1995-4108/1 | md.) Türkiye Cumhuriyeti
+  Rows: 4
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 717:
+  Headers: Madde | 20 – Verginin | tarhı, | vergi | alacağının | kanunlarında | gösterilen | matrah | ve
+  Rows: 2
+  Columns: 9
+  Confidence: 0
+  Extraction method: regex
+
+Table 718:
+  Headers: 2. (Değişik: | 23/6/1982-2686/10 | md.) Götürü | gider | emsali: | Büyük | ve | küçükbaş
+  Rows: 11
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 719:
+  Headers: (Değişik | altıncı | fkra: | 30/12/1980-2365/7 | md.) Ancak, | zirai | kazançlar | il
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 720:
+  Headers: Özellik | gösteren | ziraat nevilerinde | Maliye | ve | Tarım | Bakanlıklarınca | bu | zi | raat
+  Rows: 2
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 721:
+  Headers: Üyelerin seçilmesi:
+  Rows: 2
+  Columns: 1
+  Confidence: 0
+  Extraction method: regex
+
+Table 722:
+  Headers: c) | 72 | nci | maddenin | üçüncü | fıkrasına | göre | kurulan | takdir | komisyonu: | 1319 | sayılı
+  Rows: 3
+  Columns: 12
+  Confidence: 0
+  Extraction method: regex
+
+Table 723:
+  Headers: (b) ve (c) fıkralarına göre yapılacak değer tespitinde, | Emlak | Vergisi | Kanununun | 31
+  Rows: 2
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 724:
+  Headers: zimmet, | irtikâp, | rüşvet, | hırsızlık, | dolandırıcılık, | sahtecilik, | güveni | kötüye | kullanma, | hileli
+  Rows: 6
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 725:
+  Headers: Madde | 88 – Bu | kısımda | yazılı | komisyonlara | seçilen | üyeler | ve | tahrir | komisyonu
+  Rows: 6
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 726:
+  Headers: Bu | maddenin | (3) | numaralı | bendinin | “... | milli | savunmaya | karşı | suçlar, | devlet sırlarına | karşı | suçlar | ve
+  Rows: 2
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 727:
+  Headers: Bu | maddeye | kanunla | getirilen miktarlar aynen korunmuş olup, daha | sonra | 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 728:
+  Headers: 13/10/2022 | tarihli | ve 7418 | sayılı | Kanunun | 28 | inci | maddesiyle; bu bendin | birinci | cümlesine | “gazetede”
+  Rows: 2
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 729:
+  Headers: Bu fıkrada | yeralan | "Ücret | ve | kazançları | götürü | usulde | tespit | edilen | tüccar, | hizmet | ve | serbest | meslek
+  Rows: 2
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 730:
+  Headers: 1. | İkmalen, | re'sen | veya idarece | tarh | olunan | vergiler | taksit | zamanlarından | evvel
+  Rows: 8
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 731:
+  Headers: 6. (Ek: | 28/12/2001-4731/4 | md.) İhtirazi kayıtla beyan edilip ödendikten sonra yargı
+  Rows: 4
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 732:
+  Headers: Bu maddeye | kanunla | getirilen miktarlar aynen korunmuş olup, daha sonra 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 733:
+  Headers: c) | (Ek: | 4/12/1985-3239/11 | md.) İhbarname ve ödeme emri ilan yoluyla tebliğ edilen
+  Rows: 2
+  Columns: 4
+  Confidence: 0
+  Extraction method: regex
+
+Table 734:
+  Headers: 5. (Ek: | 23/7/2010-6009/9 | md.) Vergi | kanunlarıyla | ilgili | Cumhurbaşkanı | kararı,
+  Rows: 3
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 735:
+  Headers: 4/10/2021 | tarihli | ve | 7338 sayılı Kanunun 18 inci | maddesiyle bu fıkraya “çerçevesinde,” ibaresinden sonra
+  Rows: 2
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 736:
+  Headers: İrtibatları | sebebiyle | muhtelif | şahıslar | nezdinde ve | mahallerde | yapılmasına | lüzum
+  Rows: 5
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 737:
+  Headers: Aramada | bulunup | mükellef | nezdinde | emin bir | yere | konulmuş | veya | kablar | içinde
+  Rows: 4
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 738:
+  Headers: Bu | maddeye | kanunla | getirilen | miktarlar aynen korunmuş olup, daha sonra 30/12/2024 tarihli | ve
+  Rows: 4
+  Columns: 6
+  Confidence: 0
+  Extraction method: regex
+
+Table 739:
+  Headers: 3568 | sayılı | Kanun | kapsamında | faaliyette | bulunan | meslek mensuplarından | bu
+  Rows: 9
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 740:
+  Headers: ayrıca | mükelleften | mezkûr | fıkra | hükmünce | yeniden teminat | istenir. (Mülga
+  Rows: 22
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 741:
+  Headers: Madde | 171 – Mükellefler bu | kanuna | göre | tutacakları | defterleri | vergi | uygulaması
+  Rows: 5
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 742:
+  Headers: Bu | maddeye | kanunla | getirilen | miktarlar aynen korunmuş olup, daha sonra 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 743:
+  Headers: Şu kadar | ki, | ticari | teamüle | göre | tartılması, | sayılması | ve | ölçülmesi | mutat | olmıyan
+  Rows: 2
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 744:
+  Headers: (Ek: | 11/6/2003-4884/7 md.; Değişik: 15/2/2018-7099/2 | md.) Defterler | anonim | ve
+  Rows: 2
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 745:
+  Headers: (Ek: | 3/12/1988-3505/3 | md.) Maliye | ve | Gümrük | Bakanlığı, | düzenlenmesi | mecburi
+  Rows: 2
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 746:
+  Headers: (Ek: | 25/5/1995-4108/5 | md.) 233 Sayılı Kanun Hükmünde Kararname hükümlerine
+  Rows: 2
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 747:
+  Headers: 5. (Değişik: | 4/12/1985-3239/19 | md.) Satılan | malların | teslim | tarihi | ve | irsaliye
+  Rows: 12
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 748:
+  Headers: 6. (Ek: | 4/12/1985-3239/20 | md.) Bu Kanunun 232 nci maddesinin birinci fıkrasına
+  Rows: 2
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 749:
+  Headers: Bu | maddeye | kanunla | getirilen | miktarlar aynen korunmuş olup, daha sonra | 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 750:
+  Headers: a) | Malın | veya | hizmetin bedelinin, | dördüncü | fıkrada | belirtilen | süre | dâhilinde
+  Rows: 12
+  Columns: 9
+  Confidence: 0
+  Extraction method: regex
+
+Table 751:
+  Headers: Muhabere evrakı:
+  Rows: 3
+  Columns: 1
+  Confidence: 0
+  Extraction method: regex
+
+Table 752:
+  Headers: Bu maddede yeralan, "Zirai işletmeleri, Gelir | Vergisi | Kanununun 12 | nci | maddesine göre hasılat bildirimine
+  Rows: 2
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 753:
+  Headers: Adi | ortaklıklarda | beyanın | ortaklardan | biri | aile | reisi | beyanında | aile | rsisi | tarafından
+  Rows: 4
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 754:
+  Headers: Ekim | ve | sayım | beyanları | sözlü | veya | yazılı | olabilir. | Beyanlar, | beyanı | yapanlar
+  Rows: 5
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 755:
+  Headers: 22/7/1998 | tarihli ve | 4369 sayılı | Kanunun | 81 | inci | maddesiyle, bu | maddenin | birinci | fıkrasında yer | alan
+  Rows: 2
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 756:
+  Headers: Defter tutma mecburiyetinde olmıyanların muhafaza ödevi:
+  Rows: 2
+  Columns: 1
+  Confidence: 0
+  Extraction method: regex
+
+Table 757:
+  Headers: Bu | maddeye | kanunla | getirilen miktarlar | aynen | korunmuş olup, daha sonra 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 758:
+  Headers: 30/7/2003 | tarihli | ve | 4962 sayılı Kanunun 17 nci maddesiyle, bu fıkrada yer alan "banka veya
+  Rows: 2
+  Columns: 4
+  Confidence: 0
+  Extraction method: regex
+
+Table 759:
+  Headers: Bu | maddeye | kanunla | getirilen | miktarlar | aynen korunmuş olup, daha sonra 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 760:
+  Headers: ç) | İktisadi | kıymetin | stoklara | veya | envantere | alındığı | tarihe | kadarki | depolama | ve
+  Rows: 5
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 761:
+  Headers: Normal | temevvüçler | dışında fiyatlarda | bariz | kararsızlıklar | görülen | hallerde, | son
+  Rows: 2
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 762:
+  Headers: Madde 274 | – (Değişik: 17/12/2003-5024/1 md.)
+  Rows: 4
+  Columns: 2
+  Confidence: 0
+  Extraction method: regex
+
+Table 763:
+  Headers: Bu | maddede | yer | alan | kur | tespiti | ile | ilgili | olarak, 25/1/2018 | tarihli | ve | 30312 | sayılı Resmî | Gazete’de
+  Rows: 2
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 764:
+  Headers: Madde | 283 – Gelecek bir hesap dönemine ait olarak peşin ödenen | giderler | ile | cari
+  Rows: 4
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 765:
+  Headers: Madde | 288 – Hasıl olan veya | husulü beklenen fakat miktarı katiyetle kestirilemiyen
+  Rows: 4
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 766:
+  Headers: tutulması | sonucu | oluşan | farklar | ise | borcuna | kaydedilir. | Enflasyon | düzeltme | hesabının
+  Rows: 5
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 767:
+  Headers: 11/11/2017 | tarihli | ve | 30237 | sayılı | Resmi | Gazete’de | yayımlanan | Maliye | Bakanlığı | (Gelir | İdaresi
+  Rows: 3
+  Columns: 12
+  Confidence: 0
+  Extraction method: regex
+
+Table 768:
+  Headers: 28/11/2020 | tarihli ve | 31318 sayılı Resmî Gazete’de yayımlanan | Hazine | ve | Maliye | Bakanlığı (Gelir İdaresi
+  Rows: 4
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 769:
+  Headers: 27/11/2021 | tarihli | ve | 31672 sayılı Resmî Gazete’de yayımlanan Hazine ve Maliye Bakanlığı (Gelir İdaresi
+  Rows: 4
+  Columns: 4
+  Confidence: 0
+  Extraction method: regex
+
+Table 770:
+  Headers: 27/11/2024 tarihli | ve | 32735 sayılı Resmî Gazete’de yayımlanan | Hazine | ve | Maliye Bakanlığı (Gelir İdaresi
+  Rows: 3
+  Columns: 6
+  Confidence: 0
+  Extraction method: regex
+
+Table 771:
+  Headers: Madde 305 – A) | Belediye | teşkilatı | bulunan | yerlerde | belediye | sınırları | içindeki
+  Rows: 7
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 772:
+  Headers: Bu | maddeye | kanunla | getirilen | miktarlar | aynen korunmuş olup, | daha | sonra 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 773:
+  Headers: (Ek: | 30/12/1980-2365/54 | md.) Değeri | 50.000.000 (9.900 TL) lirayı | aşmayan
+  Rows: 3
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 774:
+  Headers: 1. | Tarım | işletmelerinde | vücuda | getirilen | meyvalık, | dutluk, | fındıklık, | zeytinlik | ve
+  Rows: 3
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 775:
+  Headers: 2. | Yeni | icatlar | dolayısiyle teknik verim ve kıymetleri düşerek tamamen veya kısmen
+  Rows: 2
+  Columns: 4
+  Confidence: 0
+  Extraction method: regex
+
+Table 776:
+  Headers: otomobillerinin | aktife | girdiği hesap dönemi için ay kesri tam ay sayılmak suretiyle kalan ay
+  Rows: 20
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 777:
+  Headers: Madde | 321 – Bu | bölüm | gereğince | hesaplanan | amortismanların, | hesaplarda | ayrıca
+  Rows: 2
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 778:
+  Headers: Bu | maddeye | kanunla getirilen | miktarlar aynen korunmuş olup, daha sonra 30/12/2024 tarihli | ve | 32768 (2.
+  Rows: 4
+  Columns: 6
+  Confidence: 0
+  Extraction method: regex
+
+Table 779:
+  Headers: Madde | 324 – Konkordato | veya | sulh | yoliyle | alınmasından | vazgeçilen | alacaklar,
+  Rows: 3
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 780:
+  Headers: c) Pasifte geçici bir hesapta tutulan tazminat fazlası, zarar gören iktisadi kıymetin
+  Rows: 2
+  Columns: 1
+  Confidence: 0
+  Extraction method: regex
+
+Table 781:
+  Headers: Bu | maddeye | kanunla | getirilen | miktarlar | aynen | korunmuş olup, daha sonra 30/12/2024 tarihli ve | 32768 (2.
+  Rows: 4
+  Columns: 8
+  Confidence: 0
+  Extraction method: regex
+
+Table 782:
+  Headers: "Kaçakçılık" | olan | birinci | bölüm | başlığı, | "Kaçakçılığın | tarifi:" olan | madde | kenar | başlığı ve | "Kaçakçılık
+  Rows: 3
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 783:
+  Headers: Usulsüzlükler, | aşağıda | yazılı | derecelere | ve | bu | kanuna bağlı | 1 | sayılı | cetvele göre
+  Rows: 6
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 784:
+  Headers: 3. | Defter kayıtlarının | ve | bunlarla | ilgili | vesikaların | doğru bir | vergi | incelemesi
+  Rows: 4
+  Columns: 9
+  Confidence: 0
+  Extraction method: regex
+
+Table 785:
+  Headers: Bu | maddede | yer | alan | miktarların 1/1/2025 tarihinden | itibaren | uygulanması | ile ilgili | olarak | 30/12/2024
+  Rows: 2
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 786:
+  Headers: 28/7/2024 | tarihli | ve | 7524 | sayılı | Kanunun | 10 | uncu | maddesi ile bu | maddenin birinci | fıkrasının | birinci
+  Rows: 2
+  Columns: 12
+  Confidence: 0
+  Extraction method: regex
+
+Table 787:
+  Headers: 6. | Tasdiki | mecburi | olan | defterlerden herhangi birinin tasdik muamelesinin, süresinin
+  Rows: 6
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 788:
+  Headers: Bu | maddeye | kanunla getirilen miktarlar aynen korunmuş olup, daha sonra | 30/12/2024 tarihli | ve 32768 (2.
+  Rows: 4
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 789:
+  Headers: Bu | madde | başlığı “d) | Bilgi | vermekten | çekinenler | ile | 257 | nci | madde | hükmüne | uymayanlar | için:” | iken
+  Rows: 3
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 790:
+  Headers: Bu | Kanunun | 86,148,149,150, mükerrer 242, 256 ve 257 nci maddelerinde | yer alan
+  Rows: 3
+  Columns: 4
+  Confidence: 0
+  Extraction method: regex
+
+Table 791:
+  Headers: 28/7/2024 | tarihli ve 7524 sayılı Kanunun 13 üncü maddesi | ile | bu madde başlığına “107/A,” ibaresinden
+  Rows: 8
+  Columns: 4
+  Confidence: 0
+  Extraction method: regex
+
+Table 792:
+  Headers: (Ek | fıkra:28/7/2024-7524/13 | md.) 23/2/2006 tarihli ve 5464 sayılı Banka Kartları ve
+  Rows: 2
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 793:
+  Headers: (Ek fıkra: 16/6/2009-5904/22 | md.) Elektronik | ortamda beyanname | ile | bildirim | ve
+  Rows: 12
+  Columns: 6
+  Confidence: 0
+  Extraction method: regex
+
+Table 794:
+  Headers: 23/7/2010 | tarihli ve | 6009 sayılı Kanunun 12 nci maddesiyle, bu maddenin beşinci fıkrasında yer alan “15
+  Rows: 2
+  Columns: 3
+  Confidence: 0
+  Extraction method: regex
+
+Table 795:
+  Headers: Bu | bölüm | başlığı | "Dördüncü | Bölüm" | ve | "ceza | mahkemelerince yargılanacak | Suçlar | ve | Cezaları" | iken,
+  Rows: 3
+  Columns: 12
+  Confidence: 0
+  Extraction method: regex
+
+Table 796:
+  Headers: 2. | Cezaya | karşı | dava | açılmışsa, | vergi | mahkemesi | kararı | üzerine | vergi | dairesince
+  Rows: 3
+  Columns: 11
+  Confidence: 0
+  Extraction method: regex
+
+Table 797:
+  Headers: 14/10/2021 tarihli | ve | 7338 | sayılı | Kanunun | 42 | nci | maddesiyle | bu | bentte | yer alan | “her | hangi | bir | vergi
+  Rows: 2
+  Columns: 15
+  Confidence: 0
+  Extraction method: regex
+
+Table 798:
+  Headers: Bu | maddeye | kanunla | getirilen miktarlar aynen korunmuş olup, | daha | sonra 30/12/2024 tarihli | ve
+  Rows: 4
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 799:
+  Headers: ceza | için | uzlaşma | talebinden | önce | dava
+  Rows: 4
+  Columns: 6
+  Confidence: 0
+  Extraction method: regex
+
+Table 800:
+  Headers: Tarhiyattan | önce | uzlaşmaya | varılması | halinde | tutanakla | tespit | edilen | bu | husus
+  Rows: 4
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 801:
+  Headers: 28/7/2024 | tarihli | ve | 7524 | sayılı | Kanunun | 14 | üncü | maddesi | ile | bu | maddenin birinci | fıkrasının | birinci
+  Rows: 3
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 802:
+  Headers: 21/3/2018 | tarihli | ve | 7103 | sayılı | Kanunun | 15 | inci | maddesiyle | bu | fıkrada | yer | alan | “vergilerle kesilecek
+  Rows: 3
+  Columns: 14
+  Confidence: 0
+  Extraction method: regex
+
+Table 803:
+  Headers: 14/10/2021 | tarihli | ve | 7338 | sayılı | Kanunun | 45 | inci | maddesiyle | bu | fıkrada | yer | alan | “ile | bunlara | ilişkin
+  Rows: 2
+  Columns: 16
+  Confidence: 0
+  Extraction method: regex
+
+Table 804:
+  Headers: Karşılıklı | anlaşma | sonucuna | göre | Türkiye’de | düzeltme | yapılmasının gerekmesi
+  Rows: 3
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 805:
+  Headers: Bu | maddeye | kanunla | getirilen miktarlar aynen korunmuş olup, daha | sonra 30/12/2024 tarihli | ve 32768 (2.
+  Rows: 4
+  Columns: 6
+  Confidence: 0
+  Extraction method: regex
+
+Table 806:
+  Headers: Özel kanunlardaki hükümlerin saklı olduğu:
+  Rows: 2
+  Columns: 1
+  Confidence: 0
+  Extraction method: regex
+
+Table 807:
+  Headers: Geçici | Madde | 3 – Kanunun | ilk | uygulama | yılında, vergiye | tabi | çiftçilerin | zirai
+  Rows: 3
+  Columns: 9
+  Confidence: 0
+  Extraction method: regex
+
+Table 808:
+  Headers: 22/7/1998 tarih ve 4369 sayılı Kanununun | 81 | inci | maddesiyle | bu | maddede yeralan "götürü usulden | (Zirai
+  Rows: 2
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 809:
+  Headers: 1/1/1999 | tarihi | ile | bu | maddenin | yürürlüğe | girdiği | tarih | arasındaki | vergilendirme
+  Rows: 4
+  Columns: 10
+  Confidence: 0
+  Extraction method: regex
+
+Table 810:
+  Headers: 24/10/2024 | tarihli | ve | 7529 sayılı Kanunun 12 | nci maddesi ile bu fıkranın birinci cümlesinde yer alan “ile
+  Rows: 4
+  Columns: 5
+  Confidence: 0
+  Extraction method: regex
+
+Table 811:
+  Headers: Anayasa | Mahkemesinin | 28/9/2022 | tarihli | ve | E: | 2022/59, | K: | 2022/111 sayılı Kararı ile bu cümle; birinci
+  Rows: 2
+  Columns: 9
+  Confidence: 0
+  Extraction method: regex
+
+Table 812:
+  Headers: Bu konuda | ihtilaf yaratılmaması | ve | yaratılmış | ihtilaflardan | vazgeçilmesi | halinde
+  Rows: 4
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+Table 813:
+  Headers: Geçici Madde | 1 – 1/1/1999 | tarihinden | önceki | vergilendirme | dönemleri için | 6183
+  Rows: 8
+  Columns: 7
+  Confidence: 0
+  Extraction method: regex
+
+--- LEGAL-SPECIFIC FIELDS ---
+Kanun No: N/A
+Mevzuat Türü: N/A
+Yürürlük Tarihi: N/A
+Madde Sayısı: 0
+Yetkili Kurum: N/A
+
+--- İLK 5 MADDE ---
+Maddeler bulunamadı
+
+--- DEĞİŞİKLİKLER ---
+Değişiklikler bulunamadı
+
+--- YAPTIRIMLAR ---
+Yaptırımlar bulunamadı
+
+--- KEY ENTITIES ---
+People: [
+  'Kanun Numaras',
+  'Kabul Tarihi',
+  'Vergi Kanunlar',
+  'Bu Kanunda',
+  'Vergi Kanunu'
+]
+Organizations: []
+Locations: []
+Dates: [ '4/1/1961', '10/1/1961', '11/1/1961', '12/1/1961', '23/1/2008' ]
+
+--- SUMMARY ---
+Document: 3317. Author: Mevzuat Bilgi Sistemi
+
+=== TEST COMPLETED ===

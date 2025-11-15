@@ -127,56 +127,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     initAuth();
 
-    // Check focus event in both development and production for proper authentication
-    if (typeof window !== 'undefined') {
-      const handleFocus = () => {
-        // Check multiple token storage locations
-        const currentToken = localStorage.getItem('token') || localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-        const currentUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-
-        console.log('[AuthProvider] Focus event - Token:', !!currentToken, 'User:', !!currentUser);
-
-        if (!currentToken || !currentUser) {
-          // If either token or user is missing, clear auth state
-          console.log('[AuthProvider] Missing token or user, clearing auth state');
-          setToken(null);
-          setUser(null);
-        } else {
-          // Token'ın expired olup olmadığını kontrol et
-          try {
-            const parsedUser = JSON.parse(currentUser);
-            const tokenPayload = JSON.parse(atob(currentToken.split('.')[1]));
-            const isExpired = tokenPayload.exp * 1000 < Date.now();
-
-            if (isExpired) {
-              console.log('[AuthProvider] Token expired, clearing auth state');
-              setToken(null);
-              setUser(null);
-              localStorage.removeItem('token');
-              localStorage.removeItem('accessToken');
-              localStorage.removeItem('user');
-              sessionStorage.removeItem('accessToken');
-              sessionStorage.removeItem('user');
-            } else {
-              console.log('[AuthProvider] Updating auth state from storage');
-              setToken(currentToken);
-              setUser(parsedUser);
-            }
-          } catch (error) {
-            console.error('Failed to parse user or token on focus:', error);
-            setToken(null);
-            setUser(null);
-          }
-        }
-      };
-
-      window.addEventListener('focus', handleFocus);
-      return () => {
-        window.removeEventListener('focus', handleFocus);
-      };
-    }
-
-    return () => {};
+    // REMOVED: Aggressive focus handler that was causing logout loops
+    // The token persistence is already handled by the initial auth check
+    // and storage event listeners above
   }, []);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -207,11 +160,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       sessionStorage.setItem('accessToken', data.accessToken);
       sessionStorage.setItem('user', JSON.stringify(data.user));
 
-      // Also set token in cookie with 30 days expiration
-      document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
+      // Set token in cookie with proper flags for Next.js middleware
+      // Use 7 days to match backend token expiration
+      const isProduction = window.location.protocol === 'https:';
+      const secureFlag = isProduction ? '; Secure' : '';
+      document.cookie = `auth-token=${data.accessToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax${secureFlag}`;
 
       setToken(data.accessToken);
       setUser(data.user);
+
+      // Force a page reload after successful login to ensure middleware picks up the cookie
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 100);
 
       return { success: true };
     } catch (error) {

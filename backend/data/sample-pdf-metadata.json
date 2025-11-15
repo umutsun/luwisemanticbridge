@@ -1,0 +1,43 @@
+{
+  "summary": "Bu bir örnek PDF dokümanıdır. Yapay zeka ve teknoloji üzerine içerik barındırır.",
+  "category": "Technology",
+  "language": "tr",
+  "keywords": ["yapay zeka", "teknoloji", "inovasyon", "AI", "makine öğrenmesi"],
+  "topics": ["AI", "Machine Learning", "Innovation", "Technology Trends"],
+  "statistics": {
+    "pageCount": 15,
+    "wordCount": 3250,
+    "paragraphCount": 42,
+    "imageCount": 8,
+    "tableCount": 3,
+    "averageWordsPerParagraph": 77.4
+  },
+  "structure": {
+    "hasTableOfContents": true,
+    "hasChapters": true,
+    "hasSections": true,
+    "hasIndex": false,
+    "hasBibliography": true,
+    "tocEntries": 8,
+    "chapterCount": 4
+  },
+  "contentAnalysis": {
+    "readabilityScore": 0.75,
+    "sentiment": "neutral",
+    "complexity": "medium",
+    "estimatedReadingTime": 13,
+    "hasFormulas": true,
+    "hasCodeBlocks": false,
+    "mainTheme": "Artificial Intelligence"
+  },
+  "entities": {
+    "people": ["Dr. John Doe", "Jane Smith"],
+    "organizations": ["Tech Corp", "AI Institute"],
+    "locations": ["San Francisco", "New York"],
+    "dates": ["2024-01-15", "2024-03-20"],
+    "money": ["$1.5M", "$250K"],
+    "products": ["AI Model X", "Neural Network Pro"]
+  },
+  "documentType": "research",
+  "lastModified": "2024-11-10T14:30:00Z"
+}

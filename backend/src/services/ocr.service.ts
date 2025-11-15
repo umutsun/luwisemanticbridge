@@ -10,7 +10,7 @@ const loadPdfPoppler = async () => {
     try {
       pdfPoppler = await import('pdf-poppler');
     } catch (error) {
-      console.warn('⚠️ pdf-poppler could not be loaded. PDF OCR will not work.', error.message);
+      console.warn('️ pdf-poppler could not be loaded. PDF OCR will not work.', error.message);
       throw new Error('PDF OCR is not available on this system');
     }
   }

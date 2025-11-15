@@ -81,6 +81,13 @@ interface CrawledItem {
   scrapedAt: string | null;
   title: string;
   url: string | null;
+  metadata?: {
+    analysis?: {
+      template?: 'web_page' | 'legal' | 'novel' | 'research' | 'invoice' | 'contract' | 'general';
+      [key: string]: any;
+    };
+  };
+  analyzeStatus?: 'waiting' | 'analyzed' | 'transformed';
 }
 
 interface SourceTable {
@@ -111,6 +118,28 @@ interface Stats {
 }
 
 type WorkflowStep = 'select-source' | 'preview-data' | 'select-target' | 'mapping' | 'import';
+
+// Helper functions for analyze status
+const getAnalyzeStatus = (item: CrawledItem): 'waiting' | 'analyzed' | 'transformed' => {
+  if (item.metadata?.analysis && Object.keys(item.metadata.analysis).length > 0) {
+    return item.analyzeStatus || 'analyzed';
+  }
+  return 'waiting';
+};
+
+const getAnalyzeTemplate = (item: CrawledItem): string => {
+  const template = item.metadata?.analysis?.template;
+  const templateNames: Record<string, string> = {
+    web_page: 'Web Page',
+    legal: 'Legal',
+    novel: 'Novel',
+    research: 'Research',
+    invoice: 'Invoice',
+    contract: 'Contract',
+    general: 'General'
+  };
+  return template ? templateNames[template] || template : '';
+};
 
 export default function CrawlerDataPage() {
   const { toast } = useToast();
@@ -167,6 +196,15 @@ export default function CrawlerDataPage() {
   const [scriptUrls, setScriptUrls] = useState<Map<string, string>>(new Map()); // directory -> URL
   const [crawlerStates, setCrawlerStates] = useState<Map<string, any>>(new Map()); // directory -> state.json
   const [recrawlingItems, setRecrawlingItems] = useState<Set<string>>(new Set()); // URL being recrawled
+  const [selectedForRecrawl, setSelectedForRecrawl] = useState<Set<string>>(new Set()); // Selected item IDs for bulk recrawl
+  const [bulkRecrawling, setBulkRecrawling] = useState(false); // Bulk recrawl in progress
+
+  // Analyze functionality
+  const [selectedForAnalyze, setSelectedForAnalyze] = useState<Set<string>>(new Set()); // Selected item IDs for batch analyze
+  const [analyzingItems, setAnalyzingItems] = useState<Set<string>>(new Set()); // Items currently being analyzed
+  const [selectedAnalyzeTemplate, setSelectedAnalyzeTemplate] = useState<string>('web_page'); // Default template for web pages
+  const [analysisTemplates, setAnalysisTemplates] = useState<any[]>([]);
+  const [batchAnalyzing, setBatchAnalyzing] = useState(false); // Batch analyze in progress
 
   // Inline new source editing
   const [isAddingNewSource, setIsAddingNewSource] = useState(false);
@@ -185,6 +223,7 @@ export default function CrawlerDataPage() {
   useEffect(() => {
     fetchDirectories();
     fetchSourceTables();
+    fetchAnalysisTemplates();
   }, []);
 
   // Debug: Track isAddingNewSource state changes
@@ -426,6 +465,17 @@ export default function CrawlerDataPage() {
       setSourceTables(data.tables || []);
     } catch (error: any) {
       console.error('Failed to fetch source tables:', error);
+    }
+  };
+
+  const fetchAnalysisTemplates = async () => {
+    try {
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/pdf/analysis-templates`);
+      if (!response.ok) throw new Error('Failed to fetch analysis templates');
+      const data = await response.json();
+      setAnalysisTemplates(data.templates || []);
+    } catch (error: any) {
+      console.error('Failed to fetch analysis templates:', error);
     }
   };
 
@@ -1215,6 +1265,180 @@ export default function CrawlerDataPage() {
     }
   };
 
+  const handleBulkRecrawl = async () => {
+    if (!selectedDirectory || selectedForRecrawl.size === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select items to recrawl',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Get URLs from selected items
+    const selectedItems = filteredItems.filter(item => selectedForRecrawl.has(item.id));
+    const urls = selectedItems.map(item => item.url).filter(url => url !== null) as string[];
+
+    if (urls.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'No valid URLs found in selected items',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setBulkRecrawling(true);
+
+      console.log(`🔄 [Bulk Recrawl] Starting bulk recrawl for ${urls.length} URLs...`);
+      console.log('📁 Crawler:', selectedDirectory.name);
+
+      const response = await fetchWithAuth(
+        `http://localhost:8002/api/python/crawl/recrawl`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            crawler_name: selectedDirectory.name,
+            urls: urls
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to queue URLs for recrawl');
+      }
+
+      const result = await response.json();
+      console.log('✅ Bulk recrawl queued:', result);
+
+      // Build toast message
+      const message = `${result.added_count} URLs queued, ${result.already_queued_count} already queued. Queue size: ${result.queue_size}`;
+
+      toast({
+        title: 'Bulk Recrawl Started',
+        description: message,
+        variant: 'default'
+      });
+
+      // Clear selection after successful bulk recrawl
+      setSelectedForRecrawl(new Set());
+
+    } catch (error: any) {
+      console.error('❌ [Bulk Recrawl] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to queue URLs for bulk recrawl',
+        variant: 'destructive'
+      });
+    } finally {
+      setBulkRecrawling(false);
+    }
+  };
+
+  const handleBatchAnalyze = async () => {
+    if (selectedForAnalyze.size === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select items to analyze',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!selectedAnalyzeTemplate) {
+      toast({
+        title: 'Error',
+        description: 'Please select an analysis template',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setBatchAnalyzing(true);
+      const selectedItems = filteredItems.filter(item => selectedForAnalyze.has(item.id));
+
+      console.log(`🧠 [Batch Analyze] Starting analysis for ${selectedItems.length} items...`);
+      console.log('📋 Template:', selectedAnalyzeTemplate);
+
+      // Get the full template object
+      const template = analysisTemplates.find(t => t.id === selectedAnalyzeTemplate);
+
+      // Analyze each item sequentially
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const item of selectedItems) {
+        try {
+          setAnalyzingItems(prev => new Set(prev).add(item.id));
+
+          const response = await fetchWithAuth(
+            `${config.api.baseUrl}/api/v2/crawler/analyze`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                itemId: item.id,
+                crawlerName: item.crawlerName,
+                template: template,
+                content: item.rawData || JSON.stringify(item.data)
+              })
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to analyze item ${item.id}`);
+          }
+
+          const result = await response.json();
+
+          // Update item in local state with metadata
+          setCrawledItems(prev =>
+            prev.map(i =>
+              i.id === item.id
+                ? { ...i, metadata: result.metadata, analyzeStatus: 'analyzed' }
+                : i
+            )
+          );
+
+          successCount++;
+        } catch (error: any) {
+          console.error(`Failed to analyze item ${item.id}:`, error);
+          errorCount++;
+        } finally {
+          setAnalyzingItems(prev => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        }
+      }
+
+      toast({
+        title: 'Batch Analysis Complete',
+        description: `Successfully analyzed ${successCount} items${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+        variant: successCount > 0 ? 'default' : 'destructive'
+      });
+
+      // Clear selection after successful analysis
+      setSelectedForAnalyze(new Set());
+
+    } catch (error: any) {
+      console.error('❌ [Batch Analyze] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to analyze items',
+        variant: 'destructive'
+      });
+    } finally {
+      setBatchAnalyzing(false);
+      setAnalyzingItems(new Set());
+    }
+  };
+
   const handleImport = async () => {
     setImporting(true);
     setImportProgress(0);
@@ -1832,34 +2056,99 @@ export default function CrawlerDataPage() {
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle>Preview Data - {selectedDirectory.displayName}</CardTitle>
-                          <CardDescription>
-                            View, edit and manage crawler data ({crawledItems.length} of {totalItemsCount} loaded)
+                        <div className="flex items-baseline gap-4">
+                          <CardTitle>{selectedDirectory.displayName}</CardTitle>
+                          <CardDescription className="text-xs">
+                            {crawledItems.length} of {totalItemsCount} loaded
                           </CardDescription>
                         </div>
                         <Button
                           onClick={handleRefresh}
                           disabled={isRefreshing || itemsLoading}
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="flex-shrink-0"
                         >
-                          <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                         </Button>
                       </div>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <Search className="w-4 h-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Search items..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="flex-1"
-                          />
+                        {/* Unified Controls */}
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900/30 rounded-lg border">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="select-all"
+                              checked={selectedForRecrawl.size === filteredItems.length && filteredItems.length > 0}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedForRecrawl(new Set(filteredItems.map(item => item.id)));
+                                  setSelectedForAnalyze(new Set(filteredItems.map(item => item.id)));
+                                } else {
+                                  setSelectedForRecrawl(new Set());
+                                  setSelectedForAnalyze(new Set());
+                                }
+                              }}
+                            />
+                            <Label htmlFor="select-all" className="text-sm cursor-pointer">
+                              {Math.max(selectedForRecrawl.size, selectedForAnalyze.size)}/{filteredItems.length}
+                            </Label>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-1">
+                            <Search className="w-4 h-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="h-8 max-w-xs"
+                            />
+                          </div>
+
+                          {/* Template Selector */}
+                          <Select value={selectedAnalyzeTemplate} onValueChange={setSelectedAnalyzeTemplate}>
+                            <SelectTrigger className="w-[180px] h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {analysisTemplates.map(template => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          <div className="flex gap-2">
+                            {selectedForAnalyze.size > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleBatchAnalyze}
+                                disabled={batchAnalyzing}
+                              >
+                                {batchAnalyzing ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <>Analyze ({selectedForAnalyze.size})</>
+                                )}
+                              </Button>
+                            )}
+                            {selectedForRecrawl.size > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleBulkRecrawl}
+                                disabled={bulkRecrawling}
+                              >
+                                {bulkRecrawling ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <>Recrawl ({selectedForRecrawl.size})</>
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </div>
 
                         <div className="border rounded-lg overflow-x-auto">
@@ -1878,6 +2167,38 @@ export default function CrawlerDataPage() {
                                     key={item.id}
                                     className="p-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors"
                                   >
+                                    {/* Checkbox for recrawl */}
+                                    <Checkbox
+                                      checked={selectedForRecrawl.has(item.id)}
+                                      onCheckedChange={(checked) => {
+                                        const newSelected = new Set(selectedForRecrawl);
+                                        if (checked) {
+                                          newSelected.add(item.id);
+                                        } else {
+                                          newSelected.delete(item.id);
+                                        }
+                                        setSelectedForRecrawl(newSelected);
+                                      }}
+                                      className="flex-shrink-0"
+                                      title="Select for recrawl"
+                                    />
+
+                                    {/* Checkbox for analyze */}
+                                    <Checkbox
+                                      checked={selectedForAnalyze.has(item.id)}
+                                      onCheckedChange={(checked) => {
+                                        const newSelected = new Set(selectedForAnalyze);
+                                        if (checked) {
+                                          newSelected.add(item.id);
+                                        } else {
+                                          newSelected.delete(item.id);
+                                        }
+                                        setSelectedForAnalyze(newSelected);
+                                      }}
+                                      className="flex-shrink-0 border-blue-500 data-[state=checked]:bg-blue-600"
+                                      title="Select for analysis"
+                                    />
+
                                     {/* Action icons on the left */}
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                       <Button
@@ -1923,6 +2244,41 @@ export default function CrawlerDataPage() {
                                     <div className="flex-1 min-w-0">
                                       <p className="font-medium text-sm truncate">{item.title}</p>
                                       <p className="text-xs text-muted-foreground truncate">{item.url || item.key}</p>
+                                    </div>
+
+                                    {/* Analyze Status */}
+                                    <div className="flex flex-col gap-1 items-end flex-shrink-0">
+                                      {analyzingItems.has(item.id) ? (
+                                        <Badge variant="secondary" className="text-xs">
+                                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                          Analyzing
+                                        </Badge>
+                                      ) : (
+                                        (() => {
+                                          const status = getAnalyzeStatus(item);
+                                          const template = getAnalyzeTemplate(item);
+                                          return (
+                                            <>
+                                              <Badge
+                                                variant={
+                                                  status === 'analyzed' ? 'default' :
+                                                  status === 'transformed' ? 'default' : 'secondary'
+                                                }
+                                                className={
+                                                  status === 'analyzed' ? 'bg-blue-600' :
+                                                  status === 'transformed' ? 'bg-green-600' : ''
+                                                }
+                                              >
+                                                {status === 'waiting' ? 'Waiting' :
+                                                 status === 'analyzed' ? 'Analyzed' : 'Transformed'}
+                                              </Badge>
+                                              {template && (
+                                                <span className="text-xs text-muted-foreground">{template}</span>
+                                              )}
+                                            </>
+                                          );
+                                        })()
+                                      )}
                                     </div>
                                   </div>
                                 ))}

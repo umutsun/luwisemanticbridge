@@ -29,6 +29,7 @@ import {
   Globe
 } from 'lucide-react';
 import Translator from '@/components/ui/translator';
+import PDFBatchTab from '@/components/PDFBatchTab';
 
 interface OperationProgress {
   status: 'idle' | 'processing' | 'completed' | 'error' | 'paused';
@@ -388,20 +389,22 @@ export default function DocumentOperations({
       <CardContent className="space-y-6">
         {/* Operation Tabs */}
         <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="ocr" className="flex items-center gap-2">
-              <Eye className="h-4 w-4" />
-              OCR Processing
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="batch">
+              Transform
             </TabsTrigger>
-            <TabsTrigger value="translate" className="flex items-center gap-2">
-              <Languages className="h-4 w-4" />
-              Translate
-            </TabsTrigger>
-            <TabsTrigger value="embedding" className="flex items-center gap-2">
-              <Brain className="h-4 w-4" />
-              Embeddings
+            <TabsTrigger value="ocr">
+              OCR
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="batch" className="space-y-4 mt-4">
+            <PDFBatchTab
+              selectedDocuments={selectedDocuments}
+              allDocuments={allDocuments}
+              onComplete={onOperationComplete}
+            />
+          </TabsContent>
 
           <TabsContent value="ocr" className="space-y-4 mt-4">
             <div className="space-y-4">

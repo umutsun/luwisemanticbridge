@@ -68,7 +68,7 @@ export class SemanticSearchService {
       `);
 
       if (result.rows.length === 0) {
-        console.warn('⚠️ [SemanticSearch] WARNING: No vector index found on unified_embeddings!');
+        console.warn('️ [SemanticSearch] WARNING: No vector index found on unified_embeddings!');
         console.warn('   Performance will be significantly degraded (100x slower)');
         console.warn('   Run: backend/scripts/QUICK-FIX.sql to create index');
       } else {
@@ -83,7 +83,7 @@ export class SemanticSearchService {
           : indexType === 'IVFFlat' ? '5-10x faster'
           : 'Unknown';
 
-        console.log(`✅ [SemanticSearch] Vector index active: ${indexType} (${performance})`);
+        console.log(` [SemanticSearch] Vector index active: ${indexType} (${performance})`);
         console.log(`   Index: ${index.indexname}, Size: ${index.index_size}`);
       }
     } catch (error) {
@@ -575,7 +575,7 @@ export class SemanticSearchService {
       return embedding;
     } catch (error) {
       console.error('[SemanticSearch] Embedding generation failed:', error);
-      console.log('[SemanticSearch] ⚠️ CRITICAL: Embedding generation failed - will fall back to keyword search');
+      console.log('[SemanticSearch] ️ CRITICAL: Embedding generation failed - will fall back to keyword search');
       // IMPORTANT: Do NOT use mock embeddings - they produce misleading low similarity scores (10-15%)
       // Instead, throw the error so semanticSearch() can fall back to keyword search
       throw new Error(`Embedding generation failed: ${error.message}`);
@@ -1054,7 +1054,7 @@ export class SemanticSearchService {
         source.summary = summaries[index];
       });
 
-      console.log(`[SemanticSearch] ✅ Generated summaries for all ${sources.length} sources`);
+      console.log(`[SemanticSearch]  Generated summaries for all ${sources.length} sources`);
 
       return sources;
     } catch (error) {
@@ -1062,11 +1062,11 @@ export class SemanticSearchService {
         console.timeEnd(queryId);
       }
       console.error('[SemanticSearch] Semantic search error:', error);
-      console.log('🔄 DEBUG: Falling back to keyword search...');
+      console.log(' DEBUG: Falling back to keyword search...');
       const keywordResults = await this.keywordSearch(query, limit);
-      console.log(`📊 DEBUG: Keyword search returned ${keywordResults.length} results`);
+      console.log(` DEBUG: Keyword search returned ${keywordResults.length} results`);
       if (keywordResults.length > 0) {
-        console.log(`📊 DEBUG: First keyword result:`, {
+        console.log(` DEBUG: First keyword result:`, {
           title: keywordResults[0].title,
           score: keywordResults[0].score,
           source_table: keywordResults[0].source_table

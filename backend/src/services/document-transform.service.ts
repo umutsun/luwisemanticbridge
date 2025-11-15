@@ -503,7 +503,7 @@ export class DocumentTransformService {
             }
 
             // Verification passed!
-            console.log(`[DocumentTransform] ✅ Verification passed: ${actualRowCount} rows confirmed`);
+            console.log(`[DocumentTransform]  Verification passed: ${actualRowCount} rows confirmed`);
 
             await this.updateDocumentStatus(documentId, 'completed', 100, {
               targetTableName: finalTableName,
@@ -722,7 +722,7 @@ export class DocumentTransformService {
 
       // Test connection
       const testResult = await sourcePool.query('SELECT current_database()');
-      console.log(`[DocumentTransform] ✅ Connected to source database: ${testResult.rows[0].current_database}`);
+      console.log(`[DocumentTransform]  Connected to source database: ${testResult.rows[0].current_database}`);
 
       return sourcePool;
     } catch (error) {

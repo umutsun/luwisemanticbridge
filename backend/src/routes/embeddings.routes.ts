@@ -23,14 +23,14 @@ async function getSourcePool(): Promise<Pool> {
     // Always try to get database from settings first for dynamic behavior
     try {
       const dbSettings = await getDatabaseSettings();
-      console.log('📊 Database settings found:', dbSettings);
+      console.log(' Database settings found:', dbSettings);
 
       // Use settings-based pool for any configured database
       sourcePool = await getSettingsBasedPool();
-      console.log('📊 Using settings-based database pool for embeddings manager');
+      console.log(' Using settings-based database pool for embeddings manager');
 
     } catch (error) {
-      console.error('❌ Failed to create settings-based pool, using fallback:', error);
+      console.error(' Failed to create settings-based pool, using fallback:', error);
       // Dynamic fallback based on environment variables
       sourcePool = process.env.RAG_CHATBOT_DATABASE_URL ?
         new Pool({
@@ -43,7 +43,7 @@ async function getSourcePool(): Promise<Pool> {
           user: process.env.POSTGRES_USER || 'postgres',
           password: process.env.POSTGRES_PASSWORD || 'postgres'
         });
-      console.log('📊 Using fallback database for embeddings manager');
+      console.log(' Using fallback database for embeddings manager');
     }
   }
   return sourcePool;
@@ -62,9 +62,9 @@ async function getAvailableTables(): Promise<string[]> {
         ORDER BY table_name
       `);
       availableTables = result.rows.map(row => row.table_name);
-      console.log('📊 Available tables:', availableTables);
+      console.log(' Available tables:', availableTables);
     } catch (error) {
-      console.error('❌ Failed to get available tables:', error);
+      console.error(' Failed to get available tables:', error);
       availableTables = [];
     }
   }
@@ -344,7 +344,7 @@ async function loadProgressFromRedis() {
           status: 'paused' // Always start as paused after server restart
         };
 
-        console.log('✅ Migration progress loaded from Redis:', {
+        console.log(' Migration progress loaded from Redis:', {
           status: migrationProgress.status,
           current: migrationProgress.current,
           total: migrationProgress.total,
@@ -387,7 +387,7 @@ async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ em
     const cached = await redis.get(cacheKey);
     if (cached) {
       const cacheTime = Date.now() - startTime;
-      console.log(`🎯 Cache HIT for text (${text.substring(0, 50)}...) - ${cacheTime}ms`);
+      console.log(` Cache HIT for text (${text.substring(0, 50)}...) - ${cacheTime}ms`);
 
       // Track cache hit statistics
       try {
@@ -404,11 +404,11 @@ async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ em
       };
     }
   } catch (err) {
-    console.error('❌ Redis cache read error:', err);
+    console.error(' Redis cache read error:', err);
   }
 
   // Generate new embedding if not cached
-  console.log(`❌ Cache MISS for text (${text.substring(0, 50)}...)`);
+  console.log(` Cache MISS for text (${text.substring(0, 50)}...)`);
   const response = await openai.embeddings.create({
     model: 'text-embedding-ada-002',
     input: text.substring(0, 8000)
@@ -431,7 +431,7 @@ async function getEmbeddingWithCache(text: string, openai: OpenAI): Promise<{ em
     await redis.expire('cache:embedding_misses', 24 * 60 * 60);
 
   } catch (err) {
-    console.error('❌ Redis cache write error:', err);
+    console.error(' Redis cache write error:', err);
   }
 
   return {
@@ -875,7 +875,7 @@ router.post('/migrate', async (req: Request, res: Response) => {
           try {
             // Update Redis with completed status
             await redis.set('migration:progress', JSON.stringify(migrationProgress), 'EX', 30); // Keep for 30 seconds
-            console.log('✅ Migration progress updated with completed status');
+            console.log(' Migration progress updated with completed status');
           } catch (err) {
             console.error('Failed to update migration progress in Redis:', err);
           }
@@ -1030,7 +1030,7 @@ router.post('/migrate', async (req: Request, res: Response) => {
       embeddingSettings: settings  // Store embedding settings for resume
     };
 
-    console.log('🎯 Migration progress set to processing:', {
+    console.log(' Migration progress set to processing:', {
       status: migrationProgress.status,
       migrationId: migrationProgress.migrationId,
       tables: migrationProgress.tables
@@ -1039,7 +1039,7 @@ router.post('/migrate', async (req: Request, res: Response) => {
     // Save to Redis immediately
     try {
       await redis.set('migration:progress', JSON.stringify(migrationProgress), 'EX', 7 * 24 * 60 * 60);
-      console.log('✅ Migration progress saved to Redis');
+      console.log(' Migration progress saved to Redis');
     } catch (err) {
       console.error('Failed to save migration progress to Redis:', err);
     }
@@ -1075,7 +1075,7 @@ router.post('/migrate', async (req: Request, res: Response) => {
         // Clear migration progress from Redis on completion
         try {
           await redis.del('migration:progress');
-          console.log('✅ Migration progress cleared from Redis');
+          console.log(' Migration progress cleared from Redis');
         } catch (err) {
           console.error('Failed to clear migration progress from Redis:', err);
         }
@@ -1180,7 +1180,7 @@ router.get('/stats-by-model', async (req: Request, res: Response) => {
 // Get detailed embedding status
 router.get('/status', async (req: Request, res: Response) => {
   try {
-    console.log('🔍 Getting detailed embedding status...');
+    console.log(' Getting detailed embedding status...');
 
     // Get counts from unified_embeddings
     const embeddedResult = await targetPool.query(`
@@ -1267,7 +1267,7 @@ router.get('/status', async (req: Request, res: Response) => {
 // Fix embedding counts - calculate and show actual progress
 router.post('/fix-counts', async (req: Request, res: Response) => {
   try {
-    console.log('🔍 Fixing embedding counts...');
+    console.log(' Fixing embedding counts...');
 
     // Get counts from unified_embeddings
     const embeddedResult = await targetPool.query(`
@@ -1347,7 +1347,7 @@ router.post('/fix-counts', async (req: Request, res: Response) => {
     // Update Redis
     try {
       await redis.set('migration:progress', JSON.stringify(migrationProgress), 'EX', 7 * 24 * 60 * 60);
-      console.log('✅ Updated Redis with correct progress');
+      console.log(' Updated Redis with correct progress');
 
       // Also update embedding:progress for SSE
       await redis.set('embedding:progress', JSON.stringify({
@@ -1361,7 +1361,7 @@ router.post('/fix-counts', async (req: Request, res: Response) => {
         newlyEmbedded: actualEmbedded,
         errorCount: 0
       }));
-      console.log('✅ Updated embedding:progress for SSE');
+      console.log(' Updated embedding:progress for SSE');
     } catch (err) {
       console.error('Failed to update Redis:', err);
     }
@@ -1436,7 +1436,7 @@ router.post('/clear', async (req: Request, res: Response) => {
       await redis.del('embedding:pause_requested');
       await redis.del('embedding:immediate_pause');
       await redis.del('embedding:pause_timestamp');
-      console.log('✅ All embedding progress cleared from Redis');
+      console.log(' All embedding progress cleared from Redis');
     } catch (err) {
       console.error('Failed to clear embedding progress from Redis:', err);
     }
@@ -1619,7 +1619,7 @@ router.get('/tables', async (req: Request, res: Response) => {
       console.log('Using default database name');
     }
 
-    console.log(`📊 Getting tables from database: ${databaseName}`);
+    console.log(` Getting tables from database: ${databaseName}`);
 
     for (const table of targetTables) {
       const tableName = table.name;
@@ -1730,7 +1730,7 @@ async function createMigrationHistory(tables: string[], batchSize: number): Prom
       console.log('Using default database name for migration history');
     }
 
-    console.log(`📊 Creating migration history for database: ${databaseName}`);
+    console.log(` Creating migration history for database: ${databaseName}`);
 
     // Count total records from SOURCE database
     let totalRecords = 0;
@@ -1777,7 +1777,7 @@ async function getTargetTables(): Promise<{ name: string; displayName: string }[
 
     if (settingsResult.rows[0]?.setting_value) {
       const tableNames = JSON.parse(settingsResult.rows[0].setting_value);
-      console.log(`📊 Using target tables from settings:`, tableNames);
+      console.log(` Using target tables from settings:`, tableNames);
       // Map to display names
       return tableNames.map((name: string) => ({
         name,
@@ -1785,7 +1785,7 @@ async function getTargetTables(): Promise<{ name: string; displayName: string }[
       }));
     }
   } catch (err) {
-    console.log('⚠️ Could not read target tables from settings, using defaults');
+    console.log('️ Could not read target tables from settings, using defaults');
   }
 
   // Fallback to dynamic tables from database
@@ -1804,7 +1804,7 @@ async function getTargetTables(): Promise<{ name: string; displayName: string }[
     return [];
   }
 
-  console.log(`📊 Using default target tables:`, defaultTables.map(t => t.name));
+  console.log(` Using default target tables:`, defaultTables.map(t => t.name));
   return defaultTables;
 }
 
@@ -1866,9 +1866,9 @@ async function getSourceDatabaseName(): Promise<string> {
 // Background migration process
 async function processMigration(tables: string[], batchSize: number, migrationId: string, workerId: number = 1, isResume: boolean = false, providedSettings?: any) {
   try {
-    console.log(`🚀 Worker ${workerId} starting with tables:`, tables);
-    console.log(`🔧 Debug mode enabled - detailed logging active`);
-    console.log(`📊 Batch size: ${batchSize}, Migration ID: ${migrationId}, Resume: ${isResume}`);
+    console.log(` Worker ${workerId} starting with tables:`, tables);
+    console.log(` Debug mode enabled - detailed logging active`);
+    console.log(` Batch size: ${batchSize}, Migration ID: ${migrationId}, Resume: ${isResume}`);
 
     // Get dynamic source pool and target tables from settings
     const sourcePool = await getSourcePool();
@@ -2048,7 +2048,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
 
         // Process batch
         try {
-          console.log(`🔄 Worker ${workerId}: Processing batch ${offset / batchSize + 1} with ${batchTexts.length} texts`);
+          console.log(` Worker ${workerId}: Processing batch ${offset / batchSize + 1} with ${batchTexts.length} texts`);
 
           // Get OpenAI client
           const openai = await getOpenAIClient();
@@ -2106,7 +2106,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 // Use Cohere API
                 const cohereApiKey = await getCohereApiKey();
 
-                console.log(`🔧 Using Cohere model: ${embeddingSettings.model}`);
+                console.log(` Using Cohere model: ${embeddingSettings.model}`);
 
                 const cohereResponse = await fetch('https://api.cohere.com/v1/embed', {
                   method: 'POST',
@@ -2135,7 +2135,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 // Use Voyage AI API
                 const voyageApiKey = await getVoyageApiKey();
 
-                console.log(`🔧 Using Voyage AI model: ${embeddingSettings.model}`);
+                console.log(` Using Voyage AI model: ${embeddingSettings.model}`);
 
                 const voyageResponse = await fetch('https://api.voyageai.com/v1/embeddings', {
                   method: 'POST',
@@ -2163,7 +2163,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 // Use Google Vertex AI API
                 const googleApiKey = await getGoogleApiKey();
 
-                console.log(`🔧 Using Google model: ${embeddingSettings.model}`);
+                console.log(` Using Google model: ${embeddingSettings.model}`);
 
                 const googleResponse = await fetch(`https://us-central1-aiplatform.googleapis.com/v1/projects/${process.env.GOOGLE_PROJECT_ID || 'your-project-id'}/locations/us-central1/publishers/google/models/${embeddingSettings.model}:predict`, {
                   method: 'POST',
@@ -2190,7 +2190,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 // Use Jina AI API
                 const jinaApiKey = await getJinaApiKey();
 
-                console.log(`🔧 Using Jina AI model: ${embeddingSettings.model}`);
+                console.log(` Using Jina AI model: ${embeddingSettings.model}`);
 
                 const jinaResponse = await fetch(`https://api.jina.ai/v1/embeddings`, {
                   method: 'POST',
@@ -2229,7 +2229,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                     throw new Error(`Ollama is not running at ${ollamaBaseUrl}`);
                   }
                   const tags = await testResponse.json();
-                  console.log('✅ Ollama is running, available models:', tags.models.map((m: any) => m.name));
+                  console.log(' Ollama is running, available models:', tags.models.map((m: any) => m.name));
                 } catch (error) {
                   throw new Error(`Cannot connect to Ollama at ${ollamaBaseUrl}. Please make sure Ollama is running.`);
                 }
@@ -2237,7 +2237,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 // Get model name (remove ollama/ prefix if present)
                 ollamaModelName = embeddingSettings.model.replace('ollama/', '');
 
-                console.log(`🔧 Using Ollama at ${ollamaBaseUrl} with model ${ollamaModelName}`);
+                console.log(` Using Ollama at ${ollamaBaseUrl} with model ${ollamaModelName}`);
 
                 const ollamaResponse = await fetch(`${ollamaBaseUrl}/api/embeddings`, {
                   method: 'POST',
@@ -2321,7 +2321,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 };
               } else if (embeddingSettings.provider === 'local') {
                 // Use local random embeddings (no API call)
-                console.log('🔧 Using local random embeddings');
+                console.log(' Using local random embeddings');
 
                 // Generate random embeddings locally
                 let dimension = 1536; // Default dimension
@@ -2346,7 +2346,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 // Use HuggingFace Inference API
                 const huggingfaceApiKey = await getHuggingFaceApiKey();
 
-                console.log(`🔧 Using HuggingFace model: ${embeddingSettings.model}`);
+                console.log(` Using HuggingFace model: ${embeddingSettings.model}`);
 
                 // HuggingFace Inference API
                 const authHeader = `Bearer ${huggingfaceApiKey}`;
@@ -2399,7 +2399,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
             } catch (error: any) {
               // Check if it's a quota error or API unavailable
               if (error.code === 'insufficient_quota' || error.code === 'rate_limit_exceeded' || error.status === 429 || error.message?.includes('quota') || error.message?.includes('billing')) {
-                console.log(`⚠️ ${embeddingSettings.provider} quota exceeded or API error, falling back to local embeddings`);
+                console.log(`️ ${embeddingSettings.provider} quota exceeded or API error, falling back to local embeddings`);
                 fallbackMode = true;
 
                 // Generate simple random embeddings as fallback with correct dimensions
@@ -2460,7 +2460,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
             const text = batchTexts[i];
 
             // ═══════════════════════════════════════════════════════
-            // ✅ DUPLICATE PREVENTION: Content Hash Check
+            //  DUPLICATE PREVENTION: Content Hash Check
             // ═══════════════════════════════════════════════════════
             const contentHash = generateContentHash(text);
 
@@ -2478,7 +2478,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 const existing = duplicateCheck.rows[0];
                 const skipReason = `Duplicate content found: ${existing.source_name}/${existing.source_table} ID=${existing.source_id}`;
 
-                console.log(`⚠️  DUPLICATE SKIPPED: ${table} ID=${row[primaryKey]}`);
+                console.log(`️  DUPLICATE SKIPPED: ${table} ID=${row[primaryKey]}`);
                 console.log(`    → Already exists as: ${existing.source_table} ID=${existing.source_id}`);
                 console.log(`    → Content hash: ${contentHash.substring(0, 16)}...`);
                 console.log(`    → Original created: ${existing.created_at}`);
@@ -2520,7 +2520,7 @@ async function processMigration(tables: string[], batchSize: number, migrationId
                 continue;
               }
             } catch (hashCheckErr) {
-              console.error(`❌ Error checking content hash for ${table} ID=${row[primaryKey]}:`, hashCheckErr);
+              console.error(` Error checking content hash for ${table} ID=${row[primaryKey]}:`, hashCheckErr);
               // Continue with insertion if hash check fails (fail-safe)
             }
             // ═══════════════════════════════════════════════════════
@@ -2758,7 +2758,7 @@ async function getPrimaryKey(tableName: string): Promise<string> {
 // Get analytics data for enterprise dashboard
 router.get('/analytics', async (req: Request, res: Response) => {
   try {
-    console.log('📊 Fetching analytics data for enterprise dashboard');
+    console.log(' Fetching analytics data for enterprise dashboard');
 
     // Get token usage from unified_embeddings
     const tokenUsageResult = await targetPool.query(`
@@ -2841,10 +2841,10 @@ router.get('/analytics', async (req: Request, res: Response) => {
       }
     };
 
-    console.log('✅ Analytics data fetched successfully');
+    console.log(' Analytics data fetched successfully');
     res.json(analyticsData);
   } catch (error) {
-    console.error('❌ Error fetching analytics data:', error);
+    console.error(' Error fetching analytics data:', error);
     res.status(500).json({ error: 'Failed to fetch analytics data' });
   }
 });

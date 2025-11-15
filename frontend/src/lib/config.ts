@@ -3,7 +3,8 @@
  * Values loaded from .env.lsemb via frontend/.env.local
  */
 export const API_CONFIG = {
-  baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083',
+  // Empty baseUrl means use relative paths (Next.js rewrites handle proxy)
+  baseUrl: process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL,
   port: process.env.NEXT_PUBLIC_API_PORT || '8083',
   wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:8083/socket.io`,
 
@@ -26,6 +27,11 @@ export const API_CONFIG = {
     physicalFiles: '/api/v2/documents/physical-files',
     physicalFilesAdd: '/api/v2/documents/physical-files/add',
     preview: '/api/v2/documents/preview',
+
+    // PDF Processing
+    pdfTemplates: '/api/v2/pdf/analysis-templates',
+    pdfBatchMetadata: '/api/v2/pdf/batch-metadata',
+    pdfBatchStatus: '/api/v2/pdf/job-status',
 
     // Embeddings
     embeddings: '/api/v2/embeddings',

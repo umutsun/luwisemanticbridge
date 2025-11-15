@@ -62,16 +62,16 @@ export class CacheReliabilityService {
     try {
       this.redis = await initializeRedis();
       if (this.redis && this.redis.status === "ready") {
-        console.log("✅ Cache reliability service initialized");
+        console.log(" Cache reliability service initialized");
         this.startHealthChecks();
       } else {
         console.warn(
-          "⚠️ Redis not available, cache reliability features disabled"
+          "️ Redis not available, cache reliability features disabled"
         );
       }
     } catch (error) {
       console.error(
-        "❌ Failed to initialize cache reliability service:",
+        " Failed to initialize cache reliability service:",
         error
       );
     }

@@ -20,7 +20,7 @@ router.get('/settings', async (req: Request, res: Response) => {
 
     // Simplified log - only log if title exists
     if (chatbotData.title) {
-      console.log(`💬 [Chatbot] ${chatbotData.title}`);
+      console.log(` [Chatbot] ${chatbotData.title}`);
     }
 
     // Default values if not set
@@ -41,7 +41,7 @@ router.get('/settings', async (req: Request, res: Response) => {
       if (!isDuplicated && isReasonableLength && hasValidChars) {
         cleanPlaceholder = placeholder;
       } else {
-        console.warn(`⚠️ Invalid placeholder detected: "${placeholder}", using default`);
+        console.warn(`️ Invalid placeholder detected: "${placeholder}", using default`);
       }
     }
 
@@ -83,7 +83,7 @@ router.post('/settings', async (req: Request, res: Response) => {
       [JSON.stringify(settings)]
     );
 
-    console.log(`✅ [Chatbot] Saved: ${settings.title || 'Untitled'}`);
+    console.log(` [Chatbot] Saved: ${settings.title || 'Untitled'}`);
 
     res.json({ success: true, message: 'Settings updated successfully' });
   } catch (error) {

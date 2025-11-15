@@ -84,9 +84,11 @@ const router = Router();
 async function getSourceDatabaseName(): Promise<string> {
   try {
     const settings = await getDatabaseSettings();
-    return settings.sourceDatabase || 'rag_chatbot';
+    // Extract database name from settings (source DB only, not system DB)
+    const dbConfig = settings?.database || settings;
+    return dbConfig?.sourceDatabase || dbConfig?.name || dbConfig?.database || 'unknown';
   } catch (error) {
-    return 'rag_chatbot'; // fallback
+    return 'unknown'; // No .env fallback - source DB must come from settings
   }
 }
 
@@ -359,7 +361,7 @@ async function ensureEmbeddingColumn(tableName: string) {
 // Check for duplicates in batch (more efficient)
 async function checkDuplicatesInBatch(table: string, ids: any[]): Promise<Set<any>> {
   try {
-    console.log(`🔎 Checking duplicates for table "${table}" with ${ids.length} IDs:`, ids.slice(0, 5));
+    console.log(` Checking duplicates for table "${table}" with ${ids.length} IDs:`, ids.slice(0, 5));
 
     // Check for duplicates using metadata->>'table'
     const result = await lsembPool.query(
@@ -373,7 +375,7 @@ async function checkDuplicatesInBatch(table: string, ids: any[]): Promise<Set<an
 
     const duplicateIds = new Set(result.rows.map(row => parseInt(row.source_id)));
 
-    console.log(`📋 Found ${duplicateIds.size} existing embeddings for table "${table}"`);
+    console.log(` Found ${duplicateIds.size} existing embeddings for table "${table}"`);
 
     return duplicateIds;
   } catch (err) {
@@ -565,13 +567,13 @@ router.get('/tables-fixed', async (req: Request, res: Response) => {
     }
 
     // Log the actual counts from database
-    console.log('\n📊 Actual embedded counts from unified_embeddings:');
+    console.log('\n Actual embedded counts from unified_embeddings:');
     actualCountsResult.rows.forEach(row => {
       console.log(`  ${row.actual_table}: ${row.embedded_count} records`);
     });
 
     // Log the final response
-    console.log('\n📤 Final response:');
+    console.log('\n Final response:');
     console.log('  - Total tables:', tablesWithMeta.length);
     console.log('  - Total records:', tablesWithMeta.reduce((acc, t) => acc + t.totalRecords, 0));
     console.log('  - Total embedded:', tablesWithMeta.reduce((acc, t) => acc + t.embeddedRecords, 0));
@@ -660,7 +662,7 @@ router.get('/debug-source-tables', async (req: Request, res: Response) => {
 
 // Get embedding progress
 router.get('/progress', async (req: Request, res: Response) => {
-  console.log('📊 Progress endpoint called');
+  console.log(' Progress endpoint called');
 
   // Try to load from Redis first
   await loadProgressFromRedis();
@@ -696,7 +698,7 @@ router.get('/progress', async (req: Request, res: Response) => {
     console.log('DEBUG: No tables found in migrationProgress');
   }
 
-  console.log('📊 Progress loaded from Redis:', {
+  console.log(' Progress loaded from Redis:', {
     status: migrationProgress.status,
     current: migrationProgress.current,
     total: migrationProgress.total,
@@ -768,7 +770,7 @@ router.post('/auto-resume', async (req: Request, res: Response) => {
     await redis.del('embedding:status');
     await saveProgressToRedis();
 
-    console.log('✅ Embedding process auto-resumed');
+    console.log(' Embedding process auto-resumed');
     res.json({ message: 'Auto-resumed', progress: migrationProgress });
   } else {
     res.json({ message: 'No paused process to resume' });
@@ -777,7 +779,7 @@ router.post('/auto-resume', async (req: Request, res: Response) => {
 
 // Generate embeddings for tables
 router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Request, res: Response) => {
-  console.log('🚀 Generate endpoint called');
+  console.log(' Generate endpoint called');
 
   try {
     const {
@@ -806,7 +808,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
 
     // Load previous progress to check if we should continue
     const hasProgress = await loadProgressFromRedis();
-    console.log('📋 Loaded progress:', {
+    console.log(' Loaded progress:', {
       hasProgress,
       status: migrationProgress.status,
       tables: migrationProgress.tables,
@@ -835,7 +837,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
           return needsProcessing;
         });
 
-        console.log('🔄 Resuming with parallel workers - redistributing tables:', {
+        console.log(' Resuming with parallel workers - redistributing tables:', {
           totalTables: allTables.length,
           remainingTables: remainingTables.length,
           workerCount: workerCount
@@ -850,7 +852,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
         for (let i = 0; i < workerCount; i++) {
           const workerTables = remainingTables.slice(i * tablesPerWorker, (i + 1) * tablesPerWorker);
           if (workerTables.length > 0) {
-            console.log(`👷 Worker ${i + 1} resuming with tables:`, workerTables);
+            console.log(` Worker ${i + 1} resuming with tables:`, workerTables);
             const workerPromise = processTableWorker(
               workerTables,
               batchSize,
@@ -901,13 +903,13 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
             migrationProgress.current = Math.min(actualTotalProcessed, migrationProgress.total);
             migrationProgress.percentage = 100;
             await saveProgressToRedis();
-            console.log('✅ All workers completed successfully - migration completed');
+            console.log(' All workers completed successfully - migration completed');
           } else {
             // Still processing, ensure status is correct
             migrationProgress.status = 'processing';
             migrationProgress.current = totalEmbedded;
             await saveProgressToRedis();
-            console.log(`🔄 Workers completed but migration continues: ${totalEmbedded}/${migrationProgress.total}`);
+            console.log(` Workers completed but migration continues: ${totalEmbedded}/${migrationProgress.total}`);
           }
         });
 
@@ -990,7 +992,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
         offset: startOffset
       };
 
-      console.log(`📊 Table ${table}: ${totalInTable} total, ${embeddedCount} already embedded, starting from ID ${startOffset}`);
+      console.log(` Table ${table}: ${totalInTable} total, ${embeddedCount} already embedded, starting from ID ${startOffset}`);
     }
 
     // Update total and current in migration progress BEFORE sending response
@@ -1043,8 +1045,8 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
       // Start multiple workers in parallel for sequential batch processing
       const workers = [];
 
-      console.log(`🚀 Starting parallel processing with ${workerCount} workers`);
-      console.log(`📊 Sequential batch processing mode`);
+      console.log(` Starting parallel processing with ${workerCount} workers`);
+      console.log(` Sequential batch processing mode`);
 
       // For single table, all workers process the same table with different batch offsets
       if (tables.length === 1) {
@@ -1053,7 +1055,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
 
         // Start workers with staggered batch processing
         for (let i = 0; i < workerCount; i++) {
-          console.log(`👷 Worker ${i + 1} starting for table: ${table} (batch offset: ${i})`);
+          console.log(` Worker ${i + 1} starting for table: ${table} (batch offset: ${i})`);
           const workerPromise = processTableWithParallelBatches(
             table,
             batchSize,
@@ -1072,12 +1074,12 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
       } else {
         // Multiple tables - distribute tables among workers (existing behavior)
         const tablesPerWorker = Math.ceil(tables.length / workerCount);
-        console.log(`📊 Tables per worker: ${tablesPerWorker}`);
+        console.log(` Tables per worker: ${tablesPerWorker}`);
 
         for (let i = 0; i < workerCount; i++) {
           const workerTables = tables.slice(i * tablesPerWorker, (i + 1) * tablesPerWorker);
           if (workerTables.length > 0) {
-            console.log(`👷 Worker ${i + 1} assigned tables:`, workerTables);
+            console.log(` Worker ${i + 1} assigned tables:`, workerTables);
             const workerPromise = processTableWorker(
               workerTables,
               batchSize,
@@ -1110,7 +1112,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
           migrationProgress.current = totalEmbedded;
           migrationProgress.percentage = 100;
           await saveProgressToRedis();
-          console.log('✅ All workers completed successfully');
+          console.log(' All workers completed successfully');
         }
       });
     } else {
@@ -1133,7 +1135,7 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
 // Process tables for a specific worker (parallel processing)
 async function processTableWithParallelBatches(table: string, batchSize: number, embeddingMethod: string, operationId?: string, resume?: boolean, workerId?: number, totalWorkers?: number, batchOffset?: number) {
   try {
-    console.log(`🚀 Worker ${workerId} starting parallel batch processing for table: ${table} (offset: ${batchOffset})`);
+    console.log(` Worker ${workerId} starting parallel batch processing for table: ${table} (offset: ${batchOffset})`);
 
     // Add a small delay to stagger worker startups
     await new Promise(resolve => setTimeout(resolve, workerId ? workerId * TIMEOUTS.DELAYS.WORKER_INIT_BASE : 0));
@@ -1182,7 +1184,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
       }
     }
 
-    console.log(`📍 Worker ${workerId} starting from offset: ${currentOffset}`);
+    console.log(` Worker ${workerId} starting from offset: ${currentOffset}`);
 
     // Process batches assigned to this worker
     while (migrationProgress.status === 'processing' && currentOffset < tableInfo.total) {
@@ -1201,7 +1203,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
         continue;
       }
 
-      console.log(`🔄 Worker ${workerId} processing batch starting at offset: ${currentOffset}`);
+      console.log(` Worker ${workerId} processing batch starting at offset: ${currentOffset}`);
 
       // Get batch records
       let batchQuery, batchResult;
@@ -1296,7 +1298,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
       const uniqueRows = [];
       const uniqueIds = [];
 
-      console.log(`🔍 Worker ${workerId} batch processing for table ${table}: ${batchTexts.length} records, ${duplicateIds.size} duplicates found`);
+      console.log(` Worker ${workerId} batch processing for table ${table}: ${batchTexts.length} records, ${duplicateIds.size} duplicates found`);
 
       for (let i = 0; i < batchTexts.length; i++) {
         const id = rowIds[i];
@@ -1307,7 +1309,7 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
         }
       }
 
-      console.log(`✅ Worker ${workerId} unique records to process: ${uniqueTexts.length}`);
+      console.log(` Worker ${workerId} unique records to process: ${uniqueTexts.length}`);
 
       if (uniqueTexts.length === 0) {
         console.log(`⏭️  Worker ${workerId} skipping batch - all records are duplicates`);
@@ -1381,23 +1383,23 @@ async function processTableWithParallelBatches(table: string, batchSize: number,
 
       await saveProgressToRedis();
 
-      console.log(`✅ Worker ${workerId} completed batch at offset ${currentOffset}: ${successfullyEmbeddedInBatch} records`);
+      console.log(` Worker ${workerId} completed batch at offset ${currentOffset}: ${successfullyEmbeddedInBatch} records`);
 
       // Move to next batch
       currentOffset += batchSize * (totalWorkers ?? 1); // Skip batches belonging to other workers
     }
 
-    console.log(`✅ Worker ${workerId} completed processing for table: ${table}`);
+    console.log(` Worker ${workerId} completed processing for table: ${table}`);
   } catch (error) {
-    console.error(`❌ Worker ${workerId} failed:`, error);
+    console.error(` Worker ${workerId} failed:`, error);
     throw error;
   }
 }
 
 async function processTableWorker(tables: string[], batchSize: number, embeddingMethod: string, operationId?: string, resume?: boolean, workerId?: number) {
   try {
-    console.log(`🚀 Worker ${workerId} starting with tables:`, tables);
-    console.log(`📊 Worker ${workerId} initial progress:`, JSON.stringify(migrationProgress.tableProgress));
+    console.log(` Worker ${workerId} starting with tables:`, tables);
+    console.log(` Worker ${workerId} initial progress:`, JSON.stringify(migrationProgress.tableProgress));
 
     // Add a small delay to stagger worker startups
     await new Promise(resolve => setTimeout(resolve, workerId ? workerId * TIMEOUTS.DELAYS.WORKER_INIT_MULTIPLIER : 0));
@@ -1405,9 +1407,9 @@ async function processTableWorker(tables: string[], batchSize: number, embedding
     // Call processTables with a flag to indicate this is a worker
     await processTables(tables, batchSize, embeddingMethod, operationId, resume, 1, workerId, true); // skipInitialization = true
 
-    console.log(`✅ Worker ${workerId} completed processing tables:`, tables);
+    console.log(` Worker ${workerId} completed processing tables:`, tables);
   } catch (error) {
-    console.error(`❌ Worker ${workerId} failed:`, error);
+    console.error(` Worker ${workerId} failed:`, error);
     throw error;
   }
 }
@@ -1513,17 +1515,17 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
       let offset = tableProgress.offset;
 
       let hasMore = true;
-      console.log(`🔄 Worker ${workerId || 'main'} starting processing loop for table ${table} at offset ${offset}`);
+      console.log(` Worker ${workerId || 'main'} starting processing loop for table ${table} at offset ${offset}`);
 
       // Check if we've already processed all records based on embedded count
       if (tableProgress.embedded >= tableProgress.total) {
-        console.log(`✅ Table ${table} already fully embedded: ${tableProgress.embedded}/${tableProgress.total}`);
+        console.log(` Table ${table} already fully embedded: ${tableProgress.embedded}/${tableProgress.total}`);
         hasMore = false;
       }
 
       // Always find the next unprocessed record (handle gaps even when not resuming)
       if (hasMore) {
-        console.log(`🔍 Finding next unprocessed record for table ${table}`);
+        console.log(` Finding next unprocessed record for table ${table}`);
 
         // Get embedded IDs first
         const embeddedResult = await lsembPool.query(`
@@ -1558,10 +1560,10 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 
         if (nextResult.rows[0]?.next_id) {
           const nextId = nextResult.rows[0].next_id;
-          console.log(`📍 Found next unprocessed record: ${nextId}`);
+          console.log(` Found next unprocessed record: ${nextId}`);
           offset = nextId;
         } else {
-          console.log(`🔍 No unprocessed records found`);
+          console.log(` No unprocessed records found`);
           hasMore = false;
         }
       }
@@ -1692,7 +1694,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         const uniqueRows = [];
         const uniqueIds = [];
 
-        console.log(`🔍 Batch processing for table ${table}: ${batchTexts.length} records, ${duplicateIds.size} duplicates found`);
+        console.log(` Batch processing for table ${table}: ${batchTexts.length} records, ${duplicateIds.size} duplicates found`);
 
         for (let i = 0; i < batchTexts.length; i++) {
           const id = rowIds[i];
@@ -1703,7 +1705,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
           }
         }
 
-        console.log(`✅ Unique records to process: ${uniqueTexts.length}`);
+        console.log(` Unique records to process: ${uniqueTexts.length}`);
 
         if (uniqueTexts.length === 0) {
           console.log(`⏭️  Skipping batch - all records are duplicates`);
@@ -1725,8 +1727,8 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 
           // Check if we should stop processing due to too many consecutive duplicates
           if (consecutiveDuplicateBatches >= maxConsecutiveDuplicateBatches) {
-            console.log(`🛑 Stopping processing for table ${table} - ${maxConsecutiveDuplicateBatches} consecutive duplicate batches detected`);
-            console.log(`💡 This likely means all remaining records are already embedded`);
+            console.log(` Stopping processing for table ${table} - ${maxConsecutiveDuplicateBatches} consecutive duplicate batches detected`);
+            console.log(` This likely means all remaining records are already embedded`);
             break;
           }
 
@@ -2219,14 +2221,14 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
 
       if (migrationProgress.status === 'processing') {
         migrationProgress.processedTables.push(table);
-        console.log(`✅ Worker ${workerId || 'main'} completed table: ${table}`);
+        console.log(` Worker ${workerId || 'main'} completed table: ${table}`);
 
         // Check if we've actually completed all embeddings for this table
         const tableProgress = migrationProgress.tableProgress[table];
         if (tableProgress && tableProgress.embedded >= tableProgress.total) {
-          console.log(`📊 Table ${table} truly completed: ${tableProgress.embedded}/${tableProgress.total} embedded`);
+          console.log(` Table ${table} truly completed: ${tableProgress.embedded}/${tableProgress.total} embedded`);
         } else if (tableProgress) {
-          console.log(`⚠️  Table ${table} marked complete but embeddings incomplete: ${tableProgress.embedded}/${tableProgress.total}`);
+          console.log(`️  Table ${table} marked complete but embeddings incomplete: ${tableProgress.embedded}/${tableProgress.total}`);
         }
       }
     }
@@ -2292,7 +2294,7 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
             stack: error instanceof Error ? error.stack : 'No stack available'
           }
         });
-        console.log('✅ Embedding error logged successfully');
+        console.log(' Embedding error logged successfully');
       } catch (historyError) {
         console.error('Failed to log embedding error:', historyError);
       }
@@ -2311,7 +2313,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
   const canonicalName = getDisplayName(table);
 
   // ═══════════════════════════════════════════════════════
-  // ✅ DUPLICATE PREVENTION: Content Hash Check
+  //  DUPLICATE PREVENTION: Content Hash Check
   // ═══════════════════════════════════════════════════════
   const contentHash = generateContentHash(text);
 
@@ -2328,7 +2330,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
     if (duplicateCheck.rows.length > 0) {
       const existing = duplicateCheck.rows[0];
 
-      console.log(`⚠️  DUPLICATE SKIPPED: ${table} ID=${id}`);
+      console.log(`️  DUPLICATE SKIPPED: ${table} ID=${id}`);
       console.log(`    → Already exists as: ${existing.source_table} ID=${existing.source_id}`);
       console.log(`    → Content hash: ${contentHash.substring(0, 16)}...`);
       console.log(`    → Original created: ${existing.created_at}`);
@@ -2359,7 +2361,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
       return;
     }
   } catch (hashCheckErr) {
-    console.error(`❌ Error checking content hash for ${table} ID=${id}:`, hashCheckErr);
+    console.error(` Error checking content hash for ${table} ID=${id}:`, hashCheckErr);
     // Continue with insertion if hash check fails (fail-safe)
   }
   // ═══════════════════════════════════════════════════════
@@ -2379,7 +2381,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
   migrationProgress.tableProgress[table].embedded = (migrationProgress.tableProgress[table].embedded || 0) + 1;
 
   try {
-    console.log(`💾 Saving embedding for ${table} ID ${id} with model ${model}`);
+    console.log(` Saving embedding for ${table} ID ${id} with model ${model}`);
 
     // Get settings for source database
     const dbSettings = await getDatabaseSettings();
@@ -2402,7 +2404,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
         RETURNING id`,
         [
           'database',
-          sourceDbName || (dbSettings?.sourceDatabase || 'rag_chatbot'),
+          sourceDbName || (dbSettings?.database?.name || dbSettings?.database?.database || dbSettings?.sourceDatabase || 'unknown'),
           canonicalName, // Use canonical name for consistency
           numericId,
           text,
@@ -2413,7 +2415,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
           contentHash  // $10: NEW content_hash parameter
         ]
       );
-      console.log('✅ Saved embedding for', table, 'ID:', id, 'returned ID:', result.rows[0].id, 'Canonical name:', canonicalName);
+      console.log(' Saved embedding for', table, 'ID:', id, 'returned ID:', result.rows[0].id, 'Canonical name:', canonicalName);
     } catch (insertErr: any) {
       // Check if it's a duplicate key error
       if (insertErr.code === '23505' && insertErr.constraint === 'unique_source_record') {
@@ -2438,14 +2440,14 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
             numericId
           ]
         );
-        console.log('🔄 Updated existing embedding for', table, 'ID:', id, 'Canonical name:', canonicalName);
+        console.log(' Updated existing embedding for', table, 'ID:', id, 'Canonical name:', canonicalName);
       } else {
         // Re-throw if it's not a duplicate key error
         throw insertErr;
       }
     }
   } catch (err) {
-    console.error('❌ Error saving embedding:', err);
+    console.error(' Error saving embedding:', err);
     console.error('Table:', table, 'ID:', id, 'Canonical name:', canonicalName);
     throw err; // Re-throw to stop processing
   }
@@ -2497,7 +2499,7 @@ router.post('/pause', async (req: Request, res: Response) => {
           percentage: migrationProgress.percentage || 0
         }
       });
-      console.log('✅ Embedding pause logged successfully');
+      console.log(' Embedding pause logged successfully');
     } catch (logError) {
       console.error('Failed to log embedding pause:', logError);
     }
@@ -2510,7 +2512,7 @@ router.post('/pause', async (req: Request, res: Response) => {
 
 // Resume migration
 router.post('/resume', async (req: Request, res: Response) => {
-  console.log('📞 RESUME ENDPOINT CALLED');
+  console.log(' RESUME ENDPOINT CALLED');
   console.log('Current status:', migrationProgress.status);
   console.log('Tables in progress:', migrationProgress.tables);
   console.log('Table progress:', JSON.stringify(migrationProgress.tableProgress, null, 2));
@@ -2528,7 +2530,7 @@ router.post('/resume', async (req: Request, res: Response) => {
         calculatedTotal += tableInfo.total || 0;
       }
       migrationProgress.total = calculatedTotal;
-      console.log(`📊 Recalculated total on resume: ${calculatedTotal}`);
+      console.log(` Recalculated total on resume: ${calculatedTotal}`);
     }
 
     // Clear Redis pause flag
@@ -2555,8 +2557,8 @@ router.post('/resume', async (req: Request, res: Response) => {
     const operationId = migrationProgress.metadata?.operationId || `embedding_${Date.now()}`;
 
     if (remainingTables.length > 0) {
-      console.log(`🔄 Resuming with ${remainingTables.length} tables, ${workerCount} workers, batch size ${batchSize}`);
-      console.log(`📋 Remaining tables: ${remainingTables.join(', ')}`);
+      console.log(` Resuming with ${remainingTables.length} tables, ${workerCount} workers, batch size ${batchSize}`);
+      console.log(` Remaining tables: ${remainingTables.join(', ')}`);
 
       // Start workers for remaining tables
       if (workerCount > 1 && remainingTables.length === 1) {
@@ -2568,7 +2570,7 @@ router.post('/resume', async (req: Request, res: Response) => {
           const totalRecords = tableProgress.total;
           const recordsPerWorker = Math.ceil(totalRecords / workerCount);
 
-          console.log(`🔄 Starting ${workerCount} workers for table ${tableName}`);
+          console.log(` Starting ${workerCount} workers for table ${tableName}`);
 
           const workers = [];
           for (let i = 0; i < workerCount; i++) {
@@ -2576,7 +2578,7 @@ router.post('/resume', async (req: Request, res: Response) => {
             const endId = Math.min((i + 1) * recordsPerWorker - 1, totalRecords - 1);
 
             if (startId <= endId) {
-              console.log(`🔄 Worker ${i + 1}: Processing IDs ${startId} to ${endId}`);
+              console.log(` Worker ${i + 1}: Processing IDs ${startId} to ${endId}`);
 
               // For parallel workers, each worker has a fixed batchOffset (worker index)
               // Worker 0 processes batches 0, totalWorkers, 2*totalWorkers, etc.
@@ -2611,13 +2613,13 @@ router.post('/resume', async (req: Request, res: Response) => {
               migrationProgress.current = totalEmbedded;
               migrationProgress.percentage = 100;
               await saveProgressToRedis();
-              console.log('✅ All workers completed successfully after resume');
+              console.log(' All workers completed successfully after resume');
             }
           });
         }
       } else {
         // Single worker or multiple tables - use the existing processTables function
-        console.log(`🔄 Starting single worker for tables: ${remainingTables.join(', ')}`);
+        console.log(` Starting single worker for tables: ${remainingTables.join(', ')}`);
         processTables(remainingTables, batchSize, embeddingMethod, operationId, true).catch(err => {
           console.error('Processing error after resume:', err);
           migrationProgress.error = err.message;
@@ -2626,7 +2628,7 @@ router.post('/resume', async (req: Request, res: Response) => {
         });
       }
     } else {
-      console.log(`📭 No remaining tables to process. All tables might be completed.`);
+      console.log(` No remaining tables to process. All tables might be completed.`);
     }
 
     // Log resume operation
@@ -2649,7 +2651,7 @@ router.post('/resume', async (req: Request, res: Response) => {
           remainingTables: remainingTables
         }
       });
-      console.log('✅ Embedding resume logged successfully');
+      console.log(' Embedding resume logged successfully');
     } catch (logError) {
       console.error('Failed to log embedding resume:', logError);
     }
@@ -2810,11 +2812,11 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
         `, [displayName, tableName]);
         const embeddedRecords = parseInt(embeddedResult.rows[0].embedded) || 0;
 
-        console.log(`📊 ${tableName}: ${embeddedRecords} embedded records found (counting both source_table and metadata)`);
+        console.log(` ${tableName}: ${embeddedRecords} embedded records found (counting both source_table and metadata)`);
 
         // Additional debug for ozelgeler
         if (tableName === 'ozelgeler') {
-          console.log(`🔍 DEBUG for ozelglers:`);
+          console.log(` DEBUG for ozelglers:`);
           console.log(`  - Query result: ${embeddedResult.rows[0].embedded}`);
           console.log(`  - Parsed result: ${embeddedRecords}`);
           console.log(`  - Table name passed to query: '${tableName}'`);
@@ -2852,7 +2854,7 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
 
     // Debug: Calculate total embedded records before sending response
     const totalEmbeddedRecords = tables.reduce((acc, t) => acc + t.embeddedRecords, 0);
-    console.log('📊 Backend tables endpoint debug:');
+    console.log(' Backend tables endpoint debug:');
     console.log('  - Individual table embedded records:', tables.map(t => `${t.name}: ${t.embeddedRecords}`));
     console.log(`  - Total embedded records calculated: ${totalEmbeddedRecords}`);
     console.log('  - Tables being sent:', JSON.stringify(tables, null, 2));
@@ -3064,7 +3066,7 @@ router.get('/table/:tableName/embedded-recent', async (req: Request, res: Respon
 // Reset migration progress endpoint
 router.post('/reset', async (req: Request, res: Response) => {
   try {
-    console.log('🔄 Resetting migration progress...');
+    console.log(' Resetting migration progress...');
 
     // Clear Redis progress data
     await redis.del('embedding:progress');
@@ -3103,14 +3105,14 @@ router.post('/reset', async (req: Request, res: Response) => {
       lastUpdate: Date.now()
     };
 
-    console.log('✅ Migration progress reset successfully');
+    console.log(' Migration progress reset successfully');
     res.json({
       success: true,
       message: 'Migration progress has been reset',
       status: 'idle'
     });
   } catch (error) {
-    console.error('❌ Error resetting migration:', error);
+    console.error(' Error resetting migration:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to reset migration progress'
@@ -3121,14 +3123,14 @@ router.post('/reset', async (req: Request, res: Response) => {
 // Check and recover from stuck embedding process
 router.post('/recover', async (req: Request, res: Response) => {
   try {
-    console.log('🔧 Checking for stuck embedding process...');
+    console.log(' Checking for stuck embedding process...');
 
     // Load current progress
     await loadProgressFromRedis();
 
     // Check if process appears to be stuck OR has an error
     if (isProcessStuck() || migrationProgress.status === 'error') {
-      console.log('⚠️  Detected stuck or failed embedding process, attempting recovery...');
+      console.log('️  Detected stuck or failed embedding process, attempting recovery...');
 
       // Validate progress data
       if (migrationProgress.total === 0 && migrationProgress.current > 0) {
@@ -3142,7 +3144,7 @@ router.post('/recover', async (req: Request, res: Response) => {
           }
           if (calculatedTotal > 0) {
             migrationProgress.total = calculatedTotal;
-            console.log(`📊 Recovered total: ${calculatedTotal}`);
+            console.log(` Recovered total: ${calculatedTotal}`);
             await saveProgressToRedis();
           }
         }
@@ -3153,7 +3155,7 @@ router.post('/recover', async (req: Request, res: Response) => {
         migrationProgress.status = 'paused';
         await saveProgressToRedis();
 
-        console.log('🛑 Error state process paused');
+        console.log(' Error state process paused');
 
         res.json({
           success: true,
@@ -3178,7 +3180,7 @@ router.post('/recover', async (req: Request, res: Response) => {
         migrationProgress.status = 'paused';
         await saveProgressToRedis();
 
-        console.log('🛑 Process paused due to inactivity');
+        console.log(' Process paused due to inactivity');
 
         res.json({
           success: true,
@@ -3188,7 +3190,7 @@ router.post('/recover', async (req: Request, res: Response) => {
         });
       } else {
         // Process might still be running but heartbeat not updating
-        console.log('✅ Recent activity detected, process may still be running');
+        console.log(' Recent activity detected, process may still be running');
         res.json({
           success: true,
           message: 'Recent activity detected, process appears active',
@@ -3197,7 +3199,7 @@ router.post('/recover', async (req: Request, res: Response) => {
         });
       }
     } else {
-      console.log('✅ No stuck process detected');
+      console.log(' No stuck process detected');
       res.json({
         success: true,
         message: 'Process is running normally',
@@ -3206,7 +3208,7 @@ router.post('/recover', async (req: Request, res: Response) => {
       });
     }
   } catch (error) {
-    console.error('❌ Error checking stuck process:', error);
+    console.error(' Error checking stuck process:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to check process status'
@@ -3216,7 +3218,7 @@ router.post('/recover', async (req: Request, res: Response) => {
 
 // SSE endpoint for real-time progress updates
 router.get('/progress/stream', async (req: Request, res: Response) => {
-  console.log('🔌 SSE connection requested');
+  console.log(' SSE connection requested');
 
   // Set headers for SSE
   res.writeHead(200, {
@@ -3231,7 +3233,7 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
   const sendProgress = async () => {
     try {
       await loadProgressFromRedis();
-      console.log('📡 SSE sending progress:', {
+      console.log(' SSE sending progress:', {
         status: migrationProgress.status,
         current: migrationProgress.current,
         total: migrationProgress.total,
@@ -3262,7 +3264,7 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
 
   // Set up interval to send progress updates every 2 seconds
   const interval = setInterval(sendProgress, 2000);
-  console.log('🔄 SSE interval started for progress updates');
+  console.log(' SSE interval started for progress updates');
 
   // Clean up on client disconnect
   req.on('close', () => {

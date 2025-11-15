@@ -1,23 +1,24 @@
 'use client';
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import React, { useState, useEffect } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   ChevronDown,
   ChevronRight,
-  Copy,
-  Search,
-  Maximize2,
-  Minimize2
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 interface JsonViewerProps {
   data: any;
   title?: string;
   className?: string;
+  selectedFields?: Set<string>;
+  onFieldToggle?: (path: string) => void;
+  highlightPath?: string;
+  editMode?: boolean;
+  onValueChange?: (path: string, newValue: any) => void;
+  toolbar?: React.ReactNode;
 }
 
 interface JsonNodeProps {
@@ -25,12 +26,33 @@ interface JsonNodeProps {
   keyName?: string;
   level: number;
   isLast: boolean;
-  expandable: boolean;
+  path?: string;
+  selectedFields?: Set<string>;
+  onFieldToggle?: (path: string) => void;
+  highlightPath?: string;
+  editMode?: boolean;
+  onValueChange?: (path: string, newValue: any) => void;
 }
 
-const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expandable = true }) => {
-  const [isExpanded, setIsExpanded] = useState(level < 2);
-  const { toast } = useToast();
+const JsonNode: React.FC<JsonNodeProps> = ({
+  data,
+  keyName,
+  level,
+  isLast,
+  path = '',
+  selectedFields,
+  onFieldToggle,
+  highlightPath,
+  editMode,
+  onValueChange
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+
+  const currentPath = path ? `${path}.${keyName}` : keyName || 'root';
+  const isHighlighted = highlightPath === currentPath;
+  const isSelected = selectedFields?.has(currentPath);
 
   const getType = (value: any) => {
     if (value === null) return 'null';
@@ -40,27 +62,62 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
 
   const type = getType(data);
   const isExpandable = type === 'object' || type === 'array';
+  const isLeafNode = !isExpandable;
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied",
-      description: "JSON path copied to clipboard"
-    });
+  // Hide internal fields that start with underscore except _textExcerpt and _contentHash
+  const shouldHideField = keyName?.startsWith('_') && keyName !== '_textExcerpt' && keyName !== '_contentHash';
+
+  const handleCheckboxChange = (checked: boolean) => {
+    onFieldToggle?.(currentPath);
+  };
+
+  const handleEdit = () => {
+    if (!editMode || !isLeafNode) return;
+    setIsEditing(true);
+    setEditValue(JSON.stringify(data));
+  };
+
+  const handleSaveEdit = () => {
+    try {
+      const parsed = JSON.parse(editValue);
+      onValueChange?.(currentPath, parsed);
+      setIsEditing(false);
+    } catch (error) {
+      // Invalid JSON, try as string
+      onValueChange?.(currentPath, editValue);
+      setIsEditing(false);
+    }
   };
 
   const renderValue = () => {
+    if (isEditing) {
+      return (
+        <input
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleSaveEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSaveEdit();
+            if (e.key === 'Escape') setIsEditing(false);
+          }}
+          className="flex-1 px-2 py-0.5 text-xs bg-background border border-primary rounded focus:outline-none focus:ring-1 focus:ring-primary"
+          autoFocus
+        />
+      );
+    }
+
     switch (type) {
       case 'string':
-        return <span className="text-green-600 dark:text-green-400">"{data}"</span>;
+        return <span className="text-green-600 dark:text-green-400 text-xs" onDoubleClick={handleEdit}>"{data}"</span>;
       case 'number':
-        return <span className="text-blue-600 dark:text-blue-400">{data}</span>;
+        return <span className="text-blue-600 dark:text-blue-400 text-xs" onDoubleClick={handleEdit}>{data}</span>;
       case 'boolean':
-        return <span className="text-purple-600 dark:text-purple-400">{data.toString()}</span>;
+        return <span className="text-purple-600 dark:text-purple-400 text-xs" onDoubleClick={handleEdit}>{data.toString()}</span>;
       case 'null':
-        return <span className="text-gray-500 dark:text-gray-400">null</span>;
+        return <span className="text-gray-500 dark:text-gray-400 text-xs">null</span>;
       case 'undefined':
-        return <span className="text-gray-500 dark:text-gray-400">undefined</span>;
+        return <span className="text-gray-500 dark:text-gray-400 text-xs">undefined</span>;
       default:
         return null;
     }
@@ -74,7 +131,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
       : Object.entries(data).map(([key, value]) => ({ key, value }));
 
     return (
-      <div className="ml-4 border-l border-border/30">
+      <div className="ml-6 border-l border-border/30 pl-2">
         {entries.map((entry, index) => (
           <JsonNode
             key={entry.key}
@@ -82,18 +139,47 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
             keyName={entry.key.toString()}
             level={level + 1}
             isLast={index === entries.length - 1}
+            path={currentPath}
+            selectedFields={selectedFields}
+            onFieldToggle={onFieldToggle}
+            highlightPath={highlightPath}
+            editMode={editMode}
+            onValueChange={onValueChange}
           />
         ))}
       </div>
     );
   };
 
+  // Don't render hidden internal fields
+  if (shouldHideField) {
+    return null;
+  }
+
   return (
-    <div className={`select-text ${!isLast ? 'border-b border-border/10 pb-1 mb-1' : ''}`}>
+    <div
+      id={`json-node-${currentPath.replace(/\./g, '-')}`}
+      className={`py-1 ${
+        isHighlighted ? 'bg-yellow-100 dark:bg-yellow-900/30 rounded px-2' : ''
+      } ${
+        isSelected ? 'bg-blue-100 dark:bg-blue-900/40 rounded px-2 border-l-2 border-blue-500' : ''
+      }`}
+    >
       <div className="flex items-start gap-2">
+        {/* Checkbox for all nodes (both parent and leaf) */}
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={handleCheckboxChange}
+          className="mt-0.5"
+        />
+
+        {/* Expand/collapse button */}
         {isExpandable && (
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
             className="p-0.5 hover:bg-muted/50 rounded transition-colors"
           >
             {isExpanded ? (
@@ -106,23 +192,23 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
 
         {!isExpandable && <div className="w-4" />}
 
+        {/* Key name */}
         {keyName !== undefined && (
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600 dark:text-gray-400 font-medium">
-              {keyName}:
-            </span>
-          </div>
+          <span className="text-gray-700 dark:text-gray-300 font-medium text-xs">
+            {keyName}:
+          </span>
         )}
 
-        <div className="flex-1">
+        {/* Value */}
+        <div className="flex-1 flex items-center gap-2">
           {isExpandable ? (
-            <div className="flex items-center gap-2">
+            <>
               <span className="text-gray-500 dark:text-gray-400">
                 {type === 'array' ? '[' : '{'}
               </span>
               {!isExpanded && (
                 <>
-                  <span className="text-muted-foreground text-sm">
+                  <span className="text-muted-foreground text-xs">
                     {type === 'array' ? `${data.length} items` : `${Object.keys(data).length} keys`}
                   </span>
                   <span className="text-gray-500 dark:text-gray-400">
@@ -131,19 +217,11 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
                 </>
               )}
               {isExpanded && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="text-xs">
-                    {type === 'array' ? `${data.length} items` : `${Object.keys(data).length} keys`}
-                  </Badge>
-                  <button
-                    onClick={() => copyToClipboard(keyName || 'root')}
-                    className="p-1 hover:bg-muted/50 rounded"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </button>
-                </div>
+                <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                  {type === 'array' ? `${data.length} items` : `${Object.keys(data).length} keys`}
+                </Badge>
               )}
-            </div>
+            </>
           ) : (
             renderValue()
           )}
@@ -153,7 +231,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
       {renderChildren()}
 
       {isExpandable && isExpanded && (
-        <div className="ml-4 text-gray-500 dark:text-gray-400">
+        <div className="ml-6 text-gray-500 dark:text-gray-400 text-xs">
           {type === 'array' ? ']' : '}'}
         </div>
       )}
@@ -161,51 +239,57 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, keyName, level, isLast, expan
   );
 };
 
-export default function JsonViewer({ data, title = "JSON Data", className = "" }: JsonViewerProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isRaw, setIsRaw] = useState(false);
-
-  const formattedJson = JSON.stringify(data, null, 2);
+export default function JsonViewer({
+  data,
+  title = "",
+  className = "",
+  selectedFields,
+  onFieldToggle,
+  highlightPath,
+  editMode = false,
+  onValueChange,
+  toolbar
+}: JsonViewerProps) {
+  // Scroll to highlighted element when highlightPath changes
+  useEffect(() => {
+    if (highlightPath) {
+      const elementId = `json-node-${highlightPath.replace(/\./g, '-')}`;
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [highlightPath]);
 
   return (
     <div className={`h-full flex flex-col ${className}`}>
-      <div className="flex items-center justify-between p-3 border-b border-border/50">
-        <h3 className="font-medium text-foreground">{title}</h3>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsRaw(!isRaw)}
-            className="text-xs"
-          >
-            {isRaw ? 'Tree View' : 'Raw JSON'}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="h-8 w-8"
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </Button>
+      {(title || toolbar || selectedFields) && (
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/50 bg-background/50">
+          <div className="flex items-center gap-2">
+            {title && <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{title}</h3>}
+            {selectedFields && (
+              <Badge variant="secondary" className="text-[9px] h-3.5 px-1">
+                {selectedFields.size} selected
+              </Badge>
+            )}
+          </div>
+          {toolbar}
         </div>
-      </div>
+      )}
 
-      <ScrollArea className={`flex-1 ${isFullscreen ? 'fixed inset-0 z-50 bg-background border-0' : ''}`}>
+      <ScrollArea className="flex-1">
         <div className="p-4">
-          {isRaw ? (
-            <pre className="text-sm font-mono text-muted-foreground whitespace-pre-wrap">
-              {formattedJson}
-            </pre>
-          ) : (
-            <JsonNode
-              data={data}
-              level={0}
-              isLast={true}
-              expandable={true}
-            />
-          )}
+          <JsonNode
+            data={data}
+            level={0}
+            isLast={true}
+            path=""
+            selectedFields={selectedFields}
+            onFieldToggle={onFieldToggle}
+            highlightPath={highlightPath}
+            editMode={editMode}
+            onValueChange={onValueChange}
+          />
         </div>
       </ScrollArea>
     </div>

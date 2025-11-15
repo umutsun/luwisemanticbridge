@@ -48,6 +48,7 @@ import ragRoutes from "./routes/rag.routes";
 import authRoutes from "./routes/auth.routes";
 import usersRoutes from "./routes/users.routes";
 import subscriptionRoutes from "./routes/subscription.routes";
+import templateRoutes from "./routes/template.routes";
 import embeddingHistoryRoutes from "./routes/embedding-history.routes";
 import embeddingCleanupRoutes from "./routes/embedding-cleanup.routes";
 import aiSettingsRoutes from "./routes/ai-settings.routes";
@@ -83,6 +84,9 @@ import documentProcessingRoutes from "./routes/document-processing.routes";
 import ocrRoutes from "./routes/ocr.routes";
 import integrationsRoutes from "./routes/integrations.routes";
 import whisperRoutes from "./routes/whisper.routes";
+import pdfBatchRoutes from "./routes/pdf-batch.routes";
+import batchFoldersRoutes from "./routes/batch-folders.routes";
+import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
@@ -108,7 +112,7 @@ const corsOrigins = (
   .map((origin) => origin.trim());
 
 // Initialize Socket.io if WebSocket is enabled
-console.log(`🔌 WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'} | Port: ${SERVER.WEBSOCKET.PORT}`);
+console.log(` WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'} | Port: ${SERVER.WEBSOCKET.PORT}`);
 
 const io = SERVER.WEBSOCKET.ENABLED
   ? new SocketServer(httpServer, {
@@ -414,6 +418,8 @@ app.use("/api/v2/translate", translateRoutes);
 app.use("/api/v2/translation-embeddings", translationEmbeddingsRoutes);
 app.use(historyRoutes);
 app.use("/api/v2/documents", documentsRoutes);
+app.use("/api/v2/pdf", pdfBatchRoutes);
+app.use("/api/v2/batch-folders", batchFoldersRoutes);
 app.use("/documents", documentsRoutes);
 app.use(API.ENDPOINTS.V2.MIGRATION, migrationRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingsV2Routes);
@@ -430,6 +436,7 @@ app.use("/health", healthRoutes);
 app.use("/api/health", healthRoutes);
 
 app.use("/api/v2/subscription", subscriptionRoutes);
+app.use("/api/v2/templates", templateRoutes);
 app.use("/api/v2/embedding-history", embeddingHistoryRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingCleanupRoutes);
 app.use("/api/v2/ai", aiSettingsRoutes);
@@ -461,9 +468,9 @@ app.use("/api/whisper", whisperRoutes);
 // GraphQL server
 try {
   createGraphQLServer(app);
-  console.log("✅ GraphQL server initialized at /api/graphql");
+  console.log(" GraphQL server initialized at /api/graphql");
 } catch (gqlError: any) {
-  console.error("❌ GraphQL server failed:", gqlError.message);
+  console.error(" GraphQL server failed:", gqlError.message);
 }
 
 // Base route
@@ -490,7 +497,7 @@ app.get("/api/v2", (req: Request, res: Response) => {
 
 // WebSocket handling - only if enabled
 if (SERVER.WEBSOCKET.ENABLED && io) {
-  console.log(`🔌 WebSocket enabled on path: ${SERVER.WEBSOCKET.PATH}`);
+  console.log(` WebSocket enabled on path: ${SERVER.WEBSOCKET.PATH}`);
   io.on("connection", (socket) => {
     console.log("WebSocket client connected");
 
@@ -544,13 +551,13 @@ if (SERVER.WEBSOCKET.ENABLED && io) {
     });
   });
 } else {
-  console.log("🔌 WebSocket disabled by configuration");
+  console.log(" WebSocket disabled by configuration");
 }
 
 // Standard WebSocket connection handling - only if enabled
 if (SERVER.WEBSOCKET.ENABLED && wss) {
   console.log(
-    `🔌 Standard WebSocket enabled on path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`
+    ` Standard WebSocket enabled on path: ${SERVER.WEBSOCKET.NOTIFICATIONS_PATH}`
   );
 
   // Store Redis subscriber instances per WebSocket connection
@@ -613,7 +620,7 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
               break;
             }
 
-            console.log(`📊 Subscribing to crawler progress: ${jobId}`);
+            console.log(` Subscribing to crawler progress: ${jobId}`);
 
             // Create a new Redis subscriber for this connection if not exists
             let redisSubscriber = redisSubscribers.get(ws);
@@ -659,7 +666,7 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
             const subscriber = redisSubscribers.get(ws);
             if (subscriber && unsubJobId) {
               await subscriber.unsubscribe(`crawler_export_progress:${unsubJobId}`);
-              console.log(`📊 Unsubscribed from crawler progress: ${unsubJobId}`);
+              console.log(` Unsubscribed from crawler progress: ${unsubJobId}`);
             }
             break;
 
@@ -689,7 +696,7 @@ if (SERVER.WEBSOCKET.ENABLED && wss) {
       if (subscriber) {
         await subscriber.quit();
         redisSubscribers.delete(ws);
-        console.log('📊 Cleaned up Redis subscriber for closed connection');
+        console.log(' Cleaned up Redis subscriber for closed connection');
       }
     });
 
@@ -753,6 +760,13 @@ if (SERVER.WEBSOCKET.ENABLED && io) {
 
   // Initialize script log bridge for real-time Python script logs
   initializeScriptLogBridge();
+
+  // Initialize PDF Progress WebSocket Service
+  if (io) {
+    const pdfProgressWS = initPDFProgressWS(io);
+    (global as any).pdfProgressWSService = pdfProgressWS;
+    console.log(' PDF Progress WebSocket Service initialized');
+  }
 }
 
 // Enhanced error handling middleware
@@ -770,7 +784,7 @@ import { loadProgressFromRedis as loadV2ProgressFromRedis } from "./routes/embed
 const PORT = SERVER.PORT;
 
 async function startServer() {
-  console.log(`\n🚀 LUWI Backend v2.0.0 | Port: ${PORT} | ${process.env.NODE_ENV || "development"}`);
+  console.log(`\n LUWI Backend v2.0.0 | Port: ${PORT} | ${process.env.NODE_ENV || "development"}`);
 
   // Database connection variables
   let dbConnectionAttempts = 0;
@@ -781,16 +795,16 @@ async function startServer() {
   while (dbConnectionAttempts < maxDbRetries) {
     try {
       await lsembPool.query("SELECT 1");
-      console.log(`✅ PostgreSQL: ${process.env.POSTGRES_HOST}:${process.env.POSTGRES_PORT}/${process.env.POSTGRES_DB}`);
+      console.log(` PostgreSQL: ${process.env.POSTGRES_HOST}:${process.env.POSTGRES_PORT}/${process.env.POSTGRES_DB}`);
       break; // Success, exit retry loop
     } catch (dbError: any) {
       dbConnectionAttempts++;
       console.error(
-        `❌ Attempt ${dbConnectionAttempts}/${maxDbRetries} failed`
+        ` Attempt ${dbConnectionAttempts}/${maxDbRetries} failed`
       );
 
       if (dbConnectionAttempts >= maxDbRetries) {
-        console.error("\n💥 DATABASE CONNECTION FAILED");
+        console.error("\n DATABASE CONNECTION FAILED");
         console.error("   Server will continue in LIMITED MODE");
 
         // Set server status to indicate database connection failure
@@ -811,43 +825,43 @@ async function startServer() {
   if ((global as any).serverStatus?.database !== "disconnected") {
     try {
       // Initialize LSEMB database tables
-      console.log("\n🗃️ [2/4] DATABASE SETUP");
+      console.log("\n️ [2/4] DATABASE SETUP");
       console.log("------------------------");
-      console.log("🔄 Initializing tables...");
+      console.log(" Initializing tables...");
       await initializeLsembDatabase();
-      console.log("✅ Tables: Ready");
+      console.log(" Tables: Ready");
 
       // Load payload limits from settings
-      console.log("🔄 Loading upload limits from settings...");
+      console.log(" Loading upload limits from settings...");
       const { updatePayloadLimitsFromSettings, getUploadLimitBytes } = await import('./middleware/security.middleware');
       await updatePayloadLimitsFromSettings(lsembPool);
       const uploadLimitMB = (getUploadLimitBytes() / (1024 * 1024)).toFixed(0);
-      console.log(`✅ Upload limits: Configured (Max file size: ${uploadLimitMB}MB)`);
+      console.log(` Upload limits: Configured (Max file size: ${uploadLimitMB}MB)`);
 
       // Create default admin user if not exists
       const authService = new AuthService();
       await authService.createDefaultAdmin();
-      console.log("✅ Admin user: Checked");
+      console.log(" Admin user: Checked");
 
       // Load all configurations from ASEMB database
-      console.log("\n⚙️ [3/4] CONFIGURATION");
+      console.log("\n️ [3/4] CONFIGURATION");
       console.log("---------------------");
-      console.log("🔄 Loading settings from database...");
+      console.log(" Loading settings from database...");
       await initializeConfigs();
-      console.log("✅ Settings: Loaded");
+      console.log(" Settings: Loaded");
 
       // Sync API keys from environment variables to database
       await syncAPIKeysToDatabase();
-      console.log("✅ API keys: Synced");
+      console.log(" API keys: Synced");
 
       // Initialize LLMManager with settings from database
       try {
         const { LLMManager } = await import('./services/llm-manager.service');
         const llmManager = LLMManager.getInstance();
         await llmManager.initialize();
-        console.log("✅ LLM Manager: Initialized with database settings");
+        console.log(" LLM Manager: Initialized with database settings");
       } catch (error: any) {
-        console.error("❌ LLM Manager initialization failed:", error.message);
+        console.error(" LLM Manager initialization failed:", error.message);
       }
 
       // Update server status to indicate successful database connection
@@ -857,7 +871,7 @@ async function startServer() {
         settings: "loaded",
       };
     } catch (configError: any) {
-      console.error("⚠️ Configuration loading failed:", configError.message);
+      console.error("️ Configuration loading failed:", configError.message);
       (global as any).serverStatus = {
         database: "connected",
         loading: false,
@@ -868,12 +882,12 @@ async function startServer() {
   }
 
   // Initialize Redis
-  console.log("\n📡 REDIS CONNECTION");
+  console.log("\n REDIS CONNECTION");
   console.log("---------------------");
   try {
-    console.log("🔄 Connecting to Redis...");
+    console.log(" Connecting to Redis...");
     await initializeRedis();
-    console.log("✅ Redis: Connected");
+    console.log(" Redis: Connected");
 
     // Initialize Console Log Service after Redis is connected
     consoleLogService = initializeConsoleLogService(redis);
@@ -884,10 +898,10 @@ async function startServer() {
         const redisInfo = await redis.info("keyspace");
         const dbKeys = redisInfo.match(/db\d+:keys=(\d+)/);
         if (dbKeys) {
-          console.log(`📊 DB Keys: ${dbKeys[1]} items`);
+          console.log(` DB Keys: ${dbKeys[1]} items`);
         }
       } catch (redisInfoError) {
-        console.warn("⚠️ Could not get Redis info");
+        console.warn("️ Could not get Redis info");
       }
     }
 
@@ -896,7 +910,7 @@ async function startServer() {
       (global as any).serverStatus.redis = "connected";
     }
   } catch (redisError: any) {
-    console.error("❌ Redis connection failed");
+    console.error(" Redis connection failed");
     if ((global as any).serverStatus) {
       (global as any).serverStatus.redis = "disconnected";
       (global as any).serverStatus.redisError = redisError.message;
@@ -904,7 +918,7 @@ async function startServer() {
   }
 
   // Initialize AI Services
-  console.log("\n🤖 [4/4] AI SERVICES");
+  console.log("\n [4/4] AI SERVICES");
   console.log("-------------------");
   const settingsService = SettingsService.getInstance();
   const aiServices = [
@@ -969,31 +983,31 @@ async function startServer() {
 
     if (isConfigured) {
       console.log(
-        `✅ ${service.name}: Available (${service.model}) [${source}]`
+        ` ${service.name}: Available (${service.model}) [${source}]`
       );
     } else {
-      console.log(`❌ ${service.name}: Not configured`);
+      console.log(` ${service.name}: Not configured`);
     }
   }
 
   // Check Embedding settings
-  console.log("\n🔤 EMBEDDINGS");
+  console.log("\n EMBEDDINGS");
   console.log("-------------");
   if (process.env.USE_LOCAL_EMBEDDINGS === "true") {
-    console.log("📦 Provider: Local");
+    console.log(" Provider: Local");
   } else {
-    console.log("📦 Provider: OpenAI (default)");
+    console.log(" Provider: OpenAI (default)");
   }
 
 
   // Load migration progress from Redis (only if Redis is available)
   if (redis) {
     try {
-      console.log("\n📈 Migration Status:");
+      console.log("\n Migration Status:");
       await loadProgressFromRedis();
     } catch (migrationError: any) {
       console.log(
-        "⚠️ Migration progress check failed:",
+        "️ Migration progress check failed:",
         migrationError.message
       );
     }
@@ -1002,12 +1016,12 @@ async function startServer() {
   // Also check v2 embedding progress
   const v2ProgressLoaded = await loadV2ProgressFromRedis();
   if (v2ProgressLoaded) {
-    console.log("🔄 Found active v2 embedding process");
+    console.log(" Found active v2 embedding process");
 
     // If process was paused, auto-resume it after backend restart
     const embeddingStatus = await redis.get("embedding:status");
     if (embeddingStatus === "paused") {
-      console.log("🔄 Auto-resuming paused embedding process...");
+      console.log(" Auto-resuming paused embedding process...");
       try {
         // Internal auto-resume - don't log this as user operation
         await fetch(`http://localhost:${PORT}/api/v2/embeddings/auto-resume`, {
@@ -1017,12 +1031,12 @@ async function startServer() {
       } catch (autoResumeError) {
         if (autoResumeError instanceof Error) {
           console.log(
-            "⚠️ Auto-resume failed, user can resume manually:",
+            "️ Auto-resume failed, user can resume manually:",
             autoResumeError.message
           );
         } else {
           console.log(
-            "⚠️ Auto-resume failed with an unknown error, user can resume manually."
+            "️ Auto-resume failed with an unknown error, user can resume manually."
           );
         }
       }
@@ -1034,7 +1048,7 @@ async function startServer() {
     const embeddingProgress = await redis.get("embedding:progress");
     if (embeddingProgress) {
       const progress = JSON.parse(embeddingProgress);
-      console.log(`📊 Migration Status: ${progress.status || "unknown"}`);
+      console.log(` Migration Status: ${progress.status || "unknown"}`);
       if (progress.currentTable) {
         console.log(`   Active Table: ${progress.currentTable}`);
         console.log(
@@ -1121,20 +1135,20 @@ async function startServer() {
 
 // Start HTTP server (this should always happen regardless of database status)
 const startHttpServer = () => {
-  console.log("\n🌐 SERVER STARTUP");
+  console.log("\n SERVER STARTUP");
   console.log("==================");
-  console.log(`📡 WebSocket: Ready`);
-  console.log(`🌐 API: http://localhost:${PORT}`);
-  console.log(`📊 Health: GET /health`);
+  console.log(` WebSocket: Ready`);
+  console.log(` API: http://localhost:${PORT}`);
+  console.log(` Health: GET /health`);
 
   // Initialize message cleanup service
   try {
     const cleanupService = MessageCleanupService.getInstance();
-    console.log("🧹 Message cleanup service initialized");
+    console.log(" Message cleanup service initialized");
   } catch (error) {
-    console.log("⚠️ Failed to initialize message cleanup service:", error);
+    console.log("️ Failed to initialize message cleanup service:", error);
   }
-  console.log(`📚 Docs: GET /api/v2`);
+  console.log(` Docs: GET /api/v2`);
 
   // Publish startup event
   if (redis) {
@@ -1158,25 +1172,25 @@ const startHttpServer = () => {
   if (!httpServer.listening) {
     httpServer.listen(PORT, () => {
       const duration = Date.now() - Date.now();
-      console.log(`\n✅ Server listening on port ${PORT}`);
+      console.log(`\n Server listening on port ${PORT}`);
 
       // Display final status
       const serverStatus = (global as any).serverStatus;
       if (serverStatus?.database === "connected") {
-        console.log("🟢 Status: FULLY OPERATIONAL");
+        console.log(" Status: FULLY OPERATIONAL");
       } else if (serverStatus?.loading) {
-        console.log("🟡 Status: LIMITED MODE (DB Connection Failed)");
+        console.log(" Status: LIMITED MODE (DB Connection Failed)");
       } else {
-        console.log("🟡 Status: LIMITED MODE");
+        console.log(" Status: LIMITED MODE");
       }
       console.log("==============================\n");
     });
   }
 };
 
-// 🚀 Emergency Chat Routes - DISABLED (using chatbot-settings.routes.ts instead)
+//  Emergency Chat Routes - DISABLED (using chatbot-settings.routes.ts instead)
 const setupChatRoutes = () => {
-  console.log("🔄 Emergency routes disabled - using regular routes");
+  console.log(" Emergency routes disabled - using regular routes");
 };
 
 /* EMERGENCY ROUTES DISABLED - using chatbot-settings.routes.ts instead
@@ -1184,7 +1198,7 @@ const setupChatRoutesOLD = () => {
   // 1. Settings - DISABLED
   app.get("/api/v2/chatbot/settings", async (req, res) => {
     try {
-      console.log("✅ /api/v2/chatbot/settings called");
+      console.log(" /api/v2/chatbot/settings called");
       res.header("Access-Control-Allow-Origin", "*");
       res.header(
         "Access-Control-Allow-Methods",
@@ -1234,7 +1248,7 @@ const setupChatRoutesOLD = () => {
 
   // 2. Chat
   app.post("/api/v2/chat", (req, res) => {
-    console.log("✅ /api/v2/chat called", req.body);
+    console.log(" /api/v2/chat called", req.body);
     res.header("Access-Control-Allow-Origin", "*");
     res.header(
       "Access-Control-Allow-Methods",
@@ -1259,7 +1273,7 @@ const setupChatRoutesOLD = () => {
 
   // 3. Suggestions
   app.get("/api/v2/chat/suggestions", (req, res) => {
-    console.log("✅ /api/v2/chat/suggestions called");
+    console.log(" /api/v2/chat/suggestions called");
     res.header("Access-Control-Allow-Origin", "*");
     res.header(
       "Access-Control-Allow-Methods",
@@ -1279,14 +1293,14 @@ const setupChatRoutesOLD = () => {
     });
   });
 
-  console.log("✅ Emergency routes disabled - using regular chatbot routes");
+  console.log(" Emergency routes disabled - using regular chatbot routes");
 };
 */
 
 // Setup emergency routes first - will be called after function declaration
 setupChatRoutes();
 
-// 🚀 Start server immediately without waiting for all services
+//  Start server immediately without waiting for all services
 const emergencyServerStarted = false;
 
 // Try to start full services (but don't block)
@@ -1299,7 +1313,7 @@ startServer()
   })
   .catch((err) => {
     console.error(
-      "⚠️ Full startup failed, but emergency routes are working:",
+      "️ Full startup failed, but emergency routes are working:",
       err
     );
     // Even if full startup fails, start HTTP server in limited mode

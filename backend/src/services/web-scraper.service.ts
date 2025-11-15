@@ -129,24 +129,24 @@ export class WebScraperService {
         this.openai = new OpenAI({
           apiKey: process.env.OPENAI_API_KEY
         });
-        console.log('✅ OpenAI initialized for intelligent scraping');
+        console.log(' OpenAI initialized for intelligent scraping');
       }
 
       // Initialize Redis
       try {
         this.redis = await initializeRedis();
         if (this.redis && this.redis.status === 'ready') {
-          console.log('✅ Redis initialized for intelligent scraper caching');
+          console.log(' Redis initialized for intelligent scraper caching');
         } else {
-          console.log('⚠️ Redis not available, caching disabled');
+          console.log('️ Redis not available, caching disabled');
           this.cacheEnabled = false;
         }
       } catch (error) {
-        console.warn('⚠️ Failed to initialize Redis, caching disabled:', error);
+        console.warn('️ Failed to initialize Redis, caching disabled:', error);
         this.cacheEnabled = false;
       }
     } catch (error) {
-      console.error('❌ Failed to initialize intelligent scraper services:', error);
+      console.error(' Failed to initialize intelligent scraper services:', error);
     }
   }
 
@@ -172,7 +172,7 @@ export class WebScraperService {
     const visited = new Set<string>();
     const queue = [url];
 
-    console.log(`🚀 Starting enhanced scrape of ${url} with caching: ${useCache}, LLM filtering: ${llmFiltering}`);
+    console.log(` Starting enhanced scrape of ${url} with caching: ${useCache}, LLM filtering: ${llmFiltering}`);
 
     try {
       // Check robots.txt if needed
@@ -186,7 +186,7 @@ export class WebScraperService {
       // Check for sitemap
       const sitemapUrls = await this.getSitemapUrls(url);
       if (sitemapUrls.length > 0 && followLinks) {
-        console.log(`📄 Found ${sitemapUrls.length} URLs in sitemap`);
+        console.log(` Found ${sitemapUrls.length} URLs in sitemap`);
         queue.push(...sitemapUrls.slice(0, maxPages - 1));
       }
 
@@ -218,7 +218,7 @@ export class WebScraperService {
               result.cacheHit = true;
               cacheHit = true;
               this.performanceMetrics.cacheHits++;
-              console.log(`🎯 Cache hit for ${currentUrl}`);
+              console.log(` Cache hit for ${currentUrl}`);
             }
           }
 
@@ -276,7 +276,7 @@ export class WebScraperService {
           }
 
         } catch (error: any) {
-          console.error(`❌ Error scraping ${currentUrl}:`, error.message);
+          console.error(` Error scraping ${currentUrl}:`, error.message);
           this.performanceMetrics.errorCount++;
 
           // Add error result for tracking
@@ -294,8 +294,8 @@ export class WebScraperService {
       const totalTime = Date.now() - startTime;
       this.performanceMetrics.avgResponseTime = (this.performanceMetrics.avgResponseTime + totalTime) / 2;
 
-      console.log(`✅ Enhanced scraping completed: ${results.length} pages in ${totalTime}ms`);
-      console.log(`📊 Performance: Cache hits: ${this.performanceMetrics.cacheHits}, Cache misses: ${this.performanceMetrics.cacheMisses}, LLM processed: ${this.performanceMetrics.llmProcessed}`);
+      console.log(` Enhanced scraping completed: ${results.length} pages in ${totalTime}ms`);
+      console.log(` Performance: Cache hits: ${this.performanceMetrics.cacheHits}, Cache misses: ${this.performanceMetrics.cacheMisses}, LLM processed: ${this.performanceMetrics.llmProcessed}`);
 
       return results;
 
@@ -335,7 +335,7 @@ export class WebScraperService {
         return result.data;
       }
     } catch (error) {
-      console.warn('⚠️ Cache read error handled by reliability service:', error);
+      console.warn('️ Cache read error handled by reliability service:', error);
     }
 
     return null;
@@ -375,11 +375,11 @@ export class WebScraperService {
           }
         } catch (indexError) {
           // Index management failure doesn't affect main caching
-          console.warn('⚠️ Cache index update failed:', indexError);
+          console.warn('️ Cache index update failed:', indexError);
         }
       }
     } catch (error) {
-      console.warn('⚠️ Cache write error handled by reliability service:', error);
+      console.warn('️ Cache write error handled by reliability service:', error);
     }
   }
 
@@ -459,7 +459,7 @@ export class WebScraperService {
         return analysis;
       }
     } catch (error) {
-      console.warn('⚠️ LLM processing error:', error);
+      console.warn('️ LLM processing error:', error);
     }
 
     return null;
@@ -513,7 +513,7 @@ export class WebScraperService {
         return JSON.parse(content);
       }
     } catch (error) {
-      console.warn('⚠️ Entity extraction error:', error);
+      console.warn('️ Entity extraction error:', error);
     }
 
     return [];
@@ -563,12 +563,12 @@ export class WebScraperService {
           ]);
         }
 
-        console.log(`💾 Saved ${result.chunks.length} chunks to scrape_embeddings for ${result.url}`);
+        console.log(` Saved ${result.chunks.length} chunks to scrape_embeddings for ${result.url}`);
       } finally {
         client.release();
       }
     } catch (error) {
-      console.error('❌ Error saving to scrape_embeddings:', error);
+      console.error(' Error saving to scrape_embeddings:', error);
     }
   }
 
@@ -1061,9 +1061,9 @@ export class WebScraperService {
           await this.redis.del(indexKey);
         }
       }
-      console.log('🗑️ Cache cleared successfully');
+      console.log('️ Cache cleared successfully');
     } catch (error) {
-      console.error('❌ Error clearing cache:', error);
+      console.error(' Error clearing cache:', error);
     }
   }
 

@@ -32,10 +32,10 @@ const getUploadDirectory = (): string => {
   // Create directory if it doesn't exist
   if (!fs.existsSync(fullPath)) {
     fs.mkdirSync(fullPath, { recursive: true });
-    console.log(`📁 Created documents directory: ${fullPath}`);
+    console.log(` Created documents directory: ${fullPath}`);
   }
 
-  console.log(`📂 Using documents directory: ${fullPath}`);
+  console.log(` Using documents directory: ${fullPath}`);
   return fullPath;
 };
 
@@ -57,13 +57,13 @@ const storage = multer.diskStorage({
 
     // Check if file exists
     if (fs.existsSync(targetPath)) {
-      console.log(`📝 Overwriting existing file: ${file.originalname}`);
+      console.log(` Overwriting existing file: ${file.originalname}`);
       // Delete old file before upload
       try {
         fs.unlinkSync(targetPath);
-        console.log(`🗑️ Deleted old file: ${file.originalname}`);
+        console.log(`️ Deleted old file: ${file.originalname}`);
       } catch (err) {
-        console.error(`⚠️ Failed to delete old file:`, err);
+        console.error(`️ Failed to delete old file:`, err);
       }
     }
 
@@ -148,8 +148,17 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
         chunk_text TEXT NOT NULL,
         embedding vector(1536),
         metadata JSONB,
+        model_name VARCHAR(100),
+        tokens_used INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    // Add missing columns to existing table (migration)
+    await lsembPool.query(`
+      ALTER TABLE document_embeddings
+      ADD COLUMN IF NOT EXISTS model_name VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS tokens_used INTEGER DEFAULT 0
     `);
 
     const result = await lsembPool.query(
@@ -229,13 +238,13 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
     const { originalname, size, mimetype, path: filePath, filename } = req.file;
     const skipDb = req.query.skipDb === 'true';
 
-    console.log(`📤 File uploaded: ${originalname} -> ${filename}`);
-    console.log(`📂 Saved to: ${filePath}`);
-    console.log(`🔧 Skip DB: ${skipDb}`);
+    console.log(` File uploaded: ${originalname} -> ${filename}`);
+    console.log(` Saved to: ${filePath}`);
+    console.log(` Skip DB: ${skipDb}`);
 
     // If skipDb is true, just return success without saving to database
     if (skipDb) {
-      console.log(`✅ Physical upload only - not saving to database`);
+      console.log(` Physical upload only - not saving to database`);
       return res.json({
         success: true,
         message: 'File uploaded to physical storage only',
@@ -254,15 +263,15 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
     );
 
     if (existingCheck.rows.length > 0) {
-      console.log(`📝 Found existing document with same filename, will update it`);
+      console.log(` Found existing document with same filename, will update it`);
       // Delete old physical file if it's different from new one
       const oldFilePath = existingCheck.rows[0].file_path;
       if (oldFilePath && oldFilePath !== filePath && fs.existsSync(oldFilePath)) {
         try {
           fs.unlinkSync(oldFilePath);
-          console.log(`🗑️ Deleted old physical file: ${oldFilePath}`);
+          console.log(`️ Deleted old physical file: ${oldFilePath}`);
         } catch (err) {
-          console.warn(`⚠️ Could not delete old file: ${oldFilePath}`, err);
+          console.warn(`️ Could not delete old file: ${oldFilePath}`, err);
         }
       }
     }
@@ -278,12 +287,16 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
         processedDoc = await documentProcessor.processFile(filePath, originalname, mimetype);
       } catch (fallbackErr) {
         console.error('Error processing file with fallback:', fallbackErr);
-        // Final fallback to simple text reading
+        // Final fallback - return minimal metadata for binary files (like PDFs)
         processedDoc = {
           title: originalname,
-          content: fs.readFileSync(filePath, 'utf-8').substring(0, 100000),
+          content: '', // Empty content for binary files that failed processing
           chunks: [],
-          metadata: { error: 'Processing failed, stored as text' }
+          metadata: {
+            error: 'Processing failed - binary file needs OCR/analysis',
+            needsOCR: mimetype.includes('pdf'),
+            size: size
+          }
         };
       }
     }
@@ -295,7 +308,32 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
 
     // Generate content hash for additional duplicate checking
     const crypto = require('crypto');
-    const contentHash = crypto.createHash('md5').update(processedDoc.content).digest('hex');
+    const contentHash = crypto.createHash('md5').update(processedDoc.content || '').digest('hex');
+
+    // Clean metadata - remove problematic characters that cause encoding issues
+    const cleanMetadata = (obj: any): any => {
+      if (typeof obj === 'string') {
+        // Remove null bytes and other problematic characters
+        return obj.replace(/\0/g, '').replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+      } else if (Array.isArray(obj)) {
+        return obj.map(cleanMetadata);
+      } else if (obj && typeof obj === 'object') {
+        const cleaned: any = {};
+        for (const key in obj) {
+          cleaned[key] = cleanMetadata(obj[key]);
+        }
+        return cleaned;
+      }
+      return obj;
+    };
+
+    const cleanedMetadata = cleanMetadata({
+      ...processedDoc.metadata,
+      originalName: originalname,
+      mimeType: mimetype,
+      uploadDate: new Date(),
+      chunks: processedDoc.chunks.length,
+    });
 
     // UPSERT to database - overwrite if same filename exists
     // Use filename as unique key (original filename)
@@ -323,18 +361,11 @@ router.post('/upload', createUploadRateLimit.middleware, upload.single('file'), 
       [
         originalname, // filename
         originalname, // title
-        processedDoc.content.substring(0, 100000), // Limit content to 100KB
+        (processedDoc.content || '').substring(0, 100000), // Limit content to 100KB
         fileType,
         size,
         filePath,
-        JSON.stringify({
-          ...processedDoc.metadata,
-          originalName: originalname,
-          mimeType: mimetype,
-          uploadDate: new Date(),
-          chunks: processedDoc.chunks.length,
-          contentHash: contentHash
-        }),
+        JSON.stringify(cleanedMetadata),
         originalname // original_filename
       ]
     );
@@ -421,48 +452,92 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 // Get document statistics (must come before /:id route) - REQUIRES AUTHENTICATION
 router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Ensure table exists first
-    await lsembPool.query(`
-      CREATE TABLE IF NOT EXISTS documents (
-        id SERIAL PRIMARY KEY,
-        title TEXT NOT NULL,
-        content TEXT,
-        type VARCHAR(50),
-        size INTEGER,
-        file_path TEXT,
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    const stats = await lsembPool.query(`
+    // Get document counts
+    const docStats = await lsembPool.query(`
       SELECT
-        COUNT(*) as total,
-        SUM(size) as total_size,
-        COUNT(CASE WHEN metadata->>'embeddings' = 'true' THEN 1 END) as with_embeddings,
-        COUNT(DISTINCT type) as unique_types,
-        COUNT(CASE WHEN transform_status = 'completed' THEN 1 END) as transformed_count,
-        COUNT(CASE WHEN transform_status = 'pending' THEN 1 END) as pending_transform,
-        COUNT(CASE WHEN transform_status = 'failed' THEN 1 END) as failed_transform
+        COUNT(*)::int as total,
+        COUNT(CASE WHEN (metadata->'analysis'->>'embeddings')::int > 0
+                   OR metadata->>'hasEmbeddings' = 'true'
+                   OR (SELECT COUNT(*) FROM chunks WHERE chunks.document_id = documents.id) > 0
+              THEN 1 END)::int as embedded,
+        COUNT(CASE WHEN metadata->'visionOCR' IS NOT NULL
+                   OR metadata->>'ocr_processed' = 'true'
+              THEN 1 END)::int as ocr_processed,
+        COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END)::int as uploaded_today,
+        SUM(CASE WHEN metadata->'analysis'->>'tokensUsed' IS NOT NULL
+                THEN (metadata->'analysis'->>'tokensUsed')::int ELSE 0 END)::bigint as total_tokens
       FROM documents
     `);
 
-    const typeDistribution = await lsembPool.query(`
-      SELECT type, COUNT(*) as count
-      FROM documents
-      GROUP BY type
-      ORDER BY count DESC
-    `);
+    const doc = docStats.rows[0];
+    const total = parseInt(doc.total) || 0;
+    const embedded = parseInt(doc.embedded) || 0;
+    const ocrProcessed = parseInt(doc.ocr_processed) || 0;
+
+    // Get physical files count
+    const uploadDir = getUploadDirectory();
+    let physicalFilesTotal = 0;
+    let physicalFilesNotInDB = 0;
+
+    try {
+      if (fs.existsSync(uploadDir)) {
+        const files = fs.readdirSync(uploadDir);
+        physicalFilesTotal = files.length;
+
+        // Get DB file paths
+        const dbFilesResult = await lsembPool.query('SELECT file_path FROM documents WHERE file_path IS NOT NULL');
+        const dbFilePaths = new Set(dbFilesResult.rows.map((row: any) => row.file_path));
+
+        // Count files not in DB
+        files.forEach(filename => {
+          const filePath = path.join(uploadDir, filename);
+          if (!dbFilePaths.has(filePath)) {
+            physicalFilesNotInDB++;
+          }
+        });
+      }
+    } catch (fsError) {
+      console.warn('Could not read physical files:', fsError);
+    }
+
+    // Calculate performance metrics
+    const successRate = total > 0 ? ((embedded / total) * 100) : 0;
+    const avgProcessingTime = 0; // TODO: Calculate from processing logs
+    const totalCost = (parseInt(doc.total_tokens) || 0) * 0.00014 / 1000; // $0.00014 per 1K tokens
 
     res.json({
-      stats: stats.rows[0],
-      typeDistribution: typeDistribution.rows
+      documents: {
+        total: total,
+        embedded: embedded,
+        pending: Math.max(0, total - embedded),
+        ocr_processed: ocrProcessed,
+        ocr_pending: Math.max(0, total - ocrProcessed),
+        under_review: 0
+      },
+      performance: {
+        total_tokens_used: parseInt(doc.total_tokens) || 0,
+        total_cost: totalCost,
+        avg_processing_time: avgProcessingTime,
+        success_rate: Math.round(successRate * 10) / 10
+      },
+      history: {
+        uploaded_today: parseInt(doc.uploaded_today) || 0,
+        embedded_today: embedded, // Approximate
+        ocr_today: ocrProcessed, // Approximate
+        last_24h_activity: parseInt(doc.uploaded_today) || 0
+      },
+      physicalFiles: {
+        total: physicalFilesTotal,
+        inDatabase: physicalFilesTotal - physicalFilesNotInDB,
+        notInDatabase: physicalFilesNotInDB,
+        uploadDirectory: uploadDir
+      }
     });
   } catch (error) {
     console.error('Error fetching document stats:', error);
     res.status(500).json({
-      error: 'Failed to fetch statistics'
+      error: 'Failed to fetch statistics',
+      message: error.message
     });
   }
 });
@@ -471,13 +546,13 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
 // NOTE: This route MUST come before /:id to avoid route matching issues
 router.get('/physical-files', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    console.log('📂 Physical files endpoint called');
+    console.log(' Physical files endpoint called');
     const uploadDir = getUploadDirectory();
-    console.log('📁 Upload directory:', uploadDir);
+    console.log(' Upload directory:', uploadDir);
 
     // Check if directory exists
     if (!fs.existsSync(uploadDir)) {
-      console.error('❌ Upload directory does not exist:', uploadDir);
+      console.error(' Upload directory does not exist:', uploadDir);
       return res.status(404).json({
         error: 'Upload directory not found',
         path: uploadDir
@@ -486,7 +561,7 @@ router.get('/physical-files', authenticateToken, async (req: AuthenticatedReques
 
     // Read all files from upload directory
     const files = fs.readdirSync(uploadDir);
-    console.log(`📄 Found ${files.length} files in directory`);
+    console.log(` Found ${files.length} files in directory`);
 
     // Get database file paths to compare (optional - continue if DB is down)
     let dbFilePaths: Set<string> = new Set();
@@ -497,10 +572,10 @@ router.get('/physical-files', authenticateToken, async (req: AuthenticatedReques
         const dbFilesResult = await lsembPool.query('SELECT file_path FROM documents WHERE file_path IS NOT NULL');
         dbFilePaths = new Set(dbFilesResult.rows.map(row => row.file_path));
         dbAvailable = true;
-        console.log(`💾 Found ${dbFilePaths.size} files in database`);
+        console.log(` Found ${dbFilePaths.size} files in database`);
       }
     } catch (dbError: any) {
-      console.warn('⚠️ Database not available - showing all files as "not in DB"');
+      console.warn('️ Database not available - showing all files as "not in DB"');
       console.warn('   Error:', dbError.code || dbError.message);
     }
 
@@ -552,7 +627,7 @@ router.get('/physical-files', authenticateToken, async (req: AuthenticatedReques
       warning: !dbAvailable ? 'Database not available - all files shown as not in database' : undefined
     });
   } catch (error: any) {
-    console.error('❌ Error listing physical files:', error);
+    console.error(' Error listing physical files:', error);
     res.status(500).json({
       error: 'Failed to list physical files',
       details: error.message,
@@ -594,18 +669,49 @@ router.post('/physical-files/add', authenticateToken, async (req: AuthenticatedR
       processedDoc = await contextualDocumentProcessor.processFile(filePath, filename, mimetype);
     } catch (err) {
       console.error('Error processing file:', err);
-      // Fallback to simple text reading
+      // Fallback for binary files - do not try to read as UTF-8
       processedDoc = {
         title: filename,
-        content: fs.readFileSync(filePath, 'utf-8').substring(0, 100000),
+        content: '', // Empty content for binary files that failed processing
         chunks: [],
-        metadata: { error: 'Processing failed, stored as text' }
+        metadata: {
+          error: 'Processing failed - binary file needs OCR/analysis',
+          needsOCR: mimetype.includes('pdf'),
+          size: stats.size
+        }
       };
     }
 
     // Generate content hash
     const crypto = require('crypto');
     const contentHash = crypto.createHash('md5').update(processedDoc.content).digest('hex');
+
+    // Clean metadata - remove problematic characters that cause encoding issues
+    const cleanMetadata = (obj: any): any => {
+      if (typeof obj === 'string') {
+        // Remove null bytes and other problematic characters
+        return obj.replace(/\0/g, '').replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+      } else if (Array.isArray(obj)) {
+        return obj.map(cleanMetadata);
+      } else if (obj && typeof obj === 'object') {
+        const cleaned: any = {};
+        for (const key in obj) {
+          cleaned[key] = cleanMetadata(obj[key]);
+        }
+        return cleaned;
+      }
+      return obj;
+    };
+
+    const cleanedMetadata = cleanMetadata({
+      ...processedDoc.metadata,
+      originalName: filename,
+      mimeType: mimetype,
+      uploadDate: new Date(),
+      chunks: processedDoc.chunks.length,
+      contentHash: contentHash,
+      addedFrom: 'physical-files'
+    });
 
     // Save to database
     const result = await lsembPool.query(
@@ -618,15 +724,7 @@ router.post('/physical-files/add', authenticateToken, async (req: AuthenticatedR
         ext,
         stats.size,
         filePath,
-        JSON.stringify({
-          ...processedDoc.metadata,
-          originalName: filename,
-          mimeType: mimetype,
-          uploadDate: new Date(),
-          chunks: processedDoc.chunks.length,
-          contentHash: contentHash,
-          addedFrom: 'physical-files'
-        })
+        JSON.stringify(cleanedMetadata)
       ]
     );
 
@@ -709,8 +807,8 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
     const uploadDir = getUploadDirectory();
     const filePath = path.join(uploadDir, filename);
 
-    console.log(`📖 Preview request for: ${filename}`);
-    console.log(`📂 Looking in: ${filePath}`);
+    console.log(` Preview request for: ${filename}`);
+    console.log(` Looking in: ${filePath}`);
 
     // Security check - ensure file is within upload directory
     const normalizedFilePath = path.normalize(filePath);
@@ -797,7 +895,7 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
 
         const headers = lines[0] ? parseCSVLine(lines[0]) : [];
 
-        console.log('📊 CSV Parse Debug:', {
+        console.log(' CSV Parse Debug:', {
           filename,
           headerCount: headers.length,
           headers: headers.slice(0, 10),
@@ -870,7 +968,7 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
     });
 
   } catch (error: any) {
-    console.error('❌ Error previewing file:', error);
+    console.error(' Error previewing file:', error);
     res.status(500).json({
       error: 'Failed to preview file',
       details: error.message
@@ -918,6 +1016,13 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
     }
 
     const doc = result.rows[0];
+
+    console.log(`[Documents GET] Document ${id} - Has metadata?`, !!doc.metadata);
+    console.log(`[Documents GET] Document ${id} - Has metadata.analysis?`, !!doc.metadata?.analysis);
+    if (doc.metadata) {
+      console.log(`[Documents GET] Document ${id} - Metadata keys:`, Object.keys(doc.metadata));
+    }
+
     res.json({
       document: {
         id: doc.id.toString(),
@@ -1005,26 +1110,15 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
 });
 
 // Delete document - REQUIRES AUTHENTICATION
+// NOTE: This endpoint only deletes from database, NOT the physical file
+// Use DELETE /physical-files to delete physical files from disk
 router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
-    
-    // First get the document to delete the file if exists
-    const docResult = await lsembPool.query(
-      'SELECT file_path FROM documents WHERE id = $1',
-      [id]
-    );
 
-    if (docResult.rows.length > 0 && docResult.rows[0].file_path) {
-      try {
-        fs.unlinkSync(docResult.rows[0].file_path);
-      } catch (err) {
-        console.log('Could not delete file:', err);
-      }
-    }
-
+    // Delete from database only (physical file remains on disk)
     const result = await lsembPool.query(
-      'DELETE FROM documents WHERE id = $1 RETURNING id',
+      'DELETE FROM documents WHERE id = $1 RETURNING id, file_path',
       [id]
     );
 
@@ -1034,12 +1128,14 @@ router.delete('/:id', authenticateToken, async (req: AuthenticatedRequest, res: 
 
     res.json({
       success: true,
-      message: 'Document deleted successfully'
+      message: 'Document deleted from database (physical file preserved)',
+      deletedId: result.rows[0].id,
+      preservedFile: result.rows[0].file_path
     });
   } catch (error) {
     console.error('Error deleting document:', error);
-    res.status(500).json({ 
-      error: 'Failed to delete document' 
+    res.status(500).json({
+      error: 'Failed to delete document'
     });
   }
 });

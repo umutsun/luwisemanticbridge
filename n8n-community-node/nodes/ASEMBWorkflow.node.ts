@@ -42,6 +42,16 @@ export class ASEMBWorkflow implements INodeType {
 				type: 'options',
 				options: [
 					{
+						name: 'Analyze Document',
+						value: 'analyzeDocument',
+						description: 'Extract metadata from documents using AI templates',
+					},
+					{
+						name: 'Analyze Crawled Content',
+						value: 'analyzeCrawl',
+						description: 'Extract metadata from web pages using AI templates',
+					},
+					{
 						name: 'Web to Vector',
 						value: 'webToVector',
 						description: 'Scrape web content and store as vectors',
@@ -74,6 +84,95 @@ export class ASEMBWorkflow implements INodeType {
 				],
 				default: 'webToVector',
 				noDataExpression: true,
+			},
+
+			// Analyze Document Options
+			{
+				displayName: 'Document ID',
+				name: 'documentId',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						workflow: ['analyzeDocument'],
+					},
+				},
+				description: 'Document ID to analyze',
+			},
+			{
+				displayName: 'Template',
+				name: 'analysisTemplate',
+				type: 'options',
+				options: [
+					{ name: 'General Document', value: 'general' },
+					{ name: 'Legal Document (Kanun/Mevzuat)', value: 'legal' },
+					{ name: 'Novel/Fiction', value: 'novel' },
+					{ name: 'Research Paper', value: 'research' },
+					{ name: 'Invoice', value: 'invoice' },
+					{ name: 'Contract', value: 'contract' },
+					{ name: 'Financial Report', value: 'financial_report' },
+					{ name: 'Web Page', value: 'web_page' },
+				],
+				default: 'general',
+				displayOptions: {
+					show: {
+						workflow: ['analyzeDocument', 'analyzeCrawl'],
+					},
+				},
+				description: 'Analysis template to use for metadata extraction',
+			},
+			{
+				displayName: 'API Base URL',
+				name: 'apiBaseUrl',
+				type: 'string',
+				default: 'http://localhost:8083',
+				displayOptions: {
+					show: {
+						workflow: ['analyzeDocument', 'analyzeCrawl'],
+					},
+				},
+				description: 'LSEMB Backend API base URL',
+			},
+
+			// Analyze Crawled Content Options
+			{
+				displayName: 'Crawler Name',
+				name: 'crawlerName',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						workflow: ['analyzeCrawl'],
+					},
+				},
+				description: 'Name of the crawler that collected the data',
+			},
+			{
+				displayName: 'Item ID',
+				name: 'itemId',
+				type: 'string',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						workflow: ['analyzeCrawl'],
+					},
+				},
+				description: 'Crawled item ID to analyze',
+			},
+			{
+				displayName: 'Content',
+				name: 'content',
+				type: 'string',
+				default: '',
+				displayOptions: {
+					show: {
+						workflow: ['analyzeCrawl'],
+					},
+				},
+				description: 'Optional: Provide content directly instead of fetching from Redis',
 			},
 
 			// Web to Vector Options
@@ -327,6 +426,124 @@ export class ASEMBWorkflow implements INodeType {
 
 		try {
 			switch (workflow) {
+				case 'analyzeDocument': {
+					const documentId = this.getNodeParameter('documentId', 0) as string;
+					const template = this.getNodeParameter('analysisTemplate', 0) as string;
+					const apiBaseUrl = this.getNodeParameter('apiBaseUrl', 0) as string;
+
+					try {
+						// Fetch template details
+						const templatesResponse = await fetch(`${apiBaseUrl}/api/v2/pdf/analysis-templates`);
+						if (!templatesResponse.ok) {
+							throw new Error('Failed to fetch analysis templates');
+						}
+						const templatesData = await templatesResponse.json();
+						const templateData = templatesData.templates.find((t: any) => t.id === template);
+
+						if (!templateData) {
+							throw new Error(`Template ${template} not found`);
+						}
+
+						// Call analyze API
+						const analyzeResponse = await fetch(`${apiBaseUrl}/api/v2/pdf/batch/analyze`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								documentIds: [documentId],
+								template: templateData,
+							}),
+						});
+
+						if (!analyzeResponse.ok) {
+							const errorData = await analyzeResponse.json();
+							throw new Error(errorData.error || 'Analysis failed');
+						}
+
+						const result = await analyzeResponse.json();
+
+						returnData.push({
+							json: {
+								workflow: 'analyzeDocument',
+								documentId,
+								template,
+								success: result.success,
+								metadata: result.results?.[0]?.metadata || {},
+								processingTime: result.results?.[0]?.processingTime || 0,
+								tokensUsed: result.results?.[0]?.tokensUsed || 0,
+							},
+						});
+					} catch (error: any) {
+						throw new NodeOperationError(this.getNode(), `Document analysis failed: ${error.message}`);
+					}
+					break;
+				}
+
+				case 'analyzeCrawl': {
+					const crawlerName = this.getNodeParameter('crawlerName', 0) as string;
+					const itemId = this.getNodeParameter('itemId', 0) as string;
+					const content = this.getNodeParameter('content', 0, '') as string;
+					const template = this.getNodeParameter('analysisTemplate', 0) as string;
+					const apiBaseUrl = this.getNodeParameter('apiBaseUrl', 0) as string;
+
+					try {
+						// Fetch template details
+						const templatesResponse = await fetch(`${apiBaseUrl}/api/v2/pdf/analysis-templates`);
+						if (!templatesResponse.ok) {
+							throw new Error('Failed to fetch analysis templates');
+						}
+						const templatesData = await templatesResponse.json();
+						const templateData = templatesData.templates.find((t: any) => t.id === template);
+
+						if (!templateData) {
+							throw new Error(`Template ${template} not found`);
+						}
+
+						// Get content from Redis if not provided
+						let finalContent = content;
+						if (!finalContent) {
+							const crawlResponse = await fetch(`${apiBaseUrl}/api/v2/crawler/items/${crawlerName}/${itemId}`);
+							if (!crawlResponse.ok) {
+								throw new Error('Failed to fetch crawled item');
+							}
+							const crawlData = await crawlResponse.json();
+							finalContent = crawlData.rawData || JSON.stringify(crawlData.data);
+						}
+
+						// Call analyze API
+						const analyzeResponse = await fetch(`${apiBaseUrl}/api/v2/crawler/analyze`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								itemId,
+								crawlerName,
+								template: templateData,
+								content: finalContent,
+							}),
+						});
+
+						if (!analyzeResponse.ok) {
+							const errorData = await analyzeResponse.json();
+							throw new Error(errorData.error || 'Analysis failed');
+						}
+
+						const result = await analyzeResponse.json();
+
+						returnData.push({
+							json: {
+								workflow: 'analyzeCrawl',
+								itemId,
+								crawlerName,
+								template,
+								success: result.success,
+								metadata: result.metadata || {},
+							},
+						});
+					} catch (error: any) {
+						throw new NodeOperationError(this.getNode(), `Crawl analysis failed: ${error.message}`);
+					}
+					break;
+				}
+
 				case 'webToVector': {
 					// Implementation for web scraping to vector storage
 					const url = this.getNodeParameter('url', 0) as string;

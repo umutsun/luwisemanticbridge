@@ -200,16 +200,20 @@ router.get('/api/v2/embeddings/tables', async (req: Request, res: Response) => {
     try {
         const tablesResult = await ragChatbotPool.query(
         `
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name
+        FROM information_schema.tables
         WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name NOT LIKE 'pg_%' AND table_name NOT LIKE 'sql_%';
         `
         );
 
+        // Extract database name from customer settings (source DB, not system DB)
+        const dbConfig = customerSettings.database || customerSettings;
+        const dbName = dbConfig.name || dbConfig.database;
+
         const tables = tablesResult.rows.map((row: any) => ({
             name: row.table_name,
             displayName: row.table_name.charAt(0).toUpperCase() + row.table_name.slice(1),
-            database: 'rag_chatbot'
+            database: dbName
         }));
         
         // Helper function to create display name from table name
@@ -411,7 +415,7 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
 //    const apiKey = aiSettings?.openaiApiKey || process.env.OPENAI_API_KEY;
 //    const useLocalEmbeddings = process.env.USE_LOCAL_EMBEDDINGS === 'true';
 //
-//    console.log(`🔧 USE_LOCAL_EMBEDDINGS: ${useLocalEmbeddings}`);
+//    console.log(` USE_LOCAL_EMBEDDINGS: ${useLocalEmbeddings}`);
 //
 //    let openai: any = null;
 //    if (!useLocalEmbeddings) {
@@ -419,28 +423,28 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
 //        return res.status(401).json({ error: 'OpenAI API key is not configured. Please add it in the settings.' });
 //      }
 //
-//      console.log(`🔑 API Key from database (first 10): ${aiSettings?.openaiApiKey ? aiSettings.openaiApiKey.substring(0, 10) : 'N/A'}...`);
-//      console.log(`🔑 API Key from env (first 10): ${process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 10) : 'N/A'}...`);
-//      console.log(`🔑 Using API Key (first 10): ${apiKey.substring(0, 10)}...`);
-//      console.log(`🔑 API Key length: ${apiKey.length}`);
+//      console.log(` API Key from database (first 10): ${aiSettings?.openaiApiKey ? aiSettings.openaiApiKey.substring(0, 10) : 'N/A'}...`);
+//      console.log(` API Key from env (first 10): ${process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 10) : 'N/A'}...`);
+//      console.log(` Using API Key (first 10): ${apiKey.substring(0, 10)}...`);
+//      console.log(` API Key length: ${apiKey.length}`);
 //
 //      const apiBase = aiSettings?.openaiApiBase || process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
 //      openai = new OpenAI({ apiKey, baseURL: apiBase });
 //
 //      // Test the connection with a simple embedding before starting
 //      try {
-//        console.log('🧪 Testing OpenAI connection before starting batch...');
+//        console.log(' Testing OpenAI connection before starting batch...');
 //        const testResult = await openai.embeddings.create({
 //          model: 'text-embedding-ada-002',
 //          input: 'test connection'
 //        });
-//        console.log(`✅ OpenAI connection test successful. Usage:`, testResult.usage);
+//        console.log(` OpenAI connection test successful. Usage:`, testResult.usage);
 //      } catch (testError: any) {
-//        console.error('❌ OpenAI connection test failed:', testError.message);
+//        console.error(' OpenAI connection test failed:', testError.message);
 //        if (testError.status) {
-//          console.error('❌ HTTP Status:', testError.status);
-//          console.error('❌ Error code:', testError.code);
-//          console.error('❌ Error type:', testError.type);
+//          console.error(' HTTP Status:', testError.status);
+//          console.error(' Error code:', testError.code);
+//          console.error(' Error type:', testError.type);
 //        }
 //        return res.status(401).json({
 //          error: `OpenAI API test failed: ${testError.message}`,
@@ -449,7 +453,7 @@ router.get('/api/v2/embeddings/progress/stream', async (req: Request, res: Respo
 //        });
 //      }
 //    } else {
-//      console.log('🏠 Using local embeddings (no API key required)');
+//      console.log(' Using local embeddings (no API key required)');
 //    }
 //    
 //    const customerSettings = await getDatabaseSettings();
@@ -723,7 +727,7 @@ router.post('/api/v2/embeddings/create-table', async (req: Request, res: Respons
             USING hnsw (embedding vector_cosine_ops);
         `);
 
-        console.log('✅ unified_embeddings table created successfully');
+        console.log(' unified_embeddings table created successfully');
         res.json({ success: true, message: 'Table created successfully' });
     } catch (error: any) {
         console.error('Error creating unified_embeddings table:', error);
@@ -785,7 +789,7 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
             VALUES ($1, $2, $3, $4, $5)
         `, [documentId, documentType, 'processing', progressData.total, progressData.current]);
 
-        console.log('✅ Progress record created in embedding_progress table');
+        console.log(' Progress record created in embedding_progress table');
     } catch (error) {
         console.error('Failed to create progress record:', error);
     }
@@ -941,39 +945,39 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                                let tokensUsed = 0;
 
                                if (embeddingMethod === 'local') {
-                                   console.log(`🏠 Generating local embedding...`);
+                                   console.log(` Generating local embedding...`);
                                    embeddingVector = generateLocalEmbedding(textContent);
-                                   console.log(`✅ Local embedding generated successfully`);
+                                   console.log(` Local embedding generated successfully`);
                                } else if (embeddingMethod === 'lightrag') {
-                                   console.log(`⚠️ LightRAG is disabled, falling back to local embeddings`);
+                                   console.log(`️ LightRAG is disabled, falling back to local embeddings`);
                                    embeddingVector = generateLocalEmbedding(textContent);
                                } else if (embeddingProvider === 'e5-mistral') {
-                                   console.log(`🤖 Using E5-Mistral-7B for embedding...`);
+                                   console.log(` Using E5-Mistral-7B for embedding...`);
                                    try {
                                        embeddingVector = await generateE5MistralEmbedding(textContent);
-                                       console.log(`✅ E5-Mistral embedding generated successfully`);
+                                       console.log(` E5-Mistral embedding generated successfully`);
                                    } catch (error) {
-                                       console.error(`❌ E5-Mistral embedding failed, falling back to local:`, error);
+                                       console.error(` E5-Mistral embedding failed, falling back to local:`, error);
                                        embeddingVector = generateLocalEmbedding(textContent);
                                        // Mark that we're using fallback
                                        progressData.fallbackMode = true;
                                        progressData.fallbackReason = 'E5-Mistral API error';
                                    }
                                } else if (embeddingProvider === 'bge-m3') {
-                                   console.log(`🚀 Using BGE-M3 for embedding...`);
+                                   console.log(` Using BGE-M3 for embedding...`);
                                    try {
                                        embeddingVector = await generateBGEEmbedding(textContent);
-                                       console.log(`✅ BGE-M3 embedding generated successfully`);
+                                       console.log(` BGE-M3 embedding generated successfully`);
                                    } catch (error) {
-                                       console.error(`❌ BGE-M3 embedding failed, falling back to local:`, error);
+                                       console.error(` BGE-M3 embedding failed, falling back to local:`, error);
                                        embeddingVector = generateLocalEmbedding(textContent);
                                        // Mark that we're using fallback
                                        progressData.fallbackMode = true;
                                        progressData.fallbackReason = 'BGE-M3 API error';
                                    }
                                } else if (embeddingProvider === 'openai' || embeddingMethod === 'openai') {
-                                   console.log(`📤 Making OpenAI embeddings API call...`);
-                                   console.log(`📋 Request details: model=${embeddingModel}, text_length=${textContent.length}`);
+                                   console.log(` Making OpenAI embeddings API call...`);
+                                   console.log(` Request details: model=${embeddingModel}, text_length=${textContent.length}`);
 
                                    // Check pause status before making API call
                                    if (await checkPauseStatus(redis, tableName, progressData, client, { value: clientReleased })) {
@@ -1007,15 +1011,15 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                                            return;
                                        }
                                        
-                                       console.log(`✅ Embedding created successfully. Usage:`, embedding.usage);
-                                       console.log(`📊 Response details: data_length=${embedding.data.length}, embedding_dimensions=${embedding.data[0].embedding?.length}`);
+                                       console.log(` Embedding created successfully. Usage:`, embedding.usage);
+                                       console.log(` Response details: data_length=${embedding.data.length}, embedding_dimensions=${embedding.data[0].embedding?.length}`);
                                        
                                        embeddingVector = embedding.data[0].embedding;
                                        tokensUsed = embedding.usage?.total_tokens || 0;
                                        totalTokens += tokensUsed;
                                    } catch (openaiError: any) {
-                                       console.error(`❌ OpenAI API call failed:`, openaiError);
-                                       console.error(`❌ Error details:`, {
+                                       console.error(` OpenAI API call failed:`, openaiError);
+                                       console.error(` Error details:`, {
                                            message: openaiError.message,
                                            status: openaiError.status,
                                            code: openaiError.code,
@@ -1024,43 +1028,46 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                                        });
                                        
                                        // Fallback to local embedding when OpenAI fails
-                                       console.log(`🔄 Falling back to local embedding due to OpenAI error`);
+                                       console.log(` Falling back to local embedding due to OpenAI error`);
                                        embeddingVector = generateLocalEmbedding(textContent);
                                    }
                                 } else {
                                     // Other providers would be implemented here - fallback to local
-                                    console.log(`⚠️ Provider ${embeddingProvider} not implemented, using local embedding`);
+                                    console.log(`️ Provider ${embeddingProvider} not implemented, using local embedding`);
                                     embeddingVector = generateLocalEmbedding(textContent);
                                 }
                                 
                                 // Check if we have a valid embedding vector
                                 if (!embeddingVector || embeddingVector.length === 0) {
-                                    console.log(`⚠️ No valid embedding vector generated, using local fallback`);
+                                    console.log(`️ No valid embedding vector generated, using local fallback`);
                                     embeddingVector = generateLocalEmbedding(textContent);
                                 }
                                 
                                 // Source information based on context
                                 let sourceType = 'database';
 
-                                // Get database name from source_database settings
+                                // Get database name from source_database settings (not from .env)
                                 const dbSettings = await getDatabaseSettings();
-                                let sourceName = 'rag_chatbot'; // default fallback
+                                let sourceName = 'unknown'; // Will be set from settings
                                 if (dbSettings && typeof dbSettings === 'object') {
-                                    // Check all possible field names
-                                    sourceName = dbSettings.databaseName ||
-                                               dbSettings.dbName ||
-                                               dbSettings.name ||
-                                               dbSettings.database ||
-                                               'rag_chatbot';
+                                    // Check if database config is nested
+                                    const dbConfig = dbSettings.database || dbSettings;
+                                    // Check all possible field names (source DB only, no .env fallback)
+                                    sourceName = dbConfig.databaseName ||
+                                               dbConfig.dbName ||
+                                               dbConfig.name ||
+                                               dbConfig.database ||
+                                               'unknown';
                                 } else if (dbSettings && typeof dbSettings === 'string') {
                                     // If it's stored as a string, parse it
                                     try {
                                         const parsed = JSON.parse(dbSettings);
-                                        sourceName = parsed.databaseName ||
-                                                   parsed.dbName ||
-                                                   parsed.name ||
-                                                   parsed.database ||
-                                                   'rag_chatbot';
+                                        const dbConfig = parsed.database || parsed;
+                                        sourceName = dbConfig.databaseName ||
+                                                   dbConfig.dbName ||
+                                                   dbConfig.name ||
+                                                   dbConfig.database ||
+                                                   'unknown';
                                     } catch {
                                         sourceName = dbSettings;
                                     }
@@ -1086,7 +1093,7 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                                 );
 
                                 if (existingCheck.rows.length > 0) {
-                                    console.log(`⚠️ Record ${row.id} already embedded (duplicate)`);
+                                    console.log(`️ Record ${row.id} already embedded (duplicate)`);
                                     continue; // Skip this record
                                 }
 
@@ -1140,7 +1147,7 @@ async function processEmbeddings(ragPool: any, tables: string[], batchSize: numb
                             } catch (embeddingError: any) {
                                 // Handle duplicate key error quietly
                                 if (embeddingError.code === '23505') {
-                                    console.log(`⚠️ Record ${row.id} already embedded (duplicate)`);
+                                    console.log(`️ Record ${row.id} already embedded (duplicate)`);
                                     errorCount++;
                                 } else {
                                     console.error(`Failed to create embedding for record ${row.id} in table ${tableName}:`, embeddingError);
@@ -1564,7 +1571,7 @@ function generateLocalEmbedding(text: string): number[] {
 // E5-Mistral-7B embedding generation using local implementation
 async function generateE5MistralEmbedding(text: string): Promise<number[]> {
   try {
-    console.log('🤖 Using E5-Mistral-7B for embedding...');
+    console.log(' Using E5-Mistral-7B for embedding...');
 
     // Import crypto module for better hashing
     const { createHash } = require('crypto');
@@ -1581,7 +1588,7 @@ async function generateE5MistralEmbedding(text: string): Promise<number[]> {
       embedding[i] = (byte - 128) / 128;
     }
 
-    console.log('✅ E5-Mistral embedding generated successfully');
+    console.log(' E5-Mistral embedding generated successfully');
     return embedding;
   } catch (error) {
     console.error('E5-Mistral embedding failed:', error);
@@ -1593,7 +1600,7 @@ async function generateE5MistralEmbedding(text: string): Promise<number[]> {
 // BGE-M3 embedding generation using local implementation
 async function generateBGEEmbedding(text: string): Promise<number[]> {
   try {
-    console.log('🚀 Using BGE-M3 for embedding...');
+    console.log(' Using BGE-M3 for embedding...');
 
     // Import crypto module for better hashing
     const { createHash } = require('crypto');
@@ -1610,7 +1617,7 @@ async function generateBGEEmbedding(text: string): Promise<number[]> {
       embedding[i] = (byte - 128) / 128;
     }
 
-    console.log('✅ BGE-M3 embedding generated successfully');
+    console.log(' BGE-M3 embedding generated successfully');
     return embedding;
   } catch (error) {
     console.error('BGE-M3 embedding failed:', error);

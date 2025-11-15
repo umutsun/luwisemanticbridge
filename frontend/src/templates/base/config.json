@@ -1,0 +1,45 @@
+{
+  "id": "base",
+  "name": "Default Template",
+  "description": "Default chat interface template",
+  "version": "1.0.0",
+  "extends": null,
+
+  "theme": {
+    "primaryColor": "#000000",
+    "secondaryColor": "#666666",
+    "backgroundColor": "#ffffff",
+    "panelBackground": "#f5f5f5",
+    "textColor": "#000000",
+    "borderRadius": "12px",
+    "fontFamily": "Inter, sans-serif",
+    "messageSpacing": "1rem",
+    "headerHeight": "60px"
+  },
+
+  "features": {
+    "showLogo": true,
+    "showSuggestions": true,
+    "showSources": true,
+    "showTimestamp": true,
+    "showAvatar": true,
+    "enableFullPage": true,
+    "enableVoiceInput": false,
+    "enableFileUpload": true
+  },
+
+  "widget": {
+    "enabled": true,
+    "position": "bottom-right",
+    "buttonIcon": "💬",
+    "buttonColor": "#000000",
+    "buttonSize": 60,
+    "panelWidth": 400,
+    "panelHeight": 600,
+    "autoOpen": false,
+    "autoOpenDelay": 3000
+  },
+
+  "customCSS": "",
+  "customHooks": {}
+}

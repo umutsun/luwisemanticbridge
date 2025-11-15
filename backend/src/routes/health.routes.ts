@@ -3,8 +3,29 @@ import { lsembPool, initializeConfigs } from '../config/database.config';
 import { initializeRedis } from '../config/redis';
 import { SettingsService } from '../services/settings.service';
 import { settingsCache } from '../services/cache.service';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
+
+// Load version info from version.json
+let versionInfo: any = null;
+try {
+  const versionPath = path.join(__dirname, '../../..', 'version.json');
+  versionInfo = JSON.parse(fs.readFileSync(versionPath, 'utf-8'));
+} catch (error) {
+  console.warn('Failed to load version.json, using default version');
+  versionInfo = {
+    version: '1.1.1',
+    codename: 'Context Engine',
+    releaseDate: '2025-01-11'
+  };
+}
+
+// Version endpoint
+router.get('/version', (req: Request, res: Response) => {
+  res.json(versionInfo);
+});
 
 // Basic health check for load balancers
 router.get('/', async (req: Request, res: Response) => {
@@ -12,8 +33,9 @@ router.get('/', async (req: Request, res: Response) => {
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      service: 'luwi-semantic-bridge',
-      version: '2.0.0',
+      service: 'lsemb-context-engine',
+      version: versionInfo?.version || '1.1.1',
+      codename: versionInfo?.codename || 'Context Engine',
       uptime: process.uptime()
     });
   } catch (error) {

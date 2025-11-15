@@ -53,6 +53,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import TemplateManager from './TemplateManager';
 
 interface Document {
   id: string;
@@ -61,6 +62,7 @@ interface Document {
   type?: string;
   size?: number;
   hasEmbeddings?: boolean;
+  file_path?: string;  // For determining file type
   metadata: {
     source?: string;
     url?: string;
@@ -72,10 +74,15 @@ interface Document {
     updated_at?: string;
     mimeType?: string;
     uploadDate?: string;
+    analysis?: {
+      template?: 'legal' | 'novel' | 'research' | 'invoice' | 'contract' | 'general';
+      [key: string]: any;
+    };
   };
   created_at: string;
   updated_at?: string;
   status?: 'processed' | 'pending' | 'error';
+  analyzeStatus?: 'waiting' | 'analyzed' | 'transformed';
 }
 
 export default function DocumentManager() {
@@ -85,6 +92,44 @@ export default function DocumentManager() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [editingDocument, setEditingDocument] = useState<Document | null>(null);
+
+  // Helper: Check if file is analyzable (not CSV)
+  const isAnalyzableFile = (doc: Document): boolean => {
+    const filePath = doc.file_path || '';
+    const fileName = doc.title || '';
+    const ext = (filePath || fileName).toLowerCase().split('.').pop();
+
+    // Analyzable formats: .pdf, .doc, .docx, .txt, .md
+    const analyzableExtensions = ['pdf', 'doc', 'docx', 'txt', 'md'];
+    return ext ? analyzableExtensions.includes(ext) : false;
+  };
+
+  // Helper: Get analyze status for a document
+  const getAnalyzeStatus = (doc: Document): 'waiting' | 'analyzed' | 'transformed' => {
+    // Check if document has analysis metadata
+    if (doc.metadata?.analysis && Object.keys(doc.metadata.analysis).length > 0) {
+      return doc.analyzeStatus || 'analyzed';
+    }
+    return 'waiting';
+  };
+
+  // Helper: Get analyze template name
+  const getAnalyzeTemplate = (doc: Document): string => {
+    const template = doc.metadata?.analysis?.template;
+    if (!template) return '';
+
+    // Format template name for display
+    const templateNames: Record<string, string> = {
+      legal: 'Legal',
+      novel: 'Novel',
+      research: 'Research',
+      invoice: 'Invoice',
+      contract: 'Contract',
+      general: 'General'
+    };
+
+    return templateNames[template] || template;
+  };
 
   // Form states
   const [newTitle, setNewTitle] = useState('');
@@ -390,8 +435,62 @@ export default function DocumentManager() {
     }
   }, [success]);
 
+  // Template Manager state
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+
+  // Calculate stats
+  const analyzedCount = documents.filter(doc => getAnalyzeStatus(doc) !== 'waiting').length;
+  const embeddedCount = documents.filter(doc => doc.hasEmbeddings).length;
+
   return (
     <div className="space-y-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{documents.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Total documents in system
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setTemplateManagerOpen(true)}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Analyzed Documents</CardTitle>
+            <div className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-blue-600" />
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); setTemplateManagerOpen(true); }}>
+                <Edit className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{analyzedCount}</div>
+            <p className="text-xs text-muted-foreground">
+              Documents with metadata analysis
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Embedded Documents</CardTitle>
+            <Database className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{embeddedCount}</div>
+            <p className="text-xs text-muted-foreground">
+              Documents with vector embeddings
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Alerts */}
       {error && (
         <Alert variant="destructive">
@@ -475,7 +574,6 @@ export default function DocumentManager() {
                             <span>{embeddingStatus || 'İşleniyor...'}</span>
                             <span>{Math.round(embeddingProgress)}%</span>
                           </div>
-                          <Progress value={embeddingProgress} className="h-2" />
                         </div>
                       )}
                     </CardContent>
@@ -528,7 +626,7 @@ export default function DocumentManager() {
                           <TableHead>Kaynak</TableHead>
                           <TableHead>Chunks</TableHead>
                           <TableHead>Embedding</TableHead>
-                          <TableHead>Durum</TableHead>
+                          <TableHead>Analyze Status</TableHead>
                           <TableHead>Tarih</TableHead>
                           <TableHead className="text-right">İşlemler</TableHead>
                         </TableRow>
@@ -547,10 +645,18 @@ export default function DocumentManager() {
                               className={doc.hasEmbeddings ? 'bg-green-50 dark:bg-green-950/20' : ''}
                             >
                               <TableCell>
-                                <Checkbox
-                                  checked={selectedDocuments.includes(doc.id)}
-                                  onCheckedChange={() => toggleDocumentSelection(doc.id)}
-                                />
+                                {isAnalyzableFile(doc) ? (
+                                  <Checkbox
+                                    checked={selectedDocuments.includes(doc.id)}
+                                    onCheckedChange={() => toggleDocumentSelection(doc.id)}
+                                  />
+                                ) : (
+                                  <Checkbox
+                                    disabled
+                                    className="opacity-30"
+                                    title="CSV files cannot be batch analyzed"
+                                  />
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div className="max-w-[250px]">
@@ -587,12 +693,27 @@ export default function DocumentManager() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                <Badge variant={
-                                  doc.status === 'processed' ? 'success' :
-                                  doc.status === 'error' ? 'destructive' : 'secondary'
-                                }>
-                                  {doc.status || 'Pending'}
-                                </Badge>
+                                {(() => {
+                                  const status = getAnalyzeStatus(doc);
+                                  const template = getAnalyzeTemplate(doc);
+
+                                  return (
+                                    <div className="flex flex-col gap-1">
+                                      <Badge variant={
+                                        status === 'analyzed' ? 'default' :
+                                        status === 'transformed' ? 'success' : 'secondary'
+                                      }>
+                                        {status === 'waiting' ? 'Waiting' :
+                                         status === 'analyzed' ? 'Analyzed' : 'Transformed'}
+                                      </Badge>
+                                      {template && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {template}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell>
                                 <div className="flex items-center gap-1">
@@ -907,6 +1028,12 @@ export default function DocumentManager() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Template Manager Modal */}
+      <TemplateManager
+        open={templateManagerOpen}
+        onClose={() => setTemplateManagerOpen(false)}
+      />
     </div>
   );
 }

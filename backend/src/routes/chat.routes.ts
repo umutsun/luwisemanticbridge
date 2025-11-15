@@ -62,7 +62,7 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
           const parsed = parseFloat(tempSetting.rows[0].value);
           if (!isNaN(parsed) && parsed >= 0 && parsed <= 2) {
             temperature = parsed;
-            console.log(`🌡️  Using temperature from settings: ${temperature}`);
+            console.log(`️  Using temperature from settings: ${temperature}`);
           }
         }
       } catch (error) {
@@ -72,7 +72,7 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
       // Final fallback
       if (temperature === undefined || temperature === null) {
         temperature = 0.7; // Balanced default
-        console.log(`🌡️  Using default temperature: ${temperature}`);
+        console.log(`️  Using default temperature: ${temperature}`);
       }
     }
 
@@ -81,7 +81,7 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    console.log('🔍 [CHAT] Processing message:', {
+    console.log(' [CHAT] Processing message:', {
       message: message.substring(0, 50),
       conversationId,
       userId,
@@ -561,7 +561,7 @@ router.post('/api/v2/chat/load-more-results', authenticateToken, async (req: Aut
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    console.log(`🔄 Loading more results for user ${userId}: query="${query}", offset=${offset}`);
+    console.log(` Loading more results for user ${userId}: query="${query}", offset=${offset}`);
 
     // Get more search results using the new method
     const result = await ragChat.getMoreSearchResults(query, offset, conversationId);

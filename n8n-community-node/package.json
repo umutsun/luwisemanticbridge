@@ -31,7 +31,7 @@
       "dist/nodes/SitemapFetch.node.js",
       "dist/nodes/PgHybridQuery.node.js",
       "dist/nodes/AsembSearch.node.js",
-      "dist/nodes/LSEMBWorkflow.node.js"
+      "dist/nodes/ASEMBWorkflow.node.js"
     ]
   },
   "dependencies": {

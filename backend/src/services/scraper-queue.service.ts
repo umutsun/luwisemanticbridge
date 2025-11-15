@@ -106,15 +106,15 @@ export class ScraperQueueService extends EventEmitter {
     try {
       this.redis = await initializeRedis();
       if (this.redis && this.redis.status === "ready") {
-        console.log("✅ Scraper Queue Service initialized with Redis");
+        console.log(" Scraper Queue Service initialized with Redis");
         this.startProcessing();
         this.startMetricsCollection();
       } else {
-        console.warn("⚠️ Redis not available, queue service in local mode");
+        console.warn("️ Redis not available, queue service in local mode");
         this.startLocalProcessing();
       }
     } catch (error) {
-      console.error("❌ Failed to initialize Scraper Queue Service:", error);
+      console.error(" Failed to initialize Scraper Queue Service:", error);
       this.startLocalProcessing();
     }
   }
@@ -163,10 +163,10 @@ export class ScraperQueueService extends EventEmitter {
       this.metrics.pending++;
       this.emit("jobAdded", fullJob);
 
-      console.log(`📋 Job added to queue: ${fullJob.id} (${fullJob.url})`);
+      console.log(` Job added to queue: ${fullJob.id} (${fullJob.url})`);
       return fullJob.id;
     } catch (error) {
-      console.error("❌ Failed to add job to queue:", error);
+      console.error(" Failed to add job to queue:", error);
       throw error;
     }
   }
@@ -204,7 +204,7 @@ export class ScraperQueueService extends EventEmitter {
     await pipeline.exec();
     this.metrics.pending += jobs.length;
 
-    console.log(`📦 Added ${jobs.length} jobs to queue`);
+    console.log(` Added ${jobs.length} jobs to queue`);
     return jobIds;
   }
 
@@ -283,7 +283,7 @@ export class ScraperQueueService extends EventEmitter {
     if (this.isProcessing) return;
 
     this.isProcessing = true;
-    console.log("🔄 Starting queue processing...");
+    console.log(" Starting queue processing...");
 
     this.processingInterval = setInterval(async () => {
       if (this.processing.size < this.concurrencyLimit) {
@@ -354,7 +354,7 @@ export class ScraperQueueService extends EventEmitter {
     const startTime = Date.now();
 
     try {
-      console.log(`🔄 Processing job: ${job.id} (${job.url})`);
+      console.log(` Processing job: ${job.id} (${job.url})`);
 
       // Update rate limit
       await this.updateRateLimit(job.metadata!.domain);
@@ -406,13 +406,13 @@ export class ScraperQueueService extends EventEmitter {
       // Emit success
       this.emit("jobCompleted", job);
 
-      console.log(`✅ Job completed: ${job.id} in ${processingTime}ms`);
+      console.log(` Job completed: ${job.id} in ${processingTime}ms`);
     } catch (error) {
       const processingTime = Date.now() - startTime;
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
 
-      console.error(`❌ Job failed: ${job.id}`, errorMessage);
+      console.error(` Job failed: ${job.id}`, errorMessage);
 
       // Handle retry logic
       job.retryCount++;
@@ -430,7 +430,7 @@ export class ScraperQueueService extends EventEmitter {
         await this.redis.zadd("scraper:queue:retry", [retryAt, job.id]);
 
         console.log(
-          `🔄 Job scheduled for retry: ${job.id} (attempt ${job.retryCount}/${job.maxRetries})`
+          ` Job scheduled for retry: ${job.id} (attempt ${job.retryCount}/${job.maxRetries})`
         );
       } else {
         // Move to dead letter queue
@@ -444,7 +444,7 @@ export class ScraperQueueService extends EventEmitter {
 
         this.metrics.deadLetter++;
 
-        console.log(`💀 Job moved to dead letter queue: ${job.id}`);
+        console.log(` Job moved to dead letter queue: ${job.id}`);
 
         this.emit("jobDeadLettered", job);
       }
@@ -629,12 +629,12 @@ export class ScraperQueueService extends EventEmitter {
   // Configuration
   setConcurrencyLimit(limit: number): void {
     this.concurrencyLimit = Math.max(1, Math.min(limit, 20));
-    console.log(`🔧 Concurrency limit set to: ${this.concurrencyLimit}`);
+    console.log(` Concurrency limit set to: ${this.concurrencyLimit}`);
   }
 
   setRateLimit(domain: string, rpm: number): void {
     this.rateLimitConfig.perDomainLimits.set(domain, rpm);
-    console.log(`🚦 Rate limit set for ${domain}: ${rpm} requests/minute`);
+    console.log(` Rate limit set for ${domain}: ${rpm} requests/minute`);
   }
 
   // Cleanup
@@ -650,12 +650,12 @@ export class ScraperQueueService extends EventEmitter {
     }
 
     this.removeAllListeners();
-    console.log("🧹 Scraper Queue Service cleaned up");
+    console.log(" Scraper Queue Service cleaned up");
   }
 
   // Local processing fallback (when Redis is unavailable)
   private startLocalProcessing(): void {
-    console.log("⚠️ Using local processing mode (Redis unavailable)");
+    console.log("️ Using local processing mode (Redis unavailable)");
     // Implement local in-memory queue processing as fallback
   }
 }

@@ -1,0 +1,77 @@
+{
+  "version": "1.1.1",
+  "codename": "Context Engine",
+  "releaseDate": "2025-01-11",
+  "milestone": "Template-Based Intelligence",
+  "backend": {
+    "version": "1.1.1",
+    "name": "luwi-semantic-bridge",
+    "description": "LSEMB Context Engine - Intelligent data transformation middleware"
+  },
+  "frontend": {
+    "version": "1.1.1",
+    "name": "luwi-semantic-bridge-frontend",
+    "framework": "Next.js 14"
+  },
+  "features": {
+    "templates": 8,
+    "llmProviders": 3,
+    "outputChannels": 3,
+    "inputSources": 3
+  },
+  "architecture": {
+    "type": "Context Engine",
+    "role": "Intelligent Data Transformation Middleware",
+    "core": "Template-Based LLM Analysis",
+    "storage": "Unified Semantic Layer (pgvector + pgai)"
+  },
+  "components": {
+    "templates": [
+      "general",
+      "legal",
+      "novel",
+      "research",
+      "invoice",
+      "contract",
+      "financial_report",
+      "web_page"
+    ],
+    "llmChain": [
+      "Gemini 2.0 Flash (Primary)",
+      "DeepSeek (Fallback)",
+      "Local Regex (Offline)"
+    ],
+    "inputSources": [
+      "Crawled Web Data (Crawl4AI + Redis)",
+      "Document Uploads (PDF, DOCX, TXT)",
+      "Database Tables (CSV, PostgreSQL)"
+    ],
+    "outputChannels": [
+      "n8n Workflow Automation",
+      "ChatInterface (Template-powered)",
+      "REST & GraphQL APIs"
+    ]
+  },
+  "changelog": {
+    "major": [
+      "Template-based metadata extraction system",
+      "Multi-tier LLM analysis chain (Gemini → DeepSeek → Local)",
+      "n8n workflow automation integration",
+      "Crawled content analysis endpoints",
+      "Unified semantic layer architecture"
+    ],
+    "improvements": [
+      "70% cost reduction with DeepSeek fallback",
+      "Template Manager UI component",
+      "Dynamic JSON schema generation",
+      "Batch processing with progress tracking",
+      "Comprehensive documentation suite"
+    ]
+  },
+  "links": {
+    "documentation": "docs/CONTEXT_ENGINE_ARCHITECTURE.md",
+    "changelog": "CHANGELOG.md",
+    "workflowGuide": "docs/WORKFLOW_AUTOMATION_GUIDE.md",
+    "templateGuide": "docs/TEMPLATE_SYSTEM_GUIDE.md"
+  }
+}

@@ -201,9 +201,9 @@ export function startGraphQLServer(app: Application, port: number = 4000) {
 
   if (typeof server.listen === 'function') {
     server.listen(port, () => {
-      console.log(`🚀 GraphQL Server hazır: http://localhost:${port}/graphql`);
-      console.log(`📊 GraphiQL Playground: http://localhost:${port}/graphql`);
-      console.log(`❤️ Health Check: http://localhost:${port}/graphql/health`);
+      console.log(` GraphQL Server hazır: http://localhost:${port}/graphql`);
+      console.log(` GraphiQL Playground: http://localhost:${port}/graphql`);
+      console.log(`️ Health Check: http://localhost:${port}/graphql/health`);
     });
   }
 

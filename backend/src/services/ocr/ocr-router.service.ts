@@ -74,9 +74,9 @@ export class OCRRouterService {
         supportedFormats: ['image/jpeg', 'image/png', 'image/webp']
       }));
 
-      logger.info('✅ OCR Router - Tüm provider\'lar initialize edildi');
+      logger.info(' OCR Router - Tüm provider\'lar initialize edildi');
     } catch (error) {
-      logger.error('❌ OCR Router - Provider initialization hatası:', error);
+      logger.error(' OCR Router - Provider initialization hatası:', error);
     }
   }
 
@@ -127,7 +127,7 @@ export class OCRRouterService {
       const selectedProvider = options.provider || settings.activeProvider;
       const provider = await this.selectProvider(selectedProvider, filePath);
 
-      logger.info(`📄 OCR başlatılıyor: ${path.basename(filePath)} (Provider: ${provider})`);
+      logger.info(` OCR başlatılıyor: ${path.basename(filePath)} (Provider: ${provider})`);
 
       // Cache kontrolü
       if (settings.cacheEnabled) {
@@ -135,7 +135,7 @@ export class OCRRouterService {
 
         if (cached) {
           await ocrCacheService.recordHit();
-          logger.info(`⚡ Cache HIT - OCR atlandı (${Date.now() - startTime}ms)`);
+          logger.info(` Cache HIT - OCR atlandı (${Date.now() - startTime}ms)`);
           return cached;
         }
 
@@ -161,11 +161,11 @@ export class OCRRouterService {
         );
       }
 
-      logger.info(`✅ OCR tamamlandı (${Date.now() - startTime}ms)`);
+      logger.info(` OCR tamamlandı (${Date.now() - startTime}ms)`);
       return result;
 
     } catch (error) {
-      logger.error('❌ OCR Router hatası:', error);
+      logger.error(' OCR Router hatası:', error);
       throw error;
     }
   }
@@ -207,7 +207,7 @@ export class OCRRouterService {
         if (providerName !== primaryProvider) {
           result.metadata.fallbackUsed = true;
           result.metadata.primaryProvider = primaryProvider;
-          logger.warn(`⚠️ Fallback kullanıldı: ${primaryProvider} → ${providerName}`);
+          logger.warn(`️ Fallback kullanıldı: ${primaryProvider} → ${providerName}`);
         }
 
         return result;

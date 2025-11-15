@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { TableSkeleton, TableBodySkeleton, StatsCardSkeleton, UploadSkeleton } from '@/components/ui/skeleton';
 import { Label } from '@/components/ui/label';
 import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-counter';
+import { ProgressCircle } from '@/components/ui/progress-circle';
 import {
   Table,
   TableBody,
@@ -20,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
@@ -45,10 +45,8 @@ import {
   Target,
   Activity,
   File,
-  Brain,
   X,
   XCircle,
-  Languages,
   FolderOpen
 } from 'lucide-react';
 import {
@@ -126,7 +124,6 @@ export default function DocumentManagerPage() {
   const [uploading, setUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
-  const [activeTab, setActiveTab] = useState('files');
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [showOperations, setShowOperations] = useState(false);
@@ -160,6 +157,7 @@ export default function DocumentManagerPage() {
     fetchDocuments();
     fetchStats();
     fetchPhysicalFiles();
+    fetchBatchSchemas();
   }, []);
 
   const fetchDocuments = async () => {
@@ -234,53 +232,56 @@ export default function DocumentManagerPage() {
       const data = await response.json();
       console.log('Stats API Response:', data);
 
-      // Use stats from backend if available, otherwise calculate from documents
-      const backendStats = data.stats || data;
-      const totalDocs = documents.length;
-      const embeddedDocs = documents.filter(d => d.hasEmbeddings || (d.metadata?.embeddings > 0)).length;
-      const ocrProcessedDocs = documents.filter(d => d.metadata?.ocr_processed === true).length;
-
+      // Use real database stats from backend
       setStats({
-        documents: {
-          total: totalDocs,
-          embedded: embeddedDocs,
-          pending: totalDocs - embeddedDocs,
-          ocr_processed: ocrProcessedDocs,
-          ocr_pending: totalDocs - ocrProcessedDocs,
-          under_review: 0 // TODO: Implement review system
+        documents: data.documents || {
+          total: 0,
+          embedded: 0,
+          pending: 0,
+          ocr_processed: 0,
+          ocr_pending: 0,
+          under_review: 0
         },
-        performance: {
-          total_tokens_used: backendStats.total_tokens_used || 0,
-          total_cost: backendStats.total_cost || 0,
-          avg_processing_time: backendStats.avg_processing_time || 0,
-          success_rate: totalDocs > 0 ? (embeddedDocs / totalDocs) * 100 : 0
+        performance: data.performance || {
+          total_tokens_used: 0,
+          total_cost: 0,
+          avg_processing_time: 0,
+          success_rate: 0
         },
-        history: {
-          uploaded_today: backendStats.uploaded_today || 0,
-          embedded_today: backendStats.embedded_today || 0,
-          ocr_today: backendStats.ocr_today || 0,
-          last_24h_activity: backendStats.last_24h_activity || 0
+        history: data.history || {
+          uploaded_today: 0,
+          embedded_today: 0,
+          ocr_today: 0,
+          last_24h_activity: 0
         }
       });
+
+      // Update physical files stats from backend
+      if (data.physicalFiles) {
+        setPhysicalFilesStats({
+          total: data.physicalFiles.total || 0,
+          inDatabase: data.physicalFiles.inDatabase || 0,
+          notInDatabase: data.physicalFiles.notInDatabase || 0,
+          uploadDirectory: data.physicalFiles.uploadDirectory || ''
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
       // Set default stats on error
-      const totalDocs = documents.length;
-      const embeddedDocs = documents.filter(d => d.hasEmbeddings || (d.metadata?.embeddings > 0)).length;
       setStats({
         documents: {
-          total: totalDocs,
-          embedded: embeddedDocs,
-          pending: totalDocs - embeddedDocs,
+          total: 0,
+          embedded: 0,
+          pending: 0,
           ocr_processed: 0,
-          ocr_pending: totalDocs,
+          ocr_pending: 0,
           under_review: 0
         },
         performance: {
           total_tokens_used: 0,
           total_cost: 0,
           avg_processing_time: 0,
-          success_rate: totalDocs > 0 ? (embeddedDocs / totalDocs) * 100 : 0
+          success_rate: 0
         },
         history: {
           uploaded_today: 0,
@@ -390,13 +391,15 @@ export default function DocumentManagerPage() {
         description: 'File added to database successfully'
       });
 
-      setTimeout(() => {
-        setUploading(false);
-        setUploadProgress(0);
-        setCurrentOperation('');
-        fetchPhysicalFiles();
-        fetchDocuments();
-      }, 500);
+      // Refresh both lists and wait for them to complete
+      await Promise.all([
+        fetchPhysicalFiles(),
+        fetchDocuments()
+      ]);
+
+      setUploading(false);
+      setUploadProgress(0);
+      setCurrentOperation('');
 
     } catch (error: any) {
       toast({
@@ -908,6 +911,17 @@ export default function DocumentManagerPage() {
   const [selectAll, setSelectAll] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
+  // Batch processing state
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchStatus, setBatchStatus] = useState('');
+  const [batchCurrent, setBatchCurrent] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchSelectedSchema, setBatchSelectedSchema] = useState('');
+  const [batchSchemas, setBatchSchemas] = useState<any[]>([]);
+  const [batchSelectedTable, setBatchSelectedTable] = useState('');
+  const [availableTables, setAvailableTables] = useState<string[]>([]);
+
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -959,25 +973,290 @@ export default function DocumentManagerPage() {
     return selectedRows.size;
   };
 
+  // Fetch batch schemas
+  const fetchBatchSchemas = async () => {
+    try {
+      const response = await fetch(getApiUrl('pdfTemplates'), {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Templates loaded:', data.templates);
+        setBatchSchemas(data.templates || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch batch schemas:', error);
+    }
+  };
+
+  // Fetch available tables from source database
+  const fetchAvailableTables = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/source-tables`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableTables(data.tables || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tables:', error);
+    }
+  };
+
+  // Auto-suggest table name when template is selected
+  useEffect(() => {
+    if (batchSelectedSchema) {
+      // Suggest table name based on template
+      const suggestedTable = `${batchSelectedSchema}_documents`;
+      setBatchSelectedTable(suggestedTable);
+
+      // Also fetch existing tables
+      fetchAvailableTables();
+    }
+  }, [batchSelectedSchema]);
+
+
+  // Handle batch transform to sourceDB
+  const handleBatchTransform = async () => {
+    const selectedDocs = Array.from(selectedRows);
+    const pdfDocs = documents.filter(doc =>
+      selectedDocs.includes(doc.id) &&
+      doc.type?.toLowerCase() === 'pdf' &&
+      doc.metadata?.analysis // Must have been analyzed
+    );
+
+    if (pdfDocs.length === 0) {
+      toast({
+        title: "No Analyzed Documents",
+        description: "Please select analyzed PDF documents for transform",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!batchSelectedSchema) {
+      toast({
+        title: "Template Required",
+        description: "Please select a template for transform",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Find selected template
+    const selectedTemplate = batchSchemas.find(t => t.id === batchSelectedSchema);
+    const tableName = batchSelectedTable || `${selectedTemplate.id}_documents`;
+
+    const confirmed = confirm(
+      `Transform ${pdfDocs.length} documents to table "${tableName}"?\n\n` +
+      `Template: ${selectedTemplate.name}\n` +
+      `This will create/update the table in your source database.`
+    );
+
+    if (!confirmed) return;
+
+    setBatchProcessing(true);
+    setBatchProgress(0);
+    setBatchStatus(`Transforming ${pdfDocs.length} documents to database...`);
+
+    try {
+      const documentIds = pdfDocs.map(doc => doc.id);
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/batch-metadata-transform`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          documentIds,
+          schema: {
+            fieldSelections: selectedTemplate.target_fields,
+            tableName: tableName,
+            useExistingTable: false, // First run creates table
+            sourceDbId: 'scriptus_lsemb', // From settings
+            template: selectedTemplate.id
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Transform failed');
+      }
+
+      const data = await response.json();
+
+      // Poll for progress
+      const checkProgress = setInterval(async () => {
+        try {
+          const progressResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/job-status/${data.jobId}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            }
+          });
+          const progressData = await progressResponse.json();
+
+          if (progressData) {
+            setBatchProgress(progressData.percentage || 0);
+            setBatchStatus(progressData.message || 'Processing...');
+
+            if (progressData.status === 'completed') {
+              clearInterval(checkProgress);
+              setBatchProgress(100);
+              setBatchStatus('Transform complete!');
+
+              toast({
+                title: "Success",
+                description: `${pdfDocs.length} documents transformed to table ${tableName}`,
+              });
+
+              setTimeout(() => {
+                clearSelection();
+                setBatchProcessing(false);
+                setBatchProgress(0);
+                setBatchStatus('');
+              }, 2000);
+            } else if (progressData.status === 'error') {
+              clearInterval(checkProgress);
+              throw new Error(progressData.error || 'Transform failed');
+            }
+          }
+        } catch (error) {
+          clearInterval(checkProgress);
+          console.error('Progress check error:', error);
+        }
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Transform error:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Transform failed',
+        variant: "destructive"
+      });
+      setBatchProcessing(false);
+      setBatchProgress(0);
+      setBatchStatus('');
+    }
+  };
+
+  const handleBatchProcess = async (schemaId: string) => {
+    const selectedDocs = Array.from(selectedRows);
+    const pdfDocs = documents.filter(doc => selectedDocs.includes(doc.id) && doc.type?.toLowerCase() === 'pdf');
+
+    if (pdfDocs.length === 0) {
+      toast({
+        title: "No PDF Documents",
+        description: "Please select PDF documents for batch processing",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    setBatchProgress(0);
+    setBatchCurrent(0);
+    setBatchTotal(pdfDocs.length);
+    setBatchStatus(`Processing ${pdfDocs.length} documents...`);
+
+    try {
+      const documentIds = pdfDocs.map(doc => doc.id);
+
+      // Find selected template
+      const selectedTemplate = batchSchemas.find(t => t.id === schemaId);
+
+      const response = await fetch(getApiUrl('pdfBatchMetadata'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          documentIds,
+          template: selectedTemplate
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Batch processing failed');
+      }
+
+      const data = await response.json();
+
+      // Poll for progress
+      const checkProgress = setInterval(async () => {
+        try {
+          const progressResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/job-status/${data.jobId}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            }
+          });
+          const progressData = await progressResponse.json();
+
+          if (progressData) {
+            setBatchCurrent(progressData.current || 0);
+            setBatchProgress(progressData.percentage || 0);
+            setBatchStatus(`Processing ${progressData.current}/${progressData.total}: ${progressData.currentDocument || ''}`);
+
+            if (progressData.status === 'completed') {
+              clearInterval(checkProgress);
+              setBatchProgress(100);
+              setBatchStatus('Batch processing complete!');
+
+              toast({
+                title: "Success",
+                description: `Successfully processed ${pdfDocs.length} documents`,
+              });
+
+              // Refresh documents
+              await fetchDocuments();
+
+              // Clear selection and reset state after 2 seconds
+              setTimeout(() => {
+                clearSelection();
+                setBatchProcessing(false);
+                setBatchProgress(0);
+                setBatchStatus('');
+              }, 2000);
+            } else if (progressData.status === 'error' || progressData.status === 'failed') {
+              clearInterval(checkProgress);
+              throw new Error(progressData.error || 'Batch processing failed');
+            }
+          }
+        } catch (error) {
+          clearInterval(checkProgress);
+          console.error('Progress check error:', error);
+        }
+      }, 2000); // Poll every 2 seconds
+
+    } catch (error: any) {
+      console.error('Batch processing error:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Batch processing failed',
+        variant: "destructive"
+      });
+      setBatchProcessing(false);
+      setBatchProgress(0);
+      setBatchStatus('');
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 dark:bg-gray-900">
-      <div className="w-[90%] mx-auto">
+      <div className="w-[98%] mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
             Document Management
           </h1>
-          <Button
-            onClick={() => {
-              fetchDocuments();
-              fetchStats();
-            }}
-            variant="outline"
-            size="sm"
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
         </div>
 
         {/* Stats Cards Above Tabs - Marker Highlight Style */}
@@ -1010,16 +1289,6 @@ export default function DocumentManagerPage() {
                   duration={800}
                   className="text-3xl font-bold text-gray-900 dark:text-white"
                 />
-                <div className="flex items-center gap-2 text-sm">
-                  <Progress value={(stats.documents.embedded / stats.documents.total) * 100} className="flex-1 h-2" />
-                  <span className="text-gray-600 dark:text-gray-400 min-w-12 text-xs font-medium">
-                    <AnimatedPercentage
-                      value={(stats.documents.embedded / stats.documents.total) * 100}
-                      duration={1000}
-                      className="min-w-12"
-                    />
-                  </span>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -1057,49 +1326,8 @@ export default function DocumentManagerPage() {
           </Card>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 h-14">
-            <TabsTrigger value="files" className="h-12">Files</TabsTrigger>
-            <TabsTrigger value="ocr" className="h-12">OCR Processing</TabsTrigger>
-            <TabsTrigger value="embeddings" className="h-12">Embeddings</TabsTrigger>
-          </TabsList>
-
-          {/* Files Tab - 2 Column Layout */}
-          <TabsContent value="files" className="space-y-6">
-            {getSelectedCount() > 0 && (
-              <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                      <span className="font-medium text-green-800 dark:text-green-200">
-                        {getSelectedCount()} {getSelectedCount() === 1 ? 'document' : 'documents'} selected
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setShowOperations(true)}
-                        className="hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors duration-200"
-                      >
-                        <Brain className="h-3 w-3 mr-2" />
-                        Batch Operations
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={clearSelection}
-                        className="hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors duration-200"
-                      >
-                        Clear Selection
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
+        {/* Files Section - 2 Column Layout */}
+        <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Left Column (40%) - Upload & Physical Files */}
               <div className="lg:col-span-5 space-y-6">
@@ -1325,16 +1553,6 @@ export default function DocumentManagerPage() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                {/* Preview Button */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handlePreviewPhysicalFile(file.filename)}
-                                  className="h-7 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/20"
-                                  title="Preview File"
-                                >
-                                  <Eye className="w-3 h-3 text-blue-600" />
-                                </Button>
 
                                 {!file.inDatabase && (
                                   <Button
@@ -1410,7 +1628,27 @@ export default function DocumentManagerPage() {
                   </CardContent>
                 </Card>
 
-                <Card className="h-full bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+                {/* Batch Processing Progress Card */}
+                {batchProcessing && (
+                  <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
+                    <CardContent className="p-6">
+                      <div className="flex items-center gap-6">
+                        <ProgressCircle progress={batchProgress} size={80} />
+                        <div className="flex-1">
+                          <h3 className="text-base font-semibold text-foreground mb-1">Batch PDF Processing</h3>
+                          <p className="text-sm text-muted-foreground mb-2">{batchStatus}</p>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>{batchCurrent} / {batchTotal} documents</span>
+                            <span>•</span>
+                            <span>{batchProgress}% complete</span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
                       <Table>
@@ -1425,8 +1663,7 @@ export default function DocumentManagerPage() {
                             </TableHead>
                             <TableHead className="w-44">Name</TableHead>
                             <TableHead className="w-20">Type</TableHead>
-                            <TableHead className="w-24">Status</TableHead>
-                            <TableHead className="w-20">OCR</TableHead>
+                            <TableHead className="w-28">Status</TableHead>
                             <TableHead className="w-16">Size</TableHead>
                             <TableHead className="w-24">Date</TableHead>
                             <TableHead className="w-28">Actions</TableHead>
@@ -1447,13 +1684,12 @@ export default function DocumentManagerPage() {
                             filteredDocuments.map(doc => (
                               <TableRow
                                 key={doc.id}
-                                className={`hover:bg-muted/50 transition-colors duration-150 cursor-pointer ${selectedRows.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
-                                onClick={() => handleRowSelect(doc.id)}
+                                className={`hover:bg-muted/50 transition-colors duration-150 ${selectedRows.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
                               >
                                 <TableCell className="flex justify-center">
                                   <Checkbox
                                     checked={selectedRows.has(doc.id)}
-                                    onChange={() => handleRowSelect(doc.id)}
+                                    onCheckedChange={() => handleRowSelect(doc.id)}
                                     className=""
                                   />
                                 </TableCell>
@@ -1461,27 +1697,48 @@ export default function DocumentManagerPage() {
                                   {doc.title}
                                 </TableCell>
                                 <TableCell>
-                                  <Badge variant="outline" className="text-xs hover:bg-muted/50 transition-colors duration-150">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs font-semibold border-2 transition-all duration-150 ${
+                                      doc.type.toLowerCase() === 'pdf' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400' :
+                                      doc.type.toLowerCase() === 'csv' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' :
+                                      doc.type.toLowerCase() === 'json' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
+                                      ['md', 'txt', 'doc', 'docx'].includes(doc.type.toLowerCase()) ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400' :
+                                      'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-400'
+                                    }`}
+                                  >
                                     {doc.type.toUpperCase()}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant={doc.metadata?.embeddings ? 'default' : 'secondary'}
-                                    className="text-xs hover:scale-105 transition-transform duration-150"
-                                  >
-                                    {doc.metadata?.embeddings ? 'Embedded' : 'Pending'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {doc.metadata?.ocr_processed ? (
-                                    <Badge variant="default" className="text-xs hover:scale-105 transition-transform duration-150">
-                                      <CheckCircle className="w-2 h-2 mr-1" />
-                                      Done
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">-</span>
-                                  )}
+                                  {(() => {
+                                    const isEmbedded = doc.metadata?.embeddings;
+                                    const isOCRProcessed = doc.metadata?.ocr_processed;
+                                    const needsOCR = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(doc.type.toLowerCase());
+
+                                    let status = '';
+                                    let colorClass = '';
+
+                                    if (isEmbedded) {
+                                      status = 'Embedded';
+                                      colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
+                                    } else if (isOCRProcessed) {
+                                      status = 'Ready';
+                                      colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                    } else if (needsOCR) {
+                                      status = 'Raw';
+                                      colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                    } else {
+                                      status = 'Ready';
+                                      colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                    }
+
+                                    return (
+                                      <Badge variant="outline" className={`text-xs font-medium border transition-all duration-150 ${colorClass}`}>
+                                        {status}
+                                      </Badge>
+                                    );
+                                  })()}
                                 </TableCell>
                                 <TableCell className="text-xs">
                                   {formatFileSize(doc.size || 0)}
@@ -1502,63 +1759,6 @@ export default function DocumentManagerPage() {
                                       title="Preview"
                                     >
                                       <Eye className="w-3 h-3" />
-                                    </Button>
-                                    {['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(doc.type.toLowerCase()) && !doc.metadata?.ocr_processed && (
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (!doc.file_path) {
-                                                  toast({
-                                                    title: 'Dosya Bulunamadı',
-                                                    description: 'Bu belgenin sunucuda fiziksel dosyası bulunamadı. OCR işlemi yapılamaz.',
-                                                    variant: 'destructive'
-                                                  });
-                                                  return;
-                                                }
-                                                handleOCR(doc.id);
-                                              }}
-                                              disabled={!doc.file_path}
-                                              className="h-8 w-8 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                              <FileText className="w-3 h-3" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            {doc.file_path ? 'OCR ile metin çıkar' : 'Dosya sunucuda bulunamadı'}
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    )}
-                                    {!doc.metadata?.embeddings && (
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleEmbeddings(doc.id);
-                                        }}
-                                        className="h-8 w-8 p-0 hover:bg-purple-100 dark:hover:bg-purple-900/20 transition-colors duration-150"
-                                        title="Embeddings"
-                                      >
-                                        <Brain className="w-3 h-3" />
-                                      </Button>
-                                    )}
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        // Handle download
-                                      }}
-                                      className="h-8 w-8 p-0 hover:bg-muted/50 transition-colors duration-150"
-                                      title="Download"
-                                    >
-                                      <Download className="w-3 h-3" />
                                     </Button>
                                     <ConfirmTooltip
                                       onConfirm={() => handleDelete(doc.id, doc.title)}
@@ -1583,319 +1783,126 @@ export default function DocumentManagerPage() {
                       </Table>
                     </div>
                   </CardContent>
+                  {getSelectedCount() > 0 && (
+                    <div className="px-6 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">
+                            {getSelectedCount()} {getSelectedCount() === 1 ? 'document' : 'documents'} selected
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* Template Selection */}
+                          <Select value={batchSelectedSchema} onValueChange={setBatchSelectedSchema}>
+                            <SelectTrigger className="h-7 w-32 text-xs">
+                              <SelectValue placeholder="Template..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {batchSchemas.length > 0 ? (
+                                batchSchemas.map(schema => (
+                                  <SelectItem key={schema.id} value={schema.id} className="text-xs">
+                                    {schema.name}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="_none" disabled className="text-xs">
+                                  No templates
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+
+                          {/* Table Selection */}
+                          <Select value={batchSelectedTable || undefined} onValueChange={setBatchSelectedTable}>
+                            <SelectTrigger className="h-7 w-40 text-xs">
+                              <SelectValue placeholder="Target table..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {batchSelectedTable && (
+                                <SelectItem value={batchSelectedTable} className="text-xs font-semibold">
+                                  ✨ {batchSelectedTable}
+                                </SelectItem>
+                              )}
+                              {availableTables.length > 0 && (
+                                <>
+                                  {batchSelectedTable && <div className="my-1 h-px bg-border" />}
+                                  <div className="text-xs text-muted-foreground px-2 py-1">Existing tables:</div>
+                                  {availableTables.map(table => (
+                                    <SelectItem key={table} value={table} className="text-xs">
+                                      {table}
+                                    </SelectItem>
+                                  ))}
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (!batchSelectedSchema) {
+                                toast({
+                                  title: "Template Required",
+                                  description: "Please select a template",
+                                  variant: "destructive"
+                                });
+                                return;
+                              }
+                              handleBatchProcess(batchSelectedSchema);
+                            }}
+                            disabled={batchProcessing || !batchSelectedSchema}
+                            className="h-7 text-xs px-3"
+                          >
+                            {batchProcessing ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-3 h-3 mr-1" />
+                                Process
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              clearSelection();
+                              setBatchSelectedSchema('');
+                            }}
+                            className="h-7 text-xs px-2"
+                            disabled={batchProcessing}
+                          >
+                            Clear
+                          </Button>
+                          {/* Transform Button - After Analysis */}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleBatchTransform()}
+                            disabled={batchProcessing || !batchSelectedSchema}
+                            className="h-7 text-xs px-3 border-green-600 text-green-600 hover:bg-green-50"
+                          >
+                            <Database className="w-3 h-3 mr-1" />
+                            Transform
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </Card>
               </div>
             </div>
-          </TabsContent>
-
-          {/* Other Tabs (OCR, Embeddings, Scraping, Analytics) */}
-          <TabsContent value="ocr" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Left Column (30%) - OCR Controls */}
-              <div className="lg:col-span-1 space-y-6">
-                <Card>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="w-5 h-5" />
-                      OCR Processing
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="text-sm text-muted-foreground mb-4">
-                      Process documents with Optical Character Recognition to extract text from images and scanned documents.
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="p-3 bg-muted rounded-lg">
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Eligible Documents</div>
-                        <div className="text-lg font-bold">
-                          {documents.filter(d => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(d.type.toLowerCase())).length}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Processed</span>
-                          <span className="font-medium text-green-600">{stats.documents.ocr_processed}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Pending</span>
-                          <span className="font-medium text-orange-600">{stats.documents.ocr_pending}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setShowOperations(true)}
-                      disabled={documents.filter(d => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(d.type.toLowerCase())).length === 0}
-                    >
-                      <FileText className="w-3 h-3 mr-2" />
-                      Process Documents
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg">OCR Settings</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      <div>
-                        <Label className="text-xs font-medium">Language</Label>
-                        <Select defaultValue="tur+eng">
-                          <SelectTrigger className="text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="tur+eng">Turkish + English</SelectItem>
-                            <SelectItem value="eng">English Only</SelectItem>
-                            <SelectItem value="tur">Turkish Only</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs font-medium">Quality</Label>
-                        <Select defaultValue="high">
-                          <SelectTrigger className="text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="high">High Quality</SelectItem>
-                            <SelectItem value="medium">Medium Quality</SelectItem>
-                            <SelectItem value="fast">Fast Processing</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg">OCR Progress</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-muted-foreground">Today</span>
-                          <span className="font-medium">{stats.history.ocr_today}</span>
-                        </div>
-                        <Progress value={stats.history.ocr_today * 10} className="h-1" />
-                      </div>
-
-                      <div className="text-xs text-muted-foreground">
-                        Avg processing time: 2.3s per document
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Right Column (70%) - OCR Documents */}
-              <div className="lg:col-span-3">
-                <Card className="h-full">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg">OCR-Ready Documents</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">
-                        {documents.filter(d => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(d.type.toLowerCase())).length} files
-                      </Badge>
-                      <Badge variant="secondary">
-                        {documents.filter(d => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(d.type.toLowerCase()) && !d.metadata?.ocr_processed).length} pending
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {documents.filter(d => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(d.type.toLowerCase())).length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <FileText className="w-16 h-16 mx-auto mb-4 opacity-40" />
-                        <p className="text-xl font-medium mb-2">No OCR-eligible documents</p>
-                        <p className="text-sm">Upload PDFs, images, or Word documents to enable OCR processing</p>
-                      </div>
-                    ) : (
-                      <DocumentOperations
-                        selectedDocuments={new Set()}
-                        allDocuments={documents.filter(d => ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(d.type.toLowerCase()))}
-                        onOperationComplete={() => {
-                          fetchDocuments();
-                          fetchStats();
-                        }}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="embeddings" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Left Column (30%) - Embedding Controls */}
-              <div className="lg:col-span-1 space-y-6">
-                <Card>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Brain className="w-5 h-5" />
-                      Embedding Management
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="text-sm text-muted-foreground mb-4">
-                      Generate embeddings for semantic search and RAG capabilities.
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="p-3 bg-muted rounded-lg">
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Total Documents</div>
-                        <div className="text-lg font-bold">{documents.length}</div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Embedded</span>
-                          <span className="font-medium text-green-600">{stats.documents.embedded}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Pending</span>
-                          <span className="font-medium text-orange-600">{stats.documents.pending}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setShowOperations(true)}
-                      disabled={documents.length === 0}
-                    >
-                      <Brain className="w-3 h-3 mr-2" />
-                      Generate Embeddings
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg">Embedding Settings</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      <div>
-                        <Label className="text-xs font-medium">Model</Label>
-                        <Select defaultValue="text-embedding-3-large">
-                          <SelectTrigger className="text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text-embedding-3-large">Large (Better Quality)</SelectItem>
-                            <SelectItem value="text-embedding-3-small">Small (Faster)</SelectItem>
-                            <SelectItem value="text-embedding-ada-002">ADA-002</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <Label className="text-xs font-medium">Chunk Size</Label>
-                        <Select defaultValue="1024">
-                          <SelectTrigger className="text-sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="512">512 chars</SelectItem>
-                            <SelectItem value="1024">1024 chars</SelectItem>
-                            <SelectItem value="2048">2048 chars</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg">Tools & Services</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Tokens to process</span>
-                        <span className="font-medium">{(stats.documents.pending * 1000).toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Estimated cost</span>
-                        <span className="font-medium">${(stats.documents.pending * 0.0001).toFixed(2)}</span>
-                      </div>
-                    </div>
-                    <div className="pt-3">
-                      <Button variant="default" className="w-full gap-2 text-sm">
-                        <Languages className="h-4 w-4" />
-                        Translate Documents
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Translate documents to multiple languages
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Right Column (70%) - Embedding Documents */}
-              <div className="lg:col-span-3">
-                <Card className="h-full">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-lg">All Documents</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">
-                        {documents.length} files
-                      </Badge>
-                      <Badge variant="default">
-                        {stats.documents.embedded} embedded
-                      </Badge>
-                      <Badge variant="secondary">
-                        {stats.documents.pending} pending
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {documents.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">
-                        <Brain className="w-16 h-16 mx-auto mb-4 opacity-40" />
-                        <p className="text-xl font-medium mb-2">No documents to embed</p>
-                        <p className="text-sm">Upload documents to start generating embeddings</p>
-                      </div>
-                    ) : (
-                      <DocumentOperations
-                        selectedDocuments={new Set()}
-                        allDocuments={documents}
-                        onOperationComplete={() => {
-                          fetchDocuments();
-                          fetchStats();
-                        }}
-                      />
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          </TabsContent>
-
-          </Tabs>
+        </div>
       </div>
 
-      {/* Document Preview Modal - Use different modals based on file type */}
-      {previewDoc && (previewDoc.type === 'csv' || previewDoc.type === 'json') ? (
+
+      {/* Document Preview Modal - Use unified modal for all types */}
+      {previewDoc && (
         <DocumentPreviewModal
-          document={previewDoc}
-          isOpen={!!previewDoc}
-          onClose={() => setPreviewDoc(null)}
-        />
-      ) : (
-        <DocumentPreview
           document={previewDoc}
           isOpen={!!previewDoc}
           onClose={() => setPreviewDoc(null)}

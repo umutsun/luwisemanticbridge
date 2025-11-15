@@ -4,8 +4,12 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 
-// Import the ChatInterface component
-import ChatInterface from '@/components/ChatInterface';
+// Import the Template-based ChatInterface component
+// This dynamically loads the active template from backend config
+import ChatInterface from '@/components/TemplateChatInterface';
+
+// Alternative: Use original ChatInterface directly (bypasses template system)
+// import ChatInterface from '@/components/ChatInterface';
 
 export default function Home() {
   const { token, user, loading: authLoading } = useAuth();

@@ -45,7 +45,7 @@ async function initializePools() {
     sourcePool = new Pool({ connectionString: sourceConnectionString });
     targetPool = new Pool({ connectionString: targetConnectionString });
 
-    console.log('📊 Migration pools initialized from settings');
+    console.log(' Migration pools initialized from settings');
     return { sourcePool, targetPool };
   } catch (error) {
     console.error('Failed to initialize migration pools:', error);
@@ -524,10 +524,10 @@ router.post('/generate', async (req: Request, res: Response) => {
     // Support both 'tables' array (from frontend) and 'sourceTable' string (legacy)
     if (requestedTables && Array.isArray(requestedTables) && requestedTables.length > 0) {
       tables = requestedTables;
-      console.log(`🔧 Using requested tables: ${tables.join(', ')}`);
+      console.log(` Using requested tables: ${tables.join(', ')}`);
     } else if (sourceTable) {
       tables = [sourceTable];
-      console.log(`🔧 Using source table: ${sourceTable}`);
+      console.log(` Using source table: ${sourceTable}`);
     } else {
       // Auto-discover tables from source database
       try {
@@ -539,7 +539,7 @@ router.post('/generate', async (req: Request, res: Response) => {
           ORDER BY tablename
         `);
         tables = tablesResult.rows.map(r => r.tablename);
-        console.log(`🔍 Auto-discovered tables: ${tables.join(', ')}`);
+        console.log(` Auto-discovered tables: ${tables.join(', ')}`);
 
         if (tables.length === 0) {
           res.write(`data: ${JSON.stringify({
@@ -567,7 +567,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       await pools.targetPool.query(`SELECT 1 FROM unified_embeddings LIMIT 1`);
       unifiedEmbeddingsExists = true;
     } catch (err) {
-      console.log(`⚠️ unified_embeddings table does not exist, will process all records`);
+      console.log(`️ unified_embeddings table does not exist, will process all records`);
     }
 
     const allPending: any[] = [];
@@ -599,7 +599,7 @@ router.post('/generate', async (req: Request, res: Response) => {
           const pendingRecords = allRecordsResult.rows
             .filter(row => !embeddedIds.has(row.id));
 
-          console.log(`📊 Table ${table}: ${allRecordsResult.rows.length} total records, ${embeddedIds.size} already embedded, ${pendingRecords.length} pending`);
+          console.log(` Table ${table}: ${allRecordsResult.rows.length} total records, ${embeddedIds.size} already embedded, ${pendingRecords.length} pending`);
 
           pendingRecords.forEach(row => allPending.push({ ...row, _sourceTable: normalizedTableName }));
         } else {
@@ -607,7 +607,7 @@ router.post('/generate', async (req: Request, res: Response) => {
           const result = await pools.sourcePool.query(
             `SELECT id, * FROM public."${table}"`
           );
-          console.log(`📊 Table ${table}: ${result.rows.length} records to process (no embeddings table exists)`);
+          console.log(` Table ${table}: ${result.rows.length} records to process (no embeddings table exists)`);
           result.rows.forEach(row => allPending.push({ ...row, _sourceTable: normalizedTableName }));
         }
       } catch (err) {
@@ -620,15 +620,15 @@ router.post('/generate', async (req: Request, res: Response) => {
     let processed = 0;
 
     if (total === 0) {
-      console.log(`✅ No pending records found in tables: ${tables.join(', ')}`);
-      console.log(`📊 All selected tables are fully embedded`);
+      console.log(` No pending records found in tables: ${tables.join(', ')}`);
+      console.log(` All selected tables are fully embedded`);
       res.write(`data: ${JSON.stringify({
         current: 0,
         total: 0,
         percentage: 100,
         status: 'completed',
         currentTable: tables[0] || null,
-        message: `✅ All records in selected tables (${tables.join(', ')}) are already embedded. No new records to process.`,
+        message: ` All records in selected tables (${tables.join(', ')}) are already embedded. No new records to process.`,
         completedTables: tables,
         tokenUsage: globalTokenUsage
       })}\n\n`);
@@ -717,7 +717,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         }
 
         if (!content || content.trim().length === 0) {
-          console.warn(`⚠️ No content found for ${table}[${row.id}] - moving to skipped_embeddings`);
+          console.warn(`️ No content found for ${table}[${row.id}] - moving to skipped_embeddings`);
 
           // Insert into skipped_embeddings table
           try {
@@ -733,9 +733,9 @@ router.post('/generate', async (req: Request, res: Response) => {
                 skipped_at: new Date().toISOString()
               })]
             );
-            console.log(`✅ Record moved to skipped_embeddings: ${table}[${row.id}]`);
+            console.log(` Record moved to skipped_embeddings: ${table}[${row.id}]`);
           } catch (err) {
-            console.error(`❌ Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+            console.error(` Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
           }
 
           processed++;
@@ -743,11 +743,11 @@ router.post('/generate', async (req: Request, res: Response) => {
         }
 
         // Generate embedding
-        console.log(`🔄 Generating embedding for ${table}[${row.id}]...`);
+        console.log(` Generating embedding for ${table}[${row.id}]...`);
         const embedding = await generateEmbedding(content);
 
         if (embedding.length === 0) {
-          console.warn(`⚠️ Empty embedding returned for ${table}[${row.id}] - moving to skipped_embeddings`);
+          console.warn(`️ Empty embedding returned for ${table}[${row.id}] - moving to skipped_embeddings`);
 
           // Insert into skipped_embeddings table
           try {
@@ -765,15 +765,15 @@ router.post('/generate', async (req: Request, res: Response) => {
                 skipped_at: new Date().toISOString()
               })]
             );
-            console.log(`✅ Record moved to skipped_embeddings: ${table}[${row.id}]`);
+            console.log(` Record moved to skipped_embeddings: ${table}[${row.id}]`);
           } catch (err) {
-            console.error(`❌ Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
+            console.error(` Failed to insert into skipped_embeddings for ${table}[${row.id}]:`, err);
           }
 
           processed++;
           continue;
         }
-        console.log(`✅ Embedding generated for ${table}[${row.id}]: ${embedding.length} dimensions`);
+        console.log(` Embedding generated for ${table}[${row.id}]: ${embedding.length} dimensions`);
 
         // Prepare metadata - dynamically include all relevant fields
         const metadata: any = {
@@ -848,7 +848,7 @@ router.post('/generate', async (req: Request, res: Response) => {
       percentage: 100,
       status: 'completed',
       currentTable: tables[tables.length - 1] || null,
-      message: `✅ Migration completed! Processed ${processed} record(s) from ${tables.length} table(s).`,
+      message: ` Migration completed! Processed ${processed} record(s) from ${tables.length} table(s).`,
       completedTables: tables,
       tokenUsage: globalTokenUsage
     })}\n\n`);
@@ -882,7 +882,7 @@ router.delete('/clear/:table', async (req: Request, res: Response) => {
 async function getEmbeddingSettings(): Promise<{ provider: string; model: string; apiKey: string | null }> {
   try {
     if (!lsembPool) {
-      console.error('❌ lsembPool is not available');
+      console.error(' lsembPool is not available');
       return { provider: 'google', model: 'text-embedding-004', apiKey: null };
     }
 
@@ -911,8 +911,8 @@ async function getEmbeddingSettings(): Promise<{ provider: string; model: string
 
     // Check if provider supports embeddings
     if (provider === 'claude' || provider === 'anthropic') {
-      console.warn(`⚠️ ${provider} does not support embeddings API. Please use OpenAI or Google for embeddings.`);
-      console.warn(`🔄 Falling back to Google embeddings...`);
+      console.warn(`️ ${provider} does not support embeddings API. Please use OpenAI or Google for embeddings.`);
+      console.warn(` Falling back to Google embeddings...`);
       provider = 'google';
       model = 'text-embedding-004';
     }

@@ -616,6 +616,40 @@ export class DocumentProcessorService {
       throw error;
     }
   }
+
+  /**
+   * Scan docs folder and return list of PDF files
+   */
+  async scanDocsFolder(): Promise<Array<{ filename: string; path: string; size: number }>> {
+    const docsPath = process.env.DOCUMENTS_PATH || process.env.UPLOAD_DIR || path.join(process.cwd(), 'docs');
+
+    try {
+      if (!fs.existsSync(docsPath)) {
+        console.log('[SCAN] Docs folder not found, creating:', docsPath);
+        fs.mkdirSync(docsPath, { recursive: true });
+        return [];
+      }
+
+      const files = fs.readdirSync(docsPath);
+      const pdfFiles = files
+        .filter(file => file.toLowerCase().endsWith('.pdf'))
+        .map(file => {
+          const filePath = path.join(docsPath, file);
+          const stats = fs.statSync(filePath);
+          return {
+            filename: file,
+            path: filePath,
+            size: stats.size
+          };
+        });
+
+      console.log(`[SCAN] Found ${pdfFiles.length} PDF files in ${docsPath}`);
+      return pdfFiles;
+    } catch (error) {
+      console.error('[SCAN] Error scanning docs folder:', error);
+      throw error;
+    }
+  }
 }
 
 export default new DocumentProcessorService();

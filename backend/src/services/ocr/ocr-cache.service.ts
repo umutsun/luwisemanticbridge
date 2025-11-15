@@ -39,12 +39,12 @@ export class OCRCacheService {
       this.isRedisReady = redis && redis.status === 'ready';
 
       if (this.isRedisReady) {
-        logger.info('✅ OCR Cache Service - Redis hazır');
+        logger.info(' OCR Cache Service - Redis hazır');
       } else {
-        logger.warn('⚠️ OCR Cache Service - Redis kullanılamıyor, cache disabled');
+        logger.warn('️ OCR Cache Service - Redis kullanılamıyor, cache disabled');
       }
     } catch (error) {
-      logger.error('❌ OCR Cache Service - Redis initialization hatası:', error);
+      logger.error(' OCR Cache Service - Redis initialization hatası:', error);
       this.isRedisReady = false;
     }
   }
@@ -94,7 +94,7 @@ export class OCRCacheService {
 
       // Cache age kontrolü (optional)
       const ageInDays = (Date.now() - entry.timestamp) / (1000 * 60 * 60 * 24);
-      logger.info(`✅ OCR Cache HIT: ${key} (age: ${ageInDays.toFixed(1)} gün)`);
+      logger.info(` OCR Cache HIT: ${key} (age: ${ageInDays.toFixed(1)} gün)`);
 
       // Metadata'ya cache bilgisi ekle
       return {
@@ -134,7 +134,7 @@ export class OCRCacheService {
       };
 
       await redis.setex(key, ttl, JSON.stringify(entry));
-      logger.info(`💾 OCR Cache SAVED: ${key} (TTL: ${ttl}s)`);
+      logger.info(` OCR Cache SAVED: ${key} (TTL: ${ttl}s)`);
 
       // İstatistik güncelle
       await this.incrementCacheStat('writes');
@@ -168,7 +168,7 @@ export class OCRCacheService {
       if (keys.length === 0) return 0;
 
       await redis.del(...keys);
-      logger.info(`🗑️ OCR Cache temizlendi: ${keys.length} entry silindi`);
+      logger.info(`️ OCR Cache temizlendi: ${keys.length} entry silindi`);
 
       return keys.length;
     } catch (error) {

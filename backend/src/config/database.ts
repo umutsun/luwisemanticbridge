@@ -31,7 +31,7 @@ pool.on('error', (err) => {
       if (reconnectErr) {
         console.error('Reconnection failed:', reconnectErr.message);
       } else {
-        console.log('✅ Successfully reconnected to database');
+        console.log(' Successfully reconnected to database');
       }
     });
   }, 5000);
@@ -42,7 +42,7 @@ const testConnection = async (retries = 3) => {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await pool.query('SELECT NOW()');
-      console.log('✅ Database connected at:', res.rows[0].now);
+      console.log(' Database connected at:', res.rows[0].now);
       return;
     } catch (err) {
       console.error(`Database connection attempt ${i + 1} failed:`, (err as Error).message);
@@ -50,7 +50,7 @@ const testConnection = async (retries = 3) => {
         console.log(`Retrying in ${(i + 1) * 5} seconds...`);
         await new Promise(resolve => setTimeout(resolve, (i + 1) * 5000));
       } else {
-        console.error('❌ Failed to connect to database after', retries, 'attempts');
+        console.error(' Failed to connect to database after', retries, 'attempts');
         console.log('Please check:');
         console.log('1. PostgreSQL is running on', process.env.DATABASE_URL);
         console.log('2. Network connectivity to the database server');

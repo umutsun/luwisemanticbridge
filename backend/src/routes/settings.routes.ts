@@ -15,17 +15,17 @@ function cacheMiddleware(req: Request, res: Response, next: any) {
 
   if (cached !== null) {
     const duration = Date.now() - startTime;
-    console.log(`📦 [CACHE] Hit for ${key} (${duration}ms)`);
+    console.log(` [CACHE] Hit for ${key} (${duration}ms)`);
     return res.json(cached);
   }
 
-  console.log(`🌐 [API] Miss for ${key}`);
+  console.log(` [API] Miss for ${key}`);
 
   // Override res.json to cache response
   const originalJson = res.json;
   res.json = function(data) {
     const duration = Date.now() - startTime;
-    console.log(`⚡ [API] Response in ${duration}ms, caching...`);
+    console.log(` [API] Response in ${duration}ms, caching...`);
 
     // Cache with 30s TTL
     settingsCache.set(key, data, 30000);
@@ -48,7 +48,7 @@ function cacheMiddleware(req: Request, res: Response, next: any) {
  *         name: category
  *         schema:
  *           type: string
- *           enum: [llm, embeddings, rag, prompts, chatbot, database, redis, security, app, scraper, translation, ocr]
+ *           enum: [llm, embeddings, rag, prompts, chatbot, database, redis, n8n, security, app, scraper, translation, ocr]
  *         description: Settings category to retrieve
  *     responses:
  *       200:
@@ -125,6 +125,9 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       redis: `SELECT key, value FROM settings
               WHERE key LIKE 'redis.%'`,
 
+      n8n: `SELECT key, value FROM settings
+           WHERE key LIKE 'n8n.%'`,
+
       security: `SELECT key, value FROM settings
                 WHERE key LIKE 'security.%' OR key LIKE 'jwt.%'`,
 
@@ -156,11 +159,11 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     }
 
     const result = await lsembPool.query(query);
-    console.log(`🔧 [OPTIMIZED] Found ${result.rows.length} settings for category: ${category}`);
+    console.log(` [OPTIMIZED] Found ${result.rows.length} settings for category: ${category}`);
 
     // DEBUG: Log raw database results for troubleshooting
     if (category === 'llm' || category === 'rag') {
-      console.log(`📊 [SETTINGS DEBUG] Raw DB results for ${category}:`,
+      console.log(` [SETTINGS DEBUG] Raw DB results for ${category}:`,
         result.rows.slice(0, 10).map(r => `${r.key}=${r.value}`).join(', ')
       );
     }
@@ -199,7 +202,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
 
         // DEBUG: Log DeepL specifically
         if (provider === 'deepl' && process.env.DEBUG_SETTINGS === 'true') {
-          console.log('🔍 [DeepL Debug]', {
+          console.log(' [DeepL Debug]', {
             hasProviderConfig: !!providerConfig,
             hasApiStatus: !!providerApiStatus,
             verifiedDate: providerConfig?.verifiedDate || providerApiStatus?.verifiedDate,
@@ -225,7 +228,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
 
             // DEBUG: Log successful validation
             if (provider === 'deepl') {
-              console.log('✅ [DeepL] Validated status created:', apiStatus[provider]);
+              console.log(' [DeepL] Validated status created:', apiStatus[provider]);
             }
           } else if (providerConfig?.apiKey) {
             // Provider has API key but not validated
@@ -238,13 +241,13 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
 
             // DEBUG: Log inactive status
             if (provider === 'deepl') {
-              console.log('⚠️ [DeepL] Inactive status created (has API key but not validated)');
+              console.log('️ [DeepL] Inactive status created (has API key but not validated)');
             }
           }
         } else {
           // DEBUG: Log when provider is skipped
           if (provider === 'deepl') {
-            console.log('❌ [DeepL] Skipped - no config and no apiStatus');
+            console.log(' [DeepL] Skipped - no config and no apiStatus');
           }
         }
       });
@@ -258,7 +261,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       // Construct activeEmbeddingModel from provider and model ONLY if it doesn't exist
       if (!config.llmSettings?.activeEmbeddingModel && config.llmSettings?.embeddingProvider && config.llmSettings?.embeddingModel) {
         config.llmSettings.activeEmbeddingModel = `${config.llmSettings.embeddingProvider}/${config.llmSettings.embeddingModel}`;
-        console.log('⚠️ [Settings] Constructed activeEmbeddingModel from separate fields:', config.llmSettings.activeEmbeddingModel);
+        console.log('️ [Settings] Constructed activeEmbeddingModel from separate fields:', config.llmSettings.activeEmbeddingModel);
       }
 
       // IMPORTANT: Ensure activeChatModel is in llmSettings
@@ -290,7 +293,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       // Frontend/User MUST configure the model in Settings UI
       if (!config.llmSettings?.activeChatModel) {
         const envModel = process.env.LLM_MODEL || 'anthropic/claude-3-5-sonnet-20241022';
-        console.warn('⚠️ [Settings] No activeChatModel found in database, using environment variable:', envModel);
+        console.warn('️ [Settings] No activeChatModel found in database, using environment variable:', envModel);
         config.llmSettings = config.llmSettings || {};
         config.llmSettings.activeChatModel = envModel;
       }
@@ -298,13 +301,13 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
       if (!config.llmSettings?.activeEmbeddingModel) {
         // CORRECT: Use proper embedding model as fallback (NOT chat model!)
         const envEmbed = process.env.EMBEDDING_MODEL || 'openai/text-embedding-3-small';
-        console.warn('⚠️ [Settings] No activeEmbeddingModel found in database, using environment variable:', envEmbed);
+        console.warn('️ [Settings] No activeEmbeddingModel found in database, using environment variable:', envEmbed);
         config.llmSettings = config.llmSettings || {};
         config.llmSettings.activeEmbeddingModel = envEmbed;
       }
 
       // Log active models
-      console.log(`📊 [Settings API Response] Category: ${category}`);
+      console.log(` [Settings API Response] Category: ${category}`);
       console.log(`  ├─ Chat Model: ${config.llmSettings?.activeChatModel || 'NOT SET'}`);
       console.log(`  ├─ Embedding: ${config.llmSettings?.activeEmbeddingModel || 'NOT SET'}`);
       console.log(`  ├─ Embedding Provider: ${config.llmSettings?.embeddingProvider || 'NOT SET'}`);
@@ -432,19 +435,19 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Clear cache intelligently
     const cleared = settingsCache.clearPattern('settings');
-    console.log(`🗑️ [CACHE] Cleared ${cleared} entries`);
+    console.log(`️ [CACHE] Cleared ${cleared} entries`);
 
     // CRITICAL: Reload LLM Manager settings to pick up changes immediately
     const llmManager = (await import('../services/llm-manager.service')).LLMManager.getInstance();
     await llmManager.reloadSettings();
-    console.log('🔄 [LLM Manager] Settings reloaded after update');
+    console.log(' [LLM Manager] Settings reloaded after update');
 
     // CRITICAL: Reload Semantic Search settings for RAG changes
     const hasRAGSettings = updates.some(u => u.key.startsWith('ragSettings.'));
     if (hasRAGSettings) {
       const { semanticSearch } = await import('../services/semantic-search.service');
       await semanticSearch.refreshRAGSettingsNow();
-      console.log('🔄 [Semantic Search] RAG settings reloaded after update');
+      console.log(' [Semantic Search] RAG settings reloaded after update');
     }
 
     res.json({ success: true, message: 'Settings updated successfully' });
@@ -519,7 +522,7 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
     }
 
     const result = await lsembPool.query(query);
-    console.log(`🔧 [CATEGORY] Found ${result.rows.length} settings for category: ${categoryName}`);
+    console.log(` [CATEGORY] Found ${result.rows.length} settings for category: ${categoryName}`);
 
     // Build category-specific response
     const config: any = {};
@@ -638,10 +641,10 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
       const { default: LLMManager } = await import('../services/llm-manager.service');
       const llmManager = LLMManager.getInstance();
       await llmManager.reloadSettings();
-      console.log(`🔄 [Settings] LLM Manager reloaded`);
+      console.log(` [Settings] LLM Manager reloaded`);
     }
 
-    console.log(`✅ [Settings] ${categoryName}: ${updates.length} keys updated`);
+    console.log(` [Settings] ${categoryName}: ${updates.length} keys updated`);
 
     res.json({
       success: true,
@@ -650,7 +653,7 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error(`❌ [SETTINGS UPDATE] Error updating ${req.params.categoryName} settings:`, error);
+    console.error(` [SETTINGS UPDATE] Error updating ${req.params.categoryName} settings:`, error);
     res.status(500).json({ error: `Failed to update ${req.params.categoryName} settings` });
   }
 });
@@ -701,7 +704,7 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
 
     // Clear cache
     const cleared = settingsCache.clearPattern('settings');
-    console.log(`🗑️ [CACHE] Cleared ${cleared} entries for category ${categoryName}`);
+    console.log(`️ [CACHE] Cleared ${cleared} entries for category ${categoryName}`);
 
     res.json({
       success: true,

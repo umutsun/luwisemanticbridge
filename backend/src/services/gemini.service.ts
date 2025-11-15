@@ -60,9 +60,9 @@ export class GeminiService {
     if (this.apiKey && this.apiKey !== 'your-google-api-key-here') {
       this.genAI = new GoogleGenerativeAI(this.apiKey);
       this.initialized = true;
-      console.log(`✅ Gemini API initialized with model: ${this.model}`);
+      console.log(` Gemini API initialized with model: ${this.model}`);
     } else {
-      console.log('⚠️  Gemini API key not configured');
+      console.log('️  Gemini API key not configured');
     }
   }
 

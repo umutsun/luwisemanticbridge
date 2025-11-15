@@ -33,7 +33,7 @@ async function initializeSourcePool() {
         const config = {
           host: dbConfig.host || process.env.POSTGRES_HOST || '91.99.229.96',
           port: parseInt(dbConfig.port || process.env.POSTGRES_PORT || '5432'),
-          database: dbConfig.name || dbConfig.database || 'rag_chatbot',
+          database: dbConfig.name || dbConfig.database, // Source DB from settings only
           user: dbConfig.user || process.env.POSTGRES_USER || 'postgres',
           password: dbConfig.password || process.env.POSTGRES_PASSWORD || '',
           ssl: dbConfig.ssl === 'true' || dbConfig.ssl === true || false,
@@ -43,11 +43,11 @@ async function initializeSourcePool() {
         sourcePool = new Pool(config);
 
         sourcePool.on('connect', () => {
-          console.log(`✅ Source database connected: ${config.database} (from settings)`);
+          console.log(` Source database connected: ${config.database} (from settings)`);
         });
 
         sourcePool.on('error', (err: any) => {
-          console.error('❌ Source database connection error:', err);
+          console.error(' Source database connection error:', err);
         });
 
         return sourcePool;
@@ -73,7 +73,7 @@ async function initializeSourcePool() {
     };
 
     sourcePool = new Pool(config);
-    console.log(`✅ Source database connected: ${config.database} (from env fallback)`);
+    console.log(` Source database connected: ${config.database} (from env fallback)`);
 
     return sourcePool;
   }
@@ -330,7 +330,7 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
 
       await client.query('COMMIT');
 
-      console.log(`✅ Insert summary - Inserted: ${insertedCount}, Updated: ${updatedCount}, Skipped: ${skippedCount}`);
+      console.log(` Insert summary - Inserted: ${insertedCount}, Updated: ${updatedCount}, Skipped: ${skippedCount}`);
 
       res.json({
         success: true,

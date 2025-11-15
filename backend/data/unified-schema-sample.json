@@ -1,0 +1,89 @@
+{
+  "schema": {
+    "id": "invoice_2024",
+    "name": "Invoice Processing Schema 2024",
+    "description": "For extracting and storing invoice data",
+    "category": "Financial",
+
+    // Template for Analysis
+    "analysis_template": {
+      "focus_keywords": ["invoice", "bill", "total", "amount", "vendor", "due date"],
+      "extraction_prompt": "Extract all invoice details including vendor info, dates, amounts, and line items",
+      "required_fields": ["invoice_number", "vendor_name", "total_amount", "invoice_date"],
+      "optional_fields": ["purchase_order", "payment_terms", "currency", "tax_amount"]
+    },
+
+    // SQL Schema for Insertion
+    "sql_schema": {
+      "table_name": "invoices_2024",
+      "columns": [
+        {
+          "name": "id",
+          "type": "SERIAL PRIMARY KEY",
+          "source": "auto"
+        },
+        {
+          "name": "document_id",
+          "type": "INTEGER",
+          "source": "document.id",
+          "nullable": false
+        },
+        {
+          "name": "invoice_number",
+          "type": "VARCHAR(50)",
+          "source": "metadata.invoice_number",
+          "nullable": false,
+          "unique": true
+        },
+        {
+          "name": "vendor_name",
+          "type": "VARCHAR(255)",
+          "source": "metadata.vendor_name",
+          "nullable": false
+        },
+        {
+          "name": "invoice_date",
+          "type": "DATE",
+          "source": "metadata.invoice_date",
+          "nullable": false
+        },
+        {
+          "name": "total_amount",
+          "type": "DECIMAL(12,2)",
+          "source": "metadata.total_amount",
+          "nullable": false
+        },
+        {
+          "name": "line_items",
+          "type": "JSONB",
+          "source": "metadata.line_items",
+          "nullable": true
+        },
+        {
+          "name": "extracted_at",
+          "type": "TIMESTAMP",
+          "source": "auto",
+          "default": "NOW()"
+        }
+      ]
+    },
+
+    // Field Mappings
+    "field_mappings": {
+      "metadata.invoice_number": "invoice_number",
+      "metadata.vendor_name": "vendor_name",
+      "metadata.total_amount": "total_amount"
+    },
+
+    // Processing Rules
+    "processing": {
+      "batch_mode": true,  // Can be used in batch process
+      "create_table": true,  // Can create new table
+      "update_existing": true,  // Can update existing records
+      "validation": {
+        "required_fields": ["invoice_number", "vendor_name", "total_amount"],
+        "unique_keys": ["invoice_number"]
+      }
+    }
+  }
+}

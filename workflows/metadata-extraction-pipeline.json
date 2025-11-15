@@ -1,0 +1,386 @@
+{
+  "name": "LSEMB-Metadata-Extraction-Pipeline",
+  "description": "Automated pipeline for crawling web content, extracting metadata with AI templates, and storing in database",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "schedule_trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "command": "KEYS",
+        "key": "emlakai:*"
+      },
+      "id": "fetch_crawled_keys",
+      "name": "Fetch Crawled Items from Redis",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "redis": {
+          "id": "lsemb-redis",
+          "name": "LSEMB Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "id": "split_batches",
+      "name": "Split into Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Redis keys to extract crawler name and item ID\nconst items = $input.all();\nconst processedItems = [];\n\nfor (const item of items) {\n  const redisKey = item.json.key || item.json;\n  \n  // Keys format: crawlerName:itemId\n  const parts = redisKey.split(':');\n  if (parts.length >= 2) {\n    processedItems.push({\n      json: {\n        redisKey,\n        crawlerName: parts[0],\n        itemId: parts.slice(1).join(':'),\n        needsAnalysis: true\n      }\n    });\n  }\n}\n\nreturn processedItems;"
+      },
+      "id": "parse_keys",
+      "name": "Parse Redis Keys",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "workflow": "analyzeCrawl",
+        "crawlerName": "={{ $json.crawlerName }}",
+        "itemId": "={{ $json.itemId }}",
+        "analysisTemplate": "web_page",
+        "apiBaseUrl": "http://localhost:8083"
+      },
+      "id": "analyze_with_ai",
+      "name": "Analyze with AI Template",
+      "type": "n8n-nodes-alice-semantic-bridge.asembWorkflow",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "credentials": {
+        "postgresDb": {
+          "id": "lsemb-postgres",
+          "name": "LSEMB PostgreSQL"
+        },
+        "openAiApi": {
+          "id": "lsemb-openai",
+          "name": "LSEMB OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check_success",
+      "name": "Analysis Successful?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sources (id, url, title, description, metadata, created_at, updated_at)\nVALUES (\n  $1,\n  $2,\n  $3,\n  $4,\n  $5::jsonb,\n  NOW(),\n  NOW()\n)\nON CONFLICT (id) DO UPDATE SET\n  metadata = $5::jsonb,\n  updated_at = NOW()\nRETURNING *",
+        "options": {
+          "queryParameters": "={{ [\n  $json.itemId,\n  $json.metadata.url || '',\n  $json.metadata.title || 'Untitled',\n  $json.metadata.summary || '',\n  JSON.stringify($json.metadata)\n] }}"
+        }
+      },
+      "id": "store_metadata",
+      "name": "Store Metadata in PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [1450, 200],
+      "credentials": {
+        "postgres": {
+          "id": "lsemb-postgres",
+          "name": "LSEMB PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-ada-002",
+        "text": "={{ $json.metadata.mainContent || $json.metadata.summary || '' }}",
+        "options": {}
+      },
+      "id": "generate_embedding",
+      "name": "Generate Vector Embedding",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1650, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "lsemb-openai",
+          "name": "LSEMB OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO documents (content, content_hash, embedding, metadata, source_id, created_at, updated_at)\nVALUES (\n  $1,\n  $2,\n  $3::vector,\n  $4::jsonb,\n  $5,\n  NOW(),\n  NOW()\n)\nON CONFLICT (content_hash) DO UPDATE SET\n  embedding = $3::vector,\n  metadata = $4::jsonb,\n  updated_at = NOW()\nRETURNING *",
+        "options": {
+          "queryParameters": "={{ [\n  $json.metadata.mainContent || $json.metadata.summary || '',\n  $crypto.createHash('sha256').update($json.metadata.mainContent || '').digest('hex'),\n  JSON.stringify($json.embedding),\n  JSON.stringify($json.metadata),\n  $json.itemId\n] }}"
+        }
+      },
+      "id": "store_embedding",
+      "name": "Store Embedding in Documents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [1850, 200],
+      "credentials": {
+        "postgres": {
+          "id": "lsemb-postgres",
+          "name": "LSEMB PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "command": "SET",
+        "key": "lsemb:pipeline:last_processed:{{ $json.itemId }}",
+        "value": "={{ JSON.stringify({ timestamp: new Date().toISOString(), status: 'completed', template: 'web_page' }) }}",
+        "expire": true,
+        "ttl": 86400
+      },
+      "id": "update_cache",
+      "name": "Update Processing Cache",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [2050, 200],
+      "credentials": {
+        "redis": {
+          "id": "lsemb-redis",
+          "name": "LSEMB Redis"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "error_message",
+              "value": "={{ $json.error || 'Unknown error' }}"
+            },
+            {
+              "name": "item_id",
+              "value": "={{ $json.itemId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log_error",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1450, 400]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "pipeline_status",
+              "value": "completed"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "total_processed",
+              "value": "={{ $items().length }}"
+            },
+            {
+              "name": "batch_number",
+              "value": "={{ $node['split_batches'].context['currentRunIndex'] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "batch_summary",
+      "name": "Batch Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2250, 200]
+    }
+  ],
+  "connections": {
+    "schedule_trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch_crawled_keys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch_crawled_keys": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "split_batches": {
+      "main": [
+        [
+          {
+            "node": "parse_keys",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "batch_summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse_keys": {
+      "main": [
+        [
+          {
+            "node": "analyze_with_ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "analyze_with_ai": {
+      "main": [
+        [
+          {
+            "node": "check_success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_success": {
+      "main": [
+        [
+          {
+            "node": "store_metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "log_error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store_metadata": {
+      "main": [
+        [
+          {
+            "node": "generate_embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "generate_embedding": {
+      "main": [
+        [
+          {
+            "node": "store_embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "store_embedding": {
+      "main": [
+        [
+          {
+            "node": "update_cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update_cache": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "log_error": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "executionTimeout": 1800,
+    "maxExecutionTimeout": 3600
+  },
+  "tags": [
+    "lsemb",
+    "metadata-extraction",
+    "ai-automation",
+    "crawl-to-db"
+  ]
+}

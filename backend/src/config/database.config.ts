@@ -30,7 +30,7 @@ let appConfig: any;
 
 // Initialize all configurations from environment variables
 export async function initializeConfigs(): Promise<void> {
-  console.log('⚠️ Using configurations from environment variables');
+  console.log('️ Using configurations from environment variables');
 
   // Set configurations from environment
   customerDbConfig = {
@@ -80,12 +80,12 @@ export async function initializeConfigs(): Promise<void> {
     rate_limit_max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100')
   };
 
-  console.log('✅ All configurations loaded from environment variables');
+  console.log(' All configurations loaded from environment variables');
 }
 
 // Sync API keys from environment variables to database
 export async function syncAPIKeysToDatabase(): Promise<void> {
-  console.log('🔄 Syncing API keys from environment variables to database (only if not exists)...');
+  console.log(' Syncing API keys from environment variables to database (only if not exists)...');
 
   try {
     const apiKeys = [
@@ -111,17 +111,17 @@ export async function syncAPIKeysToDatabase(): Promise<void> {
             'INSERT INTO settings (key, value, category, description) VALUES ($1, $2, $3, $4)',
             [apiKey.key, apiKey.value, 'api_keys', `API key for ${apiKey.key.replace('.apiKey', '').replace('.', ' ').toUpperCase()}`]
           );
-          console.log(`✅ Added ${apiKey.key} to database`);
+          console.log(` Added ${apiKey.key} to database`);
         } else {
           // Keep existing key in database, don't override
-          console.log(`🔒 Keeping existing ${apiKey.key} in database (not overriding from environment)`);
+          console.log(` Keeping existing ${apiKey.key} in database (not overriding from environment)`);
         }
       }
     }
 
-    console.log('✅ API keys sync completed successfully');
+    console.log(' API keys sync completed successfully');
   } catch (error) {
-    console.error('❌ Failed to sync API keys to database:', error);
+    console.error(' Failed to sync API keys to database:', error);
     throw error;
   }
 }
@@ -158,15 +158,15 @@ export const lsembPool = new Pool({
 
 // Connection pool monitoring and memory leak prevention
 lsembPool.on('connect', (client) => {
-  console.log('🔗 Database client connected');
+  console.log(' Database client connected');
 });
 
 lsembPool.on('error', (err, client) => {
-  console.error('❌ Database client error:', err);
+  console.error(' Database client error:', err);
 });
 
 lsembPool.on('remove', (client) => {
-  console.log('🗑️ Database client removed from pool');
+  console.log('️ Database client removed from pool');
 });
 
 // Monitor pool status every 30 seconds
@@ -176,7 +176,7 @@ setInterval(() => {
   const waitingCount = lsembPool.waitingCount;
 
   if (totalCount > 15) { // Alert if using more than 60% of pool
-    console.log(`⚠️ Pool usage: ${totalCount}/25 (Idle: ${idleCount}, Waiting: ${waitingCount})`);
+    console.log(`️ Pool usage: ${totalCount}/25 (Idle: ${idleCount}, Waiting: ${waitingCount})`);
   }
 }, 30000);
 
@@ -235,7 +235,7 @@ export async function getSettingsBasedPool(): Promise<Pool> {
 
       if (result.rows.length > 0 && result.rows[0].value) {
         const dbConfig = result.rows[0].value;
-        console.log('📊 Creating database pool from settings:', {
+        console.log(' Creating database pool from settings:', {
           host: dbConfig.host,
           port: dbConfig.port,
           database: dbConfig.database
@@ -255,7 +255,7 @@ export async function getSettingsBasedPool(): Promise<Pool> {
 
         return settingsBasedPool;
       } else {
-        console.log('⚠️ No customer_database settings found, using default config');
+        console.log('️ No customer_database settings found, using default config');
         // Fallback to default customer database config
         settingsBasedPool = getCustomerPool();
         return settingsBasedPool;
@@ -264,7 +264,7 @@ export async function getSettingsBasedPool(): Promise<Pool> {
       client.release();
     }
   } catch (error) {
-    console.error('❌ Error reading database settings:', error);
+    console.error(' Error reading database settings:', error);
     // Fallback to default customer database config
     settingsBasedPool = getCustomerPool();
     return settingsBasedPool;
@@ -523,9 +523,9 @@ export async function initializeLsembDatabase() {
       )
     `);
 
-    console.log('✅ LSEMB database tables initialized');
+    console.log(' LSEMB database tables initialized');
   } catch (error) {
-    console.error('❌ Failed to initialize LSEMB database:', error);
+    console.error(' Failed to initialize LSEMB database:', error);
     throw error;
   } finally {
     client.release();

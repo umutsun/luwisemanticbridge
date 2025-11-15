@@ -57,9 +57,9 @@ export class ConsoleLogService extends EventEmitter {
       // Override console methods
       this.overrideConsole();
 
-      console.log('✅ Console Log Service initialized with Redis');
+      console.log(' Console Log Service initialized with Redis');
     } catch (error) {
-      console.error('❌ Failed to initialize Console Log Service:', error);
+      console.error(' Failed to initialize Console Log Service:', error);
     }
   }
 
@@ -201,7 +201,7 @@ export class ConsoleLogService extends EventEmitter {
   async clearLogs() {
     try {
       await this.redis.del(this.LOG_STREAM);
-      console.log('✅ Console logs cleared');
+      console.log(' Console logs cleared');
     } catch (error) {
       console.error('Failed to clear logs:', error);
     }

@@ -10,7 +10,7 @@ export class MockDataService {
 
   async addMockDocuments() {
     try {
-      console.log('📝 Adding mock documents to database...');
+      console.log(' Adding mock documents to database...');
 
       // Add mock documents table if not exists
       await this.pool.query(`
@@ -60,17 +60,17 @@ export class MockDataService {
         );
       }
 
-      console.log('✅ Mock documents added successfully!');
+      console.log(' Mock documents added successfully!');
       return true;
     } catch (error) {
-      console.error('❌ Error adding mock data:', error);
+      console.error(' Error adding mock data:', error);
       return false;
     }
   }
 
   async createEmbeddings() {
     try {
-      console.log('🧠 Creating embeddings for mock data...');
+      console.log(' Creating embeddings for mock data...');
 
       // Create embeddings table
       await this.pool.query(`
@@ -87,7 +87,7 @@ export class MockDataService {
       const result = await this.pool.query('SELECT id, title, content FROM mock_documents');
 
       if (result.rows.length === 0) {
-        console.log('⚠️ No documents to create embeddings for');
+        console.log('️ No documents to create embeddings for');
         return false;
       }
 
@@ -107,10 +107,10 @@ export class MockDataService {
         );
       }
 
-      console.log('✅ Mock embeddings created!');
+      console.log(' Mock embeddings created!');
       return true;
     } catch (error) {
-      console.error('❌ Error creating embeddings:', error);
+      console.error(' Error creating embeddings:', error);
       return false;
     }
   }

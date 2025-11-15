@@ -328,11 +328,64 @@ export default function DashboardPage() {
               lastUpdated: new Date().toISOString()
             });
           }
+        } else if (response.status === 401) {
+          // Not authenticated - use default empty data
+          console.warn('Chat stats requires authentication. Using default data.');
+          setChatStats({
+            overview: {
+              total_conversations: 0,
+              total_messages: 0,
+              total_users: 0
+            },
+            recentMessages: 0,
+            avgMessagesPerConversation: 0,
+            daily_activity: [{
+              date: new Date().toISOString().split('T')[0],
+              active_users: 0,
+              conversations: 0,
+              messages: 0
+            }],
+            lastUpdated: new Date().toISOString()
+          });
         } else {
           console.error('Failed to fetch chat stats:', response.status);
+          // Set default data for any other error
+          setChatStats({
+            overview: {
+              total_conversations: 0,
+              total_messages: 0,
+              total_users: 0
+            },
+            recentMessages: 0,
+            avgMessagesPerConversation: 0,
+            daily_activity: [{
+              date: new Date().toISOString().split('T')[0],
+              active_users: 0,
+              conversations: 0,
+              messages: 0
+            }],
+            lastUpdated: new Date().toISOString()
+          });
         }
       } catch (error) {
         console.error('Error fetching chat stats:', error);
+        // Set default data on error
+        setChatStats({
+          overview: {
+            total_conversations: 0,
+            total_messages: 0,
+            total_users: 0
+          },
+          recentMessages: 0,
+          avgMessagesPerConversation: 0,
+          daily_activity: [{
+            date: new Date().toISOString().split('T')[0],
+            active_users: 0,
+            conversations: 0,
+            messages: 0
+          }],
+          lastUpdated: new Date().toISOString()
+        });
       } finally {
         setChatStatsLoading(false);
       }

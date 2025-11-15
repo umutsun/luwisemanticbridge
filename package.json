@@ -1,4 +1,21 @@
 {
+  "name": "lsemb",
+  "version": "1.0.0",
+  "description": "LSEMB - Semantic Document Processing System",
+  "scripts": {
+    "start": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop all",
+    "restart": "pm2 restart all",
+    "restart:backend": "pm2 restart lsemb-backend",
+    "restart:frontend": "pm2 restart lsemb-frontend",
+    "restart:python": "pm2 restart lsemb-python",
+    "logs": "pm2 logs --lines 50",
+    "logs:backend": "pm2 logs lsemb-backend --lines 50",
+    "logs:frontend": "pm2 logs lsemb-frontend --lines 50",
+    "logs:python": "pm2 logs lsemb-python --lines 50",
+    "status": "pm2 status",
+    "monit": "pm2 monit"
+  },
   "dependencies": {
     "@types/dompurify": "^3.0.5",
     "@typescript-eslint/eslint-plugin": "^8.46.1",

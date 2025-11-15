@@ -1,0 +1,308 @@
+{
+  "templates": [
+    {
+      "id": "general",
+      "name": "General",
+      "description": "Standard document analysis",
+      "category": "General",
+      "focus_keywords": [],
+      "target_fields": [
+        "title",
+        "summary",
+        "keywords",
+        "main_topics",
+        "entities",
+        "document_type",
+        "creation_date"
+      ],
+      "extraction_prompt": "Provide a comprehensive analysis of the document including summary, key topics, and entities"
+    },
+    {
+      "id": "legal",
+      "name": "Legal",
+      "description": "Turkish laws, regulations, articles",
+      "category": "Legal",
+      "focus_keywords": ["kanun", "madde", "yasa", "mevzuat", "tüzük", "yönetmelik", "kararname", "yaptirim"],
+      "target_fields": [
+        "title",
+        "summary",
+        "excerpt",
+        "author",
+        "source",
+        "tableOfContents",
+        "type",
+        "category",
+        "relatedTopics",
+        "kanunNo",
+        "maddeler",
+        "yürürlükTarihi",
+        "mevzuatTuru",
+        "maddeSayisi",
+        "degisiklikler",
+        "yaptirimlar",
+        "yetkiliKurum"
+      ],
+      "extraction_prompt": "Analyze Turkish legal document and extract:\n\nCommon Fields:\n- title: Full legal document name\n- summary: Brief 2-3 sentence overview of the law's purpose\n- excerpt: First paragraph or key article text\n- author: Legislative body (TBMM, Cumhurbaşkanlığı, etc)\n- source: Resmi Gazete number and date\n- tableOfContents: List of chapter/section names (Birinci Kısım, İkinci Kısım, etc)\n- type: 'legal'\n- category: Document type (Kanun, Tüzük, Yönetmelik, etc)\n- relatedTopics: Related legal areas (Vergi, Ticaret, Ceza, etc)\n\nLegal Specific Fields:\n- kanunNo: Law number (e.g., '213 Sayılı Vergi Usul Kanunu')\n- maddeler: Object with article numbers as keys and full article text as values {\"Madde 1\": \"text\", \"Madde 2\": \"text\"}\n- yürürlükTarihi: Effective date\n- mevzuatTuru: Type (Kanun/Tüzük/Yönetmelik/KHK)\n- maddeSayisi: Total article count\n- degisiklikler: List of amendments with dates\n- yaptirimlar: Sanctions and penalties described\n- yetkiliKurum: Responsible authority\n\nProvide complete, structured JSON with all fields."
+    },
+    {
+      "id": "turkish_tax_law",
+      "name": "Turkish Tax Law (Vergi Hukuku)",
+      "description": "Turkish tax legislation - laws, regulations, circulars, court decisions",
+      "category": "Legal",
+      "focus_keywords": [
+        "vergi", "gelir", "kdv", "ötv", "kurumlar", "gümrük", "damga",
+        "kanun", "madde", "bent", "fıkra", "resmi gazete", "tebliğ",
+        "sirküler", "genelge", "kararname", "yönetmelik",
+        "beyanname", "tahakkuk", "tahsil", "mükellefiyet", "matrah",
+        "istisna", "muafiyet", "indirim", "oran", "tarh", "tebliğ"
+      ],
+      "subcategories": {
+        "kanun": "Vergi Kanunu",
+        "genel_teblig": "Genel Tebliğ",
+        "sirkuler": "Sirküler",
+        "ozelge": "Özelge",
+        "kararname": "Kararname",
+        "yonetmelik": "Yönetmelik",
+        "genelge": "Genelge",
+        "danistay": "Danıştay Kararı",
+        "mukteza": "Mukteza",
+        "ekitap": "Vergi Kitabı"
+      },
+      "target_fields": [
+        "title",
+        "summary",
+        "excerpt",
+        "type",
+        "category",
+        "subCategory",
+        "documentType",
+
+        "mevzuatNo",
+        "mevzuatAdi",
+        "mevzuatTuru",
+        "bagliKanun",
+        "bagliKanunNo",
+
+        "resmiGazete",
+        "yururlukTarihi",
+        "yayimTarihi",
+
+        "maddeSayisi",
+        "maddeler",
+        "kisimlar",
+        "bolumler",
+        "fasiller",
+        "tableOfContents",
+
+        "ilgiliKanunlar",
+        "ilgiliTebligler",
+        "ilgiliSirkulerler",
+        "degisiklikler",
+        "yururluktenKaldirilanlar",
+
+        "vergiTurleri",
+        "mukellefTipleri",
+        "istisnalar",
+        "muafiyetler",
+        "indirimler",
+
+        "oranlar",
+        "matrahlar",
+        "beyanSureleri",
+        "odemeSureleri",
+        "zamanasimiSureleri",
+
+        "yaptirimlar",
+        "cezalar",
+        "gecikmeZammi",
+        "gecikmeFaizi",
+
+        "yetkiliKurum",
+        "ilgiliBirimler",
+        "uygulamaBirimleri",
+
+        "ornekler",
+        "formlar",
+        "ekler",
+        "dipnotlar",
+        "atiflar",
+
+        "keywords",
+        "relatedTopics",
+        "source",
+        "author",
+
+        "yazar",
+        "yayinevi",
+        "basimYili",
+        "isbn",
+        "sayfaSayisi"
+      ],
+      "extraction_prompt": "Analyze Turkish tax law document. Extract ALL fields with detailed information:\n\n# DOCUMENT IDENTIFICATION\n- title: Full official document name\n- summary: 3-4 sentence overview explaining the law's main purpose and scope\n- excerpt: First 2-3 paragraphs or key provisions\n- type: Always 'legal'\n- category: Always 'Vergi Hukuku'\n- subCategory: One of [Kanun, Genel Tebliğ, Sirküler, Özelge, Kararname, Yönetmelik, Genelge, Danıştay Kararı, E-Kitap]\n- documentType: Specific type (e.g., 'Gelir Vergisi Kanunu', 'KDV Genel Tebliği')\n\n# LEGAL METADATA\n- mevzuatNo: Law/regulation number (e.g., '193', '3065', '5520')\n- mevzuatAdi: Full official name (e.g., '193 Sayılı Gelir Vergisi Kanunu')\n- mevzuatTuru: Type [Kanun, Tebliğ, Sirküler, Yönetmelik, Kararname, Genelge]\n- bagliKanun: Parent law name if this is a regulation/circular\n- bagliKanunNo: Parent law number\n\n# OFFICIAL PUBLICATION\n- resmiGazete: {sayi: 'number', tarih: 'date', mukerrer: boolean}\n- yururlukTarihi: Effective date (ISO format)\n- yayimTarihi: Publication date (ISO format)\n\n# STRUCTURE\n- maddeSayisi: Total number of articles (integer)\n- maddeler: Structured object with ALL articles. Each article MUST have: {\"Madde 1\": {baslik: \"Article title\", metin: \"Full article text\", bentler: [\"a) First sub-item\", \"b) Second sub-item\"], fikralar: [\"(1) First paragraph\", \"(2) Second paragraph\"], atiflar: [\"213 sayılı VUK Madde 37\", \"KDV Kanunu Madde 17\"], degisiklik: \"7338 sayılı Kanun ile değişik\"}, ...}\n- kisimlar: Array of part names [\"Birinci Kısım: Genel Hükümler\", ...]\n- bolumler: Array of chapter names\n- fasiller: Array of section names if exists\n- tableOfContents: Hierarchical structure of document\n\n# RELATIONSHIPS\n- ilgiliKanunlar: Related law numbers and names [{no: '213', ad: 'VUK'}, ...]\n- ilgiliTebligler: Related general communiqués\n- ilgiliSirkulerler: Related circulars\n- degisiklikler: Amendments [{kanunNo: '7338', tarih: '2021-10-26', maddeler: ['1', '5']}, ...]\n- yururluktenKaldirilanlar: Repealed provisions\n\n# TAX SPECIFIC\n- vergiTurleri: Tax types covered [\"Gelir Vergisi\", \"KDV\", ...]\n- mukellefTipleri: Taxpayer types [\"Gerçek Kişi\", \"Tüzel Kişi\", \"Dar Mükellef\"]\n- istisnalar: Exemptions with article references\n- muafiyetler: Tax immunities\n- indirimler: Deductions allowed\n\n# RATES & DEADLINES\n- oranlar: Tax rates {\"Gelir Vergisi\": [{dilim: \"0-70000\", oran: \"15%\"}, ...], \"KDV\": [\"1%\", \"10%\", \"20%\"]}\n- matrahlar: Tax bases described\n- beyanSureleri: Declaration deadlines {\"yillik\": \"Mart sonu\", \"aylık\": \"26'sı\"}\n- odemeSureleri: Payment deadlines\n- zamanasimiSureleri: Statute of limitations\n\n# SANCTIONS\n- yaptirimlar: General sanctions described\n- cezalar: Specific penalties {\"usulsuzluk\": \"amount/description\", \"hileli\": \"3 kat\"}\n- gecikmeZammi: Late payment interest rates\n- gecikmeFaizi: Default interest provisions\n\n# AUTHORITY\n- yetkiliKurum: Main authority (e.g., \"Hazine ve Maliye Bakanlığı\")\n- ilgiliBirimler: Related departments [\"Gelir İdaresi Başkanlığı\", ...]\n- uygulamaBirimleri: Implementation units\n\n# SUPPLEMENTARY\n- ornekler: Practical examples provided in document\n- formlar: Required forms mentioned\n- ekler: Appendices list\n- dipnotlar: Important footnotes\n- atiflar: References to other laws/articles\n\n# GENERAL\n- keywords: Extract 10-15 key terms\n- relatedTopics: Related subjects [\"Vergi İncelemesi\", \"Transfer Fiyatlandırması\"]\n- source: Official source (\"Resmi Gazete\", publisher, etc.)\n- author: Author/issuing authority\n\n# FOR E-BOOKS ONLY\n- yazar: Book author(s)\n- yayinevi: Publisher\n- basimYili: Publication year\n- isbn: ISBN if available\n- sayfaSayisi: Total pages\n\nIMPORTANT INSTRUCTIONS:\n1. Extract COMPLETE article texts in 'maddeler' field\n2. For numeric fields like mevzuatNo, extract only the number (e.g., '193' not '193 Sayılı')\n3. Use null for non-applicable fields\n4. Dates in ISO format (YYYY-MM-DD)\n5. Preserve exact legal terminology\n6. Include ALL amendments and changes\n7. Extract complete tax rates and deadlines\n\nProvide comprehensive, structured JSON with all applicable fields."
+    },
+    {
+      "id": "novel",
+      "name": "Novel / E-Book",
+      "description": "Books, novels, stories - characters, plot, narrative",
+      "category": "Literature",
+      "focus_keywords": ["character", "plot", "narrative", "theme", "protagonist", "antagonist", "setting", "chapter", "kitap", "roman", "yazar", "bölüm"],
+      "target_fields": [
+        "title",
+        "summary",
+        "excerpt",
+        "author",
+        "source",
+        "tableOfContents",
+        "type",
+        "category",
+        "relatedTopics",
+        "mainCharacters",
+        "narrativeStyle",
+        "genre",
+        "plotThemes",
+        "setting",
+        "publisher",
+        "publicationDate",
+        "isbn",
+        "language",
+        "pageCount",
+        "targetAudience"
+      ],
+      "extraction_prompt": "Analyze book/novel/ebook and extract:\n\nCommon Fields:\n- title: Book title\n- summary: 3-4 sentence plot summary without spoilers\n- excerpt: Opening paragraph or memorable quote from the book\n- author: Author name(s)\n- source: Publisher and publication info\n- tableOfContents: Chapter names/titles if available\n- type: 'book' or 'novel' or 'ebook'\n- category: Genre (Roman, Hikaye, Deneme, Tarih, Bilim, etc)\n- relatedTopics: Themes and topics (Aşk, Macera, Tarih, Bilim, Felsefe, etc)\n\nBook Specific Fields:\n- mainCharacters: List of main character names with brief descriptions\n- narrativeStyle: First person/Third person/Multiple perspectives, etc\n- genre: Detailed genre (Polisiye Roman, Tarih Kurgu, Bilim Kurgu, etc)\n- plotThemes: Major themes explored (Love, War, Identity, Justice, etc)\n- setting: Time period and locations\n- publisher: Publishing house\n- publicationDate: Year published\n- isbn: ISBN number if available\n- language: Original language\n- pageCount: Number of pages\n- targetAudience: (Yetişkin, Genç, Çocuk, etc)\n\nProvide complete, structured JSON with all fields."
+    },
+    {
+      "id": "research",
+      "name": "Research",
+      "description": "Methodology, findings, citations",
+      "category": "Academic",
+      "focus_keywords": ["abstract", "methodology", "results", "conclusion", "references", "hypothesis", "research"],
+      "target_fields": [
+        "title",
+        "authors",
+        "abstract",
+        "methodology",
+        "researchDomain",
+        "keyFindings",
+        "conclusions",
+        "citations",
+        "references_count",
+        "doi",
+        "publication_date"
+      ],
+      "extraction_prompt": "Extract research paper details including authors, abstract, methodology, research domain, key findings, citations, and conclusions"
+    },
+    {
+      "id": "invoice",
+      "name": "Invoice",
+      "description": "Invoice number, amounts, vendors",
+      "category": "Financial",
+      "focus_keywords": ["invoice", "bill", "total", "amount due", "payment terms", "vendor"],
+      "target_fields": [
+        "invoice_number",
+        "vendor_name",
+        "invoice_date",
+        "due_date",
+        "total_amount",
+        "tax_amount",
+        "line_items",
+        "payment_terms",
+        "currency"
+      ],
+      "extraction_prompt": "Extract invoice details including invoice number, vendor information, dates, amounts, and line items"
+    },
+    {
+      "id": "contract",
+      "name": "Contract",
+      "description": "Parties, terms, obligations",
+      "category": "Legal",
+      "focus_keywords": ["agreement", "contract", "terms", "obligations", "liability", "termination", "parties"],
+      "target_fields": [
+        "contract_title",
+        "parties",
+        "effective_date",
+        "termination_date",
+        "key_obligations",
+        "payment_terms",
+        "liability_clauses",
+        "jurisdiction"
+      ],
+      "extraction_prompt": "Extract contract details including parties, dates, obligations, and key legal terms"
+    },
+    {
+      "id": "financial_report",
+      "name": "Finance",
+      "description": "Revenue, profit, expenses, metrics",
+      "category": "Financial",
+      "focus_keywords": ["revenue", "profit", "expenses", "assets", "liabilities", "cash flow", "earnings"],
+      "target_fields": [
+        "report_period",
+        "revenue",
+        "net_income",
+        "total_assets",
+        "total_liabilities",
+        "cash_flow",
+        "eps",
+        "key_metrics"
+      ],
+      "extraction_prompt": "Extract financial metrics including revenue, profit, assets, liabilities, and cash flow"
+    },
+    {
+      "id": "web_page",
+      "name": "Web Page",
+      "description": "Article, blog post, web content",
+      "category": "Web",
+      "focus_keywords": ["article", "post", "content", "author", "publish", "blog", "news", "headline"],
+      "target_fields": [
+        "title",
+        "summary",
+        "mainTopics",
+        "entities",
+        "publishDate",
+        "author",
+        "contentType",
+        "keywords",
+        "mainContent"
+      ],
+      "extraction_prompt": "Extract web page metadata including title, summary, main topics, entities, author, publish date, and content type (article/blog/news/etc)"
+    },
+    {
+      "id": "sheet_music",
+      "name": "Musical / Sheet Music",
+      "description": "Music notation, lyrics, chords, musical metadata",
+      "category": "Music",
+      "focus_keywords": ["nota", "müzik", "beste", "şarkı", "güfte", "makam", "usul", "tempo", "key", "chord", "lyrics", "composer", "akor", "melodi", "ritim"],
+      "target_fields": [
+        "title",
+        "summary",
+        "excerpt",
+        "author",
+        "source",
+        "tableOfContents",
+        "type",
+        "category",
+        "relatedTopics",
+        "composer",
+        "lyricist",
+        "genre",
+        "key",
+        "timeSignature",
+        "tempo",
+        "lyrics",
+        "chords",
+        "musicalNotation",
+        "language",
+        "arranger",
+        "publisher",
+        "copyright",
+        "difficulty",
+        "instruments",
+        "makam",
+        "usul",
+        "form",
+        "duration",
+        "yearComposed"
+      ],
+      "extraction_prompt": "Analyze sheet music / musical score and extract:\n\nCommon Fields:\n- title: Song/composition title\n- summary: Brief description of the piece (style, mood, context)\n- excerpt: First few lines of lyrics or musical description\n- author: Composer name (besteci)\n- source: Publisher, collection, or origin\n- tableOfContents: Movement names or song sections (Intro, Verse, Chorus, Bridge, etc)\n- type: 'sheet_music' or 'musical_score'\n- category: Music genre (Klasik Türk Müziği, Pop, Rock, Türkü, etc)\n- relatedTopics: Musical themes, emotions, or subjects (Aşk, Hüzün, Neşe, Vatan, etc)\n\nMusical Specific Fields:\n- composer: Composer/Besteci name\n- lyricist: Lyricist/Güfteci name (if different from composer)\n- genre: Detailed genre (Türk Sanat Müziği, Arabesk, Pop, Rock, Türkü, etc)\n- key: Musical key (C Major, D Minor, etc) - leave empty for Turkish classical\n- timeSignature: Time signature (4/4, 3/4, 6/8, etc)\n- tempo: Tempo marking (Andante, Allegro, 120 BPM, etc)\n- lyrics: COMPLETE lyrics text with line breaks preserved, including all verses and chorus\n- chords: Chord progression if available (C-G-Am-F, etc)\n- musicalNotation: Description of notation type (Western, Turkish, tabs, etc)\n- language: Language of lyrics (Turkish, English, etc)\n- arranger: Arranger name if applicable\n- publisher: Publishing company\n- copyright: Copyright info\n- difficulty: Performance difficulty (Beginner, Intermediate, Advanced)\n- instruments: List of instruments (Piano, Guitar, Bağlama, Ney, etc)\n- makam: Makam name for Turkish classical music (Hüseyni, Hicaz, Rast, Uşşak, etc)\n- usul: Usul/rhythm pattern for Turkish music (Sofyan, Düyek, Aksak, etc)\n- form: Musical form (Şarkı, Türkü, Beste, Semai, Longa, etc)\n- duration: Duration in minutes\n- yearComposed: Year composed\n\nIMPORTANT: Extract lyrics COMPLETELY with all verses, preserving line breaks. For Turkish classical music, always extract makam and usul. Provide complete, structured JSON with all fields."
+    }
+  ]
+}

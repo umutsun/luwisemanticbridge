@@ -52,24 +52,24 @@ const crawl4aiRedis = new Redis({
 
 crawl4aiRedis.on('connect', () => {
   const dbNum = parseInt(process.env.REDIS_DB || '2', 10);
-  console.log(`✅ Crawl4AI Redis (DB ${dbNum}) connecting...`);
+  console.log(` Crawl4AI Redis (DB ${dbNum}) connecting...`);
 });
 
 crawl4aiRedis.on('ready', () => {
   const dbNum = parseInt(process.env.REDIS_DB || '2', 10);
-  console.log(`✅ Crawl4AI Redis (DB ${dbNum}) ready for commands`);
+  console.log(` Crawl4AI Redis (DB ${dbNum}) ready for commands`);
 });
 
 crawl4aiRedis.on('close', () => {
-  console.warn('⚠️ Crawl4AI Redis connection closed');
+  console.warn('️ Crawl4AI Redis connection closed');
 });
 
 crawl4aiRedis.on('reconnecting', () => {
-  console.log('🔄 Crawl4AI Redis reconnecting...');
+  console.log(' Crawl4AI Redis reconnecting...');
 });
 
 crawl4aiRedis.on('error', (err: any) => {
-  console.error('❌ Crawl4AI Redis error:', err.message || err);
+  console.error(' Crawl4AI Redis error:', err.message || err);
 });
 
 // ============================================================================
@@ -133,7 +133,7 @@ router.post('/crawler-directories', async (req: Request, res: Response) => {
       message: `Crawler "${crawlerName}" created successfully`
     });
   } catch (error: any) {
-    console.error('❌ Failed to create crawler:', error);
+    console.error(' Failed to create crawler:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create crawler'
@@ -358,25 +358,25 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
     const { crawlerName } = req.params;
     const { items, tableName, columnMappings, createTable, tableSchema, autoEmbeddings } = req.body;
 
-    console.log('📤 [Export to DB] Starting export...');
-    console.log('📁 Crawler:', crawlerName);
-    console.log('📋 Items count from frontend:', items?.length);
-    console.log('🗃️  Table name:', tableName);
-    console.log('🔀 Column mappings:', columnMappings);
-    console.log('✨ Create table:', createTable);
-    console.log('📐 Table schema:', tableSchema);
+    console.log(' [Export to DB] Starting export...');
+    console.log(' Crawler:', crawlerName);
+    console.log(' Items count from frontend:', items?.length);
+    console.log('️  Table name:', tableName);
+    console.log(' Column mappings:', columnMappings);
+    console.log(' Create table:', createTable);
+    console.log(' Table schema:', tableSchema);
 
     // If no items provided, fetch all items from Redis for this crawler
     let itemsToExport = items;
     if (!items || !Array.isArray(items) || items.length === 0) {
-      console.log('🔍 No items provided, fetching all from Redis...');
+      console.log(' No items provided, fetching all from Redis...');
       const allKeys = await crawl4aiRedis.keys(`crawl4ai:${crawlerName}:*`);
       itemsToExport = allKeys.map(key => key.replace(`crawl4ai:${crawlerName}:`, ''));
-      console.log(`✅ Found ${itemsToExport.length} items in Redis`);
+      console.log(` Found ${itemsToExport.length} items in Redis`);
     }
 
     if (!tableName || !columnMappings) {
-      console.error('❌ Missing table name or column mappings');
+      console.error(' Missing table name or column mappings');
       return res.status(400).json({
         success: false,
         error: 'Table name and column mappings are required'
@@ -384,7 +384,7 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
     }
 
     if (!crawl4aiRedis) {
-      console.error('❌ Redis not available');
+      console.error(' Redis not available');
       return res.status(503).json({
         success: false,
         error: 'Redis not available'
@@ -392,15 +392,15 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
     }
 
     // Fetch data from Redis for each item
-    console.log('📥 Fetching data from Redis...');
-    console.log(`📊 Total items to export: ${itemsToExport.length}`);
+    console.log(' Fetching data from Redis...');
+    console.log(` Total items to export: ${itemsToExport.length}`);
     const exportData = await Promise.all(
       itemsToExport.map(async (itemKey: string) => {
         const redisKey = `crawl4ai:${crawlerName}:${itemKey}`;
         const value = await crawl4aiRedis.get(redisKey);
 
         if (!value) {
-          console.warn(`⚠️  Item not found in Redis: ${redisKey}`);
+          console.warn(`️  Item not found in Redis: ${redisKey}`);
           return null;
         }
 
@@ -413,11 +413,11 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
     );
 
     const validData = exportData.filter(d => d !== null);
-    console.log('✅ Valid data items:', validData.length);
+    console.log(' Valid data items:', validData.length);
 
     // Transform data according to column mappings
     // columnMappings example: { "db_column_name": "json_field_path" }
-    console.log('🔄 Transforming data...');
+    console.log(' Transforming data...');
     const transformedData = validData.map(item => {
       const row: any = {};
       for (const [dbColumn, jsonPath] of Object.entries(columnMappings)) {
@@ -431,21 +431,21 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
       }
       return row;
     });
-    console.log('✅ Transformed data rows:', transformedData.length);
+    console.log(' Transformed data rows:', transformedData.length);
 
     // Create table if requested (use source.routes.ts logic)
     if (createTable && tableSchema && Array.isArray(tableSchema)) {
       try {
-        console.log('🏗️  Creating table:', tableName);
+        console.log('️  Creating table:', tableName);
         // Import source routes dynamically to use table creation
         const axios = require('axios');
         const createResponse = await axios.post('http://localhost:8083/api/v2/source/tables/create', {
           tableName,
           columns: tableSchema
         });
-        console.log('✅ Table created successfully:', createResponse.data);
+        console.log(' Table created successfully:', createResponse.data);
       } catch (createError: any) {
-        console.error('❌ Failed to create table:', createError.response?.data || createError.message);
+        console.error(' Failed to create table:', createError.response?.data || createError.message);
         return res.status(500).json({
           success: false,
           error: `Failed to create table: ${createError.response?.data?.error || createError.message}`
@@ -463,12 +463,12 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
 
     if (transformedData.length > 0) {
       try {
-        console.log('💾 Inserting data into table:', tableName);
+        console.log(' Inserting data into table:', tableName);
 
         const batchSize = 50; // Insert 50 records at a time
         const totalBatches = Math.ceil(transformedData.length / batchSize);
 
-        console.log(`📊 Job ID: ${jobId}, Total batches: ${totalBatches}`);
+        console.log(` Job ID: ${jobId}, Total batches: ${totalBatches}`);
 
         const axios = require('axios');
 
@@ -477,7 +477,7 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
           const end = Math.min((i + 1) * batchSize, transformedData.length);
           const batch = transformedData.slice(start, end);
 
-          console.log(`📦 Processing batch ${i + 1}/${totalBatches} (${batch.length} records)`);
+          console.log(` Processing batch ${i + 1}/${totalBatches} (${batch.length} records)`);
 
           const insertResponse = await axios.post(`http://localhost:8083/api/v2/source/tables/${tableName}/insert`, {
             data: batch,
@@ -512,12 +512,12 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
             JSON.stringify(progress)
           );
 
-          console.log(`✅ Batch ${i + 1} complete - Inserted: ${insertResponse.data.insertedCount}, Updated: ${insertResponse.data.updatedCount}, Skipped: ${insertResponse.data.skippedCount}`);
+          console.log(` Batch ${i + 1} complete - Inserted: ${insertResponse.data.insertedCount}, Updated: ${insertResponse.data.updatedCount}, Skipped: ${insertResponse.data.skippedCount}`);
         }
 
-        console.log(`✅ All batches complete - Total inserted: ${totalInserted}, Updated: ${totalUpdated}, Skipped: ${totalSkipped}`);
+        console.log(` All batches complete - Total inserted: ${totalInserted}, Updated: ${totalUpdated}, Skipped: ${totalSkipped}`);
       } catch (insertError: any) {
-        console.error('❌ Failed to insert data:', insertError.response?.data || insertError.message);
+        console.error(' Failed to insert data:', insertError.response?.data || insertError.message);
         return res.status(500).json({
           success: false,
           error: `Failed to insert data: ${insertError.response?.data?.error || insertError.message}`
@@ -561,8 +561,8 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
       jobId
     });
   } catch (error: any) {
-    console.error('❌ [Export to DB] Critical error:', error);
-    console.error('❌ Error stack:', error.stack);
+    console.error(' [Export to DB] Critical error:', error);
+    console.error(' Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to export crawler data',
@@ -810,13 +810,13 @@ router.post('/crawler-directories/:crawlerName/update-item', async (req: Request
     const { crawlerName } = req.params;
     const { itemKey, data } = req.body;
 
-    console.log('🔄 [Update Item] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
-    console.log('🔑 Item Key:', itemKey);
-    console.log('📦 Data keys:', Object.keys(data || {}));
+    console.log(' [Update Item] Received request');
+    console.log(' Crawler Name:', crawlerName);
+    console.log(' Item Key:', itemKey);
+    console.log(' Data keys:', Object.keys(data || {}));
 
     if (!itemKey || !data) {
-      console.error('❌ Missing itemKey or data');
+      console.error(' Missing itemKey or data');
       return res.status(400).json({
         success: false,
         error: 'Item key and data are required'
@@ -824,7 +824,7 @@ router.post('/crawler-directories/:crawlerName/update-item', async (req: Request
     }
 
     if (!crawl4aiRedis) {
-      console.error('❌ Redis not available');
+      console.error(' Redis not available');
       return res.status(503).json({
         success: false,
         error: 'Redis not available'
@@ -833,17 +833,17 @@ router.post('/crawler-directories/:crawlerName/update-item', async (req: Request
 
     // Update item in Redis
     const redisKey = `crawl4ai:${crawlerName}:${itemKey}`;
-    console.log('🔑 Redis Key:', redisKey);
+    console.log(' Redis Key:', redisKey);
 
     const jsonData = JSON.stringify(data);
-    console.log('📏 Data size:', jsonData.length, 'bytes');
+    console.log(' Data size:', jsonData.length, 'bytes');
 
     await crawl4aiRedis.set(redisKey, jsonData);
-    console.log('✅ Redis SET successful');
+    console.log(' Redis SET successful');
 
     // Verify the save
     const savedData = await crawl4aiRedis.get(redisKey);
-    console.log('✅ Redis GET verification:', savedData ? 'Success' : 'Failed');
+    console.log(' Redis GET verification:', savedData ? 'Success' : 'Failed');
 
     res.json({
       success: true,
@@ -853,7 +853,7 @@ router.post('/crawler-directories/:crawlerName/update-item', async (req: Request
       dataSize: jsonData.length
     });
   } catch (error: any) {
-    console.error('❌ Failed to update item:', error);
+    console.error(' Failed to update item:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to update item'
@@ -869,11 +869,11 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
   try {
     const { crawlerName } = req.params;
 
-    console.log('🗑️  [Delete Directory] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
+    console.log('️  [Delete Directory] Received request');
+    console.log(' Crawler Name:', crawlerName);
 
     if (!crawlerName) {
-      console.error('❌ Missing crawlerName');
+      console.error(' Missing crawlerName');
       return res.status(400).json({
         success: false,
         error: 'Crawler name is required'
@@ -881,7 +881,7 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
     }
 
     if (!crawl4aiRedis) {
-      console.error('❌ Redis not available');
+      console.error(' Redis not available');
       return res.status(503).json({
         success: false,
         error: 'Redis not available'
@@ -890,13 +890,13 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
 
     // Get all keys for this crawler
     const pattern = `crawl4ai:${crawlerName}:*`;
-    console.log('🔍 Searching pattern:', pattern);
+    console.log(' Searching pattern:', pattern);
 
     const keys = await crawl4aiRedis.keys(pattern);
-    console.log(`📊 Found ${keys.length} keys to delete`);
+    console.log(` Found ${keys.length} keys to delete`);
 
     if (keys.length === 0) {
-      console.warn('⚠️  No keys found for crawler:', crawlerName);
+      console.warn('️  No keys found for crawler:', crawlerName);
       return res.status(404).json({
         success: false,
         error: 'Crawler directory not found'
@@ -910,7 +910,7 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
       deletedCount++;
     }
 
-    console.log(`✅ Deleted ${deletedCount} items from Redis`);
+    console.log(` Deleted ${deletedCount} items from Redis`);
 
     res.json({
       success: true,
@@ -919,7 +919,7 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
       deletedCount
     });
   } catch (error: any) {
-    console.error('❌ Failed to delete crawler directory:', error);
+    console.error(' Failed to delete crawler directory:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to delete crawler directory'
@@ -935,12 +935,12 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
   try {
     const { crawlerName, itemKey } = req.params;
 
-    console.log('🗑️  [Delete Item] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
-    console.log('🔑 Item Key:', itemKey);
+    console.log('️  [Delete Item] Received request');
+    console.log(' Crawler Name:', crawlerName);
+    console.log(' Item Key:', itemKey);
 
     if (!crawlerName || !itemKey) {
-      console.error('❌ Missing crawlerName or itemKey');
+      console.error(' Missing crawlerName or itemKey');
       return res.status(400).json({
         success: false,
         error: 'Crawler name and item key are required'
@@ -948,7 +948,7 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
     }
 
     if (!crawl4aiRedis) {
-      console.error('❌ Redis not available');
+      console.error(' Redis not available');
       return res.status(503).json({
         success: false,
         error: 'Redis not available'
@@ -956,12 +956,12 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
     }
 
     const redisKey = `crawl4ai:${crawlerName}:${itemKey}`;
-    console.log('🔑 Redis Key:', redisKey);
+    console.log(' Redis Key:', redisKey);
 
     // Check if item exists
     const exists = await crawl4aiRedis.exists(redisKey);
     if (!exists) {
-      console.warn('⚠️  Item not found:', redisKey);
+      console.warn('️  Item not found:', redisKey);
       return res.status(404).json({
         success: false,
         error: 'Item not found'
@@ -970,7 +970,7 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
 
     // Delete the item from Redis
     await crawl4aiRedis.del(redisKey);
-    console.log('✅ Item deleted successfully from Redis');
+    console.log(' Item deleted successfully from Redis');
 
     res.json({
       success: true,
@@ -979,7 +979,7 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
       redisKey
     });
   } catch (error: any) {
-    console.error('❌ Failed to delete item:', error);
+    console.error(' Failed to delete item:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to delete item'
@@ -995,8 +995,8 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
   try {
     const { crawlerName } = req.params;
 
-    console.log('📄 [Upload Script] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
+    console.log(' [Upload Script] Received request');
+    console.log(' Crawler Name:', crawlerName);
 
     if (!req.file) {
       return res.status(400).json({
@@ -1005,7 +1005,7 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
       });
     }
 
-    console.log('✅ Script uploaded successfully:', req.file.filename);
+    console.log(' Script uploaded successfully:', req.file.filename);
 
     res.json({
       success: true,
@@ -1015,7 +1015,7 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
       size: req.file.size
     });
   } catch (error: any) {
-    console.error('❌ Failed to upload script:', error);
+    console.error(' Failed to upload script:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to upload Python script'
@@ -1045,7 +1045,7 @@ router.get('/crawler-directories/:crawlerName/script', async (req: Request, res:
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(scriptContent);
   } catch (error: any) {
-    console.error('❌ Failed to get script content:', error);
+    console.error(' Failed to get script content:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get script content'
@@ -1064,9 +1064,9 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     const scriptPath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}.py`);
 
     console.log('▶️  [Run Script] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
-    console.log('🔗 URL:', url);
-    console.log('📂 Script Path:', scriptPath);
+    console.log(' Crawler Name:', crawlerName);
+    console.log(' URL:', url);
+    console.log(' Script Path:', scriptPath);
 
     if (!url) {
       return res.status(400).json({
@@ -1088,7 +1088,7 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     const pythonPath = 'python';
 
     const jobId = `script_run_${crawlerName}_${Date.now()}`;
-    console.log(`📊 Job ID: ${jobId}`);
+    console.log(` Job ID: ${jobId}`);
 
     // Mark crawler as running in Redis
     await crawl4aiRedis.set(
@@ -1100,7 +1100,7 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
         status: 'running'
       })
     );
-    console.log(`✅ Marked ${crawlerName} as running in Redis`);
+    console.log(` Marked ${crawlerName} as running in Redis`);
 
     // Start Python process with URL as argument
     // Set PYTHONUNBUFFERED=1 to disable stdout buffering for immediate output
@@ -1167,11 +1167,11 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
 
     // Handle process completion
     pythonProcess.on('close', async (code: number) => {
-      console.log(`✅ Script finished with code: ${code}`);
+      console.log(` Script finished with code: ${code}`);
 
       // Remove from running crawlers
       await crawl4aiRedis.del(`crawler_running:${crawlerName}`);
-      console.log(`✅ Removed ${crawlerName} from running crawlers`);
+      console.log(` Removed ${crawlerName} from running crawlers`);
 
       // Publish completion status
       crawl4aiRedis.publish(
@@ -1195,7 +1195,7 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     });
 
   } catch (error: any) {
-    console.error('❌ Failed to run script:', error);
+    console.error(' Failed to run script:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to run Python script'
@@ -1212,9 +1212,9 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
     const { crawlerName } = req.params;
     const { jobId } = req.body;
 
-    console.log('🛑 [Stop Script] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
-    console.log('📊 Job ID:', jobId);
+    console.log(' [Stop Script] Received request');
+    console.log(' Crawler Name:', crawlerName);
+    console.log(' Job ID:', jobId);
 
     // Find and kill Python process and its child processes (Playwright/Chromium)
     const { exec } = require('child_process');
@@ -1223,7 +1223,7 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
       // Windows: First find Python PID running the crawler, then kill it with /T (tree) flag to kill children
       exec(`wmic process where "CommandLine like '%${crawlerName}.py%' and name='python.exe'" get ProcessId`, (error: any, stdout: any) => {
         if (error || !stdout) {
-          console.warn('⚠️  Failed to find Python process');
+          console.warn('️  Failed to find Python process');
           return;
         }
 
@@ -1235,9 +1235,9 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
             // Kill process tree (includes Playwright/Chromium children)
             exec(`taskkill /F /T /PID ${pid}`, (killError: any) => {
               if (killError) {
-                console.warn(`⚠️  Failed to kill PID ${pid}:`, killError.message);
+                console.warn(`️  Failed to kill PID ${pid}:`, killError.message);
               } else {
-                console.log(`✅ Killed process tree for PID ${pid} (Python + Playwright)`);
+                console.log(` Killed process tree for PID ${pid} (Python + Playwright)`);
               }
             });
           }
@@ -1247,7 +1247,7 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
       // Linux/Mac: Find Python PID and kill its process group
       exec(`pgrep -f "${crawlerName}.py"`, (error: any, stdout: any) => {
         if (error || !stdout) {
-          console.warn('⚠️  Failed to find Python process');
+          console.warn('️  Failed to find Python process');
           return;
         }
 
@@ -1257,9 +1257,9 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
           exec(`pkill -P ${pid}`, () => {
             exec(`kill -9 ${pid}`, (killError: any) => {
               if (killError) {
-                console.warn('⚠️  Failed to kill process:', killError.message);
+                console.warn('️  Failed to kill process:', killError.message);
               } else {
-                console.log('✅ Killed Python process and children');
+                console.log(' Killed Python process and children');
               }
             });
           });
@@ -1269,7 +1269,7 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
 
     // Remove from running crawlers
     await crawl4aiRedis.del(`crawler_running:${crawlerName}`);
-    console.log(`✅ Removed ${crawlerName} from running crawlers`);
+    console.log(` Removed ${crawlerName} from running crawlers`);
 
     // Publish stop event
     if (jobId) {
@@ -1290,7 +1290,7 @@ router.post('/crawler-directories/:crawlerName/script/stop', async (req: Request
       message: 'Stop command sent'
     });
   } catch (error: any) {
-    console.error('❌ Failed to stop script:', error);
+    console.error(' Failed to stop script:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1307,9 +1307,9 @@ router.delete('/crawler-directories/:crawlerName/script', async (req: Request, r
     const { crawlerName } = req.params;
     const scriptPath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}.py`);
 
-    console.log('🗑️  [Delete Script] Received request');
-    console.log('📁 Crawler Name:', crawlerName);
-    console.log('📂 Script Path:', scriptPath);
+    console.log('️  [Delete Script] Received request');
+    console.log(' Crawler Name:', crawlerName);
+    console.log(' Script Path:', scriptPath);
 
     if (!fs.existsSync(scriptPath)) {
       return res.status(404).json({
@@ -1319,14 +1319,14 @@ router.delete('/crawler-directories/:crawlerName/script', async (req: Request, r
     }
 
     fs.unlinkSync(scriptPath);
-    console.log('✅ Script deleted successfully');
+    console.log(' Script deleted successfully');
 
     res.json({
       success: true,
       message: 'Python script deleted successfully'
     });
   } catch (error: any) {
-    console.error('❌ Failed to delete script:', error);
+    console.error(' Failed to delete script:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to delete Python script'
@@ -1343,7 +1343,7 @@ router.post('/crawler-directories/:crawlerName/notify-item-added', async (req: R
     const { crawlerName } = req.params;
     const { itemKey, totalCount } = req.body;
 
-    console.log(`📡 [Notify Item Added] Crawler: ${crawlerName}, Key: ${itemKey}, Total: ${totalCount}`);
+    console.log(` [Notify Item Added] Crawler: ${crawlerName}, Key: ${itemKey}, Total: ${totalCount}`);
 
     // Fetch the item from Redis - try multiple key patterns
     let redisKey = `crawl4ai:${crawlerName}:kitaplar:${itemKey}`;
@@ -1356,12 +1356,12 @@ router.post('/crawler-directories/:crawlerName/notify-item-added', async (req: R
     }
 
     if (!itemData) {
-      console.warn(`⚠️ Item not found in Redis: ${redisKey}`);
+      console.warn(`️ Item not found in Redis: ${redisKey}`);
       return res.status(404).json({ success: false, error: 'Item not found in Redis' });
     }
 
     const item = JSON.parse(itemData);
-    console.log(`✅ Found item in Redis: ${item.product_name || item.title || 'Untitled'}`);
+    console.log(` Found item in Redis: ${item.product_name || item.title || 'Untitled'}`);
 
     // Transform to CrawledItem format expected by frontend
     const crawledItem = {
@@ -1377,18 +1377,18 @@ router.post('/crawler-directories/:crawlerName/notify-item-added', async (req: R
     const wsService = WebSocketConnectionService.getInstance();
     const broadcastService = LiveDataBroadcastService.getInstance(wsService);
 
-    console.log(`📡 Broadcasting to WebSocket clients...`);
+    console.log(` Broadcasting to WebSocket clients...`);
     broadcastService.broadcastCrawlerItemAdded({
       directoryName: crawlerName,
       item: crawledItem,
       totalItems: totalCount || 0,
       timestamp: new Date().toISOString()
     });
-    console.log(`✅ WebSocket broadcast sent`);
+    console.log(` WebSocket broadcast sent`);
 
     res.json({ success: true, message: 'Item broadcast sent' });
   } catch (error: any) {
-    console.error('❌ Failed to notify item added:', error);
+    console.error(' Failed to notify item added:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1421,7 +1421,7 @@ router.get('/crawler-directories/:crawlerName/state', async (req: Request, res: 
       lastModified: fs.statSync(stateFilePath).mtime
     });
   } catch (error: any) {
-    console.error('❌ Failed to get state file:', error);
+    console.error(' Failed to get state file:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get state file',
@@ -1444,7 +1444,7 @@ export function initializeScriptLogBridge() {
   const io = getSocketIO();
 
   if (!io) {
-    console.warn('⚠️  Socket.IO not available - script logs will not be streamed');
+    console.warn('️  Socket.IO not available - script logs will not be streamed');
     return;
   }
 
@@ -1458,10 +1458,10 @@ export function initializeScriptLogBridge() {
   // Subscribe to all script log channels using pattern
   subscriber.psubscribe('script_log:*', (err, count) => {
     if (err) {
-      console.error('❌ Failed to subscribe to script logs:', err);
+      console.error(' Failed to subscribe to script logs:', err);
       return;
     }
-    console.log(`✅ Subscribed to script_log:* (${count} patterns)`);
+    console.log(` Subscribed to script_log:* (${count} patterns)`);
   });
 
   // Forward messages to Socket.IO
@@ -1479,17 +1479,141 @@ export function initializeScriptLogBridge() {
         timestamp
       });
 
-      console.log(`📡 Forwarded log [${type}] for job ${jobId}`);
+      console.log(` Forwarded log [${type}] for job ${jobId}`);
     } catch (error) {
-      console.error('❌ Failed to parse/forward script log:', error);
+      console.error(' Failed to parse/forward script log:', error);
     }
   });
 
   subscriber.on('error', (err) => {
-    console.error('❌ Redis subscriber error:', err);
+    console.error(' Redis subscriber error:', err);
   });
 
-  console.log('🔌 Script log bridge initialized');
+  console.log(' Script log bridge initialized');
 }
+
+/**
+ * POST /analyzer
+ * Analyze a crawled item with AI using template-based metadata extraction
+ */
+router.post('/analyze', async (req: Request, res: Response) => {
+  try {
+    const { itemId, crawlerName, template, content } = req.body;
+
+    if (!itemId || !crawlerName || !template || !content) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: itemId, crawlerName, template, content'
+      });
+    }
+
+    // Import the PDF metadata service to reuse the extraction logic
+    const { PdfMetadataService } = require('../services/pdf/pdf-metadata.service');
+    const metadataService = new PdfMetadataService();
+
+    // Extract metadata using the same service as documents
+    // For crawled web pages, we pass the HTML/text content directly
+    const extractionOptions = {
+      apiKey: process.env.GEMINI_API_KEY,
+      deepseekApiKey: process.env.DEEPSEEK_API_KEY,
+      template: template.id || template,
+      templateData: template,
+      analysisPrompt: template.extraction_prompt
+    };
+
+    // Use the text extraction method since we already have the content
+    const result = await metadataService.extractMetadataFromText(
+      content,
+      itemId,
+      extractionOptions
+    );
+
+    // Store the metadata back to Redis
+    const itemKey = `${crawlerName}:${itemId}`;
+    const existingData = await crawl4aiRedis.get(itemKey);
+
+    if (existingData) {
+      const parsedData = JSON.parse(existingData);
+      parsedData.metadata = {
+        ...parsedData.metadata,
+        analysis: {
+          ...result.metadata,
+          template: template.id || template,
+          analyzedAt: new Date().toISOString()
+        }
+      };
+
+      await crawl4aiRedis.set(itemKey, JSON.stringify(parsedData));
+    }
+
+    res.json({
+      success: true,
+      metadata: result.metadata,
+      itemId
+    });
+
+  } catch (error: any) {
+    console.error(' Failed to analyze crawl item:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to analyze item'
+    });
+  }
+});
+
+/**
+ * GET /items/:crawlerName/:itemId
+ * Get a single crawled item by crawler name and item ID
+ * Used by n8n workflows and external integrations
+ */
+router.get('/items/:crawlerName/:itemId', async (req: Request, res: Response) => {
+  try {
+    const { crawlerName, itemId } = req.params;
+
+    if (!crawlerName || !itemId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Crawler name and item ID are required'
+      });
+    }
+
+    // Construct the full Redis key
+    const itemKey = `${crawlerName}:${itemId}`;
+
+    // Fetch from Redis
+    const rawData = await crawl4aiRedis.get(itemKey);
+
+    if (!rawData) {
+      return res.status(404).json({
+        success: false,
+        error: `Item ${itemId} not found in crawler ${crawlerName}`
+      });
+    }
+
+    // Parse the data
+    const parsedData = JSON.parse(rawData);
+
+    res.json({
+      success: true,
+      item: {
+        id: itemId,
+        crawlerName,
+        fullKey: itemKey,
+        data: parsedData.data || {},
+        rawData: parsedData.rawData || parsedData.markdown || '',
+        metadata: parsedData.metadata || {},
+        scrapedAt: parsedData.timestamp || parsedData.scraped_at || null,
+        url: parsedData.url || null
+      }
+    });
+
+  } catch (error: any) {
+    console.error(' Failed to fetch crawled item:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch item'
+    });
+  }
+});
 
 export default router;

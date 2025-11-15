@@ -61,7 +61,8 @@ export function ProgressCircle({
   const center = size / 2;
   const strokeWidth = size * 0.0556; // 10/180 ratio from original
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference * (1 - progress / 100);
+  const safeProgress = progress || 0;
+  const strokeDashoffset = circumference * (1 - safeProgress / 100);
 
   return (
     <div className={`relative flex-shrink-0 ${className}`} style={{ width: `${size}px`, height: `${size}px` }}>

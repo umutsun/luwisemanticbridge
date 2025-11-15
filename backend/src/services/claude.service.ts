@@ -49,9 +49,9 @@ export class ClaudeService {
       this.client = new Anthropic({
         apiKey: this.apiKey,
       });
-      console.log('✅ Claude API initialized');
+      console.log(' Claude API initialized');
     } catch (error) {
-      console.error('❌ Failed to initialize Claude API:', error);
+      console.error(' Failed to initialize Claude API:', error);
     }
   }
 

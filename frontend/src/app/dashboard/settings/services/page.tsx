@@ -126,6 +126,16 @@ export default function ServicesPage() {
       port: 5432,
       version: "15.13 + pgvector",
       icon: Database
+    },
+    {
+      name: "n8n",
+      displayName: "n8n Workflow",
+      description: "Automation & workflow orchestration",
+      status: "stopped",
+      port: 5678,
+      url: "http://localhost:5678",
+      version: "n8n 1.0+",
+      icon: Zap
     }
   ]);
 
@@ -428,7 +438,8 @@ export default function ServicesPage() {
                 {activeService === "whisper" && <WhisperConfig />}
                 {activeService === "pgai" && <PgaiConfig />}
                 {activeService === "pgvectorscale" && <PgvectorscaleConfig />}
-                {!["graphql", "python", "crawl4ai", "whisper", "pgai", "pgvectorscale"].includes(activeService) && (
+                {activeService === "n8n" && <N8NConfig />}
+                {!["graphql", "python", "crawl4ai", "whisper", "pgai", "pgvectorscale", "n8n"].includes(activeService) && (
                   <Alert>
                     <AlertDescription>
                       No configuration available for this service.
@@ -1000,6 +1011,113 @@ function WhisperConfig() {
       <Button className="w-full">
         <Terminal className="h-4 w-4 mr-2" />
         Save Configuration
+      </Button>
+    </div>
+  );
+}
+
+function N8NConfig() {
+  const [n8nUrl, setN8nUrl] = useState("http://localhost:5678");
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Load settings from backend
+  useEffect(() => {
+    fetch('/api/settings?category=n8n')
+      .then(res => res.json())
+      .then(data => {
+        if (data.n8n) {
+          setN8nUrl(data.n8n.url || "http://localhost:5678");
+          setApiKey(data.n8n.apiKey || "");
+        }
+      })
+      .catch(err => console.error('Failed to load n8n settings:', err));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          'n8n.url': n8nUrl,
+          'n8n.apiKey': apiKey
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to save settings');
+
+      toast.success('n8n settings saved successfully!');
+    } catch (error: any) {
+      console.error('Failed to save n8n settings:', error);
+      toast.error(error.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Alert>
+        <AlertDescription>
+          Configure n8n workflow automation server connection. Required for triggering workflows from LSEMB.
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-2">
+        <Label htmlFor="n8n-url">n8n URL</Label>
+        <Input
+          id="n8n-url"
+          type="text"
+          value={n8nUrl}
+          onChange={(e) => setN8nUrl(e.target.value)}
+          placeholder="http://localhost:5678"
+        />
+        <p className="text-xs text-muted-foreground">
+          URL of your n8n instance (e.g., http://localhost:5678 or https://n8n.luwi.dev)
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="n8n-api-key">API Key</Label>
+        <Input
+          id="n8n-api-key"
+          type="password"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder="Enter n8n API key"
+        />
+        <p className="text-xs text-muted-foreground">
+          Get API key from n8n Settings → API → Create new API key
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Auto-trigger Workflows</Label>
+          <Switch defaultChecked />
+          <p className="text-xs text-muted-foreground">Automatically trigger workflows on document upload</p>
+        </div>
+        <div className="space-y-2">
+          <Label>Webhook Validation</Label>
+          <Switch defaultChecked />
+          <p className="text-xs text-muted-foreground">Validate webhook signatures</p>
+        </div>
+      </div>
+
+      <Button className="w-full" onClick={handleSave} disabled={saving}>
+        {saving ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <Terminal className="h-4 w-4 mr-2" />
+            Save Configuration
+          </>
+        )}
       </Button>
     </div>
   );

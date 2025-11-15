@@ -1,0 +1,16 @@
+ai:
+  primary: claude
+conventions:
+  branch_naming: '{number:03d}-{feature-name}'
+  plan_naming: plan-{number:03d}.md
+  spec_naming: spec-{number:03d}.md
+  task_naming: task-{number:03d}.md
+project:
+  created: '2025-11-09T14:27:57.876654'
+  name: lsemb
+  type: web
+templates:
+  plan: .specpulse/templates/plan.md
+  spec: .specpulse/templates/spec.md
+  task: .specpulse/templates/task.md
+version: 2.6.0

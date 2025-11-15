@@ -94,7 +94,7 @@ async function performMockTranslation(text: string, source: string, target: stri
   // Simulate translation delay
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  return `[${provider.toUpperCase()} Translation]\n\n📝 Original (${sourceName}):\n${text.substring(0, 500)}${text.length > 500 ? '...' : ''}\n\n🌐 Translated (${targetName}):\nThis is a demo translation from ${sourceName} to ${targetName}. In production, this would be the actual translated text using ${provider === 'deepl' ? 'DeepL' : 'Google Translate'} API.\n\nTranslation quality: High\nConfidence: 95%\n\n${text.substring(0, 300)}...`;
+  return `[${provider.toUpperCase()} Translation]\n\n Original (${sourceName}):\n${text.substring(0, 500)}${text.length > 500 ? '...' : ''}\n\n Translated (${targetName}):\nThis is a demo translation from ${sourceName} to ${targetName}. In production, this would be the actual translated text using ${provider === 'deepl' ? 'DeepL' : 'Google Translate'} API.\n\nTranslation quality: High\nConfidence: 95%\n\n${text.substring(0, 300)}...`;
 }
 
 // Calculate estimated cost based on provider
@@ -111,21 +111,21 @@ function calculateCost(characterCount: number, provider: string): number {
 router.get('/languages', async (req: Request, res: Response) => {
   try {
     const languages = [
-      { code: 'en', name: 'English', flag: '🇬🇧' },
-      { code: 'de', name: 'German', flag: '🇩🇪' },
-      { code: 'fr', name: 'French', flag: '🇫🇷' },
-      { code: 'es', name: 'Spanish', flag: '🇪🇸' },
-      { code: 'it', name: 'Italian', flag: '🇮🇹' },
-      { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
-      { code: 'ru', name: 'Russian', flag: '🇷🇺' },
-      { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
-      { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-      { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
-      { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
-      { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
-      { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-      { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
-      { code: 'pl', name: 'Polish', flag: '🇵🇱' }
+      { code: 'en', name: 'English', flag: '' },
+      { code: 'de', name: 'German', flag: '' },
+      { code: 'fr', name: 'French', flag: '' },
+      { code: 'es', name: 'Spanish', flag: '' },
+      { code: 'it', name: 'Italian', flag: '' },
+      { code: 'pt', name: 'Portuguese', flag: '' },
+      { code: 'ru', name: 'Russian', flag: '' },
+      { code: 'zh', name: 'Chinese', flag: '' },
+      { code: 'ja', name: 'Japanese', flag: '' },
+      { code: 'tr', name: 'Turkish', flag: '' },
+      { code: 'ar', name: 'Arabic', flag: '' },
+      { code: 'hi', name: 'Hindi', flag: '' },
+      { code: 'ko', name: 'Korean', flag: '' },
+      { code: 'nl', name: 'Dutch', flag: '' },
+      { code: 'pl', name: 'Polish', flag: '' }
     ];
 
     res.json({ languages });

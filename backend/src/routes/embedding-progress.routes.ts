@@ -210,7 +210,7 @@ router.get('/', async (req: Request, res: Response) => {
 
         // Update the embedding:progress key for future requests
         await redis.set('embedding:progress', redisProgress, 'EX', 7 * 24 * 60 * 60);
-        console.log('✅ Converted and saved progress to embedding:progress key');
+        console.log(' Converted and saved progress to embedding:progress key');
       }
     }
 
@@ -592,6 +592,11 @@ router.get('/api/embeddings/tables', async (req: Request, res: Response) => {
     // Get real data from database
     const tables = [];
 
+    // Get database name from settings (source DB only, not system DB)
+    const dbSettings = await getDatabaseSettings();
+    const dbConfig = dbSettings?.database || dbSettings;
+    const sourceDatabaseName = dbConfig?.name || dbConfig?.database || 'unknown';
+
     // Get unified_embeddings stats first
     const embeddingStats = await pgPool.query(`
       SELECT source_table, COUNT(*) as embedded_count
@@ -641,7 +646,7 @@ router.get('/api/embeddings/tables', async (req: Request, res: Response) => {
         tables.push({
           name: table.name,
           displayName: table.sourceName,
-          database: 'rag_chatbot',
+          database: sourceDatabaseName,
           totalRecords,
           embeddedRecords,
           textColumns: table.textColumns,
@@ -722,7 +727,7 @@ router.get('/api/embeddings/stats', async (req: Request, res: Response) => {
     }
 
     const stats = {
-      database: 'rag_chatbot',
+      database: sourceDatabaseName,
       totalRecords,
       embeddedRecords: totalEmbedded,
       pendingRecords: totalRecords - totalEmbedded,
@@ -795,7 +800,7 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
 
             // Update the embedding:progress key for future requests
             await redis.set('embedding:progress', redisProgress, 'EX', 7 * 24 * 60 * 60);
-            console.log('SSE: ✅ Converted and saved progress to embedding:progress key');
+            console.log('SSE:  Converted and saved progress to embedding:progress key');
           }
         }
 
@@ -1313,7 +1318,7 @@ router.post('/api/embeddings/stop', async (req: Request, res: Response) => {
       WHERE status IN ('processing', 'paused')
     `);
 
-    console.log('✅ Embedding process stopped successfully');
+    console.log(' Embedding process stopped successfully');
     res.json({ success: true, message: 'Embedding process stopped' });
   } catch (error: any) {
     console.error('Error stopping embedding process:', error);
@@ -1337,7 +1342,7 @@ router.post('/api/embeddings/reset', async (req: Request, res: Response) => {
       TRUNCATE embedding_progress RESTART IDENTITY
     `);
 
-    console.log('✅ Embedding process reset successfully');
+    console.log(' Embedding process reset successfully');
     res.json({ success: true, message: 'Embedding process reset' });
   } catch (error: any) {
     console.error('Error resetting embedding process:', error);
@@ -1354,7 +1359,7 @@ router.delete('/api/v2/embeddings/clear', async (req: Request, res: Response) =>
     // If no tables specified, clear all embeddings
     if (!tables || tables.length === 0) {
       await pgPool.query('TRUNCATE unified_embeddings RESTART IDENTITY');
-      console.log('✅ All embeddings cleared');
+      console.log(' All embeddings cleared');
     } else {
       // Clear embeddings for specific tables
       for (const table of tables) {
@@ -1362,7 +1367,7 @@ router.delete('/api/v2/embeddings/clear', async (req: Request, res: Response) =>
           DELETE FROM unified_embeddings
           WHERE source_table = $1
         `, [table]);
-        console.log(`✅ Embeddings cleared for table: ${table}`);
+        console.log(` Embeddings cleared for table: ${table}`);
       }
     }
 
@@ -1387,7 +1392,7 @@ router.post('/api/v2/embeddings/clear', async (req: Request, res: Response) => {
     // If no tables specified, clear all embeddings
     if (!tables || tables.length === 0) {
       await pgPool.query('TRUNCATE unified_embeddings RESTART IDENTITY');
-      console.log('✅ All embeddings cleared');
+      console.log(' All embeddings cleared');
     } else {
       // Clear embeddings for specific tables
       for (const table of tables) {
@@ -1395,7 +1400,7 @@ router.post('/api/v2/embeddings/clear', async (req: Request, res: Response) => {
           DELETE FROM unified_embeddings
           WHERE source_table = $1
         `, [table]);
-        console.log(`✅ Embeddings cleared for table: ${table}`);
+        console.log(` Embeddings cleared for table: ${table}`);
       }
     }
 
@@ -1435,7 +1440,7 @@ router.post('/api/v2/embeddings/complete', async (req: Request, res: Response) =
     }
 
     const progress = result.rows[0];
-    console.log(`✅ Process ${progress.id} marked as completed`);
+    console.log(` Process ${progress.id} marked as completed`);
 
     // Also update Redis if it exists
     try {
@@ -1445,7 +1450,7 @@ router.post('/api/v2/embeddings/complete', async (req: Request, res: Response) =
         progressData.status = 'completed';
         progressData.percentage = 100;
         await redis.set('embedding:progress', JSON.stringify(progressData), 'EX', 30);
-        console.log('✅ Redis progress updated with completed status');
+        console.log(' Redis progress updated with completed status');
       }
     } catch (redisError) {
       console.error('Error updating Redis:', redisError);

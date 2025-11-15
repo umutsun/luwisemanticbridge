@@ -124,7 +124,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       setLoading(true);
 
       // Get API URL from environment variables (.env.lsemb)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      // Use relative path if NEXT_PUBLIC_API_URL is not set (leverages Next.js rewrites)
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
 
       if (authToken) {
         setStoredToken(authToken);
@@ -300,7 +301,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const updateConfig = async (newConfig: Config) => {
     try {
       // Get API URL from environment variables (.env.lsemb)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      // Use relative path if NEXT_PUBLIC_API_URL is not set (leverages Next.js rewrites)
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
       const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
         method: 'PUT',
         headers: {
@@ -369,7 +371,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   // Helper function to fetch public chatbot settings for non-authenticated users
   const fetchPublicChatbotSettings = async (): Promise<{ name: string; description: string }> => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      // Use relative path if NEXT_PUBLIC_API_URL is not set (leverages Next.js rewrites)
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`);
       if (response.ok) {
         const chatbotData = await response.json();

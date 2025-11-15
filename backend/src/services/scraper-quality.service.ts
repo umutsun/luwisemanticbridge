@@ -73,12 +73,12 @@ export class ScraperQualityService {
     try {
       this.redis = await initializeRedis();
       if (this.redis && this.redis.status === 'ready') {
-        console.log('✅ Scraper Quality Service initialized with Redis');
+        console.log(' Scraper Quality Service initialized with Redis');
       } else {
-        console.warn('⚠️ Redis not available, quality service in local mode');
+        console.warn('️ Redis not available, quality service in local mode');
       }
     } catch (error) {
-      console.error('❌ Failed to initialize Scraper Quality Service:', error);
+      console.error(' Failed to initialize Scraper Quality Service:', error);
     }
   }
 
@@ -162,7 +162,7 @@ export class ScraperQualityService {
       };
     } finally {
       const processingTime = performance.now() - startTime;
-      console.log(`🔍 Duplicate check completed in ${processingTime.toFixed(2)}ms`);
+      console.log(` Duplicate check completed in ${processingTime.toFixed(2)}ms`);
     }
   }
 

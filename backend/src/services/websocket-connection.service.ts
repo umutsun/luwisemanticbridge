@@ -76,7 +76,7 @@ export class WebSocketConnectionService {
 
   private setupEventHandlers() {
     this.io.on('connection', (socket: AuthenticatedSocket) => {
-      console.log(`🔌 User connected: ${socket.userId} (${socket.userRole})`);
+      console.log(` User connected: ${socket.userId} (${socket.userRole})`);
 
       // Store connected client
       this.connectedClients.set(socket.id, socket);
@@ -215,7 +215,7 @@ export class WebSocketConnectionService {
 
       // Handle disconnection
       socket.on('disconnect', (reason) => {
-        console.log(`🔌 User disconnected: ${socket.userId} (${reason})`);
+        console.log(` User disconnected: ${socket.userId} (${reason})`);
 
         // Clean up typing indicators
         if (socket.sessionId && socket.userId) {

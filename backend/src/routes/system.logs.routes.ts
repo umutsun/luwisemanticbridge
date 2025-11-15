@@ -49,7 +49,7 @@ router.get('/stream', (req, res) => {
     req.on('close', () => {
       clients.delete(clientId);
       consoleLogService?.off('log', onLog);
-      console.log('📡 System log client disconnected');
+      console.log(' System log client disconnected');
     });
 
     // Send some initial logs

@@ -104,16 +104,16 @@ export class ScraperMonitorService extends EventEmitter {
     try {
       this.redis = await initializeRedis();
       if (this.redis && this.redis.status === 'ready') {
-        console.log('✅ Scraper Monitor Service initialized with Redis');
+        console.log(' Scraper Monitor Service initialized with Redis');
         await this.loadHistoricalData();
         this.startMonitoring();
         this.startCleanup();
       } else {
-        console.warn('⚠️ Redis not available, monitor service in local mode');
+        console.warn('️ Redis not available, monitor service in local mode');
         this.startLocalMonitoring();
       }
     } catch (error) {
-      console.error('❌ Failed to initialize Scraper Monitor Service:', error);
+      console.error(' Failed to initialize Scraper Monitor Service:', error);
       this.startLocalMonitoring();
     }
   }
@@ -152,14 +152,14 @@ export class ScraperMonitorService extends EventEmitter {
         }
       }
 
-      console.log(`📊 Loaded ${this.snapshots.length} snapshots and ${this.activeAlerts.size} active alerts`);
+      console.log(` Loaded ${this.snapshots.length} snapshots and ${this.activeAlerts.size} active alerts`);
     } catch (error) {
       console.error('Failed to load historical data:', error);
     }
   }
 
   private startMonitoring(): void {
-    console.log('🔍 Starting performance monitoring...');
+    console.log(' Starting performance monitoring...');
 
     this.monitoringInterval = setInterval(async () => {
       await this.collectSnapshot();
@@ -168,7 +168,7 @@ export class ScraperMonitorService extends EventEmitter {
   }
 
   private startLocalMonitoring(): void {
-    console.log('⚠️ Using local monitoring mode');
+    console.log('️ Using local monitoring mode');
     this.monitoringInterval = setInterval(async () => {
       await this.collectSnapshot();
       await this.checkAlerts();
@@ -234,7 +234,7 @@ export class ScraperMonitorService extends EventEmitter {
       // Emit update
       this.emit('snapshot', snapshot);
 
-      console.log(`📊 Snapshot collected: ${timestamp}`);
+      console.log(` Snapshot collected: ${timestamp}`);
 
     } catch (error) {
       console.error('Failed to collect snapshot:', error);
@@ -365,7 +365,7 @@ export class ScraperMonitorService extends EventEmitter {
         this.activeAlerts.set(alert.id, alert);
         await this.saveAlert(alert);
         this.emit('alert', alert);
-        console.warn(`🚨 New alert: ${alert.message}`);
+        console.warn(` New alert: ${alert.message}`);
       } else if (existingAlert.value !== alert.value) {
         // Update existing alert
         existingAlert.value = alert.value;
@@ -383,7 +383,7 @@ export class ScraperMonitorService extends EventEmitter {
         await this.saveAlert(alert);
         this.activeAlerts.delete(alertId);
         this.emit('alertResolved', alert);
-        console.log(`✅ Alert resolved: ${alert.message}`);
+        console.log(` Alert resolved: ${alert.message}`);
       }
     }
   }
@@ -483,7 +483,7 @@ export class ScraperMonitorService extends EventEmitter {
         }
       }
 
-      console.log('🧹 Old monitoring data cleaned up');
+      console.log(' Old monitoring data cleaned up');
     } catch (error) {
       console.error('Failed to cleanup old data:', error);
     }
@@ -590,7 +590,7 @@ export class ScraperMonitorService extends EventEmitter {
 
   updateConfig(newConfig: Partial<MonitoringConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    console.log('🔧 Monitoring configuration updated');
+    console.log(' Monitoring configuration updated');
   }
 
   async generateReport(hours: number = 24): Promise<any> {
@@ -667,7 +667,7 @@ export class ScraperMonitorService extends EventEmitter {
     }
 
     this.removeAllListeners();
-    console.log('🧹 Scraper Monitor Service cleaned up');
+    console.log(' Scraper Monitor Service cleaned up');
   }
 }
 

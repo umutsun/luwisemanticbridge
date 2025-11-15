@@ -140,7 +140,7 @@ export class RAGChatService {
 
   constructor() {
     this.llmManager = LLMManager.getInstance();
-    console.log('✅ RAG Chat Service initialized with LLM Manager');
+    console.log(' RAG Chat Service initialized with LLM Manager');
   }
 
   
@@ -206,7 +206,7 @@ export class RAGChatService {
           const content = typeof promptResult.rows[0].value === 'string'
             ? promptResult.rows[0].value
             : promptResult.rows[0].value;
-          console.log(`✅ Using active prompt: ${promptId} with ${tone} tone`);
+          console.log(` Using active prompt: ${promptId} with ${tone} tone`);
           return `${toneInstruction}\n\n${content}`;
         }
       }
@@ -217,7 +217,7 @@ export class RAGChatService {
       );
 
       if (oldResult.rows[0]?.setting_value) {
-        console.log('⚠️ Using system prompt from old chatbot_settings table');
+        console.log('️ Using system prompt from old chatbot_settings table');
         return oldResult.rows[0].setting_value;
       }
     } catch (error) {
@@ -225,7 +225,7 @@ export class RAGChatService {
     }
 
     // Generic default system prompt (multi-language, not domain-specific)
-    console.log('⚠️ No active prompt found, using generic default');
+    console.log('️ No active prompt found, using generic default');
     return `You are a helpful AI assistant. Answer questions based on the provided context information. Structure your response in clear paragraphs.`;
   }
 
@@ -253,7 +253,7 @@ export class RAGChatService {
 
       // Get system prompt from database or use default
       const systemPrompt = options.systemPrompt || await this.getSystemPrompt();
-      console.log(`📝 System Prompt loaded (length: ${systemPrompt?.length || 0} chars)`);
+      console.log(` System Prompt loaded (length: ${systemPrompt?.length || 0} chars)`);
 
       // 2. Search for relevant documents using configured source
       // Check environment variable first, then database setting
@@ -320,7 +320,7 @@ export class RAGChatService {
         '0.5'
       );
 
-      console.log(`⚙️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}`);
+      console.log(`️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}`);
 
       // Use semantic search to find related content
       let allResults = [];
@@ -330,9 +330,9 @@ export class RAGChatService {
         allResults = await semanticSearch.hybridSearch(message, maxResults);
       }
 
-      console.log(`🔍 DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
+      console.log(` DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
       if (allResults.length > 0) {
-        console.log(`📊 DEBUG: First raw result:`, {
+        console.log(` DEBUG: First raw result:`, {
           title: allResults[0].title,
           score: allResults[0].score,
           similarity_score: allResults[0].similarity_score
@@ -355,7 +355,7 @@ export class RAGChatService {
 
       // For initial display, use minResults instead of batch size
       const initialDisplayCount = Math.min(minResults, searchResults.length);
-      console.log(`📊 Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
+      console.log(` Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
 
       // Ensure minimum results requirement (for backend processing, not display)
       if (searchResults.length < minResults && allResults.length > 0) {
@@ -419,7 +419,7 @@ export class RAGChatService {
       );
 
       // Debug: Log content availability
-      console.log(`🔍 DEBUG - Content check:`, {
+      console.log(` DEBUG - Content check:`, {
         resultsCount: searchResults.length,
         initialDisplayCount,
         hasActualContent,
@@ -434,7 +434,7 @@ export class RAGChatService {
       const hasHighConfidence = bestScore >= HIGH_CONFIDENCE_THRESHOLD;
       const hasPartialMatch = bestScore >= LOW_CONFIDENCE_THRESHOLD && bestScore < HIGH_CONFIDENCE_THRESHOLD;
 
-      console.log(`📊 Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, results=${searchResults.length}, hasActualContent=${hasActualContent}, high=${hasHighConfidence}, partial=${hasPartialMatch}, belowThreshold=${isBelowThreshold}`);
+      console.log(` Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, results=${searchResults.length}, hasActualContent=${hasActualContent}, high=${hasHighConfidence}, partial=${hasPartialMatch}, belowThreshold=${isBelowThreshold}`);
 
       // CASE 1: No results OR below minimum threshold - return "not found" message
       if (hasNoResults || isBelowThreshold) {
@@ -442,7 +442,7 @@ export class RAGChatService {
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
 
-        console.log(`⚠️ No relevant context found for query: "${message}" (bestScore=${(bestScore * 100).toFixed(1)}% < threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%)`);
+        console.log(`️ No relevant context found for query: "${message}" (bestScore=${(bestScore * 100).toFixed(1)}% < threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%)`);
 
         return {
           response: noResultsMessage,
@@ -483,30 +483,30 @@ export class RAGChatService {
       // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
       const citationInstruction = responseLanguage === 'en'
         ? `\n\nCRITICAL FORMATTING RULES:\n` +
-          `✅ Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
-          `✅ Add citations at paragraph ends using ONLY source numbers 1-${initialDisplayCount}: **[1]**, **[2, 3]**, etc.\n` +
-          `❌ NEVER cite sources beyond number ${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
-          `❌ NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
-          `❌ NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
+          ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
+          ` Add citations at paragraph ends using ONLY source numbers 1-${initialDisplayCount}: **[1]**, **[2, 3]**, etc.\n` +
+          ` NEVER cite sources beyond number ${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+          ` NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
+          ` NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
           `Just write flowing paragraphs with citation numbers at the end.`
         : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
-          `✅ SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
-          `✅ Paragraf sonlarına SADECE 1-${initialDisplayCount} arası kaynak numarası kullan: **[1]**, **[2, 3]**, vb.\n` +
-          `❌ ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme (sadece ${initialDisplayCount} kaynak var)\n` +
-          `❌ ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
-          `❌ ASLA etiket ekleme\n` +
+          ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
+          ` Paragraf sonlarına SADECE 1-${initialDisplayCount} arası kaynak numarası kullan: **[1]**, **[2, 3]**, vb.\n` +
+          ` ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme (sadece ${initialDisplayCount} kaynak var)\n` +
+          ` ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
+          ` ASLA etiket ekleme\n` +
           `Sadece akıcı paragraflar yaz, sonunda kaynak numaraları olsun.`;
 
       const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${confidenceInstruction}${citationInstruction}`;
-      console.log(`🤖 Confidence: ${hasHighConfidence ? 'HIGH (≥75%)' : hasPartialMatch ? 'PARTIAL (<75%)' : 'LOW'}, bestScore=${(bestScore * 100).toFixed(1)}%`);
-      console.log(`🌡️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
-      console.log(`📝 Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
-      console.log(`📝 System prompt length: ${systemPrompt?.length || 0} chars`);
-      console.log(`🌐 Response language: ${responseLanguage}`);
+      console.log(` Confidence: ${hasHighConfidence ? 'HIGH (≥75%)' : hasPartialMatch ? 'PARTIAL (<75%)' : 'LOW'}, bestScore=${(bestScore * 100).toFixed(1)}%`);
+      console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
+      console.log(` Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
+      console.log(` System prompt length: ${systemPrompt?.length || 0} chars`);
+      console.log(` Response language: ${responseLanguage}`);
 
       // Extract provider from active model
       const providerFromModel = this.extractProviderFromModel(activeModel);
-      console.log(`🤖 Active Chat Model: ${activeModel} (provider: ${providerFromModel})`);
+      console.log(` Active Chat Model: ${activeModel} (provider: ${providerFromModel})`);
 
       // PERFORMANCE: Pass extracted provider directly (already normalized by extractProviderFromModel)
       const response = await llmManager.generateChatResponse(
@@ -533,7 +533,7 @@ export class RAGChatService {
 
       // Log if fallback was used
       if (response.fallbackUsed) {
-        console.log(`⚠️ Fallback was used - active model ${providerFromModel} was not available`);
+        console.log(`️ Fallback was used - active model ${providerFromModel} was not available`);
         await this.logActivity(userId, 'model_fallback', {
           activeModel: activeModel,
           actualProvider: response.provider,
@@ -576,7 +576,7 @@ export class RAGChatService {
     };
 
     // Log sources content for debugging
-    console.log(`📦 Returning ${formattedSources.length} sources to frontend`);
+    console.log(` Returning ${formattedSources.length} sources to frontend`);
     formattedSources.forEach((source, idx) => {
       console.log(`  Source ${idx + 1}: title="${source.title?.substring(0, 30)}...", content length=${source.content?.length || 0}, excerpt length=${source.excerpt?.length || 0}`);
     });
@@ -628,7 +628,7 @@ export class RAGChatService {
 
     // Add highest scoring sources first
     if (highScoreSources.length > 0) {
-      context += '🎯 YÜSEK EŞLEŞME SONUÇLARI:\n';
+      context += ' YÜSEK EŞLEŞME SONUÇLARI:\n';
       highScoreSources.forEach((result, idx) => {
         context += this.formatSourceForContext(result, idx + 1);
       });
@@ -637,7 +637,7 @@ export class RAGChatService {
 
     // Add medium scoring sources
     if (mediumScoreSources.length > 0) {
-      context += '📊 ORTA EŞLEŞME SONUÇLARI:\n';
+      context += ' ORTA EŞLEŞME SONUÇLARI:\n';
       mediumScoreSources.forEach((result, idx) => {
         context += this.formatSourceForContext(result, idx + highScoreSources.length + 1);
       });
@@ -646,7 +646,7 @@ export class RAGChatService {
 
     // Add low scoring sources at the end (only if few results)
     if (lowScoreSources.length > 0 && sortedResults.length < 10) {
-      context += '📝 DİĞER İLGİLİ BİLGİLER:\n';
+      context += ' DİĞER İLGİLİ BİLGİLER:\n';
       lowScoreSources.forEach((result, idx) => {
         context += this.formatSourceForContext(result, idx + highScoreSources.length + mediumScoreSources.length + 1);
       });
@@ -830,19 +830,19 @@ export class RAGChatService {
     const enableLLMGenerationSetting = await settingsService.getSetting('ragSettings.enableLLMSummaries');
     const enableLLMGeneration = enableLLMGenerationSetting === 'true'; // Default: false (disabled for performance)
 
-    console.log(`🚀 Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for natural summaries)`);
+    console.log(` Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for natural summaries)`);
 
     if (enableParallelLLM && searchResults.length > 1) {
       // NOTE: Parallel mode is now deprecated in favor of batch LLM processing
       // Batch processing is much faster (1 call vs N calls) and simpler
       // Redirecting to sequential path which uses batch LLM optimization
-      console.log('⚠️ Parallel LLM mode is deprecated - using optimized batch processing instead');
+      console.log('️ Parallel LLM mode is deprecated - using optimized batch processing instead');
     }
 
     // Always use batch processing path (much faster than parallel individual calls)
     {
       // Optimized batch LLM processing - single API call for all sources
-      console.log('🔄 Using optimized batch processing for all sources');
+      console.log(' Using optimized batch processing for all sources');
 
       // STEP 1: Prepare all results with metadata and categories
       const preparedResults = searchResults.map((r, idx) => {
@@ -886,8 +886,8 @@ export class RAGChatService {
 
       if (enableLLMGeneration && preparedResults.length > 0) {
         try {
-          console.time('⚡ Batch LLM processing for ALL results');
-          console.log(`🚀 Processing ${preparedResults.length} sources in SINGLE batch LLM call...`);
+          console.time(' Batch LLM processing for ALL results');
+          console.log(` Processing ${preparedResults.length} sources in SINGLE batch LLM call...`);
 
           // Single batch call instead of N individual calls
           batchLLMResults = await this.generateBatchContentAndQuestions(
@@ -898,10 +898,10 @@ export class RAGChatService {
             }))
           );
 
-          console.log(`✅ Batch LLM completed: ${batchLLMResults.length} results generated`);
-          console.timeEnd('⚡ Batch LLM processing for ALL results');
+          console.log(` Batch LLM completed: ${batchLLMResults.length} results generated`);
+          console.timeEnd(' Batch LLM processing for ALL results');
         } catch (error) {
-          console.error('❌ Batch LLM processing FAILED:', error);
+          console.error(' Batch LLM processing FAILED:', error);
           console.warn('Falling back to non-LLM content');
           batchLLMResults = []; // Will use fallback content below
         }
@@ -949,7 +949,7 @@ export class RAGChatService {
       }
     }
 
-    console.log(`✅ Formatted ${formattedResults.length} sources successfully`);
+    console.log(` Formatted ${formattedResults.length} sources successfully`);
     return formattedResults;
   }
 
@@ -1014,7 +1014,7 @@ export class RAGChatService {
     results: Array<{ title: string; excerpt: string; category: string }>
   ): Promise<Array<{ processedContent: string; generatedQuestion: string }>> {
     try {
-      console.log(`🚀 Batch processing ${results.length} results with LLM...`);
+      console.log(` Batch processing ${results.length} results with LLM...`);
       console.time('Batch LLM processing');
 
       // Get settings once for all results
@@ -1134,7 +1134,7 @@ Başlık: ${r.title}
       }
 
       console.timeEnd('Batch LLM processing');
-      console.log(`✅ Batch processed ${parsed.length}/${results.length} results`);
+      console.log(` Batch processed ${parsed.length}/${results.length} results`);
 
       // Fallback for missing results
       while (parsed.length < results.length) {
@@ -1151,7 +1151,7 @@ Başlık: ${r.title}
 
       return parsed;
     } catch (error) {
-      console.error('❌ Batch LLM processing failed:', error);
+      console.error(' Batch LLM processing failed:', error);
       // Fallback: return original excerpts
       return results.map(r => ({
         processedContent: r.excerpt.substring(0, 500),
@@ -1165,7 +1165,7 @@ Başlık: ${r.title}
    */
   private async generateContentAndQuestion(title: string, excerpt: string, category: string): Promise<{ processedContent: string; generatedQuestion: string }> {
     try {
-      console.log(`🤖 Attempting to generate question for: ${title.substring(0, 30)}...`);
+      console.log(` Attempting to generate question for: ${title.substring(0, 30)}...`);
       console.time(`LLM processing for: ${title.substring(0, 30)}...`);
 
       // Clean the excerpt - remove all formatting artifacts
@@ -1184,7 +1184,7 @@ Başlık: ${r.title}
 
       // Get active system prompt from database
       const activeSystemPrompt = await this.getSystemPrompt();
-      console.log(`📝 Using active system prompt for source summary (length: ${activeSystemPrompt?.length || 0})`);
+      console.log(` Using active system prompt for source summary (length: ${activeSystemPrompt?.length || 0})`);
 
       // Get language setting from database
       const responseLanguage = await settingsService.getSetting('response_language') || 'tr';
@@ -1194,7 +1194,7 @@ Başlık: ${r.title}
         || await settingsService.getSetting('conversationTone')
         || await settingsService.getSetting('prompts.conversationTone')
         || 'professional';
-      console.log(`🎭 Using conversation tone: ${conversationTone}`);
+      console.log(` Using conversation tone: ${conversationTone}`);
 
       // Get temperature from settings (check multiple possible keys)
       let temperature = 0.3; // Default fallback
@@ -1206,7 +1206,7 @@ Başlık: ${r.title}
         const parsed = parseFloat(tempSetting);
         if (!isNaN(parsed) && parsed >= 0 && parsed <= 2) {
           temperature = parsed;
-          console.log(`🌡️  Using temperature from settings: ${temperature}`);
+          console.log(`️  Using temperature from settings: ${temperature}`);
         }
       }
 
@@ -1236,12 +1236,12 @@ You are a tax and legal expert. Your job is to INTERPRET and explain content in 
 TONE: ${toneInstruction}
 
 CRITICAL RULES:
-❌ DO NOT copy the original text
-❌ DO NOT start with "The document says..." or "This content discusses..."
-❌ DO NOT preserve the original structure
-✅ REWRITE in natural language matching the tone above
-✅ EXPLAIN as if talking to someone who needs to understand quickly
-✅ USE MARKDOWN: **bold** for key terms, *italic* for emphasis, bullet points when appropriate
+ DO NOT copy the original text
+ DO NOT start with "The document says..." or "This content discusses..."
+ DO NOT preserve the original structure
+ REWRITE in natural language matching the tone above
+ EXPLAIN as if talking to someone who needs to understand quickly
+ USE MARKDOWN: **bold** for key terms, *italic* for emphasis, bullet points when appropriate
 
 TASK:
 Read the content below and create:
@@ -1275,12 +1275,12 @@ Sen vergi ve hukuk uzmanısın. Görevin içeriği YORUMLAMAK ve KENDI KELİMELE
 ÜSLUBİN: ${toneInstruction}
 
 KRİTİK KURALLAR:
-❌ Orijinal metni KOPYALAMA
-❌ "Bu belge şunu söylüyor..." diye BAŞLAMA
-❌ Orijinal yapıyı KORUMA
-✅ Yukarıdaki üsluba uygun doğal dilde YENİDEN YAZ
-✅ Hızlıca anlaması gereken birine anlatır gibi AÇIKLA
-✅ MARKDOWN KULLAN: **kalın** anahtar terimler için, *italik* vurgu için, uygun yerlerde madde işareti
+ Orijinal metni KOPYALAMA
+ "Bu belge şunu söylüyor..." diye BAŞLAMA
+ Orijinal yapıyı KORUMA
+ Yukarıdaki üsluba uygun doğal dilde YENİDEN YAZ
+ Hızlıca anlaması gereken birine anlatır gibi AÇIKLA
+ MARKDOWN KULLAN: **kalın** anahtar terimler için, *italik* vurgu için, uygun yerlerde madde işareti
 
 GÖREV:
 Aşağıdaki içeriği oku ve oluştur:
@@ -1320,7 +1320,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
         if (response && response.content) {
           // Debug: Log LLM response for troubleshooting empty summaries
-          console.log(`📝 LLM Response for "${title.substring(0, 50)}...": ${response.content.substring(0, 200)}...`);
+          console.log(` LLM Response for "${title.substring(0, 50)}...": ${response.content.substring(0, 200)}...`);
 
           // Parse the response based on language
           const contentMatch = response.content.match(
@@ -1336,10 +1336,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
           // Debug: Log parsing results
           if (!contentMatch) {
-            console.warn(`⚠️ Failed to parse content for "${title.substring(0, 50)}..." - using fallback`);
+            console.warn(`️ Failed to parse content for "${title.substring(0, 50)}..." - using fallback`);
           }
           if (!questionMatch) {
-            console.warn(`⚠️ Failed to parse summary for "${title.substring(0, 50)}..." - using fallback`);
+            console.warn(`️ Failed to parse summary for "${title.substring(0, 50)}..." - using fallback`);
           }
 
           // Clean the content
@@ -1499,23 +1499,23 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       const startTime = Date.now();
 
       // Check and add model column to messages table
-      console.log('🔧 Checking messages table structure...');
+      console.log(' Checking messages table structure...');
       const modelColumnCheck = await this.pool.query(`
         SELECT column_name FROM information_schema.columns
         WHERE table_name = 'messages' AND column_name = 'model'
       `);
 
       if (modelColumnCheck.rows.length === 0) {
-        console.log('➕ Adding model column to messages table...');
+        console.log(' Adding model column to messages table...');
         await this.pool.query(`ALTER TABLE messages ADD COLUMN model VARCHAR(255)`);
         await this.pool.query(`CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model)`);
-        console.log('✅ Added model column to messages table');
+        console.log(' Added model column to messages table');
       } else {
-        console.log('✅ Model column already exists in messages table');
+        console.log(' Model column already exists in messages table');
       }
 
       // Create activity_log table if not exists
-      console.log('🔧 Checking activity_log table...');
+      console.log(' Checking activity_log table...');
 
       // First check if table exists
       const tableCheck = await this.pool.query(`
@@ -1527,7 +1527,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       `);
 
       if (!tableCheck.rows[0].exists) {
-        console.log('➕ Creating activity_log table...');
+        console.log(' Creating activity_log table...');
         await this.pool.query(`
           CREATE TABLE activity_log (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1543,7 +1543,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         await this.pool.query(`CREATE INDEX idx_activity_log_activity_type ON activity_log(activity_type)`);
         await this.pool.query(`CREATE INDEX idx_activity_log_created_at ON activity_log(created_at DESC)`);
 
-        console.log('✅ Activity log table created successfully');
+        console.log(' Activity log table created successfully');
       } else {
         // Check if user_id column exists and has correct type
         const userIdColumnCheck = await this.pool.query(`
@@ -1555,9 +1555,9 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           // Check if it's the wrong type (integer instead of varchar)
           const columnType = userIdColumnCheck.rows[0].data_type;
           if (columnType === 'integer' || columnType === 'int4') {
-            console.log('⚠️ activity_log table has wrong user_id type, dropping and recreating...');
+            console.log('️ activity_log table has wrong user_id type, dropping and recreating...');
             await this.pool.query(`DROP TABLE activity_log`);
-            console.log('✅ Dropped old activity_log table');
+            console.log(' Dropped old activity_log table');
 
             // Recreate table with correct schema
             await this.pool.query(`
@@ -1575,17 +1575,17 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
             await this.pool.query(`CREATE INDEX idx_activity_log_activity_type ON activity_log(activity_type)`);
             await this.pool.query(`CREATE INDEX idx_activity_log_created_at ON activity_log(created_at DESC)`);
 
-            console.log('✅ Activity log table recreated with correct schema');
+            console.log(' Activity log table recreated with correct schema');
           } else {
-            console.log('✅ Activity log table already exists with proper columns');
+            console.log(' Activity log table already exists with proper columns');
           }
         }
       }
 
       const duration = Date.now() - startTime;
-      console.log(`✅ Database schema check completed in ${duration}ms`);
+      console.log(` Database schema check completed in ${duration}ms`);
     } catch (error) {
-      console.error('❌ Failed to ensure tables:', error);
+      console.error(' Failed to ensure tables:', error);
       throw error; // Re-throw to see the full error
     }
   }
@@ -1687,7 +1687,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     try {
       // Get relevance threshold from database
       const relevanceThreshold = parseFloat(await settingsService.getSetting('related_results_threshold') || '15');
-      console.log(`🔍 Searching for related topics: "${query}" (limit: ${limit}, threshold: ${relevanceThreshold}%, excluding ${usedSources.length} sources)`);
+      console.log(` Searching for related topics: "${query}" (limit: ${limit}, threshold: ${relevanceThreshold}%, excluding ${usedSources.length} sources)`);
 
       // Get IDs of sources already used in response to avoid duplicates
       const excludeIds = usedSources.map(source => source.id?.toString() || source.sourceId?.toString()).filter(Boolean);
@@ -1775,7 +1775,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         let generatedQuestion = '';
 
         try {
-          console.log(`🤖 Processing related topic with LLM: ${title.substring(0, 30)}...`);
+          console.log(` Processing related topic with LLM: ${title.substring(0, 30)}...`);
           const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
           processedContent = llmResult.processedContent;
           generatedQuestion = llmResult.generatedQuestion;
@@ -1828,7 +1828,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     try {
       // Get relevance threshold from database
       const relevanceThreshold = parseFloat(await settingsService.getSetting('related_results_threshold') || '15');
-      console.log(`🔍 Getting paginated related results: query="${query}", offset=${offset}, limit=${limit}, threshold=${relevanceThreshold}%`);
+      console.log(` Getting paginated related results: query="${query}", offset=${offset}, limit=${limit}, threshold=${relevanceThreshold}%`);
 
       // Check if we should use unified embeddings or rag_data
       let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
@@ -1915,7 +1915,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         let generatedQuestion = '';
 
         try {
-          console.log(`🤖 Processing paginated result with LLM: ${title.substring(0, 30)}...`);
+          console.log(` Processing paginated result with LLM: ${title.substring(0, 30)}...`);
           const llmResult = await this.generateContentAndQuestion(title, cleanExcerpt, category);
           processedContent = llmResult.processedContent;
           generatedQuestion = llmResult.generatedQuestion;
@@ -1984,7 +1984,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       const recentResult = await this.pool.query(recentSearchesQuery);
       const recentQuestions = recentResult.rows.map(r => r.content);
 
-      console.log(`✨ Found ${recentQuestions.length} recent questions from user searches`);
+      console.log(` Found ${recentQuestions.length} recent questions from user searches`);
 
       // 2. Get interesting titles from unified_embeddings (actual sorucevap, makaleler, etc.)
       const unifiedQuestionsQuery = `
@@ -2026,7 +2026,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         unifiedQuestions.push(questionText);
       }
 
-      console.log(`✨ Found ${unifiedQuestions.length} questions from database content`);
+      console.log(` Found ${unifiedQuestions.length} questions from database content`);
 
       // 3. Combine all questions, prioritize recent searches
       const allQuestions = [
@@ -2102,13 +2102,13 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     // Generate LLM content if enabled
     if (enableLLMGeneration) {
       try {
-        console.log(`🤖 Processing source ${idx + 1} with LLM: ${cleanTitle.substring(0, 30)}...`);
+        console.log(` Processing source ${idx + 1} with LLM: ${cleanTitle.substring(0, 30)}...`);
         const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
         processedContent = llmResult.processedContent;
         generatedQuestion = llmResult.generatedQuestion;
-        console.log(`✅ Parallel LLM generated content (length: ${processedContent?.length || 0})`);
+        console.log(` Parallel LLM generated content (length: ${processedContent?.length || 0})`);
       } catch (error) {
-        console.error(`❌ Parallel LLM processing FAILED for source ${idx + 1}:`, error);
+        console.error(` Parallel LLM processing FAILED for source ${idx + 1}:`, error);
         // Continue with fallback content
       }
     }
@@ -2196,7 +2196,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         return { sources: [], hasMore: false, nextOffset: currentOffset };
       }
 
-      console.log(`🔍 Loading more results: query="${originalQuery}", offset=${currentOffset}, batch=${fetchCount} (batch size: ${batchSize})`);
+      console.log(` Loading more results: query="${originalQuery}", offset=${currentOffset}, batch=${fetchCount} (batch size: ${batchSize})`);
 
       // Check if we should use unified embeddings
       let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
@@ -2245,7 +2245,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       const hasMore = currentOffset + fetchCount < filteredResults.length;
       const nextOffset = currentOffset + fetchCount;
 
-      console.log(`✅ Loaded ${formattedResults.length} more results (batch: ${fetchCount}), hasMore=${hasMore}, nextOffset=${nextOffset}`);
+      console.log(` Loaded ${formattedResults.length} more results (batch: ${fetchCount}), hasMore=${hasMore}, nextOffset=${nextOffset}`);
 
       return {
         sources: formattedResults,

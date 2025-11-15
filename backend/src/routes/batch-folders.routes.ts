@@ -1,6 +1,6 @@
 /**
- * Murgan Batch Upload Routes
- * Handles batch PDF processing for Turkish tax law documents
+ * Batch Folder Processing Routes
+ * Generic batch PDF processing for any folder (murgan, books, legal, custom)
  */
 
 import { Router, Request, Response } from 'express';
@@ -16,13 +16,16 @@ import documentProcessor from '../services/document-processor.service';
 
 const router = Router();
 
-interface MurganFile {
+interface BatchFile {
   path: string;
   category: string;
   subcategory: string;
   mevzuatNo?: string;
   filename: string;
   size: number;
+  inDatabase?: boolean;
+  documentId?: number;
+  documentTitle?: string;
 }
 
 interface BatchJob {
@@ -31,7 +34,7 @@ interface BatchJob {
   totalFiles: number;
   processedFiles: number;
   currentFile?: string;
-  files: MurganFile[];
+  files: BatchFile[];
   results: any[];
   errors: any[];
   createdAt: Date;
@@ -91,7 +94,7 @@ router.post('/scan', authenticateToken, async (req: AuthenticatedRequest, res: R
   try {
     const { folderPath = 'docs/murgan' } = req.body;
 
-    console.log(`[Murgan Batch] Scanning folder: ${folderPath}`);
+    console.log(`[Batch Folders] Scanning folder: ${folderPath}`);
 
     // Resolve absolute path
     const absolutePath = path.isAbsolute(folderPath)
@@ -106,7 +109,7 @@ router.post('/scan', authenticateToken, async (req: AuthenticatedRequest, res: R
     }
 
     // Recursively find all PDF files
-    const files: MurganFile[] = [];
+    const files: BatchFile[] = [];
 
     const scanDirectory = (dirPath: string) => {
       const items = fs.readdirSync(dirPath);
@@ -135,26 +138,46 @@ router.post('/scan', authenticateToken, async (req: AuthenticatedRequest, res: R
 
     scanDirectory(absolutePath);
 
+    // Check which files are already in database
+    const filePaths = files.map(f => f.path);
+    const dbCheckResult = await lsembPool.query(
+      `SELECT file_path, id, title FROM documents WHERE file_path = ANY($1::text[])`,
+      [filePaths]
+    );
+
+    const dbFiles = new Set(dbCheckResult.rows.map(row => row.file_path));
+    const dbFileMap = new Map(dbCheckResult.rows.map(row => [row.file_path, { id: row.id, title: row.title }]));
+
+    // Add inDatabase flag to each file
+    const filesWithStatus = files.map(file => ({
+      ...file,
+      inDatabase: dbFiles.has(file.path),
+      documentId: dbFileMap.get(file.path)?.id,
+      documentTitle: dbFileMap.get(file.path)?.title
+    }));
+
     // Group files by category for better display
-    const groupedFiles = files.reduce((acc, file) => {
+    const groupedFiles = filesWithStatus.reduce((acc, file) => {
       const key = file.subcategory;
       if (!acc[key]) acc[key] = [];
       acc[key].push(file);
       return acc;
-    }, {} as Record<string, MurganFile[]>);
+    }, {} as Record<string, any[]>);
 
-    console.log(`[Murgan Batch] Found ${files.length} PDF files`);
+    console.log(`[Batch Folders] Found ${files.length} PDF files (${dbFiles.size} already in DB)`);
 
     res.json({
       success: true,
       totalFiles: files.length,
-      files,
+      inDatabaseCount: dbFiles.size,
+      newFilesCount: files.length - dbFiles.size,
+      files: filesWithStatus,
       groupedFiles,
       categories: Object.keys(groupedFiles)
     });
 
   } catch (error: any) {
-    console.error('[Murgan Batch] Scan error:', error);
+    console.error('[Batch Folders] Scan error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -205,7 +228,7 @@ router.post('/process', authenticateToken, async (req: AuthenticatedRequest, res
     });
 
   } catch (error: any) {
-    console.error('[Murgan Batch] Process error:', error);
+    console.error('[Batch Folders] Process error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -216,8 +239,8 @@ router.post('/process', authenticateToken, async (req: AuthenticatedRequest, res
 /**
  * Async file processing
  */
-async function processFilesAsync(jobId: string, files: MurganFile[], options: any) {
-  console.log(`[Murgan Batch] Starting async processing for job ${jobId}`);
+async function processFilesAsync(jobId: string, files: BatchFile[], options: any) {
+  console.log(`[Batch Folders] Starting async processing for job ${jobId}`);
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -272,10 +295,10 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
       );
 
       const documentId = docResult.rows[0].id;
-      console.log(`[Murgan Batch] Document saved with ID: ${documentId}`);
+      console.log(`[Batch Folders] Document saved with ID: ${documentId}`);
 
       // 2. OCR Processing
-      console.log(`[Murgan Batch] Starting OCR for ${file.filename}`);
+      console.log(`[Batch Folders] Starting OCR for ${file.filename}`);
       const ocrResult = await ocrService.processOCR({
         base64,
         filename: file.filename,
@@ -324,7 +347,7 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
         }
       }
 
-      console.log(`[Murgan Batch] Using template: ${templateId}`);
+      console.log(`[Batch Folders] Using template: ${templateId}`);
 
       // 5. Apply template to extract metadata
       const metadataResponse = await fetch(`http://localhost:8083/api/v2/templates/apply`, {
@@ -353,7 +376,7 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
 
       // 6. Extract structured madde-level data for Turkish Tax Law
       if (templateId === 'turkish_tax_law' && metadata.maddeler) {
-        console.log(`[Murgan Batch] Extracting madde-level data for ${file.filename}`);
+        console.log(`[Batch Folders] Extracting madde-level data for ${file.filename}`);
 
         try {
           // Create vergi_mevzuati record
@@ -402,7 +425,7 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
           );
 
           const mevzuatId = mevzuatResult.rows[0].id;
-          console.log(`[Murgan Batch] Created vergi_mevzuati record: ${mevzuatId}`);
+          console.log(`[Batch Folders] Created vergi_mevzuati record: ${mevzuatId}`);
 
           // Parse and insert individual maddeler
           if (typeof metadata.maddeler === 'object') {
@@ -490,13 +513,13 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
                   ]
                 );
               } catch (maddeError) {
-                console.error(`[Murgan Batch] Error inserting madde ${maddeNo}:`, maddeError);
+                console.error(`[Batch Folders] Error inserting madde ${maddeNo}:`, maddeError);
               }
             }
-            console.log(`[Murgan Batch] Inserted ${Object.keys(metadata.maddeler).length} articles`);
+            console.log(`[Batch Folders] Inserted ${Object.keys(metadata.maddeler).length} articles`);
           }
         } catch (structuredError) {
-          console.error(`[Murgan Batch] Error in structured extraction:`, structuredError);
+          console.error(`[Batch Folders] Error in structured extraction:`, structuredError);
           // Continue with regular metadata save even if structured extraction fails
         }
       }
@@ -537,10 +560,10 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
         await redis.set(`job:${jobId}`, JSON.stringify(jobUpdated), 'EX', 86400);
       }
 
-      console.log(`[Murgan Batch] Successfully processed ${file.filename}`);
+      console.log(`[Batch Folders] Successfully processed ${file.filename}`);
 
     } catch (error: any) {
-      console.error(`[Murgan Batch] Error processing ${file.filename}:`, error);
+      console.error(`[Batch Folders] Error processing ${file.filename}:`, error);
 
       // Add to errors
       const jobData = await redis.get(`job:${jobId}`);
@@ -575,7 +598,7 @@ async function processFilesAsync(jobId: string, files: MurganFile[], options: an
     });
   }
 
-  console.log(`[Murgan Batch] Job ${jobId} completed`);
+  console.log(`[Batch Folders] Job ${jobId} completed`);
 }
 
 /**
@@ -613,7 +636,7 @@ router.get('/status/:jobId', authenticateToken, async (req: AuthenticatedRequest
     });
 
   } catch (error: any) {
-    console.error('[Murgan Batch] Status error:', error);
+    console.error('[Batch Folders] Status error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -668,7 +691,7 @@ router.get('/documents', authenticateToken, async (req: AuthenticatedRequest, re
     });
 
   } catch (error: any) {
-    console.error('[Murgan Batch] Documents error:', error);
+    console.error('[Batch Folders] Documents error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -750,7 +773,7 @@ router.get('/search-maddeler', authenticateToken, async (req: AuthenticatedReque
     });
 
   } catch (error: any) {
-    console.error('[Murgan Search] Error:', error);
+    console.error('[Batch Folders Search] Error:', error);
     res.status(500).json({
       success: false,
       error: error.message

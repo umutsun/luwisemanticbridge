@@ -149,18 +149,8 @@ export default function Header() {
         'Authorization': `Bearer ${token}`
       };
 
-      const [healthResponse, dbResponse, redisResponse, translationResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/v2/health/system`, {
-          headers,
-          mode: 'cors',
-          credentials: 'include'
-        }),
-        fetch(`${API_BASE_URL}/api/v2/database/stats`, {
-          headers,
-          mode: 'cors',
-          credentials: 'include'
-        }),
-        fetch(`${API_BASE_URL}/api/v2/redis/stats`, {
+      const [healthResponse, translationResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v2/health`, {
           headers,
           mode: 'cors',
           credentials: 'include'
@@ -172,11 +162,21 @@ export default function Header() {
         })
       ]);
 
-      if (healthResponse.ok && dbResponse.ok) {
+      if (healthResponse.ok) {
         const healthData = await healthResponse.json();
-        const dbData = await dbResponse.json();
-        const redisData = redisResponse.ok ? await redisResponse.json() : null;
         const translationData = translationResponse.ok ? await translationResponse.json() : null;
+
+        // Extract database and redis info from health data
+        const dbData = {
+          connected: healthData.services?.database?.status === 'connected',
+          status: healthData.services?.database?.status,
+          message: healthData.services?.database?.message
+        };
+        const redisData = {
+          connected: healthData.services?.redis?.status === 'connected',
+          status: healthData.services?.redis?.status,
+          message: healthData.services?.redis?.message
+        };
 
         setConnectionProgress(100);
 
@@ -198,8 +198,8 @@ export default function Header() {
           const redisService = healthData.services?.redis;
 
           // Use migration target database from settings
-          // Show rag_chatbot as the migration target, not the current connection (lsemb)
-          let databaseName = 'rag_chatbot'; // migration target from settings
+          // Read from settings or fall back to unknown
+          let databaseName = 'Unknown';
           if (settings && settings.database?.name) {
             databaseName = settings.database.name;
           } else if (settings && settings.database?.database) {
@@ -207,12 +207,9 @@ export default function Header() {
           }
 
           // Calculate total records and table count from database schema
+          // Note: These are not available from /health/system endpoint
           let totalRecords = 0;
           let tableCount = 0;
-          if (dbData && dbData.tables) {
-            totalRecords = dbData.tables.reduce((sum: number, table: any) => sum + (table.rowCount || 0), 0);
-            tableCount = dbData.tables.length;
-          }
 
           // Get LLM model information
           let llmModelInfo = {
@@ -427,7 +424,7 @@ export default function Header() {
                   <div className="text-center">
                     <span className="text-xs font-medium">DB</span>
                     <p className="text-xs text-muted-foreground">
-                      {systemStatus?.database.databaseName || 'lsemb'}
+                      {systemStatus?.database.databaseName || '—'}
                     </p>
                   </div>
                   <div className="text-center">
@@ -594,7 +591,7 @@ export default function Header() {
                           <p className="text-sm font-medium">Database</p>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {systemStatus?.database.databaseName || 'rag_chatbot'}
+                          {systemStatus?.database.databaseName || '—'}
                         </p>
                       </div>
 

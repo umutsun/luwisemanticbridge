@@ -60,7 +60,7 @@ export class LLMManager {
 
     // DON'T load settings in constructor - database might not be ready yet!
     // Call loadSettingsFromDatabase() after server initialization
-    console.log('⚠️ LLMManager created, will load settings from database later');
+    console.log('️ LLMManager created, will load settings from database later');
   }
 
   /**
@@ -117,7 +117,7 @@ export class LLMManager {
     try {
       // Check if database is available
       if (!lsembPool) {
-        console.warn('⚠️ Database not initialized, using default settings');
+        console.warn('️ Database not initialized, using default settings');
         return;
       }
 
@@ -159,7 +159,7 @@ export class LLMManager {
       const activeModel = settings.activeChatModel || settings['llmSettings.activeChatModel'];
 
       if (!activeModel) {
-        console.error('❌ CRITICAL: No activeChatModel found in database! User must configure a model in Settings.');
+        console.error(' CRITICAL: No activeChatModel found in database! User must configure a model in Settings.');
         console.error('   Database query returned:', Object.keys(settings));
         // Don't set any defaults - force user to configure
         return;
@@ -167,14 +167,14 @@ export class LLMManager {
 
       const extractedProvider = this.extractProviderFromModel(activeModel);
 
-      console.log(`🔧 Settings from DB - Active model: ${activeModel}, Extracted provider: ${extractedProvider}`);
+      console.log(` Settings from DB - Active model: ${activeModel}, Extracted provider: ${extractedProvider}`);
 
       // IMPORTANT: Always use database value
       if (this.defaultProvider !== extractedProvider) {
-        console.log(`🔄 Switching default provider from "${this.defaultProvider}" to "${extractedProvider}" based on database settings`);
+        console.log(` Switching default provider from "${this.defaultProvider}" to "${extractedProvider}" based on database settings`);
         this.defaultProvider = extractedProvider;
       } else {
-        console.log(`✅ Keeping current provider ${this.defaultProvider} as it matches database settings`);
+        console.log(` Keeping current provider ${this.defaultProvider} as it matches database settings`);
       }
 
       // Store the actual model name without provider prefix
@@ -193,7 +193,7 @@ export class LLMManager {
       // CRITICAL FIX: Remove -latest suffix from Gemini models (no longer supported)
       if (this.actualModel && this.actualModel.includes('gemini') && this.actualModel.includes('-latest')) {
         const fixedModel = this.actualModel.replace('-latest', '');
-        console.warn(`🔄 FORCE FIXING deprecated Gemini model "${this.actualModel}" to "${fixedModel}"`);
+        console.warn(` FORCE FIXING deprecated Gemini model "${this.actualModel}" to "${fixedModel}"`);
         this.actualModel = fixedModel;
 
         // Update provider configuration
@@ -211,15 +211,15 @@ export class LLMManager {
             'UPDATE settings SET value = $1 WHERE key = $2',
             [`${extractedProvider}/${fixedModel}`, 'llmSettings.activeChatModel']
           );
-          console.log('✅ Updated Gemini model in database');
+          console.log(' Updated Gemini model in database');
         } catch (error) {
-          console.warn('⚠️ Failed to update database setting:', error);
+          console.warn('️ Failed to update database setting:', error);
         }
       }
 
       // FORCE UPDATE: Always replace deprecated Claude model
       if (this.actualModel === 'claude-3-sonnet-20240229') {
-        console.warn('🔄 FORCE UPDATING deprecated Claude model claude-3-sonnet-20240229 to claude-3-5-sonnet-20241022');
+        console.warn(' FORCE UPDATING deprecated Claude model claude-3-sonnet-20240229 to claude-3-5-sonnet-20241022');
         this.actualModel = 'claude-3-5-sonnet-20241022';
 
         // Update the provider configuration
@@ -239,9 +239,9 @@ export class LLMManager {
             'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
             ['anthropic/claude-3-5-sonnet-20241022', 'llmSettings.activeChatModel']
           );
-          console.log('✅ Updated active chat model in database');
+          console.log(' Updated active chat model in database');
         } catch (error) {
-          console.warn('⚠️ Failed to update database setting:', error);
+          console.warn('️ Failed to update database setting:', error);
         }
       }
       // Map common model names to their actual API names
@@ -250,7 +250,7 @@ export class LLMManager {
         this.actualModel = 'claude-3-5-sonnet-20241022';
       } else if (this.actualModel === 'claude-3-sonnet') {
         // Map deprecated model to latest version
-        console.warn('⚠️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
+        console.warn('️ Deprecated Claude model detected, upgrading to claude-3-5-sonnet-20241022');
         this.actualModel = 'claude-3-5-sonnet-20241022';
       } else if (this.actualModel === 'claude-3-opus') {
         this.actualModel = 'claude-3-opus-20240229';
@@ -278,7 +278,7 @@ export class LLMManager {
           apiKey: claudeApiKey,
           model: this.actualModel === 'claude-3-sonnet-20240229' ? 'claude-3-5-sonnet-20241022' : (this.actualModel || 'claude-3-5-sonnet-20241022')
         });
-        console.log('✅ Updated Claude API key from database');
+        console.log(' Updated Claude API key from database');
       }
 
       const openaiApiKey = settings['openai.apiKey'];
@@ -297,19 +297,19 @@ export class LLMManager {
         });
 
         if (openaiModel) {
-          console.log(`✅ Updated OpenAI API key from database with model: ${openaiModel}`);
+          console.log(` Updated OpenAI API key from database with model: ${openaiModel}`);
         } else {
-          console.log('✅ Updated OpenAI API key from database (no chat model configured, but key loaded for embeddings)');
+          console.log(' Updated OpenAI API key from database (no chat model configured, but key loaded for embeddings)');
         }
       }
 
       const googleApiKey = settings['google.apiKey'] || settings['gemini.apiKey'];
       // Only log in debug mode
       if (process.env.DEBUG_LLM === 'true') {
-        console.log('🔍 Checking Google/Gemini API key:', {
-          'google.apiKey': settings['google.apiKey'] ? `✅ Present (${settings['google.apiKey'].substring(0, 10)}...)` : '❌ Missing',
-          'gemini.apiKey': settings['gemini.apiKey'] ? `✅ Present (${settings['gemini.apiKey'].substring(0, 10)}...)` : '❌ Missing',
-          'final': googleApiKey ? `✅ Will use (${googleApiKey.substring(0, 10)}...)` : '❌ No key found'
+        console.log(' Checking Google/Gemini API key:', {
+          'google.apiKey': settings['google.apiKey'] ? ` Present (${settings['google.apiKey'].substring(0, 10)}...)` : ' Missing',
+          'gemini.apiKey': settings['gemini.apiKey'] ? ` Present (${settings['gemini.apiKey'].substring(0, 10)}...)` : ' Missing',
+          'final': googleApiKey ? ` Will use (${googleApiKey.substring(0, 10)}...)` : ' No key found'
         });
       }
       if (googleApiKey) {
@@ -327,12 +327,12 @@ export class LLMManager {
         });
 
         if (geminiModel) {
-          console.log(`✅ Updated Google/Gemini API key from database with model: ${geminiModel}`);
+          console.log(` Updated Google/Gemini API key from database with model: ${geminiModel}`);
         } else {
-          console.log('✅ Updated Google/Gemini API key from database (no chat model configured, but key loaded for embeddings)');
+          console.log(' Updated Google/Gemini API key from database (no chat model configured, but key loaded for embeddings)');
         }
       } else {
-        console.warn('⚠️ No Google/Gemini API key found in database');
+        console.warn('️ No Google/Gemini API key found in database');
       }
 
       const deepseekApiKey = settings['deepseek.apiKey'];
@@ -344,13 +344,13 @@ export class LLMManager {
           : settings['llmSettings.deepseekModel'];
 
         if (!deepseekModel) {
-          console.warn('⚠️ No DeepSeek model configured in database! Skipping DeepSeek provider initialization.');
+          console.warn('️ No DeepSeek model configured in database! Skipping DeepSeek provider initialization.');
         } else {
           this.updateProviderSettings('deepseek', {
             apiKey: deepseekApiKey,
             model: deepseekModel
           });
-          console.log(`✅ Updated DeepSeek API key from database with model: ${deepseekModel}`);
+          console.log(` Updated DeepSeek API key from database with model: ${deepseekModel}`);
         }
       }
 
@@ -363,13 +363,13 @@ export class LLMManager {
           : settings['llmSettings.openrouterModel'];
 
         if (!openrouterModel) {
-          console.warn('⚠️ No OpenRouter model configured in database! Skipping OpenRouter provider initialization.');
+          console.warn('️ No OpenRouter model configured in database! Skipping OpenRouter provider initialization.');
         } else {
           this.updateProviderSettings('openrouter', {
             apiKey: openrouterApiKey,
             model: openrouterModel
           });
-          console.log(`✅ Updated OpenRouter API key from database with model: ${openrouterModel}`);
+          console.log(` Updated OpenRouter API key from database with model: ${openrouterModel}`);
         }
       }
 
@@ -388,14 +388,14 @@ export class LLMManager {
 
       // Only log on startup or when changed
       if (!this.lastLoggedConfig || this.lastLoggedConfig.provider !== this.defaultProvider || this.lastLoggedConfig.model !== this.actualModel) {
-        console.log(`🤖 [LLM Manager] Active Chat Provider: ${this.defaultProvider}`);
-        console.log(`🤖 [LLM Manager] Active Chat Model: ${this.defaultProvider}/${this.actualModel}`);
-        console.log(`🎯 [LLM Manager] Fallback order: ${this.fallbackOrder.join(', ')}`);
+        console.log(` [LLM Manager] Active Chat Provider: ${this.defaultProvider}`);
+        console.log(` [LLM Manager] Active Chat Model: ${this.defaultProvider}/${this.actualModel}`);
+        console.log(` [LLM Manager] Fallback order: ${this.fallbackOrder.join(', ')}`);
         this.lastLoggedConfig = { provider: this.defaultProvider, model: this.actualModel };
       }
 
     } catch (error) {
-      console.warn('⚠️ Failed to load LLM settings from database:', error);
+      console.warn('️ Failed to load LLM settings from database:', error);
     }
   }
 
@@ -503,7 +503,7 @@ export class LLMManager {
         prov.isInitialized = false;
         // Don't clear the client - let it be reused with new API key
         // prov.client = undefined; // Clear the old client - REMOVED: This causes client to disappear
-        console.log(`🔄 API key changed for ${provider}, client will be reinitialized`);
+        console.log(` API key changed for ${provider}, client will be reinitialized`);
       }
     }
   }
@@ -523,7 +523,7 @@ export class LLMManager {
       }
     }
 
-    console.log(`🎯 Fallback order: ${order.join(' -> ')}`);
+    console.log(` Fallback order: ${order.join(' -> ')}`);
     return Array.from(new Set(order)); // Remove duplicates
   }
 
@@ -548,17 +548,17 @@ export class LLMManager {
     try {
       switch (provider) {
         case 'claude':
-          console.log('🔧 Initializing Claude provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          console.log(' Initializing Claude provider with API key:', prov.apiKey ? ' Present' : ' Missing');
           prov.client = new Anthropic({ apiKey: prov.apiKey });
-          console.log('✅ Claude client created successfully');
+          console.log(' Claude client created successfully');
           break;
         case 'openai':
-          console.log('🔧 Initializing OpenAI provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          console.log(' Initializing OpenAI provider with API key:', prov.apiKey ? ' Present' : ' Missing');
           try {
             const openaiClient = new OpenAI({ apiKey: prov.apiKey });
             prov.client = openaiClient;
-            console.log('✅ OpenAI client created successfully');
-            console.log('🔍 Verification - Client after assignment:', {
+            console.log(' OpenAI client created successfully');
+            console.log(' Verification - Client after assignment:', {
               hasClient: !!prov.client,
               clientType: typeof prov.client,
               hasChat: !!(prov.client && (prov.client as any).chat),
@@ -566,27 +566,27 @@ export class LLMManager {
               hasCreate: !!(prov.client && (prov.client as any).chat && (prov.client as any).chat.completions && (prov.client as any).chat.completions.create)
             });
           } catch (error) {
-            console.error('❌ Failed to create OpenAI client:', error);
+            console.error(' Failed to create OpenAI client:', error);
             return false;
           }
           break;
         case 'gemini':
-          console.log('🔧 Initializing Gemini provider with API key:', prov.apiKey ? `✅ Present (${prov.apiKey.substring(0, 10)}...)` : '❌ Missing');
+          console.log(' Initializing Gemini provider with API key:', prov.apiKey ? ` Present (${prov.apiKey.substring(0, 10)}...)` : ' Missing');
           try {
             prov.client = new GoogleGenerativeAI(prov.apiKey);
-            console.log('✅ Gemini client created successfully');
-            console.log('🔍 Verification - Gemini client:', {
+            console.log(' Gemini client created successfully');
+            console.log(' Verification - Gemini client:', {
               hasClient: !!prov.client,
               clientType: typeof prov.client,
               hasMethod: typeof prov.client?.getGenerativeModel === 'function'
             });
           } catch (error) {
-            console.error('❌ Failed to create Gemini client:', error);
+            console.error(' Failed to create Gemini client:', error);
             return false;
           }
           break;
         case 'deepseek':
-          console.log('🔧 Initializing DeepSeek provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          console.log(' Initializing DeepSeek provider with API key:', prov.apiKey ? ' Present' : ' Missing');
           try {
             const deepseekClient = new OpenAI({
               apiKey: prov.apiKey,
@@ -595,8 +595,8 @@ export class LLMManager {
             prov.client = deepseekClient;
             // Override model to use deepseek-chat since deepseek-coder doesn't exist
             prov.model = 'deepseek-chat';
-            console.log('✅ DeepSeek OpenAI client created successfully');
-            console.log('🔍 Verification - Client after assignment:', {
+            console.log(' DeepSeek OpenAI client created successfully');
+            console.log(' Verification - Client after assignment:', {
               hasClient: !!prov.client,
               clientType: typeof prov.client,
               hasChat: !!(prov.client && (prov.client as any).chat),
@@ -605,12 +605,12 @@ export class LLMManager {
               model: prov.model
             });
           } catch (error) {
-            console.error('❌ Failed to create DeepSeek client:', error);
+            console.error(' Failed to create DeepSeek client:', error);
             return false;
           }
           break;
         case 'openrouter':
-          console.log('🔧 Initializing OpenRouter provider with API key:', prov.apiKey ? '✅ Present' : '❌ Missing');
+          console.log(' Initializing OpenRouter provider with API key:', prov.apiKey ? ' Present' : ' Missing');
           try {
             const openrouterClient = new OpenAI({
               apiKey: prov.apiKey,
@@ -621,8 +621,8 @@ export class LLMManager {
               }
             });
             prov.client = openrouterClient;
-            console.log('✅ OpenRouter client created successfully');
-            console.log('🔍 Verification - OpenRouter client:', {
+            console.log(' OpenRouter client created successfully');
+            console.log(' Verification - OpenRouter client:', {
               hasClient: !!prov.client,
               clientType: typeof prov.client,
               hasChat: !!(prov.client && (prov.client as any).chat),
@@ -630,16 +630,16 @@ export class LLMManager {
               model: prov.model
             });
           } catch (error) {
-            console.error('❌ Failed to create OpenRouter client:', error);
+            console.error(' Failed to create OpenRouter client:', error);
             return false;
           }
           break;
       }
       prov.isInitialized = true;
-      console.log(`✅ Initialized ${provider} provider`);
+      console.log(` Initialized ${provider} provider`);
       return true;
     } catch (error) {
-      console.error(`❌ Failed to initialize ${provider}:`, error);
+      console.error(` Failed to initialize ${provider}:`, error);
       return false;
     }
   }
@@ -693,7 +693,7 @@ export class LLMManager {
           return true;
       }
     } catch (error) {
-      console.warn(`⚠️ Provider ${provider} test failed:`, error);
+      console.warn(`️ Provider ${provider} test failed:`, error);
       prov.isInitialized = false;
       return false;
     }
@@ -816,17 +816,17 @@ export class LLMManager {
     const maxTokens = options.maxTokens !== undefined ? options.maxTokens : this.config.maxTokens;
     const systemPrompt = options.systemPrompt !== undefined ? options.systemPrompt : this.config.systemPrompt;
 
-    console.log(`🌡️ LLM Manager - options.temperature: ${options.temperature}, final temperature: ${temperature}`);
+    console.log(`️ LLM Manager - options.temperature: ${options.temperature}, final temperature: ${temperature}`);
 
     // Try the preferred provider first (default provider or user's choice)
     const preferredProvider = options.preferredProvider || this.defaultProvider;
     let provider = preferredProvider;
 
-    console.log(`🎯 MODEL SELECTION: User requested provider: "${preferredProvider}", defaultProvider: "${this.defaultProvider}"`);
+    console.log(` MODEL SELECTION: User requested provider: "${preferredProvider}", defaultProvider: "${this.defaultProvider}"`);
 
     // Check if preferred provider is available
     let prov = this.providers.get(provider);
-    console.log(`🔍 Provider ${provider} state:`, {
+    console.log(` Provider ${provider} state:`, {
       hasProvider: !!prov,
       isInitialized: prov?.isInitialized,
       hasApiKey: !!prov?.apiKey,
@@ -842,9 +842,9 @@ export class LLMManager {
     if (!prov || !prov.isInitialized || !prov.apiKey) {
       if (isFromSettings) {
         // This is the active provider from settings - try to initialize, if fails use fallback
-        console.log(`🔧 Initializing active provider from settings: ${provider}`);
+        console.log(` Initializing active provider from settings: ${provider}`);
         if (!this.initializeProvider(provider)) {
-          console.error(`❌ CRITICAL: Active provider ${provider} failed to initialize. Reason: ${!prov?.apiKey ? 'Missing API key' : 'Initialization error'}`);
+          console.error(` CRITICAL: Active provider ${provider} failed to initialize. Reason: ${!prov?.apiKey ? 'Missing API key' : 'Initialization error'}`);
           activeProviderFailed = true;
 
           // Save the error status to settings
@@ -854,30 +854,30 @@ export class LLMManager {
           await settingsService.saveSetting(`llmStatus.${provider}.lastChecked`, new Date().toISOString());
 
           // Try fallback
-          console.log(`🔄 Trying to find fallback provider...`);
+          console.log(` Trying to find fallback provider...`);
           const availableProvider = await this.getAvailableProvider();
           if (!availableProvider) {
             throw new Error('LLM e bağlanılamadı. Lütfen API anahtarlarınızı kontrol edin.');
           }
-          console.log(`✅ Using fallback provider: ${availableProvider}`);
+          console.log(` Using fallback provider: ${availableProvider}`);
           provider = availableProvider;
         } else {
-          console.log(`✅ Successfully initialized provider: ${provider}`);
+          console.log(` Successfully initialized provider: ${provider}`);
         }
       } else {
         // User specified a different provider - try fallbacks
-        console.log(`⚠️ USER'S PREFERRED provider ${provider} not available (API key or initialization issue)`);
-        console.log(`🔄 Trying to find fallback provider...`);
+        console.log(`️ USER'S PREFERRED provider ${provider} not available (API key or initialization issue)`);
+        console.log(` Trying to find fallback provider...`);
         const availableProvider = await this.getAvailableProvider();
         if (!availableProvider) {
           throw new Error('LLM e bağlanılamadı. Lütfen API anahtarlarınızı kontrol edin.');
         }
-        console.log(`⚠️ FALLBACK TO: ${availableProvider} (User requested: ${preferredProvider})`);
+        console.log(`️ FALLBACK TO: ${availableProvider} (User requested: ${preferredProvider})`);
         provider = availableProvider;
         activeProviderFailed = true;
       }
     } else {
-      console.log(`✅ Provider ${provider} is ready to use (already initialized)`);
+      console.log(` Provider ${provider} is ready to use (already initialized)`);
     }
 
     if (!provider) {
@@ -889,7 +889,7 @@ export class LLMManager {
       throw new Error(`Provider ${provider} not initialized`);
     }
 
-    console.log(`🤖 Using ${provider} for chat response${provider !== preferredProvider ? ' (FALLBACK)' : ''}`);
+    console.log(` Using ${provider} for chat response${provider !== preferredProvider ? ' (FALLBACK)' : ''}`);
 
     try {
       switch (provider) {
@@ -900,7 +900,7 @@ export class LLMManager {
             }
           }
 
-          console.log(`🤖 Calling Claude with model: ${prov!.model}, maxTokens: ${maxTokens}, temperature: ${temperature}`);
+          console.log(` Calling Claude with model: ${prov!.model}, maxTokens: ${maxTokens}, temperature: ${temperature}`);
 
           const claudeResponse = await prov!.client.messages.create({
             model: prov!.model,
@@ -910,7 +910,7 @@ export class LLMManager {
             messages: [{ role: 'user', content: message }]
           });
 
-          console.log(`✅ Claude response received, content blocks: ${claudeResponse.content?.length || 0}`);
+          console.log(` Claude response received, content blocks: ${claudeResponse.content?.length || 0}`);
 
           // Extract text content from Claude response
           let content = '';
@@ -937,17 +937,17 @@ export class LLMManager {
           // Get fresh reference after initialization
           const freshProv = this.providers.get(provider);
           if (!freshProv?.client) {
-            console.error('❌ OpenAI client is null after initialization');
+            console.error(' OpenAI client is null after initialization');
             throw new Error('OpenAI client creation failed');
           }
           prov = freshProv; // Update reference to the freshly initialized provider
-          console.log('✅ OpenAI client verified:', {
+          console.log(' OpenAI client verified:', {
             hasClient: !!prov!.client,
             isInitialized: prov!.isInitialized,
             hasChat: !!(prov!.client && (prov!.client as any).chat),
             hasCompletions: !!(prov!.client && (prov!.client as any).chat && (prov!.client as any).chat.completions)
           });
-          console.log(`🤖 [CHAT REQUEST] Using OpenAI | Model: ${prov!.model} | Provider: ${provider} | Preferred: ${preferredProvider}`);
+          console.log(` [CHAT REQUEST] Using OpenAI | Model: ${prov!.model} | Provider: ${provider} | Preferred: ${preferredProvider}`);
           const openaiResponse = await prov!.client.chat.completions.create({
             model: prov!.model,
             max_tokens: maxTokens,
@@ -1020,11 +1020,11 @@ export class LLMManager {
           // Get fresh reference after initialization
           const freshDeepseekProv = this.providers.get(provider);
           if (!freshDeepseekProv?.client) {
-            console.error('❌ DeepSeek client is null after initialization');
+            console.error(' DeepSeek client is null after initialization');
             throw new Error('DeepSeek client creation failed');
           }
           prov = freshDeepseekProv; // Update reference to the freshly initialized provider
-          console.log('✅ DeepSeek client verified:', {
+          console.log(' DeepSeek client verified:', {
             hasClient: !!prov!.client,
             isInitialized: prov!.isInitialized,
             hasChat: !!(prov!.client && (prov!.client as any).chat),
@@ -1032,7 +1032,7 @@ export class LLMManager {
           });
           // Ensure we're using the correct model name - force deepseek-chat as default
           const deepseekModel = 'deepseek-chat';
-          console.log(`🤖 Using DeepSeek model: ${deepseekModel}`);
+          console.log(` Using DeepSeek model: ${deepseekModel}`);
           const deepseekResponse = await prov!.client.chat.completions.create({
             model: deepseekModel,
             max_tokens: maxTokens,
@@ -1058,11 +1058,11 @@ export class LLMManager {
           // Get fresh reference after initialization
           const freshOpenrouterProv = this.providers.get(provider);
           if (!freshOpenrouterProv?.client) {
-            console.error('❌ OpenRouter client is null after initialization');
+            console.error(' OpenRouter client is null after initialization');
             throw new Error('OpenRouter client creation failed');
           }
           prov = freshOpenrouterProv; // Update reference to the freshly initialized provider
-          console.log('✅ OpenRouter client verified:', {
+          console.log(' OpenRouter client verified:', {
             hasClient: !!prov!.client,
             isInitialized: prov!.isInitialized,
             hasChat: !!(prov!.client && (prov!.client as any).chat),
@@ -1070,7 +1070,7 @@ export class LLMManager {
           });
           // OpenRouter model name should be in format "provider/model" (e.g., "openai/gpt-4o-mini")
           const openrouterModel = prov!.model || 'openai/gpt-4o-mini';
-          console.log(`🤖 [CHAT REQUEST] Using OpenRouter | Model: ${openrouterModel} | Provider: ${provider} | Preferred: ${preferredProvider}`);
+          console.log(` [CHAT REQUEST] Using OpenRouter | Model: ${openrouterModel} | Provider: ${provider} | Preferred: ${preferredProvider}`);
           const openrouterResponse = await prov!.client.chat.completions.create({
             model: openrouterModel,
             max_tokens: maxTokens,
@@ -1091,7 +1091,7 @@ export class LLMManager {
           throw new Error(`Unknown provider: ${provider}`);
       }
     } catch (error: any) {
-      console.error(`❌ Chat response failed with ${provider}:`, error);
+      console.error(` Chat response failed with ${provider}:`, error);
       console.error(`Error details:`, {
         name: error.name,
         message: error.message,
@@ -1106,7 +1106,7 @@ export class LLMManager {
       const isFromSettings = !options.preferredProvider;
 
       if (!isFromSettings && provider === preferredProvider && !options._isFallback) {
-        console.log(`⚠️ User-specified provider ${provider} failed, trying fallback providers...`);
+        console.log(`️ User-specified provider ${provider} failed, trying fallback providers...`);
 
         // Try fallback providers (only for user-specified providers)
         const currentIndex = this.fallbackOrder.indexOf(provider);
@@ -1114,12 +1114,12 @@ export class LLMManager {
 
         for (const nextProvider of nextProviders) {
           try {
-            console.log(`🔄 Falling back to ${nextProvider}...`);
+            console.log(` Falling back to ${nextProvider}...`);
             const nextProv = this.providers.get(nextProvider);
             if (nextProv && nextProv.apiKey) {
               if (!nextProv.isInitialized) {
                 if (!this.initializeProvider(nextProvider)) {
-                  console.warn(`⚠️ Failed to initialize fallback provider ${nextProvider}`);
+                  console.warn(`️ Failed to initialize fallback provider ${nextProvider}`);
                   continue;
                 }
               }
@@ -1138,12 +1138,12 @@ export class LLMManager {
               };
             }
           } catch (e) {
-            console.warn(`⚠️ Fallback to ${nextProvider} also failed:`, e);
+            console.warn(`️ Fallback to ${nextProvider} also failed:`, e);
           }
         }
       } else if (isFromSettings) {
         // This is the active provider from settings - try fallbacks to production providers only
-        console.log(`⚠️ Active provider ${provider} from settings failed, trying fallback to production providers...`);
+        console.log(`️ Active provider ${provider} from settings failed, trying fallback to production providers...`);
 
         // Try fallback providers (only production providers: Claude, Gemini, OpenAI)
         const currentIndex = this.fallbackOrder.indexOf(provider);
@@ -1157,12 +1157,12 @@ export class LLMManager {
           }
 
           try {
-            console.log(`🔄 Falling back to ${nextProvider}...`);
+            console.log(` Falling back to ${nextProvider}...`);
             const nextProv = this.providers.get(nextProvider);
             if (nextProv && nextProv.apiKey) {
               if (!nextProv.isInitialized) {
                 if (!this.initializeProvider(nextProvider)) {
-                  console.warn(`⚠️ Failed to initialize fallback provider ${nextProvider}`);
+                  console.warn(`️ Failed to initialize fallback provider ${nextProvider}`);
                   continue;
                 }
               }
@@ -1181,11 +1181,11 @@ export class LLMManager {
               };
             }
           } catch (e) {
-            console.warn(`⚠️ Fallback to ${nextProvider} also failed:`, e);
+            console.warn(`️ Fallback to ${nextProvider} also failed:`, e);
           }
         }
 
-        console.error(`❌ All production providers failed for active model ${provider}`);
+        console.error(` All production providers failed for active model ${provider}`);
       }
 
       throw new Error(`LLM provider ${provider} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1223,13 +1223,13 @@ export class LLMManager {
    * Initialize after database is ready - CALL THIS FROM SERVER STARTUP
    */
   async initialize(): Promise<void> {
-    console.log('🚀 LLMManager initializing after database is ready...');
+    console.log(' LLMManager initializing after database is ready...');
     await this.loadSettingsFromDatabase();
 
     // EMERGENCY FIX: Immediately check and fix deprecated Claude model
     await this.fixClaudeModel();
 
-    console.log('✅ LLMManager initialized successfully');
+    console.log(' LLMManager initialized successfully');
   }
 
   /**
@@ -1249,7 +1249,7 @@ export class LLMManager {
       if (this.actualModel === 'claude-3-sonnet-20240229' ||
           this.defaultProvider === 'claude' && this.providers.get('claude')?.model === 'claude-3-sonnet-20240229') {
         
-        console.warn('🚨 EMERGENCY: Detected deprecated Claude model, fixing immediately...');
+        console.warn(' EMERGENCY: Detected deprecated Claude model, fixing immediately...');
         
         // Update to the new model
         const newModel = 'claude-3-5-sonnet-20241022';
@@ -1273,13 +1273,13 @@ export class LLMManager {
             [`anthropic/${newModel}`, 'activeChatModel']
           );
           
-          console.log('✅ EMERGENCY: Fixed Claude model in database');
+          console.log(' EMERGENCY: Fixed Claude model in database');
         } catch (dbError) {
-          console.error('❌ EMERGENCY: Failed to fix Claude model in database:', dbError);
+          console.error(' EMERGENCY: Failed to fix Claude model in database:', dbError);
         }
       }
     } catch (error) {
-      console.error('❌ EMERGENCY: Error in fixClaudeModel:', error);
+      console.error(' EMERGENCY: Error in fixClaudeModel:', error);
     }
   }
 
@@ -1287,6 +1287,14 @@ export class LLMManager {
     const provider = config.provider ? this.normalizeProviderName(config.provider) : this.embeddingConfig.provider;
     const model = this.resolveEmbeddingModelName(provider, config.model || this.embeddingConfig.model);
     this.embeddingConfig = { provider, model };
+  }
+
+  /**
+   * Get API key for a specific provider
+   */
+  getApiKey(provider: string): string | null {
+    const prov = this.providers.get(provider);
+    return prov?.apiKey || null;
   }
 }
 

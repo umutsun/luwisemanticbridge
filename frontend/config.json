@@ -1,14 +1,14 @@
 {
   "app": {
-    "name": "Alice Semantic Bridge",
-    "description": "Mali Müşavir Asistanı",
+    "name": "Application Name",
+    "description": "Application Description",
     "version": "1.0.0",
     "locale": "en"
   },
   "database": {
     "host": "postgres",
     "port": 5432,
-    "name": "lsemb",
+    "name": "rag_chatbot",
     "user": "postgres",
     "password": "Semsiye!22",
     "ssl": false,

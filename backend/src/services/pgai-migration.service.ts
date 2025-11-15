@@ -120,7 +120,7 @@ export class PgAIMigrationService extends EventEmitter {
         WITH (num_neighbors = 50, search_list_size = 100);
       `);
 
-      logger.info('✅ DiskANN index created for optimal performance');
+      logger.info(' DiskANN index created for optimal performance');
     } else {
       // Fall back to regular ivfflat index
       logger.info('Creating standard ivfflat index...');

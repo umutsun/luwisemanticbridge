@@ -163,7 +163,7 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
 
       case 'google':
         try {
-          console.log(`🔧 Google AI validation starting with API key: ${apiKey?.substring(0, 10)}...`);
+          console.log(` Google AI validation starting with API key: ${apiKey?.substring(0, 10)}...`);
           const genAI = new GoogleGenerativeAI(apiKey);
 
           // Try different model names in order of preference (updated for 2025)
@@ -174,16 +174,16 @@ router.post('/test/:provider', async (req: Request, res: Response) => {
           ];
 
           const testModel = model || modelNames[0];
-          console.log(`🔧 Testing Google AI with model: ${testModel}`);
+          console.log(` Testing Google AI with model: ${testModel}`);
 
           const modelInstance = genAI.getGenerativeModel({ model: testModel });
-          console.log('🔧 Model instance created, sending test message...');
+          console.log(' Model instance created, sending test message...');
 
           const response = await modelInstance.generateContent({
             contents: [{ parts: [{ text: 'Test message' }] }]
           });
 
-          console.log('✅ Google AI response received:', response);
+          console.log(' Google AI response received:', response);
           const responseTime = Date.now() - startTime;
 
           // Try to get usage info if available

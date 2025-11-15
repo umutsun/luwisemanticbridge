@@ -65,7 +65,7 @@ router.post('/process', upload.single('file'), async (req, res) => {
       maxPages: req.body.maxPages ? parseInt(req.body.maxPages) : undefined
     };
 
-    logger.info(`📄 OCR isteği alındı: ${req.file.originalname} (Provider: ${options.provider})`);
+    logger.info(` OCR isteği alındı: ${req.file.originalname} (Provider: ${options.provider})`);
 
     // OCR işleme
     const result = await ocrRouterService.processDocument(tempFilePath, options);

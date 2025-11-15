@@ -15,17 +15,17 @@ function cacheMiddleware(req: Request, res: Response, next: any) {
 
   if (cached !== null) {
     const duration = Date.now() - startTime;
-    console.log(`📦 [CACHE] Hit for ${key} (${duration}ms)`);
+    console.log(` [CACHE] Hit for ${key} (${duration}ms)`);
     return res.json(cached);
   }
 
-  console.log(`🌐 [API] Miss for ${key}`);
+  console.log(` [API] Miss for ${key}`);
 
   // Override res.json to cache response
   const originalJson = res.json;
   res.json = function(data) {
     const duration = Date.now() - startTime;
-    console.log(`⚡ [API] Response in ${duration}ms, caching...`);
+    console.log(` [API] Response in ${duration}ms, caching...`);
 
     // Cache with 30s TTL
     settingsCache.set(key, data, 30000);
@@ -96,7 +96,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     }
 
     const result = await lsembPool.query(query);
-    console.log(`🔧 [SETTINGS] Found ${result.rows.length} settings for category: ${category}`);
+    console.log(` [SETTINGS] Found ${result.rows.length} settings for category: ${category}`);
 
     // Build category-specific response
     const config: any = {};
@@ -174,7 +174,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Clear cache intelligently
     const cleared = settingsCache.clearPattern('settings');
-    console.log(`🗑️ [CACHE] Cleared ${cleared} entries`);
+    console.log(`️ [CACHE] Cleared ${cleared} entries`);
 
     res.json({ success: true, message: 'Settings updated successfully' });
 
