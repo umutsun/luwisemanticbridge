@@ -1772,6 +1772,65 @@ function LLMSettings() {
 }
 
 
+// Template Selector Component (Experimental)
+function TemplateSelector() {
+  const [activeTemplate, setActiveTemplate] = useState('base');
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetch('/api/v2/settings/active-template')
+      .then(res => res.json())
+      .then(data => {
+        setActiveTemplate(data.active || 'base');
+        setLoading(false);
+      })
+      .catch(() => {
+        setActiveTemplate('base');
+        setLoading(false);
+      });
+  }, []);
+
+  const handleTemplateChange = async (value: string) => {
+    try {
+      const res = await fetch('/api/v2/settings/set-active-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: value })
+      });
+      if (res.ok) {
+        setActiveTemplate(value);
+        toast({
+          title: "Template Activated",
+          description: `Template "${value}" is now active. Refresh page to see changes.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to activate template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (loading) {
+    return <Spinner size="sm" />;
+  }
+
+  return (
+    <Select value={activeTemplate} onValueChange={handleTemplateChange}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select template" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="base">Default Template</SelectItem>
+        <SelectItem value="example-custom" disabled>Example Custom (Not Registered)</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 // Optimized Chatbot Settings Component
 function RAGSettings() {
   const [ragConfig, setRagConfig] = useState<any>({});
@@ -2191,8 +2250,10 @@ function RAGSettings() {
           </CardContent>
         </Card>
 
-        {/* Chatbot Configuration - Right Column */}
-        <Card>
+        {/* Right Column: Chatbot + Template Settings */}
+        <div className="space-y-6">
+          {/* Chatbot Configuration */}
+          <Card>
           <CardHeader>
             <CardTitle>Chat Settings</CardTitle>
           </CardHeader>
@@ -2372,6 +2433,56 @@ function RAGSettings() {
             {/* Note: Max/Min Results are configured in RAG Settings tab */}
           </CardContent>
         </Card>
+
+        {/* Template Management - Right Column (Experimental) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Template Management
+              <Badge variant="outline" className="text-xs">Experimental</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+              <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                <strong>Experimental Feature:</strong> Template system allows customizing chat interface per customer without code changes.
+              </AlertDescription>
+            </Alert>
+
+            {/* Template Selection */}
+            <div className="space-y-2">
+              <Label>Active Template</Label>
+              <TemplateSelector />
+              <p className="text-xs text-muted-foreground">
+                Select which template to use for the chat interface
+              </p>
+            </div>
+
+            {/* Quick Info */}
+            <div className="space-y-2 pt-2">
+              <h4 className="text-sm font-medium">Current Setup:</h4>
+              <ul className="text-xs space-y-1 text-muted-foreground">
+                <li>• Base template: Always available</li>
+                <li>• Custom templates: Add via code (see docs)</li>
+                <li>• Location: frontend/src/templates/</li>
+              </ul>
+            </div>
+
+            {/* Documentation Link */}
+            <div className="pt-2 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => window.open('/TEMPLATE_SYSTEM_GUIDE.md', '_blank')}
+              >
+                View Documentation
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+        </div>
+        {/* End Right Column */}
 
       </div>
 
@@ -4031,6 +4142,209 @@ function TranslationSettings() {
   );
 }
 
+// Templates Manager Component
+function TemplatesManager() {
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const { toast } = useToast();
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:8083/api/v2/pdf/analysis-templates');
+      const data = await response.json();
+      setTemplates(data.templates || []);
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load templates",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
+
+  const handleEdit = (template: any) => {
+    setEditingTemplate({ ...template });
+    setShowEditModal(true);
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8083/api/v2/templates/${templateId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        setTemplates(templates.filter(t => t.id !== templateId));
+        toast({
+          title: "Success",
+          description: "Template deleted successfully"
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Error",
+          description: error.error || "Failed to delete template",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete template",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center py-8">Loading templates...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Analysis Templates</CardTitle>
+          <CardDescription>
+            Manage metadata extraction templates for different document types
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {templates.map((template) => (
+              <Card key={template.id} className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">{template.icon}</span>
+                      <h3 className="font-semibold text-lg">{template.name}</h3>
+                      <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
+                        {template.id}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3">{template.description}</p>
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div>
+                        <strong>Focus Keywords:</strong>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {template.focus_keywords.slice(0, 5).map((kw: string, idx: number) => (
+                            <span key={idx} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 rounded">
+                              {kw}
+                            </span>
+                          ))}
+                          {template.focus_keywords.length > 5 && (
+                            <span className="text-muted-foreground">
+                              +{template.focus_keywords.length - 5} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <strong>Target Fields ({template.target_fields.length}):</strong>
+                        <div className="text-muted-foreground mt-1">
+                          {template.target_fields.slice(0, 3).join(', ')}
+                          {template.target_fields.length > 3 && ` +${template.target_fields.length - 3} more`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(template)}
+                    >
+                      View Details
+                    </Button>
+                    {!template.is_system && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm(`Delete template "${template.name}"?`)) {
+                            handleDeleteTemplate(template.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit Modal - Simple JSON viewer for now */}
+      {showEditModal && editingTemplate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-3xl max-h-[90vh] overflow-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>
+                  {editingTemplate.icon} {editingTemplate.name}
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setShowEditModal(false)}>
+                  Close
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <strong>Extraction Prompt:</strong>
+                  <p className="text-sm text-muted-foreground mt-2 p-3 bg-muted rounded">
+                    {editingTemplate.extraction_prompt}
+                  </p>
+                </div>
+                <div>
+                  <strong>Focus Keywords ({editingTemplate.focus_keywords.length}):</strong>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {editingTemplate.focus_keywords.map((kw: string, idx: number) => (
+                      <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 rounded text-xs">
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <strong>Target Fields ({editingTemplate.target_fields.length}):</strong>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {editingTemplate.target_fields.map((field: string, idx: number) => (
+                      <span key={idx} className="px-2 py-1 bg-green-100 dark:bg-green-900 rounded text-xs">
+                        {field}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="pt-4 border-t">
+                  <strong>Raw JSON:</strong>
+                  <pre className="text-xs bg-muted p-3 rounded mt-2 overflow-auto max-h-64">
+                    {JSON.stringify(editingTemplate, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Main Optimized Settings Component
 export default function OptimizedSettingsPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -4073,6 +4387,9 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="prompts" className="h-12 px-4">
             <span className="text-sm">Prompts</span>
           </TabsTrigger>
+          <TabsTrigger value="templates" className="h-12 px-4">
+            <span className="text-sm">📋 Templates</span>
+          </TabsTrigger>
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
           </TabsTrigger>
@@ -4099,6 +4416,10 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="prompts">
           <PromptsSettings />
+        </TabsContent>
+
+        <TabsContent value="templates">
+          <TemplatesManager />
         </TabsContent>
 
         <TabsContent value="services">
