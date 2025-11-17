@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { Pool } from 'pg';
 import { lsembPool } from '../config/database.config';
 import documentProcessor from '../services/document-processor.service';
 import contextualDocumentProcessor from '../services/contextual-document-processor.service';
@@ -474,6 +475,68 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
     const embedded = parseInt(doc.embedded) || 0;
     const ocrProcessed = parseInt(doc.ocr_processed) || 0;
 
+    // Get transform statistics (tables created and records inserted)
+    let transformStats = {
+      tables_created: 0,
+      total_records: 0
+    };
+
+    try {
+      // Get database settings from settings table
+      const settingsResult = await lsembPool.query(
+        `SELECT key, value FROM settings WHERE key LIKE 'database.%'`
+      );
+
+      const dbSettings: any = {};
+      settingsResult.rows.forEach((row: any) => {
+        const key = row.key.replace('database.', '');
+        try {
+          dbSettings[key] = JSON.parse(row.value);
+        } catch {
+          dbSettings[key] = row.value;
+        }
+      });
+
+      // Build connection string from settings
+      const username = dbSettings.user || dbSettings.username;
+      const database = dbSettings.name || dbSettings.database;
+
+      if (username && database && dbSettings.password && dbSettings.host && dbSettings.port) {
+        const sourceConnectionString = `postgresql://${username}:${dbSettings.password}@${dbSettings.host}:${dbSettings.port}/${database}`;
+        const sourcePool = new Pool({ connectionString: sourceConnectionString });
+
+        try {
+          // Get all tables from source database (exclude system tables)
+          const tablesResult = await sourcePool.query(`
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            AND tablename NOT IN ('spatial_ref_sys', 'embedding_progress', 'embedding_history', 'unified_embeddings', 'skipped_embeddings')
+            ORDER BY tablename
+          `);
+
+          transformStats.tables_created = tablesResult.rows.length;
+
+          // Get total records across all tables
+          let totalRecords = 0;
+          for (const row of tablesResult.rows) {
+            try {
+              const countResult = await sourcePool.query(`SELECT COUNT(*) as count FROM public."${row.tablename}"`);
+              totalRecords += parseInt(countResult.rows[0].count) || 0;
+            } catch (countError) {
+              console.warn(`Could not count records in table ${row.tablename}:`, countError);
+            }
+          }
+          transformStats.total_records = totalRecords;
+
+        } finally {
+          await sourcePool.end();
+        }
+      }
+    } catch (transformError) {
+      console.warn('Could not fetch transform statistics:', transformError);
+    }
+
     // Get physical files count
     const uploadDir = getUploadDirectory();
     let physicalFilesTotal = 0;
@@ -513,6 +576,10 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
         ocr_processed: ocrProcessed,
         ocr_pending: Math.max(0, total - ocrProcessed),
         under_review: 0
+      },
+      transform: {
+        tables_created: transformStats.tables_created,
+        total_records: transformStats.total_records
       },
       performance: {
         total_tokens_used: parseInt(doc.total_tokens) || 0,

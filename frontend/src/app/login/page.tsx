@@ -81,92 +81,78 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4 overflow-hidden" style={{backgroundColor: '#0f172a'}}>
       {/* 3D Cube */}
       <div className="absolute top-20 left-1/2 transform -translate-x-1/2 pointer-events-none">
+        <div className="relative w-10 h-10" style={{ perspective: '1000px' }}>
+          <div className="absolute w-full h-full" style={{
+            transformStyle: 'preserve-3d',
+            animation: 'rotateCube 8s linear infinite'
+          }}>
+            {/* Front Face */}
+            <div className="absolute w-full h-full cube-face" style={{
+              transform: 'translateZ(20px)',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              backdropFilter: 'blur(5px)'
+            }} />
+            {/* Back Face */}
+            <div className="absolute w-full h-full cube-face" style={{
+              transform: 'rotateY(180deg) translateZ(20px)',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              backdropFilter: 'blur(5px)'
+            }} />
+            {/* Right Face */}
+            <div className="absolute w-full h-full cube-face" style={{
+              transform: 'rotateY(90deg) translateZ(20px)',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              backdropFilter: 'blur(5px)'
+            }} />
+            {/* Left Face */}
+            <div className="absolute w-full h-full cube-face" style={{
+              transform: 'rotateY(-90deg) translateZ(20px)',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              backdropFilter: 'blur(5px)'
+            }} />
+            {/* Top Face */}
+            <div className="absolute w-full h-full cube-face" style={{
+              transform: 'rotateX(90deg) translateZ(20px)',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              backdropFilter: 'blur(5px)'
+            }} />
+            {/* Bottom Face */}
+            <div className="absolute w-full h-full cube-face" style={{
+              transform: 'rotateX(-90deg) translateZ(20px)',
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1))',
+              border: '1px solid rgba(99, 102, 241, 0.6)',
+              backdropFilter: 'blur(5px)'
+            }} />
+          </div>
+        </div>
+
+        {/* CSS for animations */}
         <style jsx>{`
-          .cube-container {
-            width: 40px;
-            height: 40px;
-            perspective: 600px;
-            will-change: transform;
-          }
-
-          .cube {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            transform-style: preserve-3d;
-            animation: rotateCube 30s infinite linear;
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
-            transform: translate3d(0, 0, 0);
-            will-change: transform;
-          }
-
-          .cube-face {
-            position: absolute;
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
-            border: 2px solid rgba(99, 102, 241, 0.6);
-            backdrop-filter: blur(5px);
-            box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.2), 0 0 30px rgba(99, 102, 241, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
-            animation: cubeGlow 4s ease-in-out infinite alternate, fadeInCube 0.8s ease-out forwards;
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
-            will-change: opacity;
-          }
-
-          @keyframes cubeGlow {
-            0% {
-              box-shadow: inset 0 0 30px rgba(99, 102, 241, 0.2), 0 0 40px rgba(99, 102, 241, 0.4), 0 0 60px rgba(139, 92, 246, 0.2);
-              border-color: rgba(99, 102, 241, 0.8);
-            }
-            33% {
-              box-shadow: inset 0 0 35px rgba(147, 51, 234, 0.25), 0 0 50px rgba(147, 51, 234, 0.5), 0 0 70px rgba(236, 72, 153, 0.25);
-              border-color: rgba(147, 51, 234, 0.85);
-            }
-            66% {
-              box-shadow: inset 0 0 40px rgba(59, 130, 246, 0.25), 0 0 55px rgba(59, 130, 246, 0.55), 0 0 75px rgba(99, 102, 241, 0.25);
-              border-color: rgba(59, 130, 246, 0.9);
-            }
-            100% {
-              box-shadow: inset 0 0 30px rgba(139, 92, 246, 0.2), 0 0 60px rgba(139, 92, 246, 0.45), 0 0 80px rgba(147, 51, 234, 0.2);
-              border-color: rgba(139, 92, 246, 0.85);
-            }
-          }
-
           @keyframes rotateCube {
             0% { transform: rotateX(0deg) rotateY(0deg); }
             100% { transform: rotateX(360deg) rotateY(360deg); }
           }
-
-          @keyframes fadeInCube {
+          @keyframes cubeGlow {
             0% {
-              opacity: 0;
-              box-shadow: inset 0 0 20px rgba(99, 102, 241, 0), 0 0 30px rgba(99, 102, 241, 0), 0 0 40px rgba(139, 92, 246, 0);
+              box-shadow: 0 0 10px rgba(99, 102, 241, 0.6),
+                          0 0 20px rgba(99, 102, 241, 0.4),
+                          inset 0 0 10px rgba(99, 102, 241, 0.1);
             }
             100% {
-              opacity: 1;
-              box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.2), 0 0 30px rgba(99, 102, 241, 0.4), 0 0 40px rgba(139, 92, 246, 0.2);
+              box-shadow: 0 0 20px rgba(139, 92, 246, 0.8),
+                          0 0 30px rgba(139, 92, 246, 0.6),
+                          inset 0 0 15px rgba(139, 92, 246, 0.2);
             }
           }
-
-          .cube-face:nth-child(1) { transform: translateZ(20px); }
-          .cube-face:nth-child(2) { transform: rotateY(90deg) translateZ(20px); }
-          .cube-face:nth-child(3) { transform: rotateY(180deg) translateZ(20px); }
-          .cube-face:nth-child(4) { transform: rotateY(-90deg) translateZ(20px); }
-          .cube-face:nth-child(5) { transform: rotateX(90deg) translateZ(20px); }
-          .cube-face:nth-child(6) { transform: rotateX(-90deg) translateZ(20px); }
+          .cube-face {
+            animation: cubeGlow 4s ease-in-out infinite alternate;
+          }
         `}</style>
-        <div className="cube-container">
-          <div className="cube">
-            <div className="cube-face"></div>
-            <div className="cube-face"></div>
-            <div className="cube-face"></div>
-            <div className="cube-face"></div>
-            <div className="cube-face"></div>
-            <div className="cube-face"></div>
-          </div>
-        </div>
       </div>
 
       <div className="max-w-md w-full relative z-10">

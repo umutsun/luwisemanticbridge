@@ -42,6 +42,11 @@ export class SemanticSearchService {
   private lastRAGSettingsRefresh: number = 0;
   private lastEmbeddingSettingsRefresh: number = 0;
 
+  // Source table weights for search prioritization (DYNAMIC - no hardcoded tables)
+  private sourceTableWeights: Record<string, number> = {};
+  private lastWeightsRefresh: number = 0;
+  private readonly WEIGHTS_CACHE_TTL = 30000; // 30 seconds
+
   // Add refresh method for immediate refresh
   async refreshRAGSettingsNow(): Promise<void> {
     console.log('[SemanticSearch] Force refreshing RAG settings...');
@@ -157,6 +162,51 @@ export class SemanticSearchService {
     await this.loadUnifiedRecordTypes();
   }
 
+  /**
+   * Load source table weights from settings (DYNAMIC - no hardcoded tables)
+   */
+  private async loadSourceTableWeights(): Promise<void> {
+    try {
+      if (!lsembPool) {
+        console.warn('[SemanticSearch] Database not initialized, cannot load source table weights');
+        return;
+      }
+
+      const result = await lsembPool.query(
+        `SELECT value FROM settings WHERE key = $1`,
+        ['search.sourceTableWeights']
+      );
+
+      if (result.rows.length > 0) {
+        try {
+          this.sourceTableWeights = JSON.parse(result.rows[0].value);
+          this.lastWeightsRefresh = Date.now();
+          console.log('[SemanticSearch] Loaded source table weights:', this.sourceTableWeights);
+        } catch (parseError) {
+          console.error('[SemanticSearch] Failed to parse source table weights:', parseError);
+          this.sourceTableWeights = {};
+        }
+      } else {
+        // No weights configured, all tables default to 1.0
+        this.sourceTableWeights = {};
+        console.log('[SemanticSearch] No source table weights configured, using defaults (1.0 for all)');
+      }
+    } catch (error) {
+      console.error('[SemanticSearch] Failed to load source table weights:', error);
+      this.sourceTableWeights = {};
+    }
+  }
+
+  /**
+   * Refresh source table weights if cache is expired
+   */
+  private async refreshSourceTableWeights(): Promise<void> {
+    if (Date.now() - this.lastWeightsRefresh < this.WEIGHTS_CACHE_TTL) {
+      return;
+    }
+    await this.loadSourceTableWeights();
+  }
+
   // Embedding cache for performance (L1 cache)
   private embeddingCache: Map<string, number[]> = new Map();
   private readonly EMBEDDING_CACHE_TTL = 300000; // 5 minutes
@@ -186,6 +236,10 @@ export class SemanticSearchService {
 
     this.loadUnifiedRecordTypes().catch(error => {
       console.error('[SemanticSearch] Failed to load unified record types:', error);
+    });
+
+    this.loadSourceTableWeights().catch(error => {
+      console.error('[SemanticSearch] Failed to load source table weights:', error);
     });
   }
 
@@ -881,6 +935,7 @@ export class SemanticSearchService {
     try {
       await this.refreshRAGSettings();
       await this.refreshEmbeddingSettings();
+      await this.refreshSourceTableWeights();
 
       const effectiveLimit = this.applyResultLimits(limit);
 
@@ -1012,27 +1067,37 @@ export class SemanticSearchService {
         // Extract keywords from content, title, and source table
         const keywords = this.extractSmartKeywords(smartExcerpt, row.title || '', row.source_table || '', query);
 
+        // Get source table weight (default to 1.0 if not configured)
+        const sourceTable = row.source_table || row.record_type;
+        const tableWeight = this.sourceTableWeights[sourceTable] ?? 1.0;
+
         // Calculate scores
         // similarity_score is the pure semantic similarity (0-1 range)
         // keyword_boost and priority_boost are additional signals (0-1 range each)
+        // tableWeight is the user-configured weight for this source table (0-1 range)
         const pureSimilarity = parseFloat(row.similarity_score);
         const keywordBoost = parseFloat(row.keyword_boost || 0);
         const priorityBoost = parseFloat(row.priority_boost || 0);
 
-        // Display score: Use pure semantic similarity as the main score (0-100)
-        // This gives users honest feedback about relevance
-        const displayScore = Math.round(pureSimilarity * 100);
+        // Apply table weight to similarity score
+        const weightedSimilarity = pureSimilarity * tableWeight;
+
+        // Display score: Use weighted semantic similarity as the main score (0-100)
+        // This gives users honest feedback about relevance with table prioritization
+        const displayScore = Math.round(weightedSimilarity * 100);
 
         // Combined score: Include all signals for ranking (but don't display)
-        const combinedScore = Math.min((pureSimilarity + keywordBoost + priorityBoost) * 100, 100);
+        const combinedScore = Math.min((weightedSimilarity + keywordBoost + priorityBoost) * 100, 100);
 
         return {
           ...row,
-          score: displayScore, // Display pure semantic similarity
-          similarity_score: pureSimilarity, // Keep original 0-1 value
+          score: displayScore, // Display weighted semantic similarity
+          similarity_score: weightedSimilarity, // Keep weighted 0-1 value
           relevanceScore: combinedScore, // Combined score for ranking
           _debug: {
-            pureSimilarity: displayScore,
+            pureSimilarity: Math.round(pureSimilarity * 100),
+            tableWeight: tableWeight,
+            weightedSimilarity: displayScore,
             keywordBoost: Math.round(keywordBoost * 100),
             priorityBoost: Math.round(priorityBoost * 100),
             combined: Math.round(combinedScore)

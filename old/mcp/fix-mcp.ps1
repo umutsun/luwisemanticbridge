@@ -1,1 +1,0 @@
-# MCP Fix Script for Windows

@@ -2756,14 +2756,76 @@ router.get('/stats', async (req: Request, res: Response) => {
       GROUP BY source_table
     `);
 
+    // Get embeddings by source table with document/record counts for dashboard
+    const sourceStats = await lsembPool.query(`
+      SELECT
+        source_table,
+        COUNT(*) as embedding_count,
+        COUNT(DISTINCT source_id) as record_count
+      FROM unified_embeddings
+      GROUP BY source_table
+      ORDER BY embedding_count DESC
+    `);
+
+    // Map source tables to meaningful names and categories
+    const sourceMapping: Record<string, { name: string; category: 'migrated' | 'documents' | 'scraped' | 'messages' }> = {
+      'Danıştay Kararları': { name: 'Danıştay Kararları', category: 'migrated' },
+      'Makaleler': { name: 'Makaleler', category: 'migrated' },
+      'Özelgeler': { name: 'Özelgeler', category: 'migrated' },
+      'Soru Cevap': { name: 'Soru Cevap', category: 'migrated' },
+      'danistaykararlari': { name: 'Danıştay Kararları', category: 'migrated' },
+      'makaleler': { name: 'Makaleler', category: 'migrated' },
+      'ozelgeler': { name: 'Özelgeler', category: 'migrated' },
+      'sorucevap': { name: 'Soru Cevap', category: 'migrated' },
+      'documents': { name: 'Documents', category: 'documents' },
+      'scraped_data': { name: 'Scraped Data', category: 'scraped' },
+      'messages': { name: 'Message History', category: 'messages' }
+    };
+
+    // Group by category
+    const categories = {
+      migrated: { rows: 0, embeddings: 0 },
+      documents: { documents: 0, embeddings: 0 },
+      scraped: { data: 0, embeddings: 0 },
+      messages: { messages: 0, embeddings: 0 }
+    };
+
+    sourceStats.rows.forEach(row => {
+      const mapping = sourceMapping[row.source_table];
+      if (mapping) {
+        const category = mapping.category;
+        categories[category].embeddings += parseInt(row.embedding_count);
+
+        if (category === 'migrated') {
+          categories.migrated.rows += parseInt(row.record_count);
+        } else if (category === 'documents') {
+          categories.documents.documents += parseInt(row.record_count);
+        } else if (category === 'scraped') {
+          categories.scraped.data += parseInt(row.record_count);
+        } else if (category === 'messages') {
+          categories.messages.messages += parseInt(row.record_count);
+        }
+      }
+    });
+
     res.json({
-      totalEmbeddings: parseInt(result.rows[0].total_embeddings) || 0,
+      totalEmbeddings: parseInt(result.rows[0].totalembeddings) || 0,
       tablesProcessed: parseInt(result.rows[0].tablesprocessed) || 0,
       totalTokens: parseInt(result.rows[0].totaltokens) || 0,
       modelsUsed: parseInt(result.rows[0].modelsused) || 0,
       byTable: byTable.rows.map(row => ({
         ...row,
         tokens: parseInt(row.tokens) || 0
+      })),
+      // Add new dashboard-friendly format
+      total_embeddings: parseInt(result.rows[0].totalembeddings) || 0,
+      by_category: categories,
+      by_source: sourceStats.rows.map(row => ({
+        source_table: row.source_table,
+        name: sourceMapping[row.source_table]?.name || row.source_table,
+        category: sourceMapping[row.source_table]?.category || 'other',
+        embedding_count: parseInt(row.embedding_count),
+        record_count: parseInt(row.record_count)
       }))
     });
   } catch (error) {

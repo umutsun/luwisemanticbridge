@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Database, Zap, TrendingUp, BarChart3 } from 'lucide-react';
+import { useConfig } from '@/contexts/ConfigContext';
 
 interface TableStatus {
   name: string;
@@ -48,6 +49,7 @@ interface EmbeddingStats {
 }
 
 export default function UnifiedEmbeddingStats({ showControls = true }: { showControls?: boolean }) {
+  const { config } = useConfig();
   const [status, setStatus] = useState<EmbeddingStatus | null>(null);
   const [stats, setStats] = useState<EmbeddingStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -124,7 +126,7 @@ export default function UnifiedEmbeddingStats({ showControls = true }: { showCon
           <CardContent>
             <div className="text-2xl font-bold">{formatNumber(status.overall.totalRecords)}</div>
             <p className="text-xs text-muted-foreground">
-              rag_chatbot veritabanında
+              {config?.database?.name || 'vergilex_db'} veritabanında
             </p>
           </CardContent>
         </Card>

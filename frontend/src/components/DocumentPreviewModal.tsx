@@ -1910,11 +1910,8 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
       // Get the selected template
       const template = analysisTemplates.find(t => t.id === selectedTemplate);
 
-      // Combine focus keywords from template and custom input
-      const focusKeywords = [
-        ...(template?.focus_keywords || []),
-        ...(customKeywords.split(',').map(k => k.trim()).filter(k => k))
-      ];
+      // Use focus keywords from template only
+      const focusKeywords = template?.focus_keywords || [];
 
       // Get visual elements from document metadata (if OCR was done)
       const visualElements = document?.metadata?.visionOCR?.visualElements || [];
@@ -2810,7 +2807,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     <SelectTrigger className="h-7 w-40 text-[11px]">
                       <SelectValue placeholder="Select Template..." />
                     </SelectTrigger>
-                    <SelectContent className="z-[100]">
+                    <SelectContent className="z-[10000]" position="popper" sideOffset={4}>
                       {analysisTemplates.length > 0 ? (
                         analysisTemplates.map((template) => (
                           <SelectItem key={template.id} value={template.id} className="text-xs">
@@ -2834,13 +2831,6 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                       Auto: {detectedTemplate.confidence}%
                     </Badge>
                   )}
-                  <Input
-                    type="text"
-                    placeholder="Keywords..."
-                    value={customKeywords}
-                    onChange={(e) => setCustomKeywords(e.target.value)}
-                    className="h-8 w-32 text-xs"
-                  />
                   <Button
                     variant="default"
                     size="sm"

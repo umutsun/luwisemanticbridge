@@ -86,6 +86,7 @@ import integrationsRoutes from "./routes/integrations.routes";
 import whisperRoutes from "./routes/whisper.routes";
 import pdfBatchRoutes from "./routes/pdf-batch.routes";
 import batchFoldersRoutes from "./routes/batch-folders.routes";
+import transformConfigRoutes from "./routes/transform-config.routes";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
@@ -324,28 +325,58 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
     const startTime = Date.now();
 
-    // Check PostgreSQL with timing
+    // Check PostgreSQL with timing and details
     let postgresStatus = "disconnected";
     let postgresResponseTime = 0;
+    let postgresDetails: any = {};
     try {
       const dbStart = Date.now();
-      await lsembPool.query("SELECT 1");
+      const dbResult = await lsembPool.query("SELECT current_database() as db, version() as version");
       postgresResponseTime = Date.now() - dbStart;
       postgresStatus = "connected";
+      postgresDetails = {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: dbResult.rows[0]?.db || process.env.DB_NAME || 'unknown',
+        version: dbResult.rows[0]?.version?.split(' ')[1] || 'unknown'
+      };
     } catch (dbError: any) {
       postgresStatus = "disconnected";
+      postgresDetails = {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'unknown',
+        error: dbError.message
+      };
     }
 
-    // Check Redis with timing
+    // Check Redis with timing and details
     let redisStatus = "disconnected";
     let redisResponseTime = 0;
+    let redisDetails: any = {};
     try {
       const redisStart = Date.now();
       await redis.ping();
+      const dbSize = await redis.dbsize();
+      const info = await redis.info('server');
+      const redisVersion = info.match(/redis_version:([^\r\n]+)/)?.[1] || 'unknown';
       redisResponseTime = Date.now() - redisStart;
       redisStatus = "connected";
+      redisDetails = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: process.env.REDIS_PORT || 6379,
+        db: process.env.REDIS_DB || 0,
+        keys: dbSize,
+        version: redisVersion
+      };
     } catch (redisError: any) {
       redisStatus = "disconnected";
+      redisDetails = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: process.env.REDIS_PORT || 6379,
+        db: process.env.REDIS_DB || 0,
+        error: redisError.message
+      };
     }
 
     // Get performance metrics
@@ -366,11 +397,13 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
       services: {
         postgres: {
           status: postgresStatus,
-          responseTime: postgresResponseTime
+          responseTime: postgresResponseTime,
+          ...postgresDetails
         },
         redis: {
           status: redisStatus,
-          responseTime: redisResponseTime
+          responseTime: redisResponseTime,
+          ...redisDetails
         },
       },
       performance: {
@@ -420,6 +453,7 @@ app.use(historyRoutes);
 app.use("/api/v2/documents", documentsRoutes);
 app.use("/api/v2/pdf", pdfBatchRoutes);
 app.use("/api/v2/batch-folders", batchFoldersRoutes);
+app.use("/api/v2/transform-config", transformConfigRoutes);
 app.use("/documents", documentsRoutes);
 app.use(API.ENDPOINTS.V2.MIGRATION, migrationRoutes);
 app.use(API.ENDPOINTS.V2.EMBEDDINGS, embeddingsV2Routes);

@@ -884,11 +884,16 @@ export default function DashboardPage() {
 
       case '/embeddings':
         addConsoleLog('🧠 Embedding Statistics:', 'info', 'system');
-        addConsoleLog(`  📊 Migrated Data: 4,239 documents, 18,788 embeddings`, 'info', 'system');
-        addConsoleLog(`  📄 Documents: 12,847 chunks`, 'info', 'system');
-        addConsoleLog(`  🕷️  Scraped Content: 3,245 pages`, 'info', 'system');
-        addConsoleLog(`  💬 Message History: 2,696 messages`, 'info', 'system');
-        addConsoleLog(`  📦 Total Embeddings: 34,626 vectors`, 'info', 'system');
+        if (embeddingStats?.by_category) {
+          const { migrated, documents, scraped, messages } = embeddingStats.by_category;
+          addConsoleLog(`  📊 Migrated Data: ${migrated?.rows?.toLocaleString() || 0} rows, ${migrated?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  📄 Documents: ${documents?.documents?.toLocaleString() || 0} documents, ${documents?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  🕷️  Scraped Content: ${scraped?.data?.toLocaleString() || 0} pages, ${scraped?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  💬 Message History: ${messages?.messages?.toLocaleString() || 0} messages, ${messages?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  📦 Total Embeddings: ${embeddingStats?.total_embeddings?.toLocaleString() || 0} vectors`, 'info', 'system');
+        } else {
+          addConsoleLog('  ⚠️  No embedding statistics available', 'warn', 'system');
+        }
         const activeEmbeddingModel = llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || 'text-embedding-004';
         addConsoleLog(`  🎯 Model: ${activeEmbeddingModel}`, 'info', 'system');
         break;
@@ -1276,11 +1281,11 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Rows:</span>
-                  <span className="font-semibold">4,239</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">18,788</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
                 </div>
               </div>
             </div>
@@ -1293,11 +1298,11 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Documents:</span>
-                  <span className="font-semibold">12,847</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">25,694</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.documents?.embeddings?.toLocaleString() || '0'}</span>
                 </div>
               </div>
             </div>
@@ -1310,11 +1315,11 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Data:</span>
-                  <span className="font-semibold">3,245</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">6,490</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
                 </div>
               </div>
             </div>
@@ -1327,11 +1332,11 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Messages:</span>
-                  <span className="font-semibold">2,696</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">5,392</span>
+                  <span className="font-semibold">{embeddingStats?.by_category?.messages?.embeddings?.toLocaleString() || '0'}</span>
                 </div>
               </div>
             </div>

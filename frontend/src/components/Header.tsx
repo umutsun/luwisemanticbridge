@@ -167,10 +167,11 @@ export default function Header() {
         const translationData = translationResponse.ok ? await translationResponse.json() : null;
 
         // Extract database and redis info from health data
+        // Backend sends: services.postgres and services.redis
         const dbData = {
-          connected: healthData.services?.database?.status === 'connected',
-          status: healthData.services?.database?.status,
-          message: healthData.services?.database?.message
+          connected: healthData.services?.postgres?.status === 'connected',
+          status: healthData.services?.postgres?.status,
+          message: healthData.services?.postgres?.message
         };
         const redisData = {
           connected: healthData.services?.redis?.status === 'connected',
@@ -183,27 +184,51 @@ export default function Header() {
         setTimeout(async () => {
           // Get settings first
           let settings = null;
+          let databaseSettings = null;
           try {
             settings = await getAppSettings();
             console.log('[SystemStatus] Settings loaded:', {
               activeChatModel: settings?.llmSettings?.activeChatModel,
               activeEmbeddingModel: settings?.llmSettings?.activeEmbeddingModel
             });
+
+            // Fetch database settings separately
+            const dbResponse = await fetch(`${API_BASE_URL}/api/v2/settings?category=database`, {
+              headers,
+              mode: 'cors',
+              credentials: 'include'
+            });
+            if (dbResponse.ok) {
+              databaseSettings = await dbResponse.json();
+              console.log('[SystemStatus] Database settings loaded:', databaseSettings);
+            }
           } catch (error) {
             console.warn('[SystemStatus] Could not fetch app settings:', error);
           }
 
           // Build comprehensive system status from both endpoints
-          const dbService = healthData.services?.database || healthData.services?.lsemb_database;
+          const dbService = healthData.services?.postgres || healthData.services?.database;
           const redisService = healthData.services?.redis;
 
-          // Use migration target database from settings
-          // Read from settings or fall back to unknown
+          // Get database name - prioritize source DB from settings over master DB
           let databaseName = 'Unknown';
-          if (settings && settings.database?.name) {
+          console.log('[SystemStatus] Database sources:', {
+            databaseSettingsName: databaseSettings?.database?.name,
+            settingsDbName: settings?.database?.name,
+            healthDbName: healthData.services?.postgres?.database
+          });
+
+          // First priority: Source database from database settings (migration/transform target)
+          if (databaseSettings && databaseSettings.database?.name) {
+            databaseName = databaseSettings.database.name;
+            console.log('[SystemStatus] Using database from databaseSettings:', databaseName);
+          } else if (settings && settings.database?.name) {
             databaseName = settings.database.name;
-          } else if (settings && settings.database?.database) {
-            databaseName = settings.database.database;
+            console.log('[SystemStatus] Using database from settings.database.name:', databaseName);
+          } else if (healthData.services?.postgres?.database) {
+            // Fallback: Master database from health endpoint
+            databaseName = healthData.services.postgres.database;
+            console.log('[SystemStatus] Using database from health endpoint:', databaseName);
           }
 
           // Calculate total records and table count from database schema
@@ -299,7 +324,7 @@ export default function Header() {
                         (redisService && !redisService.status),
               used_memory: redisData?.redis?.usedMemory || redisData?.used_memory || undefined,
               responseTime: redisService?.responseTime || 0,
-              keyCount: redisData?.redis?.keyCount || redisData?.keyCount || undefined
+              keyCount: healthData.services?.redis?.keys || redisData?.keyCount || undefined
             },
             llmModel: llmModelInfo,
             embedder: {

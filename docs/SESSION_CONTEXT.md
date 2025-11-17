@@ -1,1 +1,0 @@
-# ASEMB Project - Session Context & Current State## 🎯 Project Overview**Name:** ASEMB (Alice Semantic Bridge)  **Type:** n8n Community Node f

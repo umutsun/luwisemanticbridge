@@ -317,10 +317,73 @@ config/config.json
 
 # Legacy, maintenance and temporary scripts
 old/
+backups/
 scripts/legacy/
 scripts/maintenance/
 backend/*.js
 backend/nul
+
+# Backend development files
+backend/*.md
+!backend/README.md
+backend/*_crawler_state.json
+backend/customer_db_settings.json
+backend/.migration-state.json
+
+# Scripts folder temporary files
+scripts/*.js
+!scripts/package.json
+scripts/*.sql
+scripts/*.json
+!scripts/package.json
+!scripts/package-lock.json
+scripts/ecosystem.*.config.js
+
+# Python folder - Keep only production scripts
+python/*.py
+!python/requirements.txt
+!python/luwi-devops.py
+python/pm2-menu.py
+python/smart-deploy.py
+python/test-*.py
+python/redis-backup.py
+python/configure-tenants.py
+python/update-python-services.py
+
+# n8n workflow development files (not needed in production)
+n8n/
+n8n-workflows/
+*.n8n.json
+n8n-data/
+n8n-custom/
+.n8n/
+
+# Root-level temporary files (DO NOT COMMIT)
+/*.sql
+/*.md
+!README.md
+/*.js
+!ecosystem.config.js
+/*.py
+/*.sh
+/*.bat
+/*.ps1
+/*.http
+/*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+/*.txt
+!requirements.txt
+deploy-*.sh
+fix-*.sh
+check-*.js
+test-*.js
+setup-*.sh
+create-*.sql
+login-*.sh
+performance-*.json
+settings-test-*.json
 
 # Submodules / Test Directories
 awesome-claude-code-agents/
@@ -382,4 +445,16 @@ backend/python-services/crawlers/output/
 frontend/src/templates/custom-*
 frontend/src/templates/example-*
 !frontend/src/templates/base/
-*.template.zip
+*.template.zipbackend/migrations/*.md
+backend/data/sample-*.json
+backend/data/analysis-*.json
+backend/config/chat-templates.json
+backend/query-*.sql
+backend/scraper-debug.html
+backend/test-*.txt
+backend/test-*.http
+frontend/src/app/dashboard/page.tsx.new
+frontend/src/app/dashboard/query/page.old.tsx
+frontend/src/app/dashboard/settings/settings-*.tsx
+!frontend/src/app/dashboard/settings/settings.tsx
+frontend/src/app/page-old.tsx

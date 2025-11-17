@@ -9,7 +9,7 @@ const ServicesPage = dynamic(() => import('./services/page'), {
   loading: () => <div className="flex items-center justify-center h-64">Loading services...</div>
 });
 import { useToast } from '../../../hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
@@ -22,6 +22,7 @@ import { Badge } from '../../../components/ui/badge';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
 import { Spinner } from '../../../components/ui/spinner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
+import { ConfirmTooltip } from '../../../components/ui/confirm-tooltip';
 import {
   RefreshCw,
   CheckCircle,
@@ -39,7 +40,9 @@ import {
   X,
   Calendar,
   Clock,
-  Zap
+  Zap,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import {
   getSettingsCategory,
@@ -52,6 +55,7 @@ import {
   getAppSettingsOnly,
   updateSettingsCategory
 } from '../../../lib/api/settings';
+import { API_CONFIG } from '../../../lib/config';
 
 // Component for each settings category
 function CategoryTab({ category, children }: { category: string; children: React.ReactNode }) {
@@ -2503,29 +2507,103 @@ function RAGSettings() {
   );
 }
 
-// Optimized Database & Redis Settings Component
+// Source Table Weights Component (DYNAMIC - no hardcoded table names)
+// SourceTableWeights Component (controlled by parent)
+function SourceTableWeights({
+  sourceTables,
+  weights,
+  setWeights,
+  loading
+}: {
+  sourceTables: Array<{ name: string; embeddingCount: number }>;
+  weights: Record<string, number>;
+  setWeights: (weights: Record<string, number>) => void;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <Card className="h-full flex flex-col">
+        <CardHeader>
+          <CardTitle>Search Priority</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Spinner size="md" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="h-full flex flex-col">
+      <CardHeader>
+        <CardTitle>Search Priority</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1 overflow-hidden flex flex-col">
+        {sourceTables.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No embedded tables found</p>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {sourceTables.map((table) => (
+              <div key={table.name} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="font-medium capitalize">
+                      {table.name.replace(/_/g, ' ')}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      {table.embeddingCount.toLocaleString()} records
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono w-12 text-right">
+                      {weights[table.name]?.toFixed(2) || '1.00'}
+                    </span>
+                  </div>
+                </div>
+                <Slider
+                  value={[weights[table.name] || 1.0]}
+                  onValueChange={(value) => {
+                    setWeights({
+                      ...weights,
+                      [table.name]: value[0]
+                    });
+                  }}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  className="w-full"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Optimized Database Settings Component (Source DB Configuration)
 function DatabaseSettings() {
   const [dbConfig, setDbConfig] = useState<any>({});
   const [tempDBConfig, setTempDBConfig] = useState<any>({});
-  const [redisConfig, setRedisConfig] = useState<any>({});
-  const [tempRedisConfig, setTempRedisConfig] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
   const [dbType, setDbType] = useState('postgresql');
+
+  // Source table weights state
+  const [sourceTables, setSourceTables] = useState<Array<{ name: string; embeddingCount: number }>>([]);
+  const [weights, setWeights] = useState<Record<string, number>>({});
+  const [weightsLoading, setWeightsLoading] = useState(true);
+
   const { toast } = useToast();
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const [dbData, redisData] = await Promise.all([
-        getDatabaseSettings(),
-        getSettingsCategory('redis')
-      ]);
+      const dbData = await getDatabaseSettings();
       setDbConfig(dbData);
       setTempDBConfig(dbData);
-      setRedisConfig(redisData);
-      setTempRedisConfig(redisData);
       setDbType(dbData?.database?.type || 'postgresql');
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -2534,27 +2612,90 @@ function DatabaseSettings() {
     }
   }, []);
 
+  const loadSourceTables = useCallback(async () => {
+    try {
+      setWeightsLoading(true);
+      const API_BASE_URL = API_CONFIG.baseUrl;
+      const token = localStorage.getItem('token');
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // Fetch source tables and weights in parallel
+      const [tablesResponse, weightsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v2/search/source-tables`, { headers }),
+        fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, { headers })
+      ]);
+
+      if (!tablesResponse.ok) {
+        console.error(`Source tables API error: ${tablesResponse.status} ${tablesResponse.statusText}`);
+        throw new Error(`Failed to fetch source tables: ${tablesResponse.status}`);
+      }
+
+      const tablesData = await tablesResponse.json();
+      const weightsData = weightsResponse.ok ? await weightsResponse.json() : { weights: {} };
+
+      console.log('📊 Source tables loaded:', tablesData.sourceTables?.length || 0);
+      setSourceTables(tablesData.sourceTables || []);
+
+      // Initialize weights: use saved weights or default to 1.0 for all tables
+      const initialWeights: Record<string, number> = {};
+      tablesData.sourceTables?.forEach((table: { name: string }) => {
+        initialWeights[table.name] = weightsData.weights?.[table.name] ?? 1.0;
+      });
+      setWeights(initialWeights);
+    } catch (error: any) {
+      console.error('❌ Failed to load source tables:', error);
+      toast({
+        title: "Error",
+        description: `Failed to load source tables: ${error.message}`,
+        variant: "destructive"
+      });
+    } finally {
+      setWeightsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+    loadSourceTables();
+  }, [loadSettings, loadSourceTables]);
 
   const saveAllSettings = async () => {
     setSaving(true);
     try {
-      await Promise.all([
-        updateSettingsCategory('database', tempDBConfig),
-        updateSettingsCategory('redis', tempRedisConfig)
-      ]);
+      // Save database settings
+      await updateSettingsCategory('database', tempDBConfig);
       setDbConfig(tempDBConfig);
-      setRedisConfig(tempRedisConfig);
+
+      // Save source table weights
+      const API_BASE_URL = API_CONFIG.baseUrl;
+      const weightsResponse = await fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ weights })
+      });
+
+      if (!weightsResponse.ok) {
+        const result = await weightsResponse.json();
+        throw new Error(result.error || 'Failed to save weights');
+      }
+
       toast({
         title: "Success",
-        description: "Settings saved successfully",
+        description: "Database settings and search priorities saved successfully",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save settings",
+        description: error instanceof Error ? error.message : "Failed to save settings",
         variant: "destructive",
       });
     } finally {
@@ -2572,33 +2713,22 @@ function DatabaseSettings() {
     });
   };
 
-  const updateRedisSetting = (key: string, value: any) => {
-    setTempRedisConfig({
-      ...tempRedisConfig,
-      redis: {
-        ...tempRedisConfig.redis,
-        [key]: value
-      }
-    });
-  };
-
   const saveDbType = async (type: string) => {
     setDbType(type);
     updateDBSetting('type', type);
   };
 
-  const testConnection = async (type: 'database' | 'redis') => {
-    setTesting(type);
+  const testConnection = async () => {
+    setTesting(true);
     try {
-      const config = type === 'database' ? tempDBConfig : tempRedisConfig;
       const response = await fetch(`/api/config/database/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          type,
-          config: config
+          type: 'database',
+          config: tempDBConfig
         })
       });
 
@@ -2610,16 +2740,16 @@ function DatabaseSettings() {
 
       toast({
         title: "Success",
-        description: `${type === 'database' ? 'Database' : 'Redis'} connection successful`,
+        description: "Database connection successful",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : `${type === 'database' ? 'Database' : 'Redis'} connection failed`,
+        description: error instanceof Error ? error.message : "Database connection failed",
         variant: "destructive",
       });
     } finally {
-      setTesting(null);
+      setTesting(false);
     }
   };
 
@@ -2628,73 +2758,74 @@ function DatabaseSettings() {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
-      {/* Database Configuration - Left Column */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Database Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Database Type</Label>
-              <Select value={dbType} onValueChange={saveDbType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select database type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="postgresql">PostgreSQL</SelectItem>
-                  <SelectItem value="mysql">MySQL</SelectItem>
-                  <SelectItem value="mariadb">MariaDB</SelectItem>
-                </SelectContent>
-              </Select>
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-6">
+        {/* Source Database Configuration - Left Column */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Source Database</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Database Type</Label>
+                <Select value={dbType} onValueChange={saveDbType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select database type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="postgresql">PostgreSQL</SelectItem>
+                    <SelectItem value="mysql">MySQL</SelectItem>
+                    <SelectItem value="mariadb">MariaDB</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Host</Label>
+                <Input
+                  value={tempDBConfig?.database?.host || 'localhost'}
+                  onChange={(e) => updateDBSetting('host', e.target.value)}
+                />
+              </div>
             </div>
-            <div>
-              <Label>Host</Label>
-              <Input
-                value={tempDBConfig?.database?.host || 'localhost'}
-                onChange={(e) => updateDBSetting('host', e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Port</Label>
-              <Input
-                type="number"
-                value={tempDBConfig?.database?.port || dbConfig?.database?.port || (dbType === 'mysql' || dbType === 'mariadb' ? 3306 : 5432)}
-                onChange={(e) => updateDBSetting('port', parseInt(e.target.value))}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Port</Label>
+                <Input
+                  type="number"
+                  value={tempDBConfig?.database?.port || dbConfig?.database?.port || (dbType === 'mysql' || dbType === 'mariadb' ? 3306 : 5432)}
+                  onChange={(e) => updateDBSetting('port', parseInt(e.target.value))}
+                />
+              </div>
+              <div>
+                <Label>Database Name</Label>
+                <Input
+                  value={tempDBConfig?.database?.name || ''}
+                  onChange={(e) => updateDBSetting('name', e.target.value)}
+                  placeholder="e.g. vergilex_db"
+                />
+              </div>
             </div>
-            <div>
-              <Label>Database Name</Label>
-              <Input
-                value={tempDBConfig?.database?.name || ''}
-                onChange={(e) => updateDBSetting('name', e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>User</Label>
-              <Input
-                value={tempDBConfig?.database?.user || ''}
-                onChange={(e) => updateDBSetting('user', e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>User</Label>
+                <Input
+                  value={tempDBConfig?.database?.user || ''}
+                  onChange={(e) => updateDBSetting('user', e.target.value)}
+                />
+              </div>
+              <div>
+                <Label>Password</Label>
+                <Input
+                  type="password"
+                  value={tempDBConfig?.database?.password || ''}
+                  onChange={(e) => updateDBSetting('password', e.target.value)}
+                />
+              </div>
             </div>
-            <div>
-              <Label>Password</Label>
-              <Input
-                type="password"
-                value={tempDBConfig?.database?.password || ''}
-                onChange={(e) => updateDBSetting('password', e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>SSL Enabled</Label>
               <Switch
@@ -2702,86 +2833,27 @@ function DatabaseSettings() {
                 onCheckedChange={(checked) => updateDBSetting('ssl', checked)}
               />
             </div>
-            {dbType === 'postgresql' && (
-              <div className="flex items-center justify-between">
-                <Label>Enable pgvector Extension</Label>
-                <Switch
-                  checked={tempDBConfig?.database?.pgvector ?? dbConfig?.database?.pgvector}
-                  onCheckedChange={(checked) => updateDBSetting('pgvector', checked)}
-                />
-              </div>
-            )}
-          </div>
 
-          <div className="flex gap-2">
-            <Button onClick={() => testConnection('database')} disabled={testing === 'database'} size="sm">
-              {testing === 'database' ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Test Connection
-            </Button>
-            {dbType === 'postgresql' && (
-              <Button variant="outline" size="sm">
-                Test with pgvector
+            <div className="flex gap-2">
+              <Button onClick={testConnection} disabled={testing} size="sm">
+                {testing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Test Connection
               </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Redis Configuration - Right Column */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Redis Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Host</Label>
-              <Input
-                value={tempRedisConfig?.redis?.host || 'localhost'}
-                onChange={(e) => updateRedisSetting('host', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Port</Label>
-              <Input
-                type="number"
-                value={tempRedisConfig?.redis?.port || 6379}
-                onChange={(e) => updateRedisSetting('port', parseInt(e.target.value))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Database</Label>
-              <Input
-                type="number"
-                value={tempRedisConfig?.redis?.db || 2}
-                onChange={(e) => updateRedisSetting('db', parseInt(e.target.value))}
-              />
-            </div>
-            <div>
-              <Label>Password</Label>
-              <Input
-                type="password"
-                value={tempRedisConfig?.redis?.password || ''}
-                placeholder="Enter Redis password (if any)"
-                onChange={(e) => updateRedisSetting('password', e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <Button onClick={() => testConnection('redis')} disabled={testing === 'redis'} size="sm">
-              {testing === 'redis' ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Test Redis Connection
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Source Table Weights - Right Column */}
+        <SourceTableWeights
+          sourceTables={sourceTables}
+          weights={weights}
+          setWeights={setWeights}
+          loading={weightsLoading}
+        />
+      </div>
 
       {/* Save Button */}
-      <div className="flex justify-end col-span-2">
+      <div className="flex justify-end">
         <Button onClick={saveAllSettings} disabled={saving}>
           {saving ? (
             <>
@@ -4146,15 +4218,32 @@ function TranslationSettings() {
 function TemplatesManager() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
+  const [editedTemplate, setEditedTemplate] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   const loadTemplates = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/pdf/analysis-templates');
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/analysis-templates`, {
+        headers
+      });
       const data = await response.json();
       setTemplates(data.templates || []);
+      // Auto-select first template
+      if (data.templates && data.templates.length > 0 && !selectedTemplate) {
+        const firstTemplate = data.templates[0];
+        setSelectedTemplate(firstTemplate);
+        setEditedTemplate({ ...firstTemplate });
+      }
     } catch (error) {
       console.error('Failed to load templates:', error);
       toast({
@@ -4165,26 +4254,43 @@ function TemplatesManager() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, selectedTemplate]);
 
   useEffect(() => {
     loadTemplates();
   }, [loadTemplates]);
 
-  const handleEdit = (template: any) => {
-    setEditingTemplate({ ...template });
-    setShowEditModal(true);
+  const handleSelectTemplate = (template: any) => {
+    setSelectedTemplate(template);
+    setEditedTemplate({ ...template });
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      const response = await fetch(`http://localhost:8083/api/v2/templates/${templateId}`, {
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/templates/${templateId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       });
 
       if (response.ok) {
         setTemplates(templates.filter(t => t.id !== templateId));
+        if (selectedTemplate?.id === templateId) {
+          const remaining = templates.filter(t => t.id !== templateId);
+          if (remaining.length > 0) {
+            handleSelectTemplate(remaining[0]);
+          } else {
+            setSelectedTemplate(null);
+            setEditedTemplate(null);
+          }
+        }
         toast({
           title: "Success",
           description: "Template deleted successfully"
@@ -4207,140 +4313,307 @@ function TemplatesManager() {
     }
   };
 
+  const handleSaveTemplate = async () => {
+    if (!editedTemplate) return;
+
+    try {
+      setSaving(true);
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const templateId = editedTemplate.template_id || editedTemplate.id;
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/templates/${templateId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(editedTemplate)
+      });
+
+      if (response.ok) {
+        const updated = await response.json();
+        setTemplates(templates.map(t => t.id === editedTemplate.id ? updated : t));
+        setSelectedTemplate(updated);
+        setEditedTemplate({ ...updated });
+        toast({
+          title: "Success",
+          description: "Template saved successfully"
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Error",
+          description: error.error || "Failed to save template",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save template",
+        variant: "destructive"
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddTemplate = async () => {
+    try {
+      setSaving(true);
+      const token = localStorage.getItem('token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // Create a new blank template
+      const newTemplate = {
+        name: 'New Template',
+        icon: '📄',
+        description: 'Custom template',
+        is_system: false,
+        is_active: true,
+        schema: {
+          table_name: 'new_table',
+          columns: []
+        },
+        field_mappings: {},
+        transformation_rules: {}
+      };
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/templates`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(newTemplate)
+      });
+
+      if (response.ok) {
+        const created = await response.json();
+        setTemplates([...templates, created]);
+        setSelectedTemplate(created);
+        setEditedTemplate({ ...created });
+        toast({
+          title: "Success",
+          description: "New template created successfully"
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Error",
+          description: error.error || "Failed to create template",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Failed to create template:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create template",
+        variant: "destructive"
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading templates...</div>;
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Analysis Templates</CardTitle>
-          <CardDescription>
-            Manage metadata extraction templates for different document types
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {templates.map((template) => (
-              <Card key={template.id} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl">{template.icon}</span>
-                      <h3 className="font-semibold text-lg">{template.name}</h3>
-                      <span className="text-xs text-muted-foreground px-2 py-1 bg-muted rounded">
-                        {template.id}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3">{template.description}</p>
-                    <div className="grid grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <strong>Focus Keywords:</strong>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {template.focus_keywords.slice(0, 5).map((kw: string, idx: number) => (
-                            <span key={idx} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 rounded">
-                              {kw}
-                            </span>
-                          ))}
-                          {template.focus_keywords.length > 5 && (
-                            <span className="text-muted-foreground">
-                              +{template.focus_keywords.length - 5} more
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <strong>Target Fields ({template.target_fields.length}):</strong>
-                        <div className="text-muted-foreground mt-1">
-                          {template.target_fields.slice(0, 3).join(', ')}
-                          {template.target_fields.length > 3 && ` +${template.target_fields.length - 3} more`}
-                        </div>
-                      </div>
-                    </div>
+    <div className="grid grid-cols-12 gap-6">
+      {/* Left Column - Template List (40%) */}
+      <div className="col-span-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Templates</CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleAddTemplate}
+                disabled={saving}
+                className="h-8 gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span className="text-xs">Add New</span>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-border">
+              {templates.map((template) => (
+                <div
+                  key={template.id}
+                  className={`flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors cursor-pointer ${
+                    selectedTemplate?.id === template.id ? 'bg-muted' : ''
+                  }`}
+                  onClick={() => handleSelectTemplate(template)}
+                >
+                  <span className="text-xl">{template.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-sm font-medium truncate">{template.name}</h4>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEdit(template)}
+                  {!template.is_system && (
+                    <ConfirmTooltip
+                      onConfirm={() => handleDeleteTemplate(template.template_id || template.id)}
+                      message={`Delete template "${template.name}"?`}
+                      side="top"
                     >
-                      View Details
-                    </Button>
-                    {!template.is_system && (
                       <Button
-                        variant="destructive"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          if (confirm(`Delete template "${template.name}"?`)) {
-                            handleDeleteTemplate(template.id);
-                          }
-                        }}
+                        className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        Delete
+                        <Trash2 className="w-3 h-3 text-red-600" />
                       </Button>
-                    )}
-                  </div>
+                    </ConfirmTooltip>
+                  )}
                 </div>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Edit Modal - Simple JSON viewer for now */}
-      {showEditModal && editingTemplate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-3xl max-h-[90vh] overflow-auto">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>
-                  {editingTemplate.icon} {editingTemplate.name}
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={() => setShowEditModal(false)}>
-                  Close
-                </Button>
+      {/* Right Column - Edit Panel (60%) */}
+      <div className="col-span-8">
+        {editedTemplate ? (
+          <Card>
+            <CardContent className="space-y-5 pt-6">
+              {/* Template Name */}
+              <div>
+                <Label htmlFor="name" className="text-sm font-medium">Template Name</Label>
+                <Input
+                  id="name"
+                  value={editedTemplate.name || ''}
+                  onChange={(e) => setEditedTemplate({ ...editedTemplate, name: e.target.value })}
+                  disabled={editedTemplate.is_system}
+                  className="mt-1.5"
+                  placeholder="Template name..."
+                />
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <strong>Extraction Prompt:</strong>
-                  <p className="text-sm text-muted-foreground mt-2 p-3 bg-muted rounded">
-                    {editingTemplate.extraction_prompt}
+
+              {/* Active/Passive Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                <div className="flex-1">
+                  <Label htmlFor="is-active" className="text-sm font-medium cursor-pointer">
+                    Template Status
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {editedTemplate.is_active ? 'Active - Will be shown in document processing' : 'Inactive - Hidden from selection'}
                   </p>
                 </div>
-                <div>
-                  <strong>Focus Keywords ({editingTemplate.focus_keywords.length}):</strong>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {editingTemplate.focus_keywords.map((kw: string, idx: number) => (
-                      <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 rounded text-xs">
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <strong>Target Fields ({editingTemplate.target_fields.length}):</strong>
-                  <div className="grid grid-cols-3 gap-2 mt-2">
-                    {editingTemplate.target_fields.map((field: string, idx: number) => (
-                      <span key={idx} className="px-2 py-1 bg-green-100 dark:bg-green-900 rounded text-xs">
-                        {field}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="pt-4 border-t">
-                  <strong>Raw JSON:</strong>
-                  <pre className="text-xs bg-muted p-3 rounded mt-2 overflow-auto max-h-64">
-                    {JSON.stringify(editingTemplate, null, 2)}
-                  </pre>
-                </div>
+                <Switch
+                  id="is-active"
+                  checked={editedTemplate.is_active ?? true}
+                  onCheckedChange={(checked) => setEditedTemplate({ ...editedTemplate, is_active: checked })}
+                  disabled={editedTemplate.is_system}
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <Label htmlFor="description" className="text-sm font-medium">Description</Label>
+                <Textarea
+                  id="description"
+                  value={editedTemplate.description || ''}
+                  onChange={(e) => setEditedTemplate({ ...editedTemplate, description: e.target.value })}
+                  disabled={editedTemplate.is_system}
+                  className="mt-1.5 min-h-[60px]"
+                  placeholder="Brief description of what this template does..."
+                />
+              </div>
+
+              {/* Extraction Prompt */}
+              <div>
+                <Label htmlFor="prompt" className="text-sm font-medium">
+                  Extraction Prompt
+                  <span className="text-xs font-normal text-muted-foreground ml-2">
+                    The AI prompt used to extract metadata from documents
+                  </span>
+                </Label>
+                <Textarea
+                  id="prompt"
+                  value={editedTemplate.extraction_prompt || ''}
+                  onChange={(e) => setEditedTemplate({ ...editedTemplate, extraction_prompt: e.target.value })}
+                  disabled={editedTemplate.is_system}
+                  className="mt-1.5 min-h-[180px] font-mono text-xs"
+                  placeholder="Example: Extract the following information from this legal document: title, date, article numbers, key terms..."
+                />
+              </div>
+
+              {/* Target Fields */}
+              <div>
+                <Label htmlFor="fields" className="text-sm font-medium">
+                  Target Fields ({editedTemplate.target_fields?.length || 0})
+                  <span className="text-xs font-normal text-muted-foreground ml-2">
+                    Fields to extract and store in database
+                  </span>
+                </Label>
+                <Textarea
+                  id="fields"
+                  value={editedTemplate.target_fields?.join(', ') || ''}
+                  onChange={(e) => setEditedTemplate({
+                    ...editedTemplate,
+                    target_fields: e.target.value.split(',').map(f => f.trim()).filter(f => f)
+                  })}
+                  disabled={editedTemplate.is_system}
+                  className="mt-1.5 min-h-[100px]"
+                  placeholder="title, date, author, category, summary, key_points..."
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Comma-separated list. These fields will be extracted from documents and stored in the database.
+                </p>
+              </div>
+
+              {/* System Template Warning */}
+              {editedTemplate.is_system && (
+                <Alert>
+                  <Shield className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    This is a system template and cannot be edited. Clone it to create a custom version.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Save Button - Bottom Right */}
+              <div className="flex justify-end pt-2">
+                <Button
+                  onClick={handleSaveTemplate}
+                  disabled={saving || editedTemplate.is_system}
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
+        ) : (
+          <Card>
+            <CardContent className="flex items-center justify-center h-64 text-muted-foreground">
+              <div className="text-center">
+                <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Select a template to edit</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -4387,8 +4660,8 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="prompts" className="h-12 px-4">
             <span className="text-sm">Prompts</span>
           </TabsTrigger>
-          <TabsTrigger value="templates" className="h-12 px-4">
-            <span className="text-sm">📋 Templates</span>
+          <TabsTrigger value="transform" className="h-12 px-4">
+            <span className="text-sm">Transform</span>
           </TabsTrigger>
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
@@ -4418,7 +4691,7 @@ export default function OptimizedSettingsPage() {
           <PromptsSettings />
         </TabsContent>
 
-        <TabsContent value="templates">
+        <TabsContent value="transform">
           <TemplatesManager />
         </TabsContent>
 

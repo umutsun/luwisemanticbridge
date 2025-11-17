@@ -1,3 +1,0 @@
-{
-  "content": "{\n  \"servers\": [\n    {\n      \"name\": \"asb-cli\",\n      \"command\": \"node\",\n      \"args\": [\"C:\\\\mcp-servers\\\\asb-cli\\\\index.js\"],\n      \"transport\": \"stdio\"\n    }\n  ]\n}\n"
-}

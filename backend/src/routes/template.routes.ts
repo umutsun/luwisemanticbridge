@@ -159,7 +159,7 @@ router.post('/', async (req: Request, res: Response) => {
 /**
  * Update template
  */
-router.put('/:templateId', async (req: Request, res: Response) => {
+router.put('/:templateId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { templateId } = req.params;
     const {
@@ -277,7 +277,7 @@ router.put('/:templateId', async (req: Request, res: Response) => {
 /**
  * Delete template (only non-system templates)
  */
-router.delete('/:templateId', async (req: Request, res: Response) => {
+router.delete('/:templateId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { templateId } = req.params;
 

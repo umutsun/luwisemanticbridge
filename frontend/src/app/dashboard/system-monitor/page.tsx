@@ -111,46 +111,104 @@ export default function SystemMonitor() {
 
   const fetchSystemData = async () => {
     try {
-      // Mock data for demonstration
-      const newMetrics = Array.from({ length: 60 }, (_, i) => ({
-        timestamp: new Date(Date.now() - i * 60000).toISOString(),
-        cpu: Math.random() * 100,
-        memory: Math.random() * 100,
-        disk: Math.random() * 100,
-        network: {
-          upload: Math.random() * 1000,
-          download: Math.random() * 5000
-        },
-        processes: Math.floor(Math.random() * 200) + 50,
-        loadAvg: Math.random() * 4,
-        temperature: Math.random() * 20 + 40
-      })).reverse();
-
-      setMetrics(newMetrics);
-
-      setPerformance({
-        responseTime: Math.random() * 200 + 50,
-        throughput: Math.random() * 1000 + 200,
-        errorRate: Math.random() * 5,
-        cacheHitRate: Math.random() * 20 + 80,
-        activeConnections: Math.floor(Math.random() * 100) + 20,
-        queueLength: Math.floor(Math.random() * 50)
+      // Fetch real health data from backend
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
       });
 
-      setServices([
-        { name: 'PostgreSQL', status: 'running', cpu: 15, memory: 30, uptime: '15d 4h', requests: 1234 },
-        { name: 'Redis', status: 'running', cpu: 5, memory: 10, uptime: '15d 4h', requests: 5678 },
-        { name: 'Node.js API', status: 'running', cpu: 25, memory: 45, uptime: '2d 12h', requests: 8901 },
-        { name: 'LightRAG', status: 'running', cpu: 35, memory: 60, uptime: '1d 8h', requests: 2345 },
-        { name: 'OpenAI API', status: 'running', cpu: 0, memory: 0, uptime: '15d 4h', requests: 4567 }
-      ]);
+      if (!response.ok) {
+        throw new Error('Health endpoint failed');
+      }
 
+      const healthData = await response.json();
+
+      // Convert health data to metrics format
+      const newMetric: SystemMetrics = {
+        timestamp: healthData.timestamp,
+        cpu: 0, // Not available from health endpoint yet
+        memory: healthData.performance?.memory?.heapUsed || 0,
+        disk: 0, // Not available from health endpoint yet
+        network: {
+          upload: 0,
+          download: 0
+        },
+        processes: healthData.performance?.databasePool?.total || 0,
+        loadAvg: 0,
+        temperature: 0
+      };
+
+      // Keep last 60 metrics
+      setMetrics(prev => [...prev.slice(-59), newMetric]);
+
+      setPerformance({
+        responseTime: healthData.responseTime || 0,
+        throughput: 0,
+        errorRate: 0,
+        cacheHitRate: 0,
+        activeConnections: healthData.performance?.databasePool?.total || 0,
+        queueLength: healthData.performance?.databasePool?.waiting || 0
+      });
+
+      // Build services array from health data
+      const servicesArray: ServiceStatus[] = [];
+
+      // PostgreSQL
+      if (healthData.services?.postgres) {
+        const pg = healthData.services.postgres;
+        servicesArray.push({
+          name: `PostgreSQL (${pg.database || 'unknown'})`,
+          status: pg.status === 'connected' ? 'running' : 'stopped',
+          cpu: 0,
+          memory: 0,
+          uptime: formatUptime(healthData.performance?.uptime || 0),
+          requests: 0
+        });
+      }
+
+      // Redis
+      if (healthData.services?.redis) {
+        const rd = healthData.services.redis;
+        servicesArray.push({
+          name: `Redis (db${rd.db || 0} - ${rd.keys || 0} keys)`,
+          status: rd.status === 'connected' ? 'running' : 'stopped',
+          cpu: 0,
+          memory: 0,
+          uptime: formatUptime(healthData.performance?.uptime || 0),
+          requests: 0
+        });
+      }
+
+      // Node.js API
+      servicesArray.push({
+        name: 'Node.js Backend',
+        status: healthData.status === 'healthy' ? 'running' : 'error',
+        cpu: 0,
+        memory: healthData.performance?.memory?.heapUsed || 0,
+        uptime: formatUptime(healthData.performance?.uptime || 0),
+        requests: 0
+      });
+
+      setServices(servicesArray);
       setLoading(false);
     } catch (err) {
       console.error('Error fetching system data:', err);
       setError('Sistem verileri yüklenemedi');
       setLoading(false);
     }
+  };
+
+  // Helper function to format uptime
+  const formatUptime = (seconds: number): string => {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
   };
 
   const getHealthStatus = () => {

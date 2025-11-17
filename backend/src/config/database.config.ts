@@ -342,9 +342,11 @@ export async function initializeLsembDatabase() {
       CREATE TABLE IF NOT EXISTS documents (
         id SERIAL PRIMARY KEY,
         filename TEXT NOT NULL,
+        title TEXT,
         content TEXT,
         file_type VARCHAR(50),
         file_size INTEGER,
+        file_path TEXT,
         chunk_count INTEGER DEFAULT 0,
         embedding_count INTEGER DEFAULT 0,
         metadata JSONB,
@@ -354,6 +356,7 @@ export async function initializeLsembDatabase() {
         column_headers TEXT[],
         row_count INTEGER,
         transform_status VARCHAR(50) DEFAULT 'pending',
+        processing_status VARCHAR(50) DEFAULT 'waiting',
         transform_progress INTEGER DEFAULT 0,
         target_table_name VARCHAR(255),
         source_db_id VARCHAR(100),
@@ -366,7 +369,9 @@ export async function initializeLsembDatabase() {
     // Create indexes for document transform
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_documents_transform_status ON documents(transform_status);
+      CREATE INDEX IF NOT EXISTS idx_documents_processing_status ON documents(processing_status);
       CREATE INDEX IF NOT EXISTS idx_documents_file_type ON documents(file_type);
+      CREATE INDEX IF NOT EXISTS idx_documents_file_path ON documents(file_path);
       CREATE INDEX IF NOT EXISTS idx_documents_source_db_id ON documents(source_db_id);
     `);
 

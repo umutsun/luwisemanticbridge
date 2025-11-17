@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Public routes that don't require authentication
-const publicRoutes = ['/login', '/register', '/forgot-password', '/api/auth', '/favicon.ico', '/_next'];
+const publicRoutes = ['/login', '/register', '/forgot-password', '/initialize', '/api/auth', '/favicon.ico', '/_next'];
 
 // Admin only routes
 const adminRoutes = ['/admin', '/api/admin'];
@@ -16,17 +16,12 @@ export function middleware(request: NextRequest) {
   
   // Special handling for root route - check if user has valid session
   if (pathname === '/') {
-    // If no token in cookies, check if we have one in localStorage via a header
     if (!token) {
-      // Try to get token from localStorage (via a custom header)
-      const authHeader = request.headers.get('authorization');
-      const localToken = authHeader?.replace('Bearer ', '');
-
-      if (!localToken) {
-        const url = new URL('/login', request.url);
-        return NextResponse.redirect(url);
-      }
+      const url = new URL('/login', request.url);
+      return NextResponse.redirect(url);
     }
+    // If logged in, let them access the chatbot at "/"
+    // (page.tsx handles the UI for authenticated users)
   }
   // For other protected routes
   else if (!token && !isPublicRoute) {

@@ -297,19 +297,19 @@ export class RAGChatService {
       const maxResults = parseInt(
         settingsMap.get('ragSettings.maxResults') ||
         settingsMap.get('maxResults') ||
-        '7'
+        '30'
       );
       const minResults = parseInt(
         settingsMap.get('ragSettings.minResults') ||
         settingsMap.get('minResults') ||
-        '3'
+        '8'
       );
-      const batchSize = parseInt(settingsMap.get('parallel_llm_batch_size') || '2');
+      const batchSize = parseInt(settingsMap.get('parallel_llm_batch_size') || '3');
       const minThreshold = parseFloat(
         settingsMap.get('ragSettings.similarityThreshold') ||
         settingsMap.get('similarityThreshold') ||
         settingsMap.get('semantic_search_threshold') ||
-        '0.02'
+        '0.005'
       );
       const responseLanguage = settingsMap.get('response_language') || 'tr';
       const activeModel = settingsMap.get('llmSettings.activeChatModel') || 'anthropic/claude-3-5-sonnet-20241022';
@@ -339,41 +339,24 @@ export class RAGChatService {
         });
       }
 
-      // Filter by threshold and sort by similarity score
+      // Sort by similarity score (no threshold filtering - show all results)
       let searchResults = allResults
-        .filter(result => {
-          const score = result.score || (result.similarity_score * 100) || 0;
-          return score >= minThreshold;
-        })
         .sort((a, b) => {
           const scoreA = a.score || (a.similarity_score * 100) || 0;
           const scoreB = b.score || (b.similarity_score * 100) || 0;
           return scoreB - scoreA; // Highest similarity first
         });
 
-      console.log(`Found ${searchResults.length} results with similarity >= ${minThreshold}%`);
+      console.log(`Found ${searchResults.length} total results (sorted by similarity, no threshold filtering)`);
 
-      // For initial display, use minResults instead of batch size
+      // For initial display, use minResults
       const initialDisplayCount = Math.min(minResults, searchResults.length);
       console.log(` Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
 
-      // Ensure minimum results requirement (for backend processing, not display)
-      if (searchResults.length < minResults && allResults.length > 0) {
-        const additionalResults = allResults
-          .filter(result => {
-            const score = result.score || (result.similarity_score * 100) || 0;
-            return score < minThreshold;
-          })
-          .slice(0, minResults - searchResults.length);
-
-        searchResults = [...searchResults, ...additionalResults];
-        console.log(`Added ${additionalResults.length} results to meet minimum requirement of ${minResults}`);
-      }
-
-      // If still no results, take top matches anyway
+      // Ensure we have at least minResults if available
       if (searchResults.length === 0 && allResults.length > 0) {
         searchResults = allResults.slice(0, minResults);
-        console.log('No results above threshold, showing top matches');
+        console.log('Using all available results');
       }
 
       // 3. Get conversation history with retry
@@ -406,11 +389,11 @@ export class RAGChatService {
       const bestScore = searchResults.length > 0 ? (searchResults[0].score || 0) : 0;
 
       // Get threshold settings (0-1 range, e.g., 0.25 = 25%, 0.75 = 75%)
-      const HIGH_CONFIDENCE_THRESHOLD = 0.75; // 75% similarity = strong match
+      const HIGH_CONFIDENCE_THRESHOLD = 0.50; // 50% similarity = strong match
       const LOW_CONFIDENCE_THRESHOLD = parseFloat(
         settingsMap.get('ragSettings.similarityThreshold') ||
         settingsMap.get('similarityThreshold') ||
-        '0.25'
+        '0.08'
       ); // Below this = "not found" message
 
       // Check if we have actual content (not just empty strings or only titles)
@@ -436,8 +419,8 @@ export class RAGChatService {
 
       console.log(` Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, results=${searchResults.length}, hasActualContent=${hasActualContent}, high=${hasHighConfidence}, partial=${hasPartialMatch}, belowThreshold=${isBelowThreshold}`);
 
-      // CASE 1: No results OR below minimum threshold - return "not found" message
-      if (hasNoResults || isBelowThreshold) {
+      // CASE 1: No results - return "not found" message (removed threshold check to show all results)
+      if (hasNoResults) {
         const noResultsMessage = responseLanguage === 'en'
           ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
           : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
@@ -467,17 +450,8 @@ export class RAGChatService {
       const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
       const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
 
-      // Add partial match instruction for low-confidence results
-      let confidenceInstruction = '';
-      if (hasPartialMatch) {
-        confidenceInstruction = responseLanguage === 'en'
-          ? '\n\nIMPORTANT: The context sources have moderate relevance (similarity < 75%). Start your response with "I found some related information, though not a perfect match:" and then summarize the most relevant parts from the context.'
-          : '\n\nÖNEMLİ: Bağlam kaynakları orta düzeyde ilgili (benzerlik < %75). Yanıtınıza "Tam eşleşme bulamadım ancak benzer kayıtlara göre:" diyerek başlayın ve bağlamdaki en ilgili kısımları özetleyin.';
-      } else if (hasHighConfidence) {
-        confidenceInstruction = responseLanguage === 'en'
-          ? '\n\nThe context sources are highly relevant (similarity ≥ 75%). Provide a comprehensive answer based on this information.'
-          : '\n\nBağlam kaynakları yüksek düzeyde ilgili (benzerlik ≥ %75). Bu bilgilere dayanarak kapsamlı bir yanıt verin.';
-      }
+      // Removed confidence instruction - results are already sorted by score (best first)
+      // The LLM will naturally use the most relevant context from top results
 
       // Add citation format instruction with STRONG emphasis on NO HEADINGS
       // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
@@ -497,8 +471,8 @@ export class RAGChatService {
           ` ASLA etiket ekleme\n` +
           `Sadece akıcı paragraflar yaz, sonunda kaynak numaraları olsun.`;
 
-      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${confidenceInstruction}${citationInstruction}`;
-      console.log(` Confidence: ${hasHighConfidence ? 'HIGH (≥75%)' : hasPartialMatch ? 'PARTIAL (<75%)' : 'LOW'}, bestScore=${(bestScore * 100).toFixed(1)}%`);
+      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
+      console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(` Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
       console.log(` System prompt length: ${systemPrompt?.length || 0} chars`);
@@ -1725,14 +1699,13 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         return score >= relevanceThreshold && !excludeIds.includes(resultId?.toString());
       });
 
-      // Sort by relevance score and limit results
-      const sortedResults = filteredResults
-        .sort((a, b) => {
-          const scoreA = a.score || (a.similarity_score * 100) || 0;
-          const scoreB = b.score || (b.similarity_score * 100) || 0;
-          return scoreB - scoreA;
-        })
-        .slice(0, limit);
+      // Randomize results (Fisher-Yates shuffle) instead of sorting by score
+      const shuffledResults = [...filteredResults];
+      for (let i = shuffledResults.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledResults[i], shuffledResults[j]] = [shuffledResults[j], shuffledResults[i]];
+      }
+      const sortedResults = shuffledResults.slice(0, limit);
 
       console.log(`Filtered to ${sortedResults.length} related topics (score >= 15%, excluded ${excludeIds.length} items)`);
 
@@ -1866,16 +1839,15 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         return score >= relevanceThreshold && !excludeIds.includes(resultId?.toString());
       });
 
-      // Sort by relevance score
-      const sortedResults = filteredResults
-        .sort((a, b) => {
-          const scoreA = a.score || (a.similarity_score * 100) || 0;
-          const scoreB = b.score || (b.similarity_score * 100) || 0;
-          return scoreB - scoreA;
-        });
+      // Randomize results (Fisher-Yates shuffle) instead of sorting by score
+      const shuffledResults = [...filteredResults];
+      for (let i = shuffledResults.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledResults[i], shuffledResults[j]] = [shuffledResults[j], shuffledResults[i]];
+      }
 
       // Apply pagination
-      const paginatedResults = sortedResults.slice(offset, offset + limit);
+      const paginatedResults = shuffledResults.slice(offset, offset + limit);
 
       console.log(`Returning ${paginatedResults.length} paginated results (offset: ${offset})`);
 

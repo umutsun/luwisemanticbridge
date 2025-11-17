@@ -32,42 +32,33 @@ interface SystemConfig {
 }
 
 export default function SystemInitializePage() {
-  const [services, setServices] = useState<ServiceHealth[]>([
+  const [essentialServices, setEssentialServices] = useState<ServiceHealth[]>([
     {
-      name: 'Backend API',
+      name: 'PostgreSQL (Master DB)',
       status: 'checking',
       url: '/api/v2/health',
-      description: 'Main backend service'
-    },
-    {
-      name: 'PostgreSQL Database',
-      status: 'checking',
-      url: '/api/v2/database/health',
-      description: 'Primary database'
+      description: 'Essential: vergilex_lsemb database from .env'
     },
     {
       name: 'Redis Cache',
       status: 'checking',
-      url: '/api/v2/redis/health',
-      description: 'Cache and session storage'
-    },
-    {
-      name: 'Settings Service',
-      status: 'checking',
-      url: '/api/v2/settings/health',
-      description: 'Configuration management'
-    },
+      url: '/api/v2/health',
+      description: 'Essential: Session & cache storage from .env'
+    }
+  ]);
+
+  const [optionalServices, setOptionalServices] = useState<ServiceHealth[]>([
     {
       name: 'LLM Service',
       status: 'checking',
-      url: '/api/v2/llm/health',
-      description: 'AI model integration'
+      url: '/api/v2/health',
+      description: 'Optional: Configure in Settings'
     },
     {
-      name: 'Embeddings Service',
+      name: 'Client DB (Source)',
       status: 'checking',
-      url: '/api/v2/embeddings/health',
-      description: 'Vector embeddings'
+      url: '/api/v2/health',
+      description: 'Optional: Configure in Settings'
     }
   ]);
 
@@ -86,45 +77,77 @@ export default function SystemInitializePage() {
   const [isInitialized, setIsInitialized] = useState(false);
   const { toast } = useToast();
 
-  // Check service health
-  const checkServiceHealth = async (service: ServiceHealth): Promise<ServiceHealth> => {
+  // Check health endpoint and parse for essential services
+  const checkEssentialServices = async () => {
     try {
-      const response = await fetch(service.url);
-      const isHealthy = response.ok;
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+      const response = await fetch(`${baseUrl}/api/v2/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
+      });
 
-      return {
-        ...service,
-        status: isHealthy ? 'healthy' : 'unhealthy',
+      if (!response.ok) {
+        throw new Error(`Backend unreachable (HTTP ${response.status})`);
+      }
+
+      const healthData = await response.json();
+
+      // Check PostgreSQL (Master DB)
+      const pgStatus: ServiceHealth = {
+        name: 'PostgreSQL (Master DB)',
+        url: '/api/v2/health',
+        description: `Essential: ${healthData.services?.postgres?.database || 'unknown'} database from .env`,
+        status: healthData.services?.postgres?.status === 'connected' ? 'healthy' : 'unhealthy',
         lastCheck: new Date().toLocaleTimeString(),
-        error: isHealthy ? undefined : `HTTP ${response.status}`
+        error: healthData.services?.postgres?.status !== 'connected'
+          ? healthData.services?.postgres?.error || 'Disconnected'
+          : undefined
       };
+
+      // Check Redis
+      const redisStatus: ServiceHealth = {
+        name: 'Redis Cache',
+        url: '/api/v2/health',
+        description: `Essential: db${healthData.services?.redis?.db || 0} - ${healthData.services?.redis?.keys || 0} keys from .env`,
+        status: healthData.services?.redis?.status === 'connected' ? 'healthy' : 'unhealthy',
+        lastCheck: new Date().toLocaleTimeString(),
+        error: healthData.services?.redis?.status !== 'connected'
+          ? healthData.services?.redis?.error || 'Disconnected'
+          : undefined
+      };
+
+      setEssentialServices([pgStatus, redisStatus]);
+
+      // Check if both essential services are healthy
+      const essentialsHealthy = pgStatus.status === 'healthy' && redisStatus.status === 'healthy';
+
+      if (essentialsHealthy) {
+        setIsInitialized(true);
+        toast({
+          title: "System Ready",
+          description: "Essential services are healthy. You can proceed to login.",
+        });
+      } else {
+        setIsInitialized(false);
+        toast({
+          title: "System Not Ready",
+          description: "Essential services are not healthy. Check .env configuration.",
+          variant: "destructive"
+        });
+      }
+
+      return essentialsHealthy;
     } catch (error) {
-      return {
-        ...service,
+      console.error('Health check failed:', error);
+      setEssentialServices(prev => prev.map(s => ({
+        ...s,
         status: 'unhealthy',
         lastCheck: new Date().toLocaleTimeString(),
         error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  };
-
-  // Check all services
-  const checkAllServices = async () => {
-    setServices(prev => prev.map(s => ({ ...s, status: 'checking' })));
-
-    const results = await Promise.all(
-      services.map(service => checkServiceHealth(service))
-    );
-
-    setServices(results);
-
-    const allHealthy = results.every(s => s.status === 'healthy');
-    if (allHealthy) {
-      setIsInitialized(true);
-      toast({
-        title: "System Ready",
-        description: "All services are healthy and initialized",
-      });
+      })));
+      setIsInitialized(false);
+      return false;
     }
   };
 
@@ -173,15 +196,15 @@ export default function SystemInitializePage() {
 
   // Auto-check on mount
   useEffect(() => {
-    checkAllServices();
+    checkEssentialServices();
 
-    // Set up periodic health checks
-    const interval = setInterval(checkAllServices, 30000);
+    // Set up periodic health checks every 10 seconds
+    const interval = setInterval(checkEssentialServices, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  const healthyCount = services.filter(s => s.status === 'healthy').length;
-  const allHealthy = services.every(s => s.status === 'healthy');
+  const essentialHealthyCount = essentialServices.filter(s => s.status === 'healthy').length;
+  const allEssentialsHealthy = essentialServices.every(s => s.status === 'healthy');
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -195,25 +218,28 @@ export default function SystemInitializePage() {
         </p>
       </div>
 
-      {/* System Status Overview */}
+      {/* Essential Services Status */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>System Status</span>
-            <Badge variant={allHealthy ? "default" : "secondary"} className="text-sm">
-              {healthyCount}/{services.length} Services Healthy
+            <span className="flex items-center gap-2">
+              <Database className="w-5 h-5" />
+              Essential Services (.env)
+            </span>
+            <Badge variant={allEssentialsHealthy ? "default" : "destructive"} className="text-sm">
+              {essentialHealthyCount}/{essentialServices.length} Healthy
             </Badge>
           </CardTitle>
           <CardDescription>
-            {allHealthy
-              ? "All services are running properly"
-              : "Some services need attention before proceeding"
+            {allEssentialsHealthy
+              ? "All essential services are running. You can proceed to login."
+              : "Essential services are required for login. Check your .env configuration."
             }
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {services.map((service) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {essentialServices.map((service) => (
               <div
                 key={service.name}
                 className={`p-4 rounded-lg border ${
@@ -224,7 +250,7 @@ export default function SystemInitializePage() {
                     : 'border-red-200 bg-red-50'
                 }`}
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
                     {service.status === 'healthy' ? (
                       <CheckCircle className="w-5 h-5 text-green-600" />
@@ -233,10 +259,7 @@ export default function SystemInitializePage() {
                     ) : (
                       <AlertCircle className="w-5 h-5 text-red-600" />
                     )}
-                    <div>
-                      <h3 className="font-medium">{service.name}</h3>
-                      <p className="text-sm text-muted-foreground">{service.description}</p>
-                    </div>
+                    <h3 className="font-medium">{service.name}</h3>
                   </div>
                   <Badge
                     variant={service.status === 'healthy' ? "default" : "destructive"}
@@ -245,8 +268,9 @@ export default function SystemInitializePage() {
                     {service.status}
                   </Badge>
                 </div>
+                <p className="text-sm text-muted-foreground">{service.description}</p>
                 {service.error && (
-                  <p className="text-xs text-red-600 mt-2">{service.error}</p>
+                  <p className="text-xs text-red-600 mt-2 font-medium">Error: {service.error}</p>
                 )}
                 {service.lastCheck && (
                   <p className="text-xs text-muted-foreground mt-1">
@@ -257,161 +281,71 @@ export default function SystemInitializePage() {
             ))}
           </div>
 
-          <div className="flex justify-center mt-6">
-            <Button onClick={checkAllServices} variant="outline">
+          <div className="flex justify-center mt-6 gap-3">
+            <Button onClick={checkEssentialServices} variant="outline">
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh Status
             </Button>
+            {allEssentialsHealthy && (
+              <Button asChild>
+                <a href="/login">Proceed to Login →</a>
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* System Configuration */}
+      {/* Optional Services Info */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5" />
-            System Configuration
+            Optional Services
           </CardTitle>
           <CardDescription>
-            Configure port and database settings
+            These services can be configured in Settings after login
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Label htmlFor="port">Application Port</Label>
-              <Input
-                id="port"
-                type="number"
-                value={systemConfig.port}
-                onChange={(e) => setSystemConfig(prev => ({
-                  ...prev,
-                  port: parseInt(e.target.value) || 8083
-                }))}
-                className="mt-1"
-              />
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="font-medium flex items-center gap-2">
-                <Database className="w-4 h-4" />
-                Database Configuration
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="db-host">Host</Label>
-                  <Input
-                    id="db-host"
-                    value={systemConfig.database.host}
-                    onChange={(e) => setSystemConfig(prev => ({
-                      ...prev,
-                      database: { ...prev.database, host: e.target.value }
-                    }))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="db-port">Port</Label>
-                  <Input
-                    id="db-port"
-                    type="number"
-                    value={systemConfig.database.port}
-                    onChange={(e) => setSystemConfig(prev => ({
-                      ...prev,
-                      database: { ...prev.database, port: parseInt(e.target.value) || 5432 }
-                    }))}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="db-name">Database</Label>
-                  <Input
-                    id="db-name"
-                    value={systemConfig.database.name}
-                    onChange={(e) => setSystemConfig(prev => ({
-                      ...prev,
-                      database: { ...prev.database, name: e.target.value }
-                    }))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="db-user">User</Label>
-                  <Input
-                    id="db-user"
-                    value={systemConfig.database.user}
-                    onChange={(e) => setSystemConfig(prev => ({
-                      ...prev,
-                      database: { ...prev.database, user: e.target.value }
-                    }))}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Initialization Actions */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium">System Actions</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Initialize or reset the system configuration
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                onClick={initializeSystem}
-                disabled={isInitializing || !allHealthy}
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {optionalServices.map((service) => (
+              <div
+                key={service.name}
+                className="p-4 rounded-lg border border-gray-200 bg-gray-50"
               >
-                {isInitializing ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Initializing...
-                  </>
-                ) : (
-                  <>
-                    <Settings className="w-4 h-4 mr-2" />
-                    Initialize System
-                  </>
-                )}
-              </Button>
-            </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Settings className="w-4 h-4 text-gray-600" />
+                  <h3 className="font-medium">{service.name}</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">{service.description}</p>
+              </div>
+            ))}
           </div>
-
-          {isInitialized && (
-            <Alert className="mt-4">
-              <CheckCircle className="h-4 w-4" />
-              <AlertDescription>
-                System is initialized and ready. You can now proceed to login.
-              </AlertDescription>
-            </Alert>
-          )}
         </CardContent>
       </Card>
 
-      {/* Quick Access */}
-      {isInitialized && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-medium">System Ready</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  All services are operational. You can now access the application.
-                </p>
-              </div>
-              <Button asChild>
-                <a href="/login">Proceed to Login</a>
-              </Button>
-            </div>
+      {/* Help Card */}
+      {!allEssentialsHealthy && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-900">
+              <AlertCircle className="w-5 h-5" />
+              Troubleshooting
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-amber-900 space-y-2">
+            <p><strong>If PostgreSQL fails:</strong></p>
+            <ul className="list-disc list-inside ml-4 space-y-1">
+              <li>Check DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD in .env.lsemb</li>
+              <li>Ensure PostgreSQL service is running</li>
+              <li>Verify database "vergilex_lsemb" exists</li>
+            </ul>
+            <p className="mt-3"><strong>If Redis fails:</strong></p>
+            <ul className="list-disc list-inside ml-4 space-y-1">
+              <li>Check REDIS_HOST, REDIS_PORT in .env.lsemb</li>
+              <li>Ensure Redis service is running</li>
+              <li>Test connection: redis-cli ping</li>
+            </ul>
           </CardContent>
         </Card>
       )}

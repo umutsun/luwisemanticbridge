@@ -129,6 +129,8 @@ export default function DocumentManagerPage() {
   const [showOperations, setShowOperations] = useState(false);
   const [physicalFiles, setPhysicalFiles] = useState<any[]>([]);
   const [physicalFilesStats, setPhysicalFilesStats] = useState({ total: 0, inDatabase: 0, notInDatabase: 0, uploadDirectory: '' });
+  const [folders, setFolders] = useState<any[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
   const [selectedPhysicalFiles, setSelectedPhysicalFiles] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<Stats>({
     documents: {
@@ -157,6 +159,7 @@ export default function DocumentManagerPage() {
     fetchDocuments();
     fetchStats();
     fetchPhysicalFiles();
+    fetchFolders();
     fetchBatchSchemas();
   }, []);
 
@@ -347,6 +350,153 @@ export default function DocumentManagerPage() {
       });
     } finally {
       setPhysicalFilesLoading(false);
+    }
+  };
+
+  const fetchFolders = async () => {
+    try {
+      setFoldersLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${getApiUrl('').replace('/documents', '')}/api/v2/batch-folders/list`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.warn('Batch folders endpoint not available:', response.status);
+        setFolders([]);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setFolders(data.folders || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch folders:', error);
+      setFolders([]);
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  const [processingFolders, setProcessingFolders] = useState<Set<string>>(new Set());
+
+  const handleFolderBatchImport = async (folderName: string) => {
+    try {
+      setProcessingFolders(prev => new Set(prev).add(folderName));
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Step 1: Analyze folder
+      toast({
+        title: 'Analyzing Folder',
+        description: `Sampling PDFs from ${folderName}...`
+      });
+
+      const analyzeResponse = await fetch(`${getApiUrl('').replace('/documents', '')}/batch-folders/${folderName}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ sampleSize: 3 })
+      });
+
+      if (!analyzeResponse.ok) {
+        throw new Error('Failed to analyze folder');
+      }
+
+      const analyzeData = await analyzeResponse.json();
+
+      if (!analyzeData.success) {
+        throw new Error(analyzeData.error || 'Analysis failed');
+      }
+
+      const { folderConfig, recommendation } = analyzeData;
+
+      // Show analysis results
+      toast({
+        title: 'Analysis Complete',
+        description: `${recommendation.message} - ${folderConfig.total_pdfs} PDFs found`
+      });
+
+      // Step 2: Scan folder to get all files
+      const scanResponse = await fetch(`${getApiUrl('').replace('/documents', '')}/batch-folders/scan`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ folderPath: `docs/${folderName}` })
+      });
+
+      if (!scanResponse.ok) {
+        throw new Error('Failed to scan folder');
+      }
+
+      const scanData = await scanResponse.json();
+      const newFiles = scanData.files.filter((f: any) => !f.inDatabase);
+
+      if (newFiles.length === 0) {
+        toast({
+          title: 'No New Files',
+          description: 'All files are already in database'
+        });
+        return;
+      }
+
+      // Step 3: Start batch processing with folder_config
+      toast({
+        title: 'Starting Batch Import',
+        description: `Processing ${newFiles.length} new files...`
+      });
+
+      const processResponse = await fetch(`${getApiUrl('').replace('/documents', '')}/batch-folders/process`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          files: newFiles,
+          folderConfig,
+          options: {}
+        })
+      });
+
+      if (!processResponse.ok) {
+        throw new Error('Failed to start batch processing');
+      }
+
+      const processData = await processResponse.json();
+
+      toast({
+        title: 'Batch Import Started',
+        description: `Job ID: ${processData.jobId} - Processing ${processData.totalFiles} files`,
+        duration: 5000
+      });
+
+      // Refresh data
+      await Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
+
+    } catch (error: any) {
+      console.error('Folder batch import error:', error);
+      toast({
+        title: 'Import Failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setProcessingFolders(prev => {
+        const next = new Set(prev);
+        next.delete(folderName);
+        return next;
+      });
     }
   };
 
@@ -1259,68 +1409,60 @@ export default function DocumentManagerPage() {
           </h1>
         </div>
 
-        {/* Stats Cards Above Tabs - Marker Highlight Style */}
+        {/* Stats Cards - Pastel Colors */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="bg-white dark:bg-black ">
-            <CardContent className="p-6">
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Total Documents</p>
-                <AnimatedCounter
-                  value={stats.documents.total}
-                  duration={800}
-                  className="text-3xl font-bold text-gray-900 dark:text-white"
-                />
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-1.5 h-1.5 bg-gray-400 dark:bg-gray-500 rounded-full"></div>
-                  <span className="text-gray-600 dark:text-gray-400">
-                    +{stats.history.uploaded_today} today
-                  </span>
-                </div>
+          {/* Total Documents - Blue Pastel */}
+          <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-blue-200 dark:border-blue-800">
+            <CardContent className="p-4">
+              <div className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">Total Documents</div>
+              <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                {stats.documents.total.toLocaleString()}
+              </div>
+              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                <span className="font-mono">+{stats.history.uploaded_today}</span>
+                <span className="opacity-75 ml-1">today</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white dark:bg-black ">
-            <CardContent className="p-6">
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Embedded</p>
-                <AnimatedCounter
-                  value={stats.documents.embedded}
-                  duration={800}
-                  className="text-3xl font-bold text-gray-900 dark:text-white"
-                />
+          {/* Transformed - Green Pastel */}
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
+            <CardContent className="p-4">
+              <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">Transformed</div>
+              <div className="text-2xl font-bold text-green-900 dark:text-green-100">
+                {stats.transform?.tables_created?.toLocaleString() || '0'} tables
+              </div>
+              <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                <span className="font-mono">{stats.transform?.total_records?.toLocaleString() || '0'}</span>
+                <span className="opacity-75 ml-1">records</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white dark:bg-black ">
-            <CardContent className="p-6">
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Physical Files</p>
-                <AnimatedCounter
-                  value={physicalFilesStats.total}
-                  duration={800}
-                  className="text-3xl font-bold text-gray-900 dark:text-white"
-                />
-                <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                  {physicalFilesStats.notInDatabase} not in DB
-                </div>
+          {/* OCR Processed - Purple Pastel */}
+          <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
+            <CardContent className="p-4">
+              <div className="text-sm text-purple-700 dark:text-purple-300 font-medium mb-1">OCR Processed</div>
+              <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                {stats.documents.ocr_processed.toLocaleString()}
+              </div>
+              <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                <span className="font-mono">{stats.documents.ocr_pending.toLocaleString()}</span>
+                <span className="opacity-75 ml-1">pending</span>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white dark:bg-black ">
-            <CardContent className="p-6">
-              <div className="space-y-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Success Rate</p>
-                <AnimatedPercentage
-                  value={stats.performance.success_rate}
-                  duration={1000}
-                  className="text-3xl font-bold text-gray-900 dark:text-white"
-                />
-                <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                  {stats.performance.avg_processing_time}s avg
-                </div>
+          {/* Physical Files - Orange Pastel */}
+          <Card className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
+            <CardContent className="p-4">
+              <div className="text-sm text-orange-700 dark:text-orange-300 font-medium mb-1">Physical Files</div>
+              <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                {physicalFilesStats.total.toLocaleString()}
+              </div>
+              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                <span className="font-mono">{physicalFilesStats.notInDatabase.toLocaleString()}</span>
+                <span className="opacity-75 ml-1">not in DB</span>
               </div>
             </CardContent>
           </Card>
@@ -1328,9 +1470,9 @@ export default function DocumentManagerPage() {
 
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:h-[calc(100vh-350px)]">
               {/* Left Column (40%) - Upload & Physical Files */}
-              <div className="lg:col-span-5 space-y-6">
+              <div className="lg:col-span-5 flex flex-col gap-6">
                 {/* Upload Area */}
                 <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
                   <CardContent className="p-6">
@@ -1455,7 +1597,7 @@ export default function DocumentManagerPage() {
                 </Card>
 
                 {/* Physical Files List */}
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1 min-h-0">
                   <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -1467,7 +1609,7 @@ export default function DocumentManagerPage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1 flex flex-col overflow-hidden">
                     {/* Search & Filter */}
                     <div className="flex gap-2 mb-4">
                       <div className="relative flex-1">
@@ -1485,6 +1627,7 @@ export default function DocumentManagerPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="folders">Folders</SelectItem>
                           <SelectItem value="txt">TXT</SelectItem>
                           <SelectItem value="md">Markdown</SelectItem>
                           <SelectItem value="json">JSON</SelectItem>
@@ -1495,81 +1638,151 @@ export default function DocumentManagerPage() {
                     </div>
 
                     {/* Files List */}
-                    <ScrollArea className="h-[400px]">
-                      {physicalFilesLoading ? (
-                        <div className="space-y-2 p-2">
+                    <ScrollArea className="flex-1">
+                      {(physicalFilesLoading || foldersLoading) ? (
+                        <div className="divide-y divide-border">
                           {[...Array(8)].map((_, i) => (
-                            <div key={i} className="flex items-center gap-2 p-2">
-                              <div className="w-4 h-4 bg-muted rounded animate-pulse flex-shrink-0" />
-                              <div className="flex-1 space-y-2">
+                            <div key={i} className="flex items-center gap-2 p-3">
+                              {/* Action buttons skeleton on left */}
+                              <div className="flex gap-1 flex-shrink-0">
+                                <div className="w-7 h-7 bg-muted rounded animate-pulse" />
+                                <div className="w-7 h-7 bg-muted rounded animate-pulse" />
+                              </div>
+                              {/* File name skeleton */}
+                              <div className="flex-1 space-y-2 min-w-0">
                                 <div className="h-4 bg-muted rounded animate-pulse w-3/4" />
                                 <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
-                              </div>
-                              <div className="flex gap-1">
-                                <div className="w-7 h-7 bg-muted rounded animate-pulse" />
-                                <div className="w-7 h-7 bg-muted rounded animate-pulse" />
                               </div>
                             </div>
                           ))}
                         </div>
-                      ) : physicalFiles.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <File className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                          <p className="text-sm">No files found</p>
-                        </div>
+                      ) : physicalFilesFilter === 'folders' ? (
+                        /* Folders View */
+                        folders.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                            <p className="text-sm">No folders found</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-border">
+                            {folders
+                              .filter(folder => {
+                                // Search filter
+                                if (physicalFilesSearch && !folder.name.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+                                  return false;
+                                }
+                                return true;
+                              })
+                              .map((folder) => (
+                                <div
+                                  key={folder.path}
+                                  className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
+                                >
+                                  {/* Actions on the left */}
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {/* DB icon - for batch import */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleFolderBatchImport(folder.name)}
+                                      disabled={processingFolders.has(folder.name) || folder.newFilesCount === 0}
+                                      className={`h-7 px-2 ${
+                                        folder.newFilesCount === 0
+                                          ? 'cursor-not-allowed opacity-50'
+                                          : 'hover:bg-green-100 dark:hover:bg-green-900/20'
+                                      }`}
+                                      title={folder.newFilesCount === 0 ? "All files already in database" : "Batch import folder to database"}
+                                    >
+                                      {processingFolders.has(folder.name) ? (
+                                        <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
+                                      ) : (
+                                        <Database className={`w-3 h-3 ${folder.newFilesCount === 0 ? 'text-gray-400' : 'text-green-600'}`} />
+                                      )}
+                                    </Button>
+
+                                    {/* Delete icon */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 hover:bg-red-100 dark:hover:bg-red-900/20"
+                                      title="Delete folder"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-red-600" />
+                                    </Button>
+                                  </div>
+
+                                  {/* Folder icon */}
+                                  <FolderOpen className="w-4 h-4 text-amber-600 flex-shrink-0" />
+
+                                  {/* Folder name and stats */}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate" title={folder.name}>
+                                      {folder.name}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {folder.pdfCount} PDFs • {folder.inDatabaseCount} in DB • {folder.newFilesCount} new
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        )
                       ) : (
-                        <div className="space-y-2">
-                          {physicalFiles
-                            .filter(file => {
-                              // Search filter
-                              if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
-                                return false;
-                              }
-                              // File type filter
-                              if (physicalFilesFilter !== 'all') {
-                                const fileExt = file.ext.toLowerCase();
-                                // Handle markdown separately
-                                if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+                        /* Files View */
+                        physicalFiles.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <File className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                            <p className="text-sm">No files found</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-border">
+                            {physicalFiles
+                              .filter(file => {
+                                // Search filter
+                                if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
                                   return false;
                                 }
-                                if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-                                  return false;
+                                // File type filter
+                                if (physicalFilesFilter !== 'all') {
+                                  const fileExt = file.ext.toLowerCase();
+                                  // Handle markdown separately
+                                  if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+                                    return false;
+                                  }
+                                  if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
+                                    return false;
+                                  }
                                 }
-                              }
-                              return true;
-                            })
+                                return true;
+                              })
                             .map((file) => (
                             <div
                               key={file.path}
-                              className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                              className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
                             >
-                              <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate" title={file.displayName || file.filename}>
-                                  {file.displayName || file.filename}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatFileSize(file.size)} • {file.ext.toUpperCase()}
-                                </p>
-                              </div>
+                              {/* Actions on the left - always visible */}
                               <div className="flex items-center gap-1 flex-shrink-0">
+                                {/* DB icon - always visible, disabled if already in DB */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => !file.inDatabase && handleAddPhysicalFileToDb(file.path)}
+                                  className={`h-7 px-2 ${
+                                    file.inDatabase
+                                      ? 'cursor-not-allowed opacity-50'
+                                      : 'hover:bg-green-100 dark:hover:bg-green-900/20'
+                                  }`}
+                                  title={file.inDatabase ? "Already in Database" : "Add to Database"}
+                                  disabled={file.inDatabase || processingFiles.has(file.path)}
+                                >
+                                  {processingFiles.has(file.path) ? (
+                                    <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
+                                  ) : (
+                                    <Database className={`w-3 h-3 ${file.inDatabase ? 'text-gray-400' : 'text-green-600'}`} />
+                                  )}
+                                </Button>
 
-                                {!file.inDatabase && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleAddPhysicalFileToDb(file.path)}
-                                    className="h-7 px-2 hover:bg-green-100 dark:hover:bg-green-900/20"
-                                    title="Add to Database"
-                                    disabled={processingFiles.has(file.path)}
-                                  >
-                                    {processingFiles.has(file.path) ? (
-                                      <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
-                                    ) : (
-                                      <Database className="w-3 h-3 text-green-600" />
-                                    )}
-                                  </Button>
-                                )}
+                                {/* Delete icon */}
                                 <ConfirmTooltip
                                   onConfirm={() => handleDeletePhysicalFile(file.path, file.inDatabase)}
                                   message={`Delete ${file.inDatabase ? 'from disk & DB' : 'from disk'}?`}
@@ -1584,10 +1797,21 @@ export default function DocumentManagerPage() {
                                   </Button>
                                 </ConfirmTooltip>
                               </div>
+
+                              {/* File name */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate" title={file.displayName || file.filename}>
+                                  {file.displayName || file.filename}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatFileSize(file.size)} • {file.ext.toUpperCase()}
+                                </p>
+                              </div>
                             </div>
                           ))}
                         </div>
-                      )}
+                      )
+                    )}
                     </ScrollArea>
                   </CardContent>
                 </Card>
@@ -1595,9 +1819,9 @@ export default function DocumentManagerPage() {
                   </div>
 
               {/* Right Column (60%) - Database Files */}
-              <div className="lg:col-span-7">
+              <div className="lg:col-span-7 flex flex-col gap-4">
                 {/* Search and Filter - Moved Above Table */}
-                <Card className="mb-4 bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex gap-4 items-center">
                       <div className="relative flex-1">
@@ -1648,9 +1872,9 @@ export default function DocumentManagerPage() {
                   </Card>
                 )}
 
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1 min-h-0">
+                  <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
+                    <div className="overflow-auto flex-1">
                       <Table>
                         <TableHeader className="bg-gray-50 dark:bg-gray-900">
                           <TableRow>
@@ -1799,15 +2023,15 @@ export default function DocumentManagerPage() {
                               <SelectValue placeholder="Template..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {batchSchemas.length > 0 ? (
-                                batchSchemas.map(schema => (
+                              {batchSchemas.filter(s => s.is_active !== false).length > 0 ? (
+                                batchSchemas.filter(s => s.is_active !== false).map(schema => (
                                   <SelectItem key={schema.id} value={schema.id} className="text-xs">
                                     {schema.name}
                                   </SelectItem>
                                 ))
                               ) : (
                                 <SelectItem value="_none" disabled className="text-xs">
-                                  No templates
+                                  No active templates
                                 </SelectItem>
                               )}
                             </SelectContent>
