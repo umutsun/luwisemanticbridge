@@ -2823,7 +2823,7 @@ function DatabaseSettings() {
             </div>
 
             <div className="flex gap-2">
-              <Button onClick={testConnection} disabled={testing} size="sm">
+              <Button onClick={testConnection} disabled={testing} size="sm" variant="outline">
                 {testing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
                 Test Connection
               </Button>
@@ -3772,7 +3772,8 @@ function PromptsSettings() {
         <CardContent className="space-y-4">
           <div className="flex justify-between">
             <h3 className="text-sm font-medium">System Prompts</h3>
-            <Button size="sm" onClick={addNewPrompt}>
+            <Button size="sm" onClick={addNewPrompt} className="gap-2">
+              <Plus className="w-4 h-4" />
               Add New
             </Button>
           </div>
@@ -4098,6 +4099,7 @@ function TranslationSettings() {
               </div>
 
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => testConnection('deepl')}
                 disabled={testing === 'deepl' || !tempConfig?.deepl?.apiKey}
@@ -4150,6 +4152,7 @@ function TranslationSettings() {
               </div>
 
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => testConnection('google')}
                 disabled={testing === 'google' || !tempConfig?.google?.translate?.apiKey}
@@ -4425,13 +4428,12 @@ function TemplatesManager() {
               <CardTitle className="text-base">Templates</CardTitle>
               <Button
                 size="sm"
-                variant="outline"
                 onClick={handleAddTemplate}
                 disabled={saving}
-                className="h-8 gap-1"
+                className="gap-2"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span className="text-xs">Add New</span>
+                <Plus className="w-4 h-4" />
+                Add New
               </Button>
             </div>
           </CardHeader>
@@ -4458,10 +4460,10 @@ function TemplatesManager() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 flex-shrink-0"
+                        className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 flex-shrink-0"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Trash2 className="w-3 h-3 text-red-600" />
+                        <Trash2 className="w-4 h-4 text-red-600" />
                       </Button>
                     </ConfirmTooltip>
                   )}
@@ -4574,7 +4576,7 @@ function TemplatesManager() {
               )}
 
               {/* Save Button - Bottom Right */}
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end pt-4">
                 <Button
                   onClick={handleSaveTemplate}
                   disabled={saving || editedTemplate.is_system}
