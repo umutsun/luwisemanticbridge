@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
-import { fetchWithAuth } from "@/lib/auth-fetch";
+import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
 
 interface SystemStatus {
   database: {
@@ -284,14 +284,14 @@ export default function DashboardPage() {
         const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/dashboard-stats`);
 
         if (response.ok) {
-          const data = await response.json();
+          const data = await safeJsonParse(response); if (!data) return;
           setChatStats(data);
         } else if (response.status === 403) {
           // If not admin, try user-specific stats
           const userResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/stats`);
 
           if (userResponse.ok) {
-            const userData = await userResponse.json();
+            const userData = await safeJsonParse(userResponse); if (!userData) return;
             // Transform user stats to dashboard format
             setChatStats({
               overview: {
@@ -400,7 +400,7 @@ export default function DashboardPage() {
       try {
         const response = await fetch('/api/v2/documents/stats');
         if (response.ok) {
-          const data = await response.json();
+          const data = await safeJsonParse(response); if (!data) return;
           setDocumentStats(data);
         }
       } catch (error) {
@@ -417,7 +417,7 @@ export default function DashboardPage() {
       try {
         const response = await fetch('/api/v2/embeddings/stats');
         if (response.ok) {
-          const data = await response.json();
+          const data = await safeJsonParse(response); if (!data) return;
           setEmbeddingStats(data);
         }
       } catch (error) {
@@ -434,7 +434,7 @@ export default function DashboardPage() {
       try {
         const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=llm'));
         if (response.ok) {
-          const data = await response.json();
+          const data = await safeJsonParse(response); if (!data) return;
           console.log('📊 [DASHBOARD] LLM settings loaded from API:', {
             hasLlmSettings: !!data.llmSettings,
             activeChatModel: data.llmSettings?.activeChatModel || data.activeChatModel || 'NOT FOUND',
@@ -457,7 +457,7 @@ export default function DashboardPage() {
       try {
         const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=database'));
         if (response.ok) {
-          const data = await response.json();
+          const data = await safeJsonParse(response); if (!data) return;
           setDatabaseSettings(data.database || data);
         }
       } catch (error) {
@@ -474,7 +474,7 @@ export default function DashboardPage() {
       try {
         const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/dashboard/stats'));
         if (response.ok) {
-          const data = await response.json();
+          const data = await safeJsonParse(response); if (!data) return;
           console.log('📊 [DASHBOARD] Token stats loaded:', {
             totalTokens: data.totalTokensUsed,
             totalCost: data.totalCost
@@ -503,8 +503,8 @@ export default function DashboardPage() {
         fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/dashboard/status')),
       ]);
 
-      const healthData = healthResponse.ok ? await healthResponse.json() : null;
-      const scraperStatus = scraperStatusResponse.ok ? await scraperStatusResponse.json() : null;
+      const healthData = await safeJsonParse(healthResponse);
+      const scraperStatus = await safeJsonParse(scraperStatusResponse);
 
       if (healthData) {
         addConsoleLog('[API] ✅ System health check tamamlandı', 'info', 'backend');
@@ -571,7 +571,7 @@ export default function DashboardPage() {
         throw new Error('Failed to fetch documents');
       }
 
-      const payload = await response.json();
+      const payload = await safeJsonParse(response); if (!payload) return;
       const docs = Array.isArray(payload?.history)
         ? payload.history
         : [];
@@ -595,7 +595,7 @@ export default function DashboardPage() {
         throw new Error('Failed to fetch scraper sessions');
       }
 
-      const payload = await response.json();
+      const payload = await safeJsonParse(response); if (!payload) return;
       const sessionList = Array.isArray(payload?.history)
         ? payload.history
         : [];
@@ -974,7 +974,7 @@ export default function DashboardPage() {
             const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/health/system'));
             if (response.ok) {
               addConsoleLog('✅ API connection successful', 'success', 'system');
-              const data = await response.json();
+              const data = await safeJsonParse(response); if (!data) return;
               addConsoleLog(`  📊 Response time: ${Math.random() * 100 + 10}ms`, 'info', 'system');
               addConsoleLog(`  🏥 Status: ${data.status || 'OK'}`, 'info', 'system');
             } else {

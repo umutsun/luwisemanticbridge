@@ -123,3 +123,33 @@ export const fetchWithAuth = async (
   return response;
 };
 
+/**
+ * Safe JSON parse helper to prevent "Unexpected token '<'" errors
+ * when response is HTML instead of JSON
+ */
+export const safeJsonParse = async (response: Response): Promise<any> => {
+  // Check if response is ok
+  if (!response.ok) {
+    console.warn(`[safeJsonParse] Response not ok: ${response.status} ${response.statusText}`);
+    return null;
+  }
+
+  // Check content-type
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    console.warn(`[safeJsonParse] Response is not JSON (content-type: ${contentType})`);
+    // Try to get text for debugging
+    const text = await response.text();
+    console.warn(`[safeJsonParse] Response text: ${text.substring(0, 200)}...`);
+    return null;
+  }
+
+  // Parse JSON safely
+  try {
+    return await response.json();
+  } catch (error) {
+    console.error('[safeJsonParse] JSON parse error:', error);
+    return null;
+  }
+};
+
