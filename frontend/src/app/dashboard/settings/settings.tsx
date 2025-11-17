@@ -2471,18 +2471,6 @@ function RAGSettings() {
                 <li>• Location: frontend/src/templates/</li>
               </ul>
             </div>
-
-            {/* Documentation Link */}
-            <div className="pt-2 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => window.open('/TEMPLATE_SYSTEM_GUIDE.md', '_blank')}
-              >
-                View Documentation
-              </Button>
-            </div>
           </CardContent>
         </Card>
         </div>
