@@ -1933,112 +1933,164 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
   /**
    * Get popular questions based on recent searches and actual database content
+   * IMPROVED: Now generates contextual, specific questions instead of generic ones
    */
   async getPopularQuestions(): Promise<string[]> {
     try {
-      // NOTE: Generated questions query (jsonb_array_elements) is too slow on large datasets
-      // Using direct unified_embeddings query for better performance
+      console.log('[SUGGESTIONS] Generating contextual suggestion questions...');
 
-      // 1. Fallback: Get most searched questions from recent messages (randomized)
-      const recentSearchesQuery = `
-        SELECT content, COUNT(*) as count
-        FROM messages
-        WHERE role = 'user'
-          AND created_at > NOW() - INTERVAL '7 days'
-          AND LENGTH(content) > 10
-          AND LENGTH(content) < 200
-        GROUP BY content
-        HAVING COUNT(*) >= 2
-        ORDER BY RANDOM()
-        LIMIT 5
-      `;
-
-      const recentResult = await this.pool.query(recentSearchesQuery);
-      const recentQuestions = recentResult.rows.map(r => r.content);
-
-      console.log(` Found ${recentQuestions.length} recent questions from user searches`);
-
-      // 2. Get interesting titles from unified_embeddings (actual sorucevap, makaleler, etc.)
-      const unifiedQuestionsQuery = `
+      // 1. Get interesting content from database (titles + excerpts for context)
+      const contentQuery = `
         SELECT
-          COALESCE(metadata->>'title',
-                   LEFT(content, 150)) as question_text,
-          metadata->>'table' as source_type
+          COALESCE(metadata->>'title', LEFT(content, 100)) as title,
+          LEFT(content, 300) as excerpt,
+          metadata->>'table' as source_table
         FROM unified_embeddings
-        WHERE metadata->>'table' IN ('sorucevap', 'makaleler', 'ozelgeler')
+        WHERE metadata->>'table' IN ('sorucevap', 'makaleler', 'ozelgeler', 'danistaykararlari')
           AND (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
-          AND LENGTH(COALESCE(metadata->>'title', content)) > 20
-          AND LENGTH(COALESCE(metadata->>'title', content)) < 200
+          AND LENGTH(COALESCE(metadata->>'title', content)) > 30
         ORDER BY RANDOM()
-        LIMIT 15
+        LIMIT 20
       `;
 
-      const unifiedResult = await this.pool.query(unifiedQuestionsQuery);
-      const unifiedQuestions: string[] = [];
+      const contentResult = await this.pool.query(contentQuery);
+      const generatedQuestions: string[] = [];
 
-      for (const row of unifiedResult.rows) {
-        let questionText = row.question_text || '';
+      console.log(`[SUGGESTIONS] Processing ${contentResult.rows.length} database entries...`);
 
-        // Clean up the question text
-        questionText = questionText
-          .replace(/<[^>]*>/g, '') // Remove HTML tags
-          .replace(/\s+/g, ' ') // Normalize whitespace
-          .trim();
+      // 2. Generate contextual questions from each content
+      for (const row of contentResult.rows) {
+        const title = row.title || '';
+        const excerpt = row.excerpt || '';
+        const sourceTable = row.source_table || '';
 
-        // Skip if too short or contains unwanted patterns
-        if (questionText.length < 20 || questionText.includes('http')) {
+        // Skip empty or too short content
+        if (!title || title.length < 10) {
           continue;
         }
 
-        // Add question mark if it's a soru-cevap entry without one
-        if (row.source_type === 'sorucevap' && !questionText.endsWith('?')) {
-          questionText += '?';
+        // Clean the text
+        const cleanTitle = title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const cleanExcerpt = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+        // Skip URLs and unwanted patterns
+        if (cleanTitle.includes('http') || cleanExcerpt.includes('http')) {
+          continue;
         }
 
-        unifiedQuestions.push(questionText);
+        // Generate dynamic, contextual question using existing smart logic
+        const category = this.categorizeContent(cleanTitle, cleanExcerpt, sourceTable);
+        const smartQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
+
+        // FILTER OUT GENERIC/VAGUE QUESTIONS
+        const isGenericQuestion = this.isGenericQuestion(smartQuestion);
+        if (isGenericQuestion) {
+          console.log(`   [SKIP] Generic: "${smartQuestion.substring(0, 60)}..."`);
+          continue;
+        }
+
+        generatedQuestions.push(smartQuestion);
+        console.log(`   [OK] Generated: "${smartQuestion.substring(0, 80)}..."`);
       }
 
-      console.log(` Found ${unifiedQuestions.length} questions from database content`);
+      console.log(`[SUGGESTIONS] Generated ${generatedQuestions.length} contextual questions`);
 
-      // 3. Combine all questions, prioritize recent searches
-      const allQuestions = [
-        ...new Set([
-          ...recentQuestions.slice(0, 2), // Max 2 recent searches (most relevant)
-          ...unifiedQuestions.slice(0, 10) // Max 10 from database
-        ])
-      ];
-
-      // 4. If not enough questions, add some default high-quality ones
-      if (allQuestions.length < 4) {
+      // 3. If not enough questions, add high-quality defaults
+      if (generatedQuestions.length < 4) {
+        console.log(`[SUGGESTIONS] Not enough questions (${generatedQuestions.length}), adding defaults`);
         const defaultQuestions = [
-          'KDV tevkifatı nasıl hesaplanır?',
-          'Gelir vergisi beyannamesi hangi durumlarda verilir?',
-          'E-fatura uygulaması zorunlu mudur?',
-          'Stopaj oranları nelerdir?',
-          'Kurumlar vergisi beyannamesi ne zaman verilir?',
-          'Damga vergisi hangi işlemlerde alınır?'
+          'Stopaj hesaplarken önemli faktörler nelerdir?',
+          'KDV tevkifatı hangi işlemlerde uygulanır?',
+          'Gelir vergisi beyannamesinde hangi gelirler beyan edilir?',
+          'E-fatura uygulamasından kimler muaf tutulur?',
+          'Kurumlar vergisi matrahı nasıl hesaplanır?',
+          'Damga vergisi oranları hangi işlemler için farklılaşır?'
         ];
 
-        allQuestions.push(...defaultQuestions.slice(0, 4 - allQuestions.length));
+        generatedQuestions.push(...defaultQuestions.slice(0, 6 - generatedQuestions.length));
       }
 
-      // 5. Randomly select 4 questions using Fisher-Yates shuffle
-      const shuffled = [...allQuestions];
+      // 4. Randomly select 4 questions using Fisher-Yates shuffle
+      const shuffled = [...generatedQuestions];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
-      return shuffled.slice(0, 4);
+
+      const final = shuffled.slice(0, 4);
+      console.log('[SUGGESTIONS] Final 4 questions:', final);
+
+      return final;
     } catch (error) {
-      console.error('Error getting popular questions:', error);
+      console.error('[SUGGESTIONS] Error generating questions:', error);
       // Return high-quality default questions if error
       return [
-        'KDV iade işlemleri nasıl yapılır?',
-        'Gelir vergisi matrah tespit yöntemleri nelerdir?',
-        'E-beyanname sistemi nasıl kullanılır?',
-        'Stopaj tevkifatı hangi durumlarda yapılır?'
+        'Stopaj hesaplarken önemli faktörler nelerdir?',
+        'KDV iade işlemleri hangi durumlarda yapılır?',
+        'Gelir vergisi matrahı nasıl tespit edilir?',
+        'E-beyanname sistemi zorunlu kullanıcılar kimlerdir?'
       ];
     }
+  }
+
+  /**
+   * Filter out generic/vague questions that lack context
+   */
+  private isGenericQuestion(question: string): boolean {
+    const genericPatterns = [
+      /buna benzer/i,
+      /bunun gibi/i,
+      /bu tür/i,
+      /bu konuda/i,
+      /hakkında bilgi/i,
+      /detaylı bilgi/i,
+      /bilgi verir misiniz/i,
+      /açıklar mısınız/i,
+      /nedir\?$/i, // Questions that ONLY ask "what is X?"
+      /ne demek/i,
+      /similar to/i,
+      /like this/i,
+      /about this/i,
+      /information about/i,
+      /can you provide/i
+    ];
+
+    // Check if question matches any generic pattern
+    for (const pattern of genericPatterns) {
+      if (pattern.test(question)) {
+        return true;
+      }
+    }
+
+    // Check if question is too short (less than 30 chars = likely too generic)
+    if (question.length < 30) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Categorize content for better question generation
+   */
+  private categorizeContent(title: string, excerpt: string, sourceTable: string): string {
+    const content = `${title} ${excerpt}`.toLowerCase();
+
+    // Tax/Legal categories
+    if (/stopaj|tevkifat/i.test(content)) return 'stopaj';
+    if (/kdv|katma değer/i.test(content)) return 'kdv';
+    if (/gelir vergisi/i.test(content)) return 'gelir_vergisi';
+    if (/kurumlar vergisi/i.test(content)) return 'kurumlar_vergisi';
+    if (/beyanname/i.test(content)) return 'beyanname';
+    if (/muafiyet|istisna/i.test(content)) return 'muafiyet';
+    if (/damga vergisi/i.test(content)) return 'damga';
+
+    // Source table fallback
+    if (sourceTable === 'sorucevap') return 'soru_cevap';
+    if (sourceTable === 'makaleler') return 'makale';
+    if (sourceTable === 'ozelgeler') return 'ozelge';
+
+    return 'genel';
   }
 /**
    * Process a single source with LLM enrichment
