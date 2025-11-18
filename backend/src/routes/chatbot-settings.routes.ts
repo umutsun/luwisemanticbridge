@@ -6,21 +6,35 @@ const router = Router();
 // Get chatbot settings
 router.get('/settings', async (req: Request, res: Response) => {
   try {
-    // Get chatbot settings from main settings table
+    // Get chatbot settings AND app settings from main settings table
     const result = await pool.query(`
-      SELECT value FROM settings WHERE key = 'chatbot'
+      SELECT key, value FROM settings
+      WHERE key IN ('chatbot', 'app.name', 'app.description')
     `);
 
     let chatbotData: any = {};
-    if (result.rows.length > 0) {
-      const rawValue = result.rows[0].value;
-      // Parse if string (TEXT column), use directly if already object (JSONB column)
-      chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
+    let appName = '';
+    let appDescription = '';
+
+    // Parse the results
+    for (const row of result.rows) {
+      if (row.key === 'chatbot') {
+        const rawValue = row.value;
+        chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
+      } else if (row.key === 'app.name') {
+        appName = row.value;
+      } else if (row.key === 'app.description') {
+        appDescription = row.value;
+      }
     }
 
+    // Use app.name/description as primary, fallback to chatbot.title/subtitle
+    const finalTitle = appName || chatbotData.title || '';
+    const finalSubtitle = appDescription || chatbotData.subtitle || '';
+
     // Simplified log - only log if title exists
-    if (chatbotData.title) {
-      console.log(` [Chatbot] ${chatbotData.title}`);
+    if (finalTitle) {
+      console.log(` [Chatbot] ${finalTitle}`);
     }
 
     // Default values if not set
@@ -46,8 +60,8 @@ router.get('/settings', async (req: Request, res: Response) => {
     }
 
     const defaultSettings = {
-      title: chatbotData.title || '',
-      subtitle: chatbotData.subtitle || '',
+      title: finalTitle,
+      subtitle: finalSubtitle,
       logoUrl: chatbotData.logoUrl || '',
       placeholder: cleanPlaceholder,
       primaryColor: chatbotData.primaryColor || '#3B82F6',
