@@ -718,4 +718,36 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
   }
 });
 
+// Get active template
+router.get('/active-template', async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT value FROM settings WHERE key = 'template.active'`
+    );
+    const active = result.rows.length > 0 ? result.rows[0].value : 'base';
+    res.json({ active });
+  } catch (error) {
+    console.error('Error fetching active template:', error);
+    res.json({ active: 'base' }); // Return default on error
+  }
+});
+
+// Set active template
+router.post('/set-active-template', async (req: Request, res: Response) => {
+  try {
+    const { templateId } = req.body;
+    await pool.query(
+      `INSERT INTO settings (key, value, category, description, updated_at)
+       VALUES ('template.active', $1, 'app', 'Active document template', CURRENT_TIMESTAMP)
+       ON CONFLICT (key)
+       DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [templateId]
+    );
+    res.json({ success: true, active: templateId });
+  } catch (error) {
+    console.error('Error setting active template:', error);
+    res.status(500).json({ error: 'Failed to set active template' });
+  }
+});
+
 export default router;

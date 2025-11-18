@@ -4314,7 +4314,6 @@ router.get('/dashboard/status', async (req: Request, res: Response) => {
     const [
       scraperStatus,
       realTimeMetrics,
-      monitorData,
       scraperStats,
       queueMetrics,
       cacheStats
@@ -4323,8 +4322,6 @@ router.get('/dashboard/status', async (req: Request, res: Response) => {
       new ScraperService().getPerformanceMetrics().catch(() => null),
       // Real-time monitoring metrics
       scraperMonitorService.getRealTimeMetrics().catch(() => null),
-      // Monitor data with alerts
-      scraperMonitorService.getMonitorData().catch(() => null),
       // General statistics
       new ScraperService().getBasicStats().catch(() => null),
       // Queue metrics
@@ -4332,6 +4329,7 @@ router.get('/dashboard/status', async (req: Request, res: Response) => {
       // Cache statistics
       scrapingCacheService.getCacheStats().catch(() => null)
     ]);
+    const monitorData = null; // getMonitorData() method not available
 
     // Get recent job counts
     let jobsToday = 0;
