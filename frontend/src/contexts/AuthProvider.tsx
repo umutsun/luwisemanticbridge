@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { API_BASE_URL } from '@/config/api.config';
-import { setStoredToken } from '@/lib/auth-fetch';
+import { setStoredToken, safeJsonParse } from '@/lib/auth-fetch';
 
 interface User {
   id: string;
@@ -144,14 +144,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await safeJsonParse(response) || {};
         return {
           success: false,
           error: errorData.error || 'Login failed'
         };
       }
 
-      const data = await response.json();
+      const data = await safeJsonParse(response);
+      if (!data || !data.accessToken) {
+        return {
+          success: false,
+          error: 'Invalid response from server'
+        };
+      }
 
       // Store token in multiple places for compatibility
       setStoredToken(data.accessToken);

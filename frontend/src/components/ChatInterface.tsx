@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import config, { getEndpoint } from '@/config/api.config';
+import { safeJsonParse } from '@/lib/auth-fetch';
 import {
   Send,
   Bot,
@@ -127,7 +128,8 @@ export default function ChatInterface() {
       // Fetch from backend (includes generated questions from database)
       const response = await fetch(getEndpoint('chat', 'suggestions'));
       if (response.ok) {
-        const data = await response.json();
+        const data = await safeJsonParse(response);
+        if (!data) return [];
         const suggestions = data.suggestions || [];
 
         // Update cache
@@ -254,10 +256,10 @@ export default function ChatInterface() {
       fetch('/api/v2/settings?category=prompts')
     ])
       .then(async ([chatbotRes, llmRes, ragRes, promptsRes]) => {
-        const chatbotData = chatbotRes.ok ? await chatbotRes.json() : {};
-        const llmData = llmRes.ok ? await llmRes.json() : {};
-        const ragData = ragRes.ok ? await ragRes.json() : {};
-        const promptsData = promptsRes.ok ? await promptsRes.json() : {};
+        const chatbotData = chatbotRes.ok ? await safeJsonParse(chatbotRes) || {} : {};
+        const llmData = llmRes.ok ? await safeJsonParse(llmRes) || {} : {};
+        const ragData = ragRes.ok ? await safeJsonParse(ragRes) || {} : {};
+        const promptsData = promptsRes.ok ? await safeJsonParse(promptsRes) || {} : {};
 
         // Merge all settings
         const settingsData = {

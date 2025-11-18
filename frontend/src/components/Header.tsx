@@ -54,6 +54,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
 import { getAppSettings } from '@/lib/api/settings';
 import { API_BASE_URL } from '@/config/api.config';
+import { safeJsonParse } from '@/lib/auth-fetch';
 
 
 interface SystemStatus {
@@ -163,8 +164,14 @@ export default function Header() {
       ]);
 
       if (healthResponse.ok) {
-        const healthData = await healthResponse.json();
-        const translationData = translationResponse.ok ? await translationResponse.json() : null;
+        const healthData = await safeJsonParse(healthResponse);
+        const translationData = translationResponse.ok ? await safeJsonParse(translationResponse) : null;
+
+        if (!healthData) {
+          console.warn('[SystemStatus] Failed to parse health data');
+          setConnectionProgress(0);
+          return;
+        }
 
         // Extract database and redis info from health data
         // Backend sends: services.postgres and services.redis
@@ -199,8 +206,10 @@ export default function Header() {
               credentials: 'include'
             });
             if (dbResponse.ok) {
-              databaseSettings = await dbResponse.json();
-              console.log('[SystemStatus] Database settings loaded:', databaseSettings);
+              databaseSettings = await safeJsonParse(dbResponse);
+              if (databaseSettings) {
+                console.log('[SystemStatus] Database settings loaded:', databaseSettings);
+              }
             }
           } catch (error) {
             console.warn('[SystemStatus] Could not fetch app settings:', error);
