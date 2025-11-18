@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { fetchWithAuth, setStoredToken, getStoredToken } from '@/lib/auth-fetch';
+import { fetchWithAuth, setStoredToken, getStoredToken, safeJsonParse } from '@/lib/auth-fetch';
 
 interface Config {
   app: {
@@ -149,7 +149,10 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         throw new Error('Failed to fetch configuration from backend');
       }
-      const data = await response.json();
+      const data = await safeJsonParse(response);
+      if (!data) {
+        throw new Error('Invalid JSON response from backend');
+      }
 
       // Transform backend settings to match Config interface
       const transformedConfig = {
@@ -247,15 +250,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         try {
           const chatbotResponse = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`, { headers });
           if (chatbotResponse.ok) {
-            const chatbotData = await chatbotResponse.json();
-            transformedConfig.chatbot = {
-              title: chatbotData.title,
-              subtitle: chatbotData.subtitle,
-              logoUrl: chatbotData.logoUrl,
-              welcomeMessage: chatbotData.welcomeMessage,
-              placeholder: chatbotData.placeholder,
-              primaryColor: chatbotData.primaryColor
-            };
+            const chatbotData = await safeJsonParse(chatbotResponse);
+            if (chatbotData) {
+              transformedConfig.chatbot = {
+                title: chatbotData.title,
+                subtitle: chatbotData.subtitle,
+                logoUrl: chatbotData.logoUrl,
+                welcomeMessage: chatbotData.welcomeMessage,
+                placeholder: chatbotData.placeholder,
+                primaryColor: chatbotData.primaryColor
+              };
+            }
           }
         } catch (chatbotErr) {
           console.warn('Could not fetch chatbot settings:', chatbotErr);
@@ -315,9 +320,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         throw new Error('Failed to update configuration');
       }
 
-      const result = await response.json();
-      setConfig(result.config);
-      setError(null);
+      const result = await safeJsonParse(response);
+      if (result && result.config) {
+        setConfig(result.config);
+        setError(null);
+      } else {
+        throw new Error('Invalid response format');
+      }
 
       // Dispatch event to notify components that settings have been updated
       if (typeof window !== 'undefined') {
@@ -375,11 +384,13 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`);
       if (response.ok) {
-        const chatbotData = await response.json();
-        return {
-          name: chatbotData.title || 'LSEMB',
-          description: chatbotData.subtitle || 'AI-Powered Knowledge Management System'
-        };
+        const chatbotData = await safeJsonParse(response);
+        if (chatbotData) {
+          return {
+            name: chatbotData.title || 'LSEMB',
+            description: chatbotData.subtitle || 'AI-Powered Knowledge Management System'
+          };
+        }
       }
     } catch (error) {
       console.error('Error fetching public chatbot settings:', error);
