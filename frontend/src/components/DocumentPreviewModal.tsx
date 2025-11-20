@@ -351,10 +351,11 @@ export default function DocumentPreviewModal({
                   document?.file_type === 'application/pdf' ||
                   document?.title?.toLowerCase().endsWith('.pdf');
 
-    if (isPDF) {
+    if (isPDF && config?.database?.name) {
       fetchPDFSchemas();
+      loadAvailableTables(); // Load available tables for Transform tab
     }
-  }, [document?.id]);
+  }, [document?.id, config?.database?.name]);
 
   // Fetch analysis templates for PDF documents
   useEffect(() => {
@@ -1184,29 +1185,38 @@ export default function DocumentPreviewModal({
 
   // Toggle field selection (with parent/child logic)
   const toggleFieldSelection = (fieldPath: string, checked: boolean) => {
-    const newSelected = new Set(pdfSelectedFields);
+    try {
+      const newSelected = new Set(pdfSelectedFields);
 
-    if (checked) {
-      // Add the field
-      newSelected.add(fieldPath);
+      if (checked) {
+        // Add the field
+        newSelected.add(fieldPath);
 
-      // If selecting a parent, also select all children
-      if (pdfMetadata) {
-        const childPaths = getChildPaths(fieldPath, pdfMetadata);
-        childPaths.forEach(path => newSelected.add(path));
+        // If selecting a parent, also select all children
+        if (pdfMetadata) {
+          const childPaths = getChildPaths(fieldPath, pdfMetadata);
+          childPaths.forEach(path => newSelected.add(path));
+        }
+      } else {
+        // Remove the field
+        newSelected.delete(fieldPath);
+
+        // If deselecting a parent, also deselect all children
+        if (pdfMetadata) {
+          const childPaths = getChildPaths(fieldPath, pdfMetadata);
+          childPaths.forEach(path => newSelected.delete(path));
+        }
       }
-    } else {
-      // Remove the field
-      newSelected.delete(fieldPath);
 
-      // If deselecting a parent, also deselect all children
-      if (pdfMetadata) {
-        const childPaths = getChildPaths(fieldPath, pdfMetadata);
-        childPaths.forEach(path => newSelected.delete(path));
-      }
+      setPdfSelectedFields(newSelected);
+    } catch (error) {
+      console.error('[toggleFieldSelection] Error toggling field:', fieldPath, error);
+      toast({
+        title: "Error",
+        description: "Failed to toggle field selection",
+        variant: "destructive"
+      });
     }
-
-    setPdfSelectedFields(newSelected);
   };
 
   // Get all field paths from metadata (for auto-select all)
@@ -2194,27 +2204,40 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   data={pdfEditMode && pdfEditedMetadata ? pdfEditedMetadata : pdfMetadata}
                   selectedFields={pdfSelectedFields}
                   onFieldToggle={(path) => {
-                    // Check if currently selected
-                    const isCurrentlySelected = pdfSelectedFields.has(path);
-                    // Toggle selection (with parent/child logic)
-                    toggleFieldSelection(path, !isCurrentlySelected);
+                    try {
+                      // Check if currently selected
+                      const isCurrentlySelected = pdfSelectedFields.has(path);
+                      // Toggle selection (with parent/child logic)
+                      toggleFieldSelection(path, !isCurrentlySelected);
+                    } catch (error) {
+                      console.error('[JsonViewer] onFieldToggle error:', error);
+                    }
                   }}
                   highlightPath={pdfHighlightedPath}
                   editMode={pdfEditMode}
                   onValueChange={(path, newValue) => {
-                    if (pdfEditMode) {
-                      const updated = { ...pdfEditedMetadata };
-                      const keys = path.split('.');
-                      let current = updated;
-                      for (let i = 0; i < keys.length - 1; i++) {
-                        // Create intermediate object if it doesn't exist
-                        if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
-                          current[keys[i]] = {};
+                    try {
+                      if (pdfEditMode) {
+                        const updated = { ...pdfEditedMetadata };
+                        const keys = path.split('.');
+                        let current = updated;
+                        for (let i = 0; i < keys.length - 1; i++) {
+                          // Create intermediate object if it doesn't exist
+                          if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+                            current[keys[i]] = {};
+                          }
+                          current = current[keys[i]];
                         }
-                        current = current[keys[i]];
+                        current[keys[keys.length - 1]] = newValue;
+                        setPdfEditedMetadata(updated);
                       }
-                      current[keys[keys.length - 1]] = newValue;
-                      setPdfEditedMetadata(updated);
+                    } catch (error) {
+                      console.error('[JsonViewer] onValueChange error:', error);
+                      toast({
+                        title: "Error",
+                        description: "Failed to update value",
+                        variant: "destructive"
+                      });
                     }
                   }}
                   className="h-full"
@@ -2366,7 +2389,28 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 <Button
                   variant={useCustomSchema ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setUseCustomSchema(true)}
+                  onClick={() => {
+                    setUseCustomSchema(true);
+                    // Auto-populate custom schema from JSON selections if empty
+                    if (customTableSchema.fields.length === 0 && pdfSelectedFields.size > 0) {
+                      const fieldsFromJson = Array.from(pdfSelectedFields)
+                        .filter(path => !path.startsWith('_')) // Skip internal fields
+                        .map(path => ({
+                          id: Date.now().toString() + Math.random(),
+                          name: path.replace(/\./g, '_').toLowerCase(),
+                          type: 'TEXT' as const,
+                          description: `From JSON: ${path}`,
+                          required: false,
+                          isPrimaryKey: false
+                        }));
+
+                      setCustomTableSchema(prev => ({
+                        ...prev,
+                        tableName: prev.tableName || pdfMetadata?.dataQuality?.suggestedTableName || 'pdf_metadata',
+                        fields: fieldsFromJson
+                      }));
+                    }
+                  }}
                   className="h-7"
                 >
                   <Database className="w-3 h-3 mr-1" />
@@ -2374,47 +2418,143 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </Button>
               </div>
               {useCustomSchema && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    // Add a new field
-                    setCustomTableSchema(prev => ({
-                      ...prev,
-                      fields: [...prev.fields, {
-                        id: Date.now().toString(),
-                        name: '',
-                        type: 'TEXT',
-                        description: '',
-                        required: false
-                      }]
-                    }));
-                  }}
-                  className="h-7"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Add Field
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      // Sync from JSON selections
+                      if (pdfSelectedFields.size > 0) {
+                        const fieldsFromJson = Array.from(pdfSelectedFields)
+                          .filter(path => !path.startsWith('_')) // Skip internal fields
+                          .map(path => ({
+                            id: Date.now().toString() + Math.random(),
+                            name: path.replace(/\./g, '_').toLowerCase(),
+                            type: 'TEXT' as const,
+                            description: `From JSON: ${path}`,
+                            required: false,
+                            isPrimaryKey: false
+                          }));
+
+                        setCustomTableSchema(prev => ({
+                          ...prev,
+                          fields: fieldsFromJson
+                        }));
+
+                        toast({
+                          title: "Synced",
+                          description: `${fieldsFromJson.length} fields imported from JSON selections`,
+                        });
+                      } else {
+                        toast({
+                          title: "No selections",
+                          description: "Please select fields in the JSON tab first",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                    className="h-7 text-xs"
+                    title="Import fields from JSON selections"
+                  >
+                    <ArrowRight className="w-3 h-3 mr-1" />
+                    Sync from JSON
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Add a new field
+                      setCustomTableSchema(prev => ({
+                        ...prev,
+                        fields: [...prev.fields, {
+                          id: Date.now().toString(),
+                          name: '',
+                          type: 'TEXT',
+                          description: '',
+                          required: false
+                        }]
+                      }));
+                    }}
+                    className="h-7"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add Field
+                  </Button>
+                </div>
               )}
             </div>
 
             {/* Template-based Transform (existing) */}
             {!useCustomSchema && pdfMetadata && pdfSelectedFields.size > 0 ? (
               <>
-                {/* Table Name Input - Full Width at Top */}
-                <div className="flex-shrink-0 mb-4">
-                  <Label htmlFor="pdf-new-table-name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">
-                    Target Table Name
-                  </Label>
-                  <Input
-                    id="pdf-new-table-name"
-                    value={pdfTableName || pdfMetadata.dataQuality?.suggestedTableName || 'pdf_metadata'}
-                    onChange={(e) => setPdfTableName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
-                    className="text-sm font-mono font-bold px-4 w-full"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Table will be created in source database
-                  </p>
+                {/* Table Selection - New or Existing */}
+                <div className="flex-shrink-0 mb-4 space-y-3">
+                  {/* Toggle between Create New / Use Existing */}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={!pdfUseExistingTable ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPdfUseExistingTable(false)}
+                      className="h-7 text-xs"
+                    >
+                      Create New Table
+                    </Button>
+                    <Button
+                      variant={pdfUseExistingTable ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setPdfUseExistingTable(true)}
+                      className="h-7 text-xs"
+                      disabled={pdfAvailableTables.length === 0}
+                    >
+                      Use Existing Table
+                    </Button>
+                  </div>
+
+                  {/* New Table Input */}
+                  {!pdfUseExistingTable ? (
+                    <>
+                      <Label htmlFor="pdf-new-table-name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">
+                        Target Table Name
+                      </Label>
+                      <Input
+                        id="pdf-new-table-name"
+                        value={pdfTableName || pdfMetadata.dataQuality?.suggestedTableName || 'pdf_metadata'}
+                        onChange={(e) => setPdfTableName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                        className="text-sm font-mono font-bold px-4 w-full"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Table will be created in source database
+                      </p>
+                    </>
+                  ) : (
+                    /* Existing Table Dropdown */
+                    <>
+                      <Label htmlFor="pdf-existing-table" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">
+                        Select Existing Table
+                      </Label>
+                      <Select
+                        value={pdfExistingTableName}
+                        onValueChange={(value) => {
+                          setPdfExistingTableName(value);
+                          loadTableColumns(value);
+                        }}
+                      >
+                        <SelectTrigger className="text-sm font-mono font-bold">
+                          <SelectValue placeholder="Select a table..." />
+                        </SelectTrigger>
+                        <SelectContent className="z-[10000]">
+                          {pdfAvailableTables.map(table => (
+                            <SelectItem key={table} value={table} className="text-sm font-mono">
+                              {table}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Data will be inserted into existing table
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* Two Column Layout: Progress | SQL Schema */}
@@ -2777,11 +2917,15 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   <div className="flex items-center gap-1.5">
                     <span><span className="font-bold text-foreground">{csvHeaders.length}</span> columns</span>
                   </div>
-                  <div className="w-px h-3 bg-border" />
-                  <div className="flex items-center gap-1.5">
-                    <Database className="w-3 h-3" />
-                    <span className="font-mono font-semibold text-foreground">{config?.database?.name || 'vergilex_db'}</span>
-                  </div>
+                  {config?.database?.name && (
+                    <>
+                      <div className="w-px h-3 bg-border" />
+                      <div className="flex items-center gap-1.5">
+                        <Database className="w-3 h-3" />
+                        <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               {isPDF && pdfMetadata && (
@@ -2790,11 +2934,15 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     <FileText className="w-3 h-3" />
                     <span><span className="font-bold text-foreground">{pdfSelectedFields.size}</span> / <span className="font-bold text-foreground">{Object.keys(pdfMetadata).length}</span> fields selected</span>
                   </div>
-                  <div className="w-px h-3 bg-border" />
-                  <div className="flex items-center gap-1.5">
-                    <Database className="w-3 h-3" />
-                    <span className="font-mono font-semibold text-foreground">{config?.database?.name || 'vergilex_db'}</span>
-                  </div>
+                  {config?.database?.name && (
+                    <>
+                      <div className="w-px h-3 bg-border" />
+                      <div className="flex items-center gap-1.5">
+                        <Database className="w-3 h-3" />
+                        <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               {!isCSV && !isPDF && (

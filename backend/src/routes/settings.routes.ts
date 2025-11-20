@@ -70,11 +70,12 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     const { category } = req.query;
 
     if (!category) {
-      // Return minimal full config if no category - include active models and app description
+      // Return minimal full config if no category - include active models, app description, and database settings
       const result = await lsembPool.query(
         `SELECT key, value FROM settings
-         WHERE key IN ($1, $2, $3, $4, $5, $6)`,
-        ['app.name', 'app.description', 'app.version', 'app.locale', 'llmSettings.activeChatModel', 'llmSettings.activeEmbeddingModel']
+         WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        ['app.name', 'app.description', 'app.version', 'app.locale', 'llmSettings.activeChatModel', 'llmSettings.activeEmbeddingModel',
+         'database.host', 'database.port', 'database.name']
       );
 
       const config: any = {
@@ -86,6 +87,11 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
         llmSettings: {
           activeChatModel: null,
           activeEmbeddingModel: null
+        },
+        database: {
+          host: null,
+          port: null,
+          name: null
         }
       };
 
