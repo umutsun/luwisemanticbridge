@@ -53,7 +53,7 @@ export function GraphQLTransformTab({
 
   const { progress: wsProgress, setProgress, cancelTransform } = useTransformProgressSubscription(jobId);
 
-  const sourceDbName = config?.database?.name || 'rag_chatbot';
+  const sourceDbName = config?.database?.name || 'vergilex_db';
   const totalRows = totalRowCount || parsedData.length;
   const totalBatches = Math.ceil(totalRows / batchSize);
 

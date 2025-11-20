@@ -1993,46 +1993,6 @@ export default function DocumentManagerPage() {
                   </Card>
                 )}
 
-                {/* Bulk Actions Bar */}
-                {selectedRows.size > 0 && (
-                  <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100">
-                            {selectedRows.size} seçili
-                          </Badge>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedRows(new Set());
-                              setSelectAll(false);
-                            }}
-                            className="h-7 text-xs"
-                          >
-                            Seçimi Temizle
-                          </Button>
-                        </div>
-                        <ConfirmTooltip
-                          onConfirm={handleBulkDelete}
-                          message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
-                          side="top"
-                        >
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="h-7 gap-1.5"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Toplu Sil</span>
-                          </Button>
-                        </ConfirmTooltip>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
                 <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
                   <CardContent className="p-0">
                     <div className="h-[664px] overflow-auto">
@@ -2196,20 +2156,47 @@ export default function DocumentManagerPage() {
                         </TableBody>
                       </Table>
 
-                      {/* Load More Button */}
-                      {!loading && filteredDocuments.length > visibleDocumentsCount && (
-                        <div className="flex justify-center p-4 border-t">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                            className="gap-2"
-                          >
-                            Daha Fazla Yükle
-                            <span className="text-xs text-muted-foreground">
-                              ({filteredDocuments.length - visibleDocumentsCount} kaldı)
-                            </span>
-                          </Button>
+                      {/* Footer: Load More + Bulk Actions */}
+                      {(!loading && (filteredDocuments.length > visibleDocumentsCount || selectedRows.size > 0)) && (
+                        <div className="flex items-center justify-between p-4 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                          {/* Load More */}
+                          {filteredDocuments.length > visibleDocumentsCount ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
+                              className="gap-2"
+                            >
+                              Daha Fazla Yükle
+                              <span className="text-xs text-muted-foreground">
+                                ({filteredDocuments.length - visibleDocumentsCount} kaldı)
+                              </span>
+                            </Button>
+                          ) : (
+                            <div></div>
+                          )}
+
+                          {/* Bulk Delete */}
+                          {selectedRows.size > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="text-xs">
+                                {selectedRows.size} seçili
+                              </Badge>
+                              <ConfirmTooltip
+                                onConfirm={handleBulkDelete}
+                                message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
+                                side="top"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </ConfirmTooltip>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
