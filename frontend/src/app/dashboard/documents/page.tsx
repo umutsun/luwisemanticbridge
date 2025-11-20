@@ -1124,8 +1124,8 @@ export default function DocumentManagerPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Pagination state
-  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(20);
-  const DOCUMENTS_PER_PAGE = 20;
+  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(30);
+  const DOCUMENTS_PER_PAGE = 30;
 
   // Batch processing state
   const [batchProcessing, setBatchProcessing] = useState(false);
@@ -1944,19 +1944,8 @@ export default function DocumentManagerPage() {
                 )}
 
                 <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
-                  <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Database className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        <span className="text-gray-900 dark:text-white font-semibold">Database Documents</span>
-                      </CardTitle>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                        {documents.length} total
-                      </div>
-                    </div>
-                  </CardHeader>
                   <CardContent className="p-0">
-                    <div className="h-[600px] overflow-auto">
+                    <div className="h-[664px] overflow-auto">
                       <Table>
                         <TableHeader className="bg-gray-50 dark:bg-gray-900">
                           <TableRow>
