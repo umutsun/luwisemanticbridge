@@ -533,7 +533,7 @@ export default function DocumentManagerPage() {
         } catch (error) {
           console.error('Error polling job status:', error);
         }
-      }, 2000); // Poll every 2 seconds
+      }, 1000); // Poll every 1 second for faster updates
 
       // Timeout after 5 minutes
       setTimeout(() => {
@@ -1397,6 +1397,11 @@ export default function DocumentManagerPage() {
                 description: `${pdfDocs.length} documents transformed to table ${tableName}`,
               });
 
+              // Refresh documents and stats
+              setTimeout(async () => {
+                await Promise.all([fetchDocuments(), fetchStats()]);
+              }, 500);
+
               setTimeout(() => {
                 clearSelection();
                 setBatchProcessing(false);
@@ -1412,7 +1417,7 @@ export default function DocumentManagerPage() {
           clearInterval(checkProgress);
           console.error('Progress check error:', error);
         }
-      }, 2000);
+      }, 1000); // Poll every 1 second for faster updates
 
     } catch (error: any) {
       console.error('Transform error:', error);
@@ -1496,8 +1501,10 @@ export default function DocumentManagerPage() {
                 description: `Successfully processed ${pdfDocs.length} documents`,
               });
 
-              // Refresh documents
-              await fetchDocuments();
+              // Refresh documents and stats
+              setTimeout(async () => {
+                await Promise.all([fetchDocuments(), fetchStats()]);
+              }, 500);
 
               // Clear selection and reset state after 2 seconds
               setTimeout(() => {
@@ -1515,7 +1522,7 @@ export default function DocumentManagerPage() {
           clearInterval(checkProgress);
           console.error('Progress check error:', error);
         }
-      }, 2000); // Poll every 2 seconds
+      }, 1000); // Poll every 1 second for faster updates
 
     } catch (error: any) {
       console.error('Batch processing error:', error);
