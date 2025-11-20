@@ -414,7 +414,7 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
     const size = Buffer.byteLength(content, 'utf8');
 
     const result = await lsembPool.query(
-      `INSERT INTO documents (title, content, type, size, metadata)
+      `INSERT INTO documents (title, content, file_type, file_size, metadata)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
       [
@@ -784,7 +784,7 @@ router.post('/physical-files/add', authenticateToken, async (req: AuthenticatedR
 
     // Save to database
     const result = await lsembPool.query(
-      `INSERT INTO documents (title, content, type, size, file_path, metadata)
+      `INSERT INTO documents (title, content, file_type, file_size, file_path, metadata)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
