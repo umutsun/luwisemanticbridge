@@ -4,7 +4,7 @@
  */
 export const API_CONFIG = {
   // Empty baseUrl means use relative paths (Next.js rewrites handle proxy)
-  baseUrl: process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL,
+  baseUrl: process.env.NEXT_PUBLIC_API_URL || '',
   port: process.env.NEXT_PUBLIC_API_PORT || '8083',
   wsUrl: process.env.NEXT_PUBLIC_WEBSOCKET_URL || `ws://localhost:8083/socket.io`,
 

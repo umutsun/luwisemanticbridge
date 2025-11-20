@@ -35,7 +35,7 @@ class QuestionGenerationService {
   /**
    * Generate questions from content dynamically
    */
-  async generateQuestions(context: QuestionGenerationContext, count: number = 3): Promise<GeneratedQuestion[]> {
+  async generateQuestions(context: QuestionGenerationContext, count: number = 1): Promise<GeneratedQuestion[]> {
     const cacheKey = `${context.sourceTable}-${context.sourceId}`;
     const cached = this.cache.get(cacheKey);
 

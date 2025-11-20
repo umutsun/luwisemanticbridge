@@ -402,9 +402,54 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
                 ]
               );
 
-              // TODO: Transform to source table (ozelgeler, danistaykararlari, etc.)
-              // After successful transform, update status to 'transformed'
-              // This will be handled by /transform endpoint in next phase
+              // Transform to source table if template detected AND user opted-in
+              const autoTransform = options.autoTransform === true;
+              if (autoTransform && extractedMetadata && Object.keys(extractedMetadata).length > 0) {
+                try {
+                  console.log(`[Batch Folders] Starting transform to source DB for document ${documentId}`);
+
+                  // Call transform service (uses pdf-batch routes transform logic)
+                  const transformResponse = await fetch(`http://localhost:8083/api/v2/pdf/metadata-transform`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${process.env.SYSTEM_TOKEN || 'internal'}`
+                    },
+                    body: JSON.stringify({
+                      documentId,
+                      selectedFields: Object.keys(extractedMetadata),
+                      tableName: templateId || 'batch_documents',
+                      useExistingTable: false,
+                      sourceDbId: process.env.SOURCE_DB_NAME || 'scriptus_lsemb'
+                    })
+                  });
+
+                  if (transformResponse.ok) {
+                    const transformData = await transformResponse.json();
+                    console.log(`[Batch Folders] Transform job started: ${transformData.jobId}`);
+
+                    // Update status to transformed
+                    await lsembPool.query(
+                      `UPDATE documents
+                       SET metadata = metadata || $1::jsonb,
+                           processing_status = 'transformed',
+                           updated_at = CURRENT_TIMESTAMP
+                       WHERE id = $2`,
+                      [
+                        JSON.stringify({
+                          transform_job_id: transformData.jobId,
+                          transformed_at: new Date().toISOString()
+                        }),
+                        documentId
+                      ]
+                    );
+                    console.log(`[Batch Folders] Document ${documentId} status: analyzed → transformed`);
+                  }
+                } catch (transformError: any) {
+                  console.warn(`[Batch Folders] Transform failed (non-critical): ${transformError.message}`);
+                  // Don't fail the whole batch if transform fails - just log it
+                }
+              }
             }
           }
         } catch (metadataError: any) {

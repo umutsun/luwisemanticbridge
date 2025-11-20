@@ -72,6 +72,7 @@ interface Document {
   size: number;
   file_path?: string; // Physical file path on server
   hasEmbeddings?: boolean; // from backend
+  processing_status?: string; // Database processing status: waiting, analyzing, analyzed, transformed
   metadata: {
     source?: string;
     created_at: string;
@@ -359,7 +360,7 @@ export default function DocumentManagerPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch(`${getApiUrl('').replace('/documents', '')}/api/v2/batch-folders/list`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/list`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -398,7 +399,7 @@ export default function DocumentManagerPage() {
         description: `Sampling PDFs from ${folderName}...`
       });
 
-      const analyzeResponse = await fetch(`${getApiUrl('').replace('/documents', '')}/batch-folders/${folderName}/analyze`, {
+      const analyzeResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/${folderName}/analyze`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -426,7 +427,7 @@ export default function DocumentManagerPage() {
       });
 
       // Step 2: Scan folder to get all files
-      const scanResponse = await fetch(`${getApiUrl('').replace('/documents', '')}/batch-folders/scan`, {
+      const scanResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/scan`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -456,7 +457,7 @@ export default function DocumentManagerPage() {
         description: `Processing ${newFiles.length} new files...`
       });
 
-      const processResponse = await fetch(`${getApiUrl('').replace('/documents', '')}/batch-folders/process`, {
+      const processResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/process`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -465,7 +466,9 @@ export default function DocumentManagerPage() {
         body: JSON.stringify({
           files: newFiles,
           folderConfig,
-          options: {}
+          options: {
+            autoTransform: false  // Transform disabled for now - user will preview analysis first
+          }
         })
       });
 
@@ -475,14 +478,73 @@ export default function DocumentManagerPage() {
 
       const processData = await processResponse.json();
 
+      // Set job tracking state
+      setBatchJobId(processData.jobId);
+      setBatchProcessing(true);
+
       toast({
         title: 'Batch Import Started',
-        description: `Job ID: ${processData.jobId} - Processing ${processData.totalFiles} files`,
+        description: `Processing ${processData.totalFiles} files...`,
         duration: 5000
       });
 
-      // Refresh data
-      await Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
+      // Poll for job progress
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/job-status/${processData.jobId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            const progress = statusData.processedCount && statusData.totalFiles
+              ? Math.round((statusData.processedCount / statusData.totalFiles) * 100)
+              : 0;
+
+            setBatchProgress(progress);
+
+            if (statusData.status === 'completed' || statusData.status === 'failed') {
+              clearInterval(pollInterval);
+              setBatchProcessing(false);
+              setBatchJobId(null);
+
+              if (statusData.status === 'completed') {
+                toast({
+                  title: 'Import Completed!',
+                  description: `Successfully processed ${statusData.processedCount} files`
+                });
+              } else {
+                toast({
+                  title: 'Import Failed',
+                  description: statusData.error || 'Some files failed to process',
+                  variant: 'destructive'
+                });
+              }
+
+              // Refresh data
+              await Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
+
+              // Clear progress after animation
+              setTimeout(() => setBatchProgress(0), 1000);
+            }
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+        }
+      }, 2000); // Poll every 2 seconds
+
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (batchProcessing) {
+          setBatchProcessing(false);
+          setBatchJobId(null);
+          setBatchProgress(0);
+          Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
+        }
+      }, 300000);
 
     } catch (error: any) {
       console.error('Folder batch import error:', error);
@@ -1061,6 +1123,10 @@ export default function DocumentManagerPage() {
   const [selectAll, setSelectAll] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
+  // Pagination state
+  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(20);
+  const DOCUMENTS_PER_PAGE = 20;
+
   // Batch processing state
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState(0);
@@ -1093,6 +1159,11 @@ export default function DocumentManagerPage() {
 
     return matchesSearch && matchesType;
   });
+
+  // Reset pagination when search or filter changes
+  useEffect(() => {
+    setVisibleDocumentsCount(DOCUMENTS_PER_PAGE);
+  }, [searchQuery, filterType]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -1400,7 +1471,7 @@ export default function DocumentManagerPage() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900">
+    <div className="p-6 pb-40">
       <div className="w-[98%] mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -1416,25 +1487,25 @@ export default function DocumentManagerPage() {
             <CardContent className="p-4">
               <div className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">Total Documents</div>
               <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                {stats.documents.total.toLocaleString()}
+                {(documents || []).length.toLocaleString()}
               </div>
               <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                <span className="font-mono">+{stats.history.uploaded_today}</span>
+                <span className="font-mono">+{stats.history?.uploaded_today || 0}</span>
                 <span className="opacity-75 ml-1">today</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Transformed - Green Pastel */}
+          {/* Embedded - Green Pastel */}
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
             <CardContent className="p-4">
-              <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">Transformed</div>
+              <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">Embedded</div>
               <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-                {stats.transform?.tables_created?.toLocaleString() || '0'} tables
+                {(documents || []).filter(doc => doc.metadata?.embeddings > 0).length.toLocaleString()}
               </div>
               <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                <span className="font-mono">{stats.transform?.total_records?.toLocaleString() || '0'}</span>
-                <span className="opacity-75 ml-1">records</span>
+                <span className="font-mono">{(documents || []).filter(doc => !doc.metadata?.embeddings || doc.metadata.embeddings === 0).length.toLocaleString()}</span>
+                <span className="opacity-75 ml-1">pending</span>
               </div>
             </CardContent>
           </Card>
@@ -1444,10 +1515,10 @@ export default function DocumentManagerPage() {
             <CardContent className="p-4">
               <div className="text-sm text-purple-700 dark:text-purple-300 font-medium mb-1">OCR Processed</div>
               <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                {stats.documents.ocr_processed.toLocaleString()}
+                {(documents || []).filter(doc => doc.metadata?.ocr_processed === true).length.toLocaleString()}
               </div>
               <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                <span className="font-mono">{stats.documents.ocr_pending.toLocaleString()}</span>
+                <span className="font-mono">{(documents || []).filter(doc => doc.type && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(doc.type.toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
                 <span className="opacity-75 ml-1">pending</span>
               </div>
             </CardContent>
@@ -1470,17 +1541,17 @@ export default function DocumentManagerPage() {
 
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:h-[calc(100vh-350px)]">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Left Column (40%) - Upload & Physical Files */}
-              <div className="lg:col-span-5 flex flex-col gap-6">
+              <div className="lg:col-span-5 flex flex-col gap-4">
                 {/* Upload Area */}
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-2 gap-6">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-2 gap-4">
                       {/* Left: Upload Area (50%) */}
                       <div>
                         <div
-                          className={`rounded-lg p-4 text-center transition-colors duration-200 ${
+                          className={`rounded-lg p-3 text-center transition-colors duration-200 ${
                             isDragging
                               ? 'bg-blue-50 dark:bg-blue-950/20'
                               : 'bg-muted/30 hover:bg-muted/50'
@@ -1597,7 +1668,7 @@ export default function DocumentManagerPage() {
                 </Card>
 
                 {/* Physical Files List */}
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1 min-h-0">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
                   <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -1609,7 +1680,7 @@ export default function DocumentManagerPage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="flex-1 flex flex-col overflow-hidden">
+                  <CardContent className="flex flex-col overflow-hidden p-4">
                     {/* Search & Filter */}
                     <div className="flex gap-2 mb-4">
                       <div className="relative flex-1">
@@ -1638,7 +1709,7 @@ export default function DocumentManagerPage() {
                     </div>
 
                     {/* Files List */}
-                    <ScrollArea className="flex-1">
+                    <ScrollArea className="h-[600px]">
                       {(physicalFilesLoading || foldersLoading) ? (
                         <div className="divide-y divide-border">
                           {[...Array(8)].map((_, i) => (
@@ -1691,7 +1762,7 @@ export default function DocumentManagerPage() {
                                           ? 'cursor-not-allowed opacity-50'
                                           : 'hover:bg-green-100 dark:hover:bg-green-900/20'
                                       }`}
-                                      title={folder.newFilesCount === 0 ? "All files already in database" : "Batch import folder to database"}
+                                      title={folder.newFilesCount === 0 ? "All files already in database" : "Import folder to database (OCR + Analysis)"}
                                     >
                                       {processingFolders.has(folder.name) ? (
                                         <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
@@ -1798,14 +1869,14 @@ export default function DocumentManagerPage() {
                                 </ConfirmTooltip>
                               </div>
 
-                              {/* File name */}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate" title={file.displayName || file.filename}>
+                              {/* File name and size */}
+                              <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium truncate flex-1" title={file.displayName || file.filename}>
                                   {file.displayName || file.filename}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatFileSize(file.size)} • {file.ext.toUpperCase()}
-                                </p>
+                                <span className="text-[10px] text-muted-foreground flex-shrink-0 font-mono">
+                                  {formatFileSize(file.size)}
+                                </span>
                               </div>
                             </div>
                           ))}
@@ -1872,9 +1943,9 @@ export default function DocumentManagerPage() {
                   </Card>
                 )}
 
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1 min-h-0">
-                  <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
-                    <div className="overflow-auto flex-1">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+                  <CardContent className="p-0">
+                    <div className="h-[600px] overflow-auto">
                       <Table>
                         <TableHeader className="bg-gray-50 dark:bg-gray-900">
                           <TableRow>
@@ -1895,7 +1966,7 @@ export default function DocumentManagerPage() {
                         </TableHeader>
                         <TableBody>
                           {loading ? (
-                            <TableBodySkeleton rows={8} columns={7} />
+                            <TableBodySkeleton rows={20} columns={7} />
                           ) : filteredDocuments.length === 0 ? (
                             <TableRow>
                               <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
@@ -1905,7 +1976,7 @@ export default function DocumentManagerPage() {
                               </TableCell>
                             </TableRow>
                           ) : (
-                            filteredDocuments.map(doc => (
+                            filteredDocuments.slice(0, visibleDocumentsCount).map(doc => (
                               <TableRow
                                 key={doc.id}
                                 className={`hover:bg-muted/50 transition-colors duration-150 ${selectedRows.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
@@ -1936,25 +2007,54 @@ export default function DocumentManagerPage() {
                                 </TableCell>
                                 <TableCell>
                                   {(() => {
+                                    // Use actual processing_status from database if available
+                                    const processingStatus = doc.processing_status;
                                     const isEmbedded = doc.metadata?.embeddings;
                                     const isOCRProcessed = doc.metadata?.ocr_processed;
-                                    const needsOCR = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(doc.type.toLowerCase());
 
                                     let status = '';
                                     let colorClass = '';
 
-                                    if (isEmbedded) {
-                                      status = 'Embedded';
-                                      colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
-                                    } else if (isOCRProcessed) {
-                                      status = 'Ready';
-                                      colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
-                                    } else if (needsOCR) {
-                                      status = 'Raw';
-                                      colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                    // Map processing_status values to display
+                                    if (processingStatus) {
+                                      switch(processingStatus) {
+                                        case 'waiting':
+                                          status = 'Waiting';
+                                          colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                          break;
+                                        case 'analyzing':
+                                          status = 'Analyzing';
+                                          colorClass = 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400';
+                                          break;
+                                        case 'analyzed':
+                                          status = 'Analyzed';
+                                          colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                          break;
+                                        case 'transformed':
+                                          status = 'Transformed';
+                                          colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
+                                          break;
+                                        case 'failed':
+                                          status = 'Failed';
+                                          colorClass = 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400';
+                                          break;
+                                        default:
+                                          // Fallback for unknown status
+                                          status = processingStatus;
+                                          colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                      }
                                     } else {
-                                      status = 'Ready';
-                                      colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                      // Fallback to old logic if processing_status is not available
+                                      if (isEmbedded) {
+                                        status = 'Embedded';
+                                        colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
+                                      } else if (isOCRProcessed) {
+                                        status = 'OCR Done';
+                                        colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                      } else {
+                                        status = 'Raw';
+                                        colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                      }
                                     }
 
                                     return (
@@ -2005,6 +2105,23 @@ export default function DocumentManagerPage() {
                           )}
                         </TableBody>
                       </Table>
+
+                      {/* Load More Button */}
+                      {!loading && filteredDocuments.length > visibleDocumentsCount && (
+                        <div className="flex justify-center p-4 border-t">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
+                            className="gap-2"
+                          >
+                            Daha Fazla Yükle
+                            <span className="text-xs text-muted-foreground">
+                              ({filteredDocuments.length - visibleDocumentsCount} kaldı)
+                            </span>
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                   {getSelectedCount() > 0 && (
