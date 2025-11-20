@@ -2780,7 +2780,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   <div className="w-px h-3 bg-border" />
                   <div className="flex items-center gap-1.5">
                     <Database className="w-3 h-3" />
-                    <span className="font-mono font-semibold text-foreground">{config?.database?.name || 'Not configured'}</span>
+                    <span className="font-mono font-semibold text-foreground">{config?.database?.name || 'vergilex_db'}</span>
                   </div>
                 </>
               )}
@@ -2793,7 +2793,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   <div className="w-px h-3 bg-border" />
                   <div className="flex items-center gap-1.5">
                     <Database className="w-3 h-3" />
-                    <span className="font-mono font-semibold text-foreground">{config?.database?.name || 'Not configured'}</span>
+                    <span className="font-mono font-semibold text-foreground">{config?.database?.name || 'vergilex_db'}</span>
                   </div>
                 </>
               )}
