@@ -2176,42 +2176,20 @@ export default function DocumentManagerPage() {
                       </Table>
                     </div>
 
-                    {/* Fixed Footer: Load More + Bulk Delete */}
-                    {(!loading && (filteredDocuments.length > visibleDocumentsCount || selectedRows.size > 0)) && (
-                      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
-                        {/* Load More */}
-                        {filteredDocuments.length > visibleDocumentsCount ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                            className="gap-2"
-                          >
-                            Daha Fazla Yükle
-                            <span className="text-xs text-muted-foreground">
-                              ({filteredDocuments.length - visibleDocumentsCount} kaldı)
-                            </span>
-                          </Button>
-                        ) : (
-                          <div></div>
-                        )}
-
-                        {/* Bulk Delete - Icon Only */}
-                        {selectedRows.size > 0 && (
-                          <ConfirmTooltip
-                            onConfirm={handleBulkDelete}
-                            message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
-                            side="top"
-                          >
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </ConfirmTooltip>
-                        )}
+                    {/* Fixed Footer: Load More */}
+                    {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
+                      <div className="flex-shrink-0 flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
+                          className="gap-2"
+                        >
+                          Daha Fazla Yükle
+                          <span className="text-xs text-muted-foreground">
+                            ({filteredDocuments.length - visibleDocumentsCount} kaldı)
+                          </span>
+                        </Button>
                       </div>
                     )}
                   </CardContent>
@@ -2321,6 +2299,21 @@ export default function DocumentManagerPage() {
                             <Database className="w-3 h-3 mr-1" />
                             Transform
                           </Button>
+
+                          {/* Bulk Delete Icon */}
+                          <ConfirmTooltip
+                            onConfirm={handleBulkDelete}
+                            message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
+                            side="top"
+                          >
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </ConfirmTooltip>
                         </div>
                       </div>
                     </div>
