@@ -282,10 +282,20 @@ export default function DocumentPreviewModal({
           console.log('[PDF Init] Scanned PDF detected, starting automatic OCR');
           setPdfAnalyzing(false); // Stop initial analysis
           await handleRunOCR(); // Start OCR automatically
+        } else {
+          // Neither scanned nor has content - just show the document as is
+          console.log('[PDF Init] PDF has no extractable content yet');
+          setPdfExtractedText(document.content || '');
         }
+      } else {
+        console.error('PDF analysis failed with status:', response.status);
+        // Even if analysis fails, show document content if available
+        setPdfExtractedText(document.content || '');
       }
     } catch (error) {
       console.error('Failed to check PDF type:', error);
+      // On error, still show the document content if available
+      setPdfExtractedText(document.content || '');
     } finally {
       setPdfAnalyzing(false);
     }
