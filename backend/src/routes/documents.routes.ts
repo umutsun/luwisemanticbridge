@@ -1178,6 +1178,36 @@ router.put('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
   }
 });
 
+// Bulk delete documents - REQUIRES AUTHENTICATION
+router.post('/bulk-delete', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { documentIds } = req.body;
+
+    if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'Document IDs array is required' });
+    }
+
+    // Delete from database only (physical files remain on disk)
+    const result = await lsembPool.query(
+      'DELETE FROM documents WHERE id = ANY($1::int[]) RETURNING id, file_path',
+      [documentIds]
+    );
+
+    res.json({
+      success: true,
+      message: `Deleted ${result.rows.length} documents from database (physical files preserved)`,
+      deletedCount: result.rows.length,
+      deletedIds: result.rows.map(r => r.id),
+      preservedFiles: result.rows.map(r => r.file_path).filter(Boolean)
+    });
+  } catch (error) {
+    console.error('Error bulk deleting documents:', error);
+    res.status(500).json({
+      error: 'Failed to bulk delete documents'
+    });
+  }
+});
+
 // Delete document - REQUIRES AUTHENTICATION
 // NOTE: This endpoint only deletes from database, NOT the physical file
 // Use DELETE /physical-files to delete physical files from disk

@@ -1120,6 +1120,56 @@ export default function DocumentManagerPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedRows.size === 0) {
+      toast({
+        title: 'Uyarı',
+        description: 'Lütfen silmek için en az bir döküman seçin',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const documentIds = Array.from(selectedRows).map(id => parseInt(id));
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/bulk-delete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ documentIds })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Bulk delete failed');
+      }
+
+      const result = await response.json();
+      console.log('Bulk delete result:', result);
+
+      toast({
+        title: 'Başarılı',
+        description: `${result.deletedCount} döküman silindi`,
+      });
+
+      // Clear selection and refresh
+      setSelectedRows(new Set());
+      setSelectAll(false);
+      fetchDocuments();
+      fetchStats();
+    } catch (error: any) {
+      console.error('Bulk delete error:', error);
+      toast({
+        title: 'Hata',
+        description: error.message || 'Toplu silme başarısız oldu',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const [selectAll, setSelectAll] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
@@ -1938,6 +1988,46 @@ export default function DocumentManagerPage() {
                             <span>{batchProgress}% complete</span>
                           </div>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Bulk Actions Bar */}
+                {selectedRows.size > 0 && (
+                  <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100">
+                            {selectedRows.size} seçili
+                          </Badge>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedRows(new Set());
+                              setSelectAll(false);
+                            }}
+                            className="h-7 text-xs"
+                          >
+                            Seçimi Temizle
+                          </Button>
+                        </div>
+                        <ConfirmTooltip
+                          onConfirm={handleBulkDelete}
+                          message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
+                          side="top"
+                        >
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-7 gap-1.5"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Toplu Sil</span>
+                          </Button>
+                        </ConfirmTooltip>
                       </div>
                     </CardContent>
                   </Card>
