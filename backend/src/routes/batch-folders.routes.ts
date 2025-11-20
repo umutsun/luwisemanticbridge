@@ -288,7 +288,7 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
       }
 
       const docResult = await lsembPool.query(
-        `INSERT INTO documents (title, content, type, size, file_path, metadata, processing_status, created_at, updated_at)
+        `INSERT INTO documents (title, content, file_type, file_size, file_path, metadata, processing_status, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING id`,
         [
