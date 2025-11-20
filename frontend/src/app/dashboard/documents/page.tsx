@@ -1193,17 +1193,26 @@ export default function DocumentManagerPage() {
 
     let matchesType = true;
     switch (filterType) {
+      case 'analyzed':
+        matchesType = doc.processing_status === 'analyzed';
+        break;
+      case 'processing':
+        matchesType = doc.processing_status === 'processing';
+        break;
+      case 'pending':
+        matchesType = doc.processing_status === 'pending' || !doc.processing_status;
+        break;
+      case 'completed':
+        matchesType = doc.processing_status === 'completed';
+        break;
+      case 'failed':
+        matchesType = doc.processing_status === 'failed';
+        break;
       case 'embedded':
         matchesType = doc.hasEmbeddings || doc.metadata?.embeddings > 0;
         break;
       case 'not-embedded':
         matchesType = !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0);
-        break;
-      case 'ocr':
-        matchesType = doc.metadata?.ocr_processed === true;
-        break;
-      case 'pending':
-        matchesType = !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0) && !doc.metadata?.ocr_processed;
         break;
     }
 
@@ -1960,10 +1969,13 @@ export default function DocumentManagerPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Files</SelectItem>
+                          <SelectItem value="analyzed">Analyzed</SelectItem>
+                          <SelectItem value="processing">Processing</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="failed">Failed</SelectItem>
                           <SelectItem value="embedded">Embedded</SelectItem>
                           <SelectItem value="not-embedded">Not Embedded</SelectItem>
-                          <SelectItem value="ocr">OCR Processed</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
                         </SelectContent>
                       </Select>
                       <Badge variant="outline" className="px-3 py-2">
@@ -1993,9 +2005,10 @@ export default function DocumentManagerPage() {
                   </Card>
                 )}
 
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
-                  <CardContent className="p-0">
-                    <div className="h-[664px] overflow-auto">
+                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col h-[calc(100vh-240px)]">
+                  <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+                    {/* Fixed Header */}
+                    <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
                       <Table>
                         <TableHeader className="bg-gray-50 dark:bg-gray-900">
                           <TableRow>
@@ -2014,6 +2027,12 @@ export default function DocumentManagerPage() {
                             <TableHead className="w-28">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
+                      </Table>
+                    </div>
+
+                    {/* Scrollable Body */}
+                    <div className="flex-1 overflow-auto">
+                      <Table>
                         <TableBody>
                           {loading ? (
                             <TableBodySkeleton rows={20} columns={7} />
@@ -2155,51 +2174,46 @@ export default function DocumentManagerPage() {
                           )}
                         </TableBody>
                       </Table>
-
-                      {/* Footer: Load More + Bulk Actions */}
-                      {(!loading && (filteredDocuments.length > visibleDocumentsCount || selectedRows.size > 0)) && (
-                        <div className="flex items-center justify-between p-4 border-t bg-gray-50/50 dark:bg-gray-900/50">
-                          {/* Load More */}
-                          {filteredDocuments.length > visibleDocumentsCount ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                              className="gap-2"
-                            >
-                              Daha Fazla Yükle
-                              <span className="text-xs text-muted-foreground">
-                                ({filteredDocuments.length - visibleDocumentsCount} kaldı)
-                              </span>
-                            </Button>
-                          ) : (
-                            <div></div>
-                          )}
-
-                          {/* Bulk Delete */}
-                          {selectedRows.size > 0 && (
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-xs">
-                                {selectedRows.size} seçili
-                              </Badge>
-                              <ConfirmTooltip
-                                onConfirm={handleBulkDelete}
-                                message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
-                                side="top"
-                              >
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </ConfirmTooltip>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
+
+                    {/* Fixed Footer: Load More + Bulk Delete */}
+                    {(!loading && (filteredDocuments.length > visibleDocumentsCount || selectedRows.size > 0)) && (
+                      <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                        {/* Load More */}
+                        {filteredDocuments.length > visibleDocumentsCount ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
+                            className="gap-2"
+                          >
+                            Daha Fazla Yükle
+                            <span className="text-xs text-muted-foreground">
+                              ({filteredDocuments.length - visibleDocumentsCount} kaldı)
+                            </span>
+                          </Button>
+                        ) : (
+                          <div></div>
+                        )}
+
+                        {/* Bulk Delete - Icon Only */}
+                        {selectedRows.size > 0 && (
+                          <ConfirmTooltip
+                            onConfirm={handleBulkDelete}
+                            message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
+                            side="top"
+                          >
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </ConfirmTooltip>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                   {getSelectedCount() > 0 && (
                     <div className="px-6 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
