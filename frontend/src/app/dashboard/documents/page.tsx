@@ -1187,6 +1187,7 @@ export default function DocumentManagerPage() {
   const [batchSchemas, setBatchSchemas] = useState<any[]>([]);
   const [batchSelectedTable, setBatchSelectedTable] = useState('');
   const [availableTables, setAvailableTables] = useState<string[]>([]);
+  const [batchJobId, setBatchJobId] = useState<string | null>(null);
 
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
