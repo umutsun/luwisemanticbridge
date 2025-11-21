@@ -16,43 +16,146 @@ const runCommand = (command) =>
     });
   });
 
-/**
- * @route GET /api/v2/services/lightrag/status
- * @group Services - External service management
- * @summary Get the status of the LightRAG service
- * @description Checks the health of the LightRAG (RAG-anything) service by pinging its health endpoint.
- * @returns {object} 200 - An object indicating the status ('running' or 'stopped').
- */
-router.get("/lightrag/status", (req, res) => {
-  const options = {
-    hostname: "localhost",
-    port: 8002,
-    path: "/health", // Assuming a /health endpoint
-    method: "GET",
-    timeout: 2000,
-  };
 
-  const request = http.request(options, (response) => {
-    if (response.statusCode === 200) {
-      res.json({ status: "running" });
-    } else {
-      res.json({
-        status: "stopped",
-        error: `Received status code ${response.statusCode}`,
-      });
+const servicesList = [
+    {
+      name: "graphql",
+      displayName: "GraphQL Server",
+      description: "Query API with type safety",
+      status: "stopped",
+      port: 4000,
+      url: "http://localhost:4000/graphql",
+      version: "Apollo Server 4.0",
+      icon: "GitBranch"
+    },
+    {
+      name: "python",
+      displayName: "Python Services",
+      description: "AI & ML microservices",
+      status: "stopped",
+      port: parseInt(process.env.PYTHON_SERVICE_PORT || "8002"),
+      url: process.env.PYTHON_SERVICE_URL || "http://localhost:8002",
+      version: "FastAPI 0.104.1",
+      icon: "Code"
+    },
+    {
+      name: "crawl4ai",
+      displayName: "Crawl4AI",
+      description: "AI-powered web scraping",
+      status: "stopped",
+      port: 8001,
+      url: "http://localhost:8001/api/python/crawl",
+      icon: "Globe"
+    },
+    {
+      name: "whisper",
+      displayName: "Whisper STT",
+      description: "Speech-to-text (OpenAI API)",
+      status: "stopped",
+      port: 8001,
+      url: "http://localhost:8001/api/python/whisper",
+      version: "API + Self-hosted",
+      icon: "Mic"
+    },
+    {
+      name: "pgai",
+      displayName: "pgai Worker",
+      description: "Automatic embeddings",
+      status: "stopped",
+      icon: "Brain"
+    },
+    {
+      name: "pgvectorscale",
+      displayName: "pgvectorscale",
+      description: "Performance optimizer (Not installed)",
+      status: "stopped",
+      icon: "Zap"
+    },
+    {
+      name: "nodejs",
+      displayName: "Node.js Backend",
+      description: "Main API gateway",
+      status: "running",
+      port: parseInt(process.env.PORT || "8083"),
+      url: `http://localhost:${process.env.PORT || "8083"}`,
+      version: "Express 4.18",
+      icon: "Server"
+    },
+    {
+      name: "database",
+      displayName: "PostgreSQL",
+      description: "Vector database",
+      status: "running",
+      port: parseInt(process.env.POSTGRES_PORT || "5432"),
+      host: process.env.POSTGRES_HOST || "localhost",
+      database: process.env.POSTGRES_DB || "lsemb",
+      version: "15.13 + pgvector",
+      icon: "Database"
+    },
+    {
+      name: "redis",
+      displayName: "Redis Cache",
+      description: "Cache server",
+      status: "running",
+      port: parseInt(process.env.REDIS_PORT || "6379"),
+      host: process.env.REDIS_HOST || "localhost",
+      version: "7.0+",
+      icon: "Server"
+    },
+    {
+      name: "n8n",
+      displayName: "n8n Workflow",
+      description: "Automation & workflow orchestration",
+      status: "stopped",
+      port: 5678,
+      url: "http://localhost:5678",
+      version: "n8n 1.0+",
+      icon: "Zap"
+    }
+  ];
+
+/**
+ * @route GET /api/v2/integrations/services
+ * @group Services - External service management
+ * @summary Get the list of all available services
+ * @description Returns a list of all services, including their status and metadata.
+ * @returns {Array<object>} 200 - An array of service objects.
+ */
+router.get("/integrations/services", (req, res) => {
+  // TODO: Replace this with a dynamic list from a database or configuration file
+  res.json(servicesList);
+});
+
+/**
+ * @route GET /api/v2/services/system/info
+ * @group Services - System information
+ * @summary Get system information (Database and Redis)
+ * @description Returns configuration information for PostgreSQL and Redis from environment variables.
+ * @returns {object} 200 - System information including database and Redis details.
+ */
+router.get("/system/info", (req, res) => {
+  res.json({
+    database: {
+      host: process.env.POSTGRES_HOST || "localhost",
+      port: parseInt(process.env.POSTGRES_PORT || "5432"),
+      database: process.env.POSTGRES_DB || "lsemb",
+      user: process.env.POSTGRES_USER || "postgres",
+      version: "15.13 + pgvector"
+    },
+    redis: {
+      host: process.env.REDIS_HOST || "localhost",
+      port: parseInt(process.env.REDIS_PORT || "6379"),
+      database: parseInt(process.env.REDIS_DB || "0"),
+      version: "7.0+"
+    },
+    backend: {
+      port: parseInt(process.env.PORT || "8083"),
+      nodeEnv: process.env.NODE_ENV || "development"
+    },
+    frontend: {
+      port: parseInt(process.env.FRONTEND_PORT || "3002")
     }
   });
-
-  request.on("error", (e) => {
-    res.json({ status: "stopped", error: e.message });
-  });
-
-  request.on("timeout", () => {
-    request.destroy();
-    res.json({ status: "stopped", error: "Request timed out" });
-  });
-
-  request.end();
 });
 
 /**

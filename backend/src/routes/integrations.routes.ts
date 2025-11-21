@@ -19,6 +19,114 @@ const execAsync = promisify(exec);
 let pythonProcess: ChildProcess | null = null;
 
 /**
+ * Services list configuration
+ */
+const servicesList = [
+  {
+    name: 'graphql',
+    displayName: 'GraphQL Server',
+    description: 'Query API with type safety',
+    status: 'stopped',
+    port: 4000,
+    url: 'http://localhost:4000/graphql',
+    version: 'Apollo Server 4.0',
+    icon: 'GitBranch'
+  },
+  {
+    name: 'python',
+    displayName: 'Python Services',
+    description: 'AI & ML microservices',
+    status: 'stopped',
+    port: parseInt(process.env.PYTHON_SERVICE_PORT || '8002'),
+    url: process.env.PYTHON_SERVICE_URL || 'http://localhost:8002',
+    version: 'FastAPI 0.104.1',
+    icon: 'Code'
+  },
+  {
+    name: 'crawl4ai',
+    displayName: 'Crawl4AI',
+    description: 'AI-powered web scraping',
+    status: 'stopped',
+    port: 8001,
+    url: 'http://localhost:8001/api/python/crawl',
+    icon: 'Globe'
+  },
+  {
+    name: 'whisper',
+    displayName: 'Whisper STT',
+    description: 'Speech-to-text (OpenAI API)',
+    status: 'stopped',
+    port: 8001,
+    url: 'http://localhost:8001/api/python/whisper',
+    version: 'API + Self-hosted',
+    icon: 'Mic'
+  },
+  {
+    name: 'pgai',
+    displayName: 'pgai Worker',
+    description: 'Automatic embeddings',
+    status: 'stopped',
+    icon: 'Brain'
+  },
+  {
+    name: 'pgvectorscale',
+    displayName: 'pgvectorscale',
+    description: 'Performance optimizer (Not installed)',
+    status: 'stopped',
+    icon: 'Zap'
+  },
+  {
+    name: 'nodejs',
+    displayName: 'Node.js Backend',
+    description: 'Main API gateway',
+    status: 'running',
+    port: parseInt(process.env.PORT || '8083'),
+    url: `http://localhost:${process.env.PORT || '8083'}`,
+    version: 'Express 4.18',
+    icon: 'Server'
+  },
+  {
+    name: 'database',
+    displayName: 'PostgreSQL',
+    description: 'Vector database',
+    status: 'running',
+    port: parseInt(process.env.POSTGRES_PORT || '5432'),
+    host: process.env.POSTGRES_HOST || 'localhost',
+    database: process.env.POSTGRES_DB || 'lsemb',
+    version: '15.13 + pgvector',
+    icon: 'Database'
+  },
+  {
+    name: 'redis',
+    displayName: 'Redis Cache',
+    description: 'Cache server',
+    status: 'running',
+    port: parseInt(process.env.REDIS_PORT || '6379'),
+    host: process.env.REDIS_HOST || 'localhost',
+    version: '7.0+',
+    icon: 'Server'
+  },
+  {
+    name: 'n8n',
+    displayName: 'n8n Workflow',
+    description: 'Automation & workflow orchestration',
+    status: 'stopped',
+    port: 5678,
+    url: 'http://localhost:5678',
+    version: 'n8n 1.0+',
+    icon: 'Zap'
+  }
+];
+
+/**
+ * GET /api/v2/integrations/services
+ * Get list of all available services
+ */
+router.get('/services', (req: Request, res: Response) => {
+  res.json(servicesList);
+});
+
+/**
  * Get status of all integrations
  */
 router.get('/status', async (req: Request, res: Response) => {

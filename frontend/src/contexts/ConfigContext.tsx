@@ -165,7 +165,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         database: data.database || {
           host: 'localhost',
           port: 5432,
-          name: 'rag_chatbot',
+          name: 'lsemb', // Default to lsemb database
           user: 'postgres',
           password: 'postgres',
           ssl: false,

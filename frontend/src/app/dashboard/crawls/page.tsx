@@ -15,6 +15,20 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -56,7 +70,9 @@ import {
   MousePointer2,
   Square,
   RefreshCw,
-  Radar
+  Radar,
+  MoreHorizontal,
+  Filter
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -169,6 +185,7 @@ export default function CrawlerDataPage() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [autoEmbeddings, setAutoEmbeddings] = useState(true);
   const [editingItem, setEditingItem] = useState<CrawledItem | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -1196,6 +1213,60 @@ export default function CrawlerDataPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (!selectedDirectory) return;
+
+    const selectedIds = Array.from(new Set([...selectedForRecrawl, ...selectedForAnalyze]));
+    if (selectedIds.length === 0) {
+      toast({
+        title: 'No Items Selected',
+        description: 'Please select items to delete',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      // Get the keys of selected items
+      const selectedItems = crawledItems.filter(item => selectedIds.includes(item.id));
+      const itemKeys = selectedItems.map(item => item.key);
+
+      // Delete each item
+      for (const key of itemKeys) {
+        await fetchWithAuth(
+          `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${selectedDirectory.name}/items/${key}`,
+          { method: 'DELETE' }
+        );
+      }
+
+      // Update local state
+      const updatedItems = crawledItems.filter(item => !selectedIds.includes(item.id));
+      setCrawledItems(updatedItems);
+
+      // Clear selections
+      setSelectedForRecrawl(new Set());
+      setSelectedForAnalyze(new Set());
+
+      // Update stats
+      setStats(prev => ({
+        ...prev,
+        totalItems: prev.totalItems - selectedIds.length
+      }));
+
+      toast({
+        title: 'Success',
+        description: `${selectedIds.length} items deleted successfully`
+      });
+    } catch (error: any) {
+      console.error('Bulk delete error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete items',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handleRecrawl = async (item: CrawledItem) => {
     if (!selectedDirectory || !item.url) {
       toast({
@@ -1530,10 +1601,17 @@ export default function CrawlerDataPage() {
     return steps.indexOf(step) + 1;
   };
 
-  const filteredItems = crawledItems.filter(item =>
-    item.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.key?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredItems = crawledItems.filter(item => {
+    // Search filter
+    const matchesSearch = item.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.key?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Status filter
+    const status = item.analyzeStatus || 'waiting';
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -2105,6 +2183,19 @@ export default function CrawlerDataPage() {
                             />
                           </div>
 
+                          {/* Status Filter */}
+                          <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[180px] h-8">
+                              <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Items</SelectItem>
+                              <SelectItem value="waiting">Waiting</SelectItem>
+                              <SelectItem value="analyzed">Analyzed</SelectItem>
+                              <SelectItem value="transformed">Transformed</SelectItem>
+                            </SelectContent>
+                          </Select>
+
                           {/* Template Selector */}
                           <Select value={selectedAnalyzeTemplate} onValueChange={setSelectedAnalyzeTemplate}>
                             <SelectTrigger className="w-[180px] h-8">
@@ -2126,11 +2217,18 @@ export default function CrawlerDataPage() {
                                 variant="outline"
                                 onClick={handleBatchAnalyze}
                                 disabled={batchAnalyzing}
+                                className="h-8 text-xs px-3"
                               >
                                 {batchAnalyzing ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <>
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    Analyzing...
+                                  </>
                                 ) : (
-                                  <>Analyze ({selectedForAnalyze.size})</>
+                                  <>
+                                    <Brain className="w-3 h-3 mr-1" />
+                                    Analyze ({selectedForAnalyze.size})
+                                  </>
                                 )}
                               </Button>
                             )}
@@ -2140,172 +2238,212 @@ export default function CrawlerDataPage() {
                                 variant="outline"
                                 onClick={handleBulkRecrawl}
                                 disabled={bulkRecrawling}
+                                className="h-8 text-xs px-3"
                               >
                                 {bulkRecrawling ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <>
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    Recrawling...
+                                  </>
                                 ) : (
-                                  <>Recrawl ({selectedForRecrawl.size})</>
+                                  <>
+                                    <RefreshCw className="w-3 h-3 mr-1" />
+                                    Recrawl ({selectedForRecrawl.size})
+                                  </>
                                 )}
                               </Button>
+                            )}
+                            {(selectedForRecrawl.size > 0 || selectedForAnalyze.size > 0) && (
+                              <ConfirmTooltip
+                                onConfirm={handleBulkDelete}
+                                message={`Delete ${Math.max(selectedForRecrawl.size, selectedForAnalyze.size)} selected items?`}
+                                side="top"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 px-3 text-xs hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  Delete ({Math.max(selectedForRecrawl.size, selectedForAnalyze.size)})
+                                </Button>
+                              </ConfirmTooltip>
                             )}
                           </div>
                         </div>
 
-                        <div className="border rounded-lg overflow-x-auto">
+                        <div className="border rounded-lg overflow-hidden">
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader className="bg-gray-50 dark:bg-gray-900">
+                                <TableRow>
+                                  <TableHead className="w-10">
+                                    <Checkbox
+                                      id="select-all-table"
+                                      checked={selectedForRecrawl.size === filteredItems.length && filteredItems.length > 0}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setSelectedForRecrawl(new Set(filteredItems.map(item => item.id)));
+                                          setSelectedForAnalyze(new Set(filteredItems.map(item => item.id)));
+                                        } else {
+                                          setSelectedForRecrawl(new Set());
+                                          setSelectedForAnalyze(new Set());
+                                        }
+                                      }}
+                                    />
+                                  </TableHead>
+                                  <TableHead>Name</TableHead>
+                                  <TableHead>URL</TableHead>
+                                  <TableHead className="w-32">Status</TableHead>
+                                  <TableHead className="w-32">Template</TableHead>
+                                  <TableHead className="w-24">Date</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                            </Table>
+                          </div>
                           <ScrollArea className="h-[500px]">
-                            {itemsLoading ? (
-                              <div className="p-4"><ListSkeleton count={5} /></div>
-                            ) : filteredItems.length === 0 ? (
-                              <div className="text-center py-12">
-                                <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                                <p className="text-sm text-muted-foreground">No items found</p>
-                              </div>
-                            ) : (
-                              <div className="divide-y">
-                                {filteredItems.map(item => (
-                                  <div
-                                    key={item.id}
-                                    className="p-3 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors"
-                                  >
-                                    {/* Checkbox for recrawl */}
-                                    <Checkbox
-                                      checked={selectedForRecrawl.has(item.id)}
-                                      onCheckedChange={(checked) => {
-                                        const newSelected = new Set(selectedForRecrawl);
-                                        if (checked) {
-                                          newSelected.add(item.id);
-                                        } else {
-                                          newSelected.delete(item.id);
-                                        }
-                                        setSelectedForRecrawl(newSelected);
-                                      }}
-                                      className="flex-shrink-0"
-                                      title="Select for recrawl"
-                                    />
+                            <Table>
+                              <TableBody>
+                                {itemsLoading ? (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-12">
+                                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
+                                      <p className="text-sm text-muted-foreground mt-2">Loading items...</p>
+                                    </TableCell>
+                                  </TableRow>
+                                ) : filteredItems.length === 0 ? (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="text-center py-12">
+                                      <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                                      <p className="text-sm text-muted-foreground">No items found</p>
+                                    </TableCell>
+                                  </TableRow>
+                                ) : (
+                                  <>
+                                    {filteredItems.map(item => {
+                                      const isSelected = selectedForRecrawl.has(item.id) || selectedForAnalyze.has(item.id);
+                                      const status = getAnalyzeStatus(item);
+                                      const template = getAnalyzeTemplate(item);
 
-                                    {/* Checkbox for analyze */}
-                                    <Checkbox
-                                      checked={selectedForAnalyze.has(item.id)}
-                                      onCheckedChange={(checked) => {
-                                        const newSelected = new Set(selectedForAnalyze);
-                                        if (checked) {
-                                          newSelected.add(item.id);
-                                        } else {
-                                          newSelected.delete(item.id);
-                                        }
-                                        setSelectedForAnalyze(newSelected);
-                                      }}
-                                      className="flex-shrink-0 border-blue-500 data-[state=checked]:bg-blue-600"
-                                      title="Select for analysis"
-                                    />
-
-                                    {/* Action icons on the left */}
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => handleEditItem(item)}
-                                        className="h-8 w-8 p-0 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                        title="View/Edit"
-                                      >
-                                        <Eye className="w-4 h-4 text-slate-600 dark:text-slate-300" />
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => handleRecrawl(item)}
-                                        disabled={recrawlingItems.has(item.url || '') || !item.url}
-                                        className="h-8 w-8 p-0 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50"
-                                        title="Re-crawl this URL"
-                                      >
-                                        {recrawlingItems.has(item.url || '') ? (
-                                          <Loader2 className="w-4 h-4 text-blue-600 dark:text-blue-400 animate-spin" />
-                                        ) : (
-                                          <Radar className="w-4 h-4 text-slate-600 dark:text-slate-300 hover:text-blue-600" />
-                                        )}
-                                      </Button>
-                                      <ConfirmTooltip
-                                        onConfirm={() => handleDeleteItem(item.key)}
-                                        message="Delete this item?"
-                                        side="top"
-                                      >
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-8 w-8 p-0 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                          title="Delete"
+                                      return (
+                                        <TableRow
+                                          key={item.id}
+                                          className={`hover:bg-muted/50 transition-colors duration-150 ${isSelected ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}
                                         >
-                                          <Trash2 className="w-4 h-4 text-slate-600 dark:text-slate-300 hover:text-red-600" />
-                                        </Button>
-                                      </ConfirmTooltip>
-                                    </div>
-
-                                    {/* Content with truncate */}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="font-medium text-sm truncate">{item.title}</p>
-                                      <p className="text-xs text-muted-foreground truncate">{item.url || item.key}</p>
-                                    </div>
-
-                                    {/* Analyze Status */}
-                                    <div className="flex flex-col gap-1 items-end flex-shrink-0">
-                                      {analyzingItems.has(item.id) ? (
-                                        <Badge variant="secondary" className="text-xs">
-                                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                          Analyzing
-                                        </Badge>
-                                      ) : (
-                                        (() => {
-                                          const status = getAnalyzeStatus(item);
-                                          const template = getAnalyzeTemplate(item);
-                                          return (
-                                            <>
-                                              <Badge
-                                                variant={
-                                                  status === 'analyzed' ? 'default' :
-                                                  status === 'transformed' ? 'default' : 'secondary'
+                                          <TableCell>
+                                            <Checkbox
+                                              checked={isSelected}
+                                              onCheckedChange={(checked) => {
+                                                const newRecrawl = new Set(selectedForRecrawl);
+                                                const newAnalyze = new Set(selectedForAnalyze);
+                                                if (checked) {
+                                                  newRecrawl.add(item.id);
+                                                  newAnalyze.add(item.id);
+                                                } else {
+                                                  newRecrawl.delete(item.id);
+                                                  newAnalyze.delete(item.id);
                                                 }
-                                                className={
-                                                  status === 'analyzed' ? 'bg-blue-600' :
-                                                  status === 'transformed' ? 'bg-green-600' : ''
-                                                }
-                                              >
-                                                {status === 'waiting' ? 'Waiting' :
-                                                 status === 'analyzed' ? 'Analyzed' : 'Transformed'}
-                                              </Badge>
-                                              {template && (
-                                                <span className="text-xs text-muted-foreground">{template}</span>
-                                              )}
-                                            </>
-                                          );
-                                        })()
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
+                                                setSelectedForRecrawl(newRecrawl);
+                                                setSelectedForAnalyze(newAnalyze);
+                                              }}
+                                            />
+                                          </TableCell>
+                                          <TableCell className="font-medium truncate max-w-xs" title={item.title}>
+                                            {item.title}
+                                          </TableCell>
+                                          <TableCell className="text-xs text-muted-foreground truncate max-w-xs" title={item.url || item.key}>
+                                            {item.url || item.key}
+                                          </TableCell>
+                                          <TableCell>
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                <div className="flex items-center gap-1 cursor-pointer group">
+                                                  <Badge
+                                                    variant="outline"
+                                                    className={`text-xs font-medium border transition-all duration-150 ${
+                                                      status === 'waiting' ? 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400' :
+                                                      status === 'analyzed' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
+                                                      'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
+                                                    } hover:opacity-80`}
+                                                  >
+                                                    {analyzingItems.has(item.id) ? (
+                                                      <>
+                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                                        Analyzing
+                                                      </>
+                                                    ) : (
+                                                      status === 'waiting' ? 'Waiting' :
+                                                      status === 'analyzed' ? 'Analyzed' : 'Transformed'
+                                                    )}
+                                                  </Badge>
+                                                  <MoreHorizontal className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleEditItem(item)}>
+                                                  <Eye className="w-3 h-3 mr-2" />
+                                                  Preview
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleRecrawl(item)}
+                                                  disabled={recrawlingItems.has(item.url || '') || !item.url}
+                                                >
+                                                  <Radar className="w-3 h-3 mr-2" />
+                                                  Recrawl
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleDeleteItem(item.key)}
+                                                  className="text-red-600 focus:text-red-600"
+                                                >
+                                                  <Trash2 className="w-3 h-3 mr-2" />
+                                                  Delete
+                                                </DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                          </TableCell>
+                                          <TableCell className="text-xs text-muted-foreground">
+                                            {template || '-'}
+                                          </TableCell>
+                                          <TableCell className="text-xs">
+                                            {item.scrapedAt ? new Date(item.scrapedAt).toLocaleDateString('en-US', {
+                                              month: '2-digit',
+                                              day: '2-digit',
+                                              year: 'numeric'
+                                            }) : '-'}
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
 
-                                {/* Load More Button */}
-                                {hasMoreItems && !loadingMore && (
-                                  <div className="p-4 text-center">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={loadMoreItems}
-                                      className="w-full"
-                                    >
-                                      Load More ({totalItemsCount - crawledItems.length} remaining)
-                                    </Button>
-                                  </div>
-                                )}
+                                    {/* Load More Row */}
+                                    {hasMoreItems && !loadingMore && (
+                                      <TableRow>
+                                        <TableCell colSpan={6} className="text-center py-4">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={loadMoreItems}
+                                            className="w-full max-w-md"
+                                          >
+                                            Load More ({totalItemsCount - crawledItems.length} remaining)
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    )}
 
-                                {/* Loading indicator */}
-                                {loadingMore && (
-                                  <div className="p-4 text-center">
-                                    <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
-                                    <p className="text-xs text-muted-foreground mt-2">Loading more items...</p>
-                                  </div>
+                                    {/* Loading indicator */}
+                                    {loadingMore && (
+                                      <TableRow>
+                                        <TableCell colSpan={6} className="text-center py-4">
+                                          <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
+                                          <p className="text-xs text-muted-foreground mt-2">Loading more items...</p>
+                                        </TableCell>
+                                      </TableRow>
+                                    )}
+                                  </>
                                 )}
-                              </div>
-                            )}
+                              </TableBody>
+                            </Table>
                           </ScrollArea>
                         </div>
 

@@ -28,9 +28,9 @@ router.get('/settings', async (req: Request, res: Response) => {
       }
     }
 
-    // Use app.name/description as primary, fallback to chatbot.title/subtitle
-    const finalTitle = appName || chatbotData.title || '';
-    const finalSubtitle = appDescription || chatbotData.subtitle || '';
+    // Use app.name/description as primary, fallback to chatbot.title/subtitle, then to defaults
+    const finalTitle = appName || chatbotData.title || 'Luwi Semantic Bridge';
+    const finalSubtitle = appDescription || chatbotData.subtitle || 'Context Engine';
 
     // Simplified log - only log if title exists
     if (finalTitle) {
@@ -71,7 +71,12 @@ router.get('/settings', async (req: Request, res: Response) => {
       maxResponseLength: chatbotData.maxResponseLength || 1000,
       maxQuestionLength: chatbotData.maxQuestionLength || 500,
       questionTemplate: chatbotData.questionTemplate || 'Yaptığımız konuşmaya göre, şunu da merak ediyor olabilirsiniz: {question}',
-      autoGenerateQuestions: chatbotData.autoGenerateQuestions || false
+      autoGenerateQuestions: chatbotData.autoGenerateQuestions || false,
+      // Add app settings for login page
+      app: {
+        name: finalTitle,
+        description: finalSubtitle
+      }
     };
 
     // Log removed - already logged above

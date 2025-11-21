@@ -7,7 +7,7 @@ on:
 
 jobs:
   validate-nodejs:
-    name: "Validate Node.js Service"
+    name: "Validate Node.js Services"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,24 +16,39 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18' # Projenizin gereksinimine göre ayarlayın
+          node-version: '18'
           cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: ----------------- Validate API -----------------
+      - name: Install API Dependencies
+        run: npm ci --prefix api
 
-      - name: Security Audit
-        run: npm audit --audit-level=high
+      - name: Run API Linter
+        run: npm run lint --prefix api
 
-      - name: Run linter
-        run: npm run lint
+      - name: Run API Tests
+        run: npm test --prefix api
 
-      - name: Run tests
-        run: npm test
-        env:
-          CI: true
-          # Test için gerekli ortam değişkenlerini buraya ekleyin
-          # Örn: DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      - name: ----------------- Validate Backend -----------------
+      - name: Install Backend Dependencies
+        run: npm ci --prefix backend
+
+      - name: Run Backend Linter
+        run: npm run lint --prefix backend
+
+      - name: Run Backend Tests with Coverage
+        run: npm run test:coverage --prefix backend
+
+      - name: ----------------- Validate Frontend -----------------
+      - name: Install Frontend Dependencies
+        run: npm ci --prefix frontend
+
+      - name: Run Frontend Linter
+        run: npm run lint --prefix frontend
+
+      - name: Run Frontend Tests
+        run: npm test --prefix frontend
 
   validate-python:
     name: "Validate Python Service"

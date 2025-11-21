@@ -1,7 +1,7 @@
 'use client';
 
-import MurganBatchUpload from '@/components/MurganBatchUpload';
+import BatchFolderUpload from '@/components/BatchFolderUpload';
 
-export default function MurganPage() {
-  return <MurganBatchUpload />;
+export default function BatchFolderPage() {
+  return <BatchFolderUpload />;
 }

@@ -27,24 +27,19 @@ class PDFProgressWSClient {
       return;
     }
 
-    const token = localStorage.getItem('authToken');
-    const cookies = document.cookie.split(';').reduce((acc: any, cookie) => {
+    const token = localStorage.getItem('token');
+    const cookies = document.cookie.split(';').reduce((acc: Record<string, string>, cookie) => {
       const [key, value] = cookie.trim().split('=');
       if (key) acc[key] = value;
       return acc;
     }, {});
 
-    this.socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8086', {
+    this.socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083', {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       auth: {
-        token,
-        cookies
+        token
       },
-      extraHeaders: {
-        Cookie: document.cookie
-      },
-      credentials: 'include'
     });
 
     this.socket.on('connect', () => {

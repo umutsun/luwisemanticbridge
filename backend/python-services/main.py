@@ -29,8 +29,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router
-# whisper_router disabled due to heavy dependencies
+from routers import crawl_router, pgai_router, health_router, whisper_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -100,7 +99,12 @@ app.include_router(
     tags=["pgai"],
     dependencies=[Depends(verify_api_key)]
 )
-# whisper_router disabled due to heavy dependencies (PyTorch, Whisper)
+app.include_router(
+    whisper_router,
+    prefix="/api/python/whisper",
+    tags=["whisper"],
+    dependencies=[Depends(verify_api_key)]
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -122,6 +126,7 @@ async def root():
             "health": "/health",
             "crawl": "/api/python/crawl",
             "pgai": "/api/python/pgai",
+            "whisper": "/api/python/whisper",
             "docs": "/docs"
         }
     }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import * as LucideIcons from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Play,
   Square,
-  RefreshCw,
   Settings as SettingsIcon,
   Activity,
   CheckCircle,
@@ -49,97 +49,25 @@ interface ServiceStatus {
   port?: number;
   url?: string;
   version?: string;
-  icon: any;
+  icon: React.ElementType; // Use React.ElementType for type safety
   workerCount?: number; // For pgai worker
 }
 
-export default function ServicesPage() {
-  const [services, setServices] = useState<ServiceStatus[]>([
-    {
-      name: "graphql",
-      displayName: "GraphQL Server",
-      description: "Query API with type safety",
-      status: "stopped",
-      port: 4000,
-      url: "http://localhost:4000/graphql",
-      version: "Apollo Server 4.0",
-      icon: GitBranch
-    },
-    {
-      name: "python",
-      displayName: "Python Services",
-      description: "AI & ML microservices",
-      status: "stopped",
-      port: 8001,
-      url: "http://localhost:8001",
-      version: "FastAPI 0.104.1",
-      icon: Code
-    },
-    {
-      name: "crawl4ai",
-      displayName: "Crawl4AI",
-      description: "AI-powered web scraping",
-      status: "stopped",
-      port: 8001,
-      url: "http://localhost:8001/api/python/crawl",
-      icon: Globe
-    },
-    {
-      name: "whisper",
-      displayName: "Whisper STT",
-      description: "Speech-to-text (OpenAI API)",
-      status: "stopped",
-      port: 8001,
-      url: "http://localhost:8001/api/python/whisper",
-      version: "API + Self-hosted",
-      icon: Mic
-    },
-    {
-      name: "pgai",
-      displayName: "pgai Worker",
-      description: "Automatic embeddings",
-      status: "stopped",
-      icon: Brain
-    },
-    {
-      name: "pgvectorscale",
-      displayName: "pgvectorscale",
-      description: "Performance optimizer (Not installed)",
-      status: "stopped",
-      icon: Zap
-    },
-    {
-      name: "nodejs",
-      displayName: "Node.js Backend",
-      description: "Main API gateway",
-      status: "running",
-      port: 8083,
-      url: "http://localhost:8083",
-      version: "Express 4.18",
-      icon: Server
-    },
-    {
-      name: "database",
-      displayName: "PostgreSQL",
-      description: "Vector database",
-      status: "running",
-      port: 5432,
-      version: "15.13 + pgvector",
-      icon: Database
-    },
-    {
-      name: "n8n",
-      displayName: "n8n Workflow",
-      description: "Automation & workflow orchestration",
-      status: "stopped",
-      port: 5678,
-      url: "http://localhost:5678",
-      version: "n8n 1.0+",
-      icon: Zap
-    }
-  ]);
+const iconMap: { [key: string]: React.ElementType } = {
+  GitBranch: LucideIcons.GitBranch,
+  Code: LucideIcons.Code,
+  Globe: LucideIcons.Globe,
+  Mic: LucideIcons.Mic,
+  Brain: LucideIcons.Brain,
+  Zap: LucideIcons.Zap,
+  Server: LucideIcons.Server,
+  Database: LucideIcons.Database,
+  // Add other icons from lucide-react as needed
+};
 
-  const [loading, setLoading] = useState(false);
+export default function ServicesPage() {
+  const [services, setServices] = useState<ServiceStatus[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeService, setActiveService] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [showPgaiModal, setShowPgaiModal] = useState(false);
@@ -147,9 +75,30 @@ export default function ServicesPage() {
   const [vectorTables, setVectorTables] = useState<string[]>([]);
 
   useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const response = await fetch("/api/v2/integrations/services");
+        if (response.ok) {
+          const data = await response.json();
+          const servicesWithIcons = data.map((service: any) => ({
+            ...service,
+            icon: iconMap[service.icon] || LucideIcons.Activity, // Fallback to a default icon
+          }));
+          setServices(servicesWithIcons);
+        } else {
+          toast.error("Failed to fetch services list.");
+        }
+      } catch (error) {
+        console.error("Failed to fetch services list:", error);
+        toast.error("An error occurred while fetching the services list.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchServices();
     fetchServicesStatus();
-    const interval = setInterval(fetchServicesStatus, 10000);
-    return () => clearInterval(interval);
+    // Auto-refresh disabled to prevent terminal pop-ups
   }, []);
 
   useEffect(() => {
@@ -278,14 +227,6 @@ export default function ServicesPage() {
             Manage microservices and integrations
           </p>
         </div>
-        <Button
-          onClick={() => fetchServicesStatus()}
-          variant="outline"
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
       </div>
 
       {/* Services Grid - 3 columns */}

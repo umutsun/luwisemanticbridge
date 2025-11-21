@@ -368,6 +368,7 @@ export default function Header() {
       { href: '/dashboard/crawls', label: 'Crawler Data', icon: Database },
       { href: '/dashboard/messages', label: 'Sohbet Geçmişi', icon: MessageSquare },
       { href: '/dashboard/translations', label: 'Translations', icon: Languages },
+      { href: '/dashboard/data-translations', label: 'Veri Çevirileri', icon: Languages },
       { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
     ] : [])
   ];

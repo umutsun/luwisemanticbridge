@@ -5,8 +5,10 @@ import { fetchWithAuth } from '@/lib/auth-fetch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { TaoProgressBar } from '@/components/ui/tao-progress-bar';
-import { ListSkeleton } from '@/components/ui/skeleton';
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { ProgressCircle } from '@/components/ui/progress-circle';
 import { useToast } from '@/hooks/use-toast';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -22,7 +24,10 @@ import {
   Activity,
   TrendingUp,
   X,
-  Eye
+  Eye,
+  Trash2,
+  MoreHorizontal,
+  Filter
 } from 'lucide-react';
 import {
   Dialog,
@@ -31,6 +36,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
+import { cn } from '@/lib/utils';
 
 interface TableInfo {
   name: string;
@@ -106,6 +129,9 @@ export default function EmbeddingsManagerPage() {
     message: 'Ready to start migration'
   });
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedTableRows, setSelectedTableRows] = useState<Set<string>>(new Set());
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [availableTables, setAvailableTables] = useState<TableInfo[]>([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -591,6 +617,105 @@ export default function EmbeddingsManagerPage() {
     return `${minutes}m`;
   };
 
+  // Helper function for status badge colors
+  const getStatusBadgeClass = (table: TableInfo) => {
+    const isCompleted = table.isFullyEmbedded;
+    const hasEmbedded = table.embeddedRecords > 0;
+
+    if (isCompleted) {
+      return 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300';
+    } else if (hasEmbedded) {
+      return 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300';
+    } else {
+      return 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-300';
+    }
+  };
+
+  const getStatusText = (table: TableInfo) => {
+    const isCompleted = table.isFullyEmbedded;
+    const hasEmbedded = table.embeddedRecords > 0;
+
+    if (isCompleted) {
+      return 'Completed';
+    } else if (hasEmbedded) {
+      return 'Processing';
+    } else {
+      return 'Pending';
+    }
+  };
+
+  const handleBatchMigration = async () => {
+    if (selectedTableRows.size === 0) {
+      toast({
+        title: 'No Tables Selected',
+        description: 'Please select at least one table',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const tablesToMigrate = Array.from(selectedTableRows);
+    setSelectedTables(tablesToMigrate);
+    await startMigration();
+  };
+
+  const handleBulkDelete = async () => {
+    console.log('Bulk delete for tables:', Array.from(selectedTableRows));
+    toast({
+      title: 'Not Implemented',
+      description: 'Bulk delete functionality will be added soon',
+      variant: 'default'
+    });
+  };
+
+  const handlePreviewTable = (table: TableInfo) => {
+    setSelectedTableForPreview(table.name);
+    fetchTablePreview(table.name);
+    const newExpanded = new Set(expandedTables);
+    if (expandedTables.has(table.name)) {
+      newExpanded.delete(table.name);
+    } else {
+      newExpanded.add(table.name);
+    }
+    setExpandedTables(newExpanded);
+  };
+
+  const handleStartSingleMigration = (table: TableInfo) => {
+    if (table.isFullyEmbedded) {
+      toast({
+        title: 'Already Completed',
+        description: 'This table is fully embedded',
+        variant: 'default'
+      });
+      return;
+    }
+    setSelectedTables([table.name]);
+    startMigration();
+  };
+
+  const handleDeleteTable = (table: TableInfo) => {
+    console.log('Delete table:', table);
+    toast({
+      title: 'Not Implemented',
+      description: 'Table deletion will be added soon',
+      variant: 'default'
+    });
+  };
+
+  // Filter tables based on search and status
+  const filteredTables = availableTables.filter(table => {
+    const matchesSearch = table.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         table.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    let matchesStatus = true;
+    if (statusFilter !== 'all') {
+      const status = getStatusText(table).toLowerCase();
+      matchesStatus = status === statusFilter.toLowerCase();
+    }
+
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -952,182 +1077,275 @@ export default function EmbeddingsManagerPage() {
               </Card>
             )}
 
+            {/* Batch Toolbar */}
+            {selectedTableRows.size > 0 && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      {selectedTableRows.size} table(s) selected
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSelectedTableRows(new Set())}
+                      className="h-7 text-xs"
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleBatchMigration}
+                      className="h-7 text-xs"
+                      disabled={progress?.status === 'processing'}
+                    >
+                      <Play className="w-3 h-3 mr-1" />
+                      Start Migration
+                    </Button>
+                    <ConfirmTooltip
+                      onConfirm={handleBulkDelete}
+                      title="Delete Selected Tables"
+                      description={`Are you sure you want to delete ${selectedTableRows.size} table(s)?`}
+                    >
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Delete Selected
+                      </Button>
+                    </ConfirmTooltip>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Search and Filter */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="text"
+                      placeholder="Search tables..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[180px] h-9">
+                      <Filter className="w-3 h-3 mr-2" />
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Tables</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Tables List */}
             <Card>
               <CardContent className="pt-4 pb-4">
                 {isLoadingTables ? (
-                  <ListSkeleton items={5} />
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12"><Skeleton className="h-4 w-4" /></TableHead>
+                        <TableHead className="w-64"><Skeleton className="h-4 w-32" /></TableHead>
+                        <TableHead className="w-32"><Skeleton className="h-4 w-20" /></TableHead>
+                        <TableHead className="w-24"><Skeleton className="h-4 w-16" /></TableHead>
+                        <TableHead className="w-24"><Skeleton className="h-4 w-12" /></TableHead>
+                        <TableHead className="w-24"><Skeleton className="h-4 w-16" /></TableHead>
+                        <TableHead className="w-32"><Skeleton className="h-4 w-20" /></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...Array(7)].map((_, i) => (
+                        <TableRow key={i}>
+                          <TableCell><Skeleton className="h-4 w-4 rounded" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                          <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <Skeleton className="h-2 w-full rounded-full" />
+                              <Skeleton className="h-3 w-12" />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 ) : (
-                  <div className="space-y-2">
-                    {availableTables.map((table) => {
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={selectedTableRows.size === filteredTables.length && filteredTables.length > 0}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedTableRows(new Set(filteredTables.map(t => t.name)));
+                              } else {
+                                setSelectedTableRows(new Set());
+                              }
+                            }}
+                          />
+                        </TableHead>
+                        <TableHead className="w-64">Table Name</TableHead>
+                        <TableHead className="w-32">Database</TableHead>
+                        <TableHead className="w-24">Status</TableHead>
+                        <TableHead className="w-24">Total</TableHead>
+                        <TableHead className="w-24">Embedded</TableHead>
+                        <TableHead className="w-32">Progress</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {filteredTables.map((table) => {
                       const skipped = table.skippedRecords || 0;
                       const isCompleted = (table.embeddedRecords + skipped) === table.totalRecords;
                       const tableProgress = table.totalRecords > 0 ? (table.embeddedRecords / table.totalRecords) * 100 : 0;
+                      const isSelected = selectedTableRows.has(table.name);
 
                       return (
-                        <div key={table.name} className="border rounded-lg overflow-hidden transition-all">
-                          <div
-                            className={`p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
-                              selectedTables.includes(table.name) ? 'bg-slate-100/80 dark:bg-slate-800/30' : ''
-                            } ${expandedTables.has(table.name) ? 'border-b' : ''}`}
-                            onClick={() => {
-                              const newExpanded = new Set(expandedTables);
-                              if (expandedTables.has(table.name)) {
-                                newExpanded.delete(table.name);
-                              } else {
-                                newExpanded.add(table.name);
-                                setSelectedTableForPreview(table.name);
-                                fetchTablePreview(table.name);
-                              }
-                              setExpandedTables(newExpanded);
-                            }}
-                          >
-                            <div className="flex items-center space-x-3">
-                              {!isCompleted && (
-                                <div
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (progress?.status !== 'processing') {
-                                      if (selectedTables.includes(table.name)) {
-                                        setSelectedTables(selectedTables.filter(t => t !== table.name));
-                                      } else {
-                                        setSelectedTables([...selectedTables, table.name]);
-                                      }
-                                    }
-                                  }}
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${
-                                    selectedTables.includes(table.name)
-                                      ? 'bg-slate-200/80 dark:bg-slate-700/40 border-slate-500 dark:border-slate-500/70'
-                                      : 'bg-white dark:bg-slate-800/50 border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500/70'
-                                  } ${progress?.status === 'processing' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        <TableRow
+                          key={table.name}
+                          className={cn(
+                            "hover:bg-muted/50 transition-colors duration-150 cursor-pointer",
+                            isSelected && "bg-blue-50 dark:bg-blue-950/30"
+                          )}
+                        >
+                          {/* Checkbox column */}
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedTableRows);
+                                if (checked) {
+                                  newSelected.add(table.name);
+                                } else {
+                                  newSelected.delete(table.name);
+                                }
+                                setSelectedTableRows(newSelected);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </TableCell>
+
+                          {/* Table Name column */}
+                          <TableCell className="font-medium">
+                            <div className="truncate max-w-xs" title={table.name}>
+                              {table.displayName}
+                            </div>
+                          </TableCell>
+
+                          {/* Database column */}
+                          <TableCell className="text-sm text-muted-foreground">
+                            scriptus_lsemb
+                          </TableCell>
+
+                          {/* Status column with dropdown */}
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <div className="flex items-center gap-1 cursor-pointer group">
+                                  <Badge variant="outline" className={cn(
+                                    "text-xs font-medium border transition-all duration-150",
+                                    getStatusBadgeClass(table)
+                                  )}>
+                                    {getStatusText(table)}
+                                  </Badge>
+                                  <MoreHorizontal className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handlePreviewTable(table)}>
+                                  <Eye className="w-3 h-3 mr-2" />
+                                  Preview
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleStartSingleMigration(table)}
+                                  disabled={table.isFullyEmbedded}
                                 >
-                                  {selectedTables.includes(table.name) && (
-                                    <CheckCircle className="w-3 h-3 text-slate-600 dark:text-slate-400 fill-current" />
-                                  )}
-                                </div>
+                                  <Play className="w-3 h-3 mr-2" />
+                                  Start Migration
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteTable(table)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Trash2 className="w-3 h-3 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+
+                          {/* Total column */}
+                          <TableCell className="text-sm">{table.totalRecords.toLocaleString()}</TableCell>
+
+                          {/* Embedded column */}
+                          <TableCell className="text-sm">
+                            <div className="flex items-center gap-2">
+                              <span>{table.embeddedRecords.toLocaleString()}</span>
+                              {skipped > 0 && (
+                                <>
+                                  <span className="text-xs text-yellow-600 dark:text-yellow-500">
+                                    ({skipped} skipped)
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fetchSkippedRecords(table.name);
+                                    }}
+                                    className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded p-0.5 transition-colors"
+                                    title="View skipped records"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
                               )}
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium">
-                                    {table.displayName}
-                                  </span>
-                                  <div className="flex items-center gap-2">
-                                    {isCompleted && (
-                                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-500" />
-                                    )}
-                                    <span className="text-sm text-muted-foreground">
-                                      {tableProgress.toFixed(1)}%
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-                                  <span>
-                                    {table.embeddedRecords.toLocaleString()} / {table.totalRecords.toLocaleString()}
-                                  </span>
-                                  {skipped > 0 && (
-                                    <>
-                                      <span className="text-xs text-yellow-600 dark:text-yellow-500">
-                                        ({skipped} skipped)
-                                      </span>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          fetchSkippedRecords(table.name);
-                                        }}
-                                        className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded p-0.5 transition-colors"
-                                        title="View skipped records"
-                                      >
-                                        <Eye className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                                <TaoProgressBar
-                                  value={tableProgress}
-                                  variant="zen"
-                                  size="sm"
-                                  className="mt-2"
-                                  showPercentage={false}
+                            </div>
+                          </TableCell>
+
+                          {/* Progress column */}
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div
+                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${tableProgress}%` }}
                                 />
                               </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">{tableProgress.toFixed(1)}%</span>
+                                {isCompleted && (
+                                  <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-500" />
+                                )}
+                              </div>
                             </div>
-                          </div>
-
-                          {/* Expanded Details - Just Records Table */}
-                          {expandedTables.has(table.name) && (
-                            <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t">
-                              {isLoadingPreview ? (
-                                <div className="flex items-center justify-center py-8">
-                                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                                  <span className="ml-2 text-sm text-muted-foreground">Loading preview...</span>
-                                </div>
-                              ) : tablePreviewData.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                                  <Database className="w-12 h-12 mb-3 opacity-40" />
-                                  <p className="text-sm font-medium">No embedded data found</p>
-                                  <p className="text-xs mt-1">This table has not been embedded yet</p>
-                                </div>
-                              ) : (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-xs">
-                                    <thead>
-                                      <tr className="border-b">
-                                        <th className="text-left p-2 font-medium">Source ID</th>
-                                        <th className="text-left p-2 font-medium">Created</th>
-                                        <th className="text-left p-2 font-medium">Tokens</th>
-                                        <th className="text-left p-2 font-medium">Model</th>
-                                        <th className="text-center p-2 font-medium w-20"></th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {tablePreviewData.slice(0, 10).map((record, index) => (
-                                        <tr key={index} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                          <td className="p-3 text-sm font-medium">{record.source_id || '-'}</td>
-                                          <td className="p-3 text-sm">
-                                            {record.created_at ?
-                                              new Date(record.created_at).toLocaleDateString() + ' ' +
-                                              new Date(record.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-                                              : '-'
-                                            }
-                                          </td>
-                                          <td className="p-3 text-sm">
-                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800/30 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-                                              <Database className="w-3.5 h-3.5" />
-                                              {record.tokens || record.token_used || '-'}
-                                            </div>
-                                          </td>
-                                          <td className="p-3 text-sm">
-                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300 border border-green-200/50 dark:border-green-800/50 shadow-sm">
-                                              <Activity className="w-3.5 h-3.5" />
-                                              {record.model || record.model_used || '-'}
-                                            </div>
-                                          </td>
-                                          <td className="p-3 text-center">
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedRecord(record);
-                                                setShowContentModal(true);
-                                              }}
-                                              className="group inline-flex items-center justify-center w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-all duration-200 hover:scale-105"
-                                              title="View content"
-                                            >
-                                              <Eye className="w-4 h-4 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors" />
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </div>
+                    </TableBody>
+                  </Table>
                 )}
+
+                {/* Expanded Details - Commented out for now, can be added back later as a modal
+                */}
               </CardContent>
             </Card>
           </div>

@@ -78,7 +78,7 @@ export default function MigrationToolsPage() {
   const [sourceType, setSourceType] = useState<'database' | 'file' | 'url'>('database');
   const [sourceConfig, setSourceConfig] = useState({
     // Database source
-    database: 'rag_chatbot',
+    database: 'lsemb', // Default to LSEMB database
     table: 'all',
     
     // File source
@@ -461,8 +461,7 @@ export default function MigrationToolsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="rag_chatbot">RAG Chatbot DB</SelectItem>
-                      <SelectItem value="lsemb">ASEMB DB</SelectItem>
+                      <SelectItem value="lsemb">LSEMB DB</SelectItem>
                       <SelectItem value="custom">Özel Veritabanı</SelectItem>
                     </SelectContent>
                   </Select>

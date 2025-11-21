@@ -358,7 +358,10 @@ export default function EmbeddingsPage() {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card
+          className="cursor-pointer hover:border-blue-400 transition-colors"
+          onClick={() => setActiveTab('history')}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Durum

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dil Test Sayfası - 12 Dil Desteği</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .flag-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+        .language-card {
+            transition: all 0.3s ease;
+        }
+        .language-card:hover {
+            transform: translateY(-2px);
+        }
+        .active-language {
+            ring: 2px;
+            ring-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-4 flex items-center justify-center gap-3">
+                <i data-lucide="globe" class="w-10 h-10 text-blue-600 dark:text-blue-400"></i>
+                Dil Değiştirme Test Sayfası
+            </h1>
+            <p class="text-lg text-gray-600 dark:text-gray-300">
+                Mevcut Dil: <span id="currentLanguage" class="font-semibold text-blue-600 dark:text-blue-400">tr</span>
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+            <!-- Türkçe -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg active-language" onclick="selectLanguage('tr')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇹🇷</span>
+                        <span class="font-medium text-lg">Türkçe</span>
+                    </div>
+                    <i data-lucide="check-circle" class="w-5 h-5 text-green-600 dark:text-green-400"></i>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> tr</p>
+                    <p><strong>Durum:</strong> <span class="text-green-600">Aktif</span></p>
+                </div>
+            </div>
+
+            <!-- İngilizce -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('en')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇺🇸</span>
+                        <span class="font-medium text-lg">English</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> en</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Fransızca -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('fr')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇫🇷</span>
+                        <span class="font-medium text-lg">Français</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> fr</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- İspanyolca -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('es')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇪🇸</span>
+                        <span class="font-medium text-lg">Español</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> es</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Almanca -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('de')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇩🇪</span>
+                        <span class="font-medium text-lg">Deutsch</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> de</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Çince -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('zh')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇨🇳</span>
+                        <span class="font-medium text-lg">中文</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> zh</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Yunanca -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('el')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇬🇷</span>
+                        <span class="font-medium text-lg">Ελληνικά</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> el</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Tayca -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('th')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇹🇭</span>
+                        <span class="font-medium text-lg">ไทย</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> th</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Rusça -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('ru')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇷🇺</span>
+                        <span class="font-medium text-lg">Русский</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> ru</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Arapça -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('ar')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇸🇦</span>
+                        <span class="font-medium text-lg">العربية</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> ar</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Japonca -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('ja')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇯🇵</span>
+                        <span class="font-medium text-lg">日本語</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> ja</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+
+            <!-- Korece -->
+            <div class="language-card bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg" onclick="selectLanguage('ko')">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <span class="flag-icon">🇰🇷</span>
+                        <span class="font-medium text-lg">한국어</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                    <p><strong>Kod:</strong> ko</p>
+                    <p><strong>Durum:</strong> <span class="text-gray-600">Mevcut</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <i data-lucide="settings" class="w-5 h-5"></i>
+                    Ayarlar Çevirileri
+                </h2>
+                <div class="space-y-3">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Genel Ayarlar</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Ayarlar</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Dil Ayarları</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Dil Ayarları</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Mevcut Dil</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Mevcut Dil</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Dil Seç</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Dil Seç</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Kaydet</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Kaydet</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                    <i data-lucide="globe" class="w-5 h-5"></i>
+                    Genel Çeviriler
+                </h2>
+                <div class="space-y-3">
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Kaydet</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Kaydet</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">İptal</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">İptal</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Yükleme...</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Yükleme...</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Başarılı</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Başarılı</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-gray-700 dark:text-gray-300">Hata</h4>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Hata</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 text-center">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 inline-block">
+                <h2 class="text-xl font-semibold mb-4">Tüm Diller (12 Dil)</h2>
+                <div class="flex flex-wrap gap-2 justify-center">
+                    <span class="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-sm flex items-center gap-1">
+                        🇹🇷 tr
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇺🇸 en
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇫🇷 fr
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇪🇸 es
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇩🇪 de
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇨🇳 zh
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇬🇷 el
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇹🇭 th
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇷🇺 ru
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇸🇦 ar
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇯🇵 ja
+                    </span>
+                    <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full text-sm flex items-center gap-1">
+                        🇰🇷 ko
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Lucide icons initialization
+        lucide.createIcons();
+
+        let currentLang = 'tr';
+
+        function selectLanguage(languageCode) {
+            // Remove active class from all cards
+            document.querySelectorAll('.language-card').forEach(card => {
+                card.classList.remove('active-language');
+                const checkIcon = card.querySelector('[data-lucide="check-circle"]');
+                if (checkIcon) {
+                    checkIcon.remove();
+                }
+                // Update status
+                const statusElement = card.querySelector('.text-green-600, .text-gray-600');
+                if (statusElement) {
+                    statusElement.textContent = 'Mevcut';
+                    statusElement.className = 'text-gray-600';
+                }
+            });
+
+            // Add active class to selected card
+            const selectedCard = document.querySelector(`.language-card[onclick="selectLanguage('${languageCode}')"]`);
+            if (selectedCard) {
+                selectedCard.classList.add('active-language');
+                
+                // Add check icon
+                const headerDiv = selectedCard.querySelector('.flex.items-center.justify-between.mb-4');
+                const checkIcon = document.createElement('i');
+                checkIcon.setAttribute('data-lucide', 'check-circle');
+                checkIcon.className = 'w-5 h-5 text-green-600 dark:text-green-400';
+                headerDiv.appendChild(checkIcon);
+                
+                // Update status
+                const statusElement = selectedCard.querySelector('.text-gray-600');
+                if (statusElement) {
+                    statusElement.textContent = 'Aktif';
+                    statusElement.className = 'text-green-600';
+                }
+            }
+
+            // Update current language display
+            currentLang = languageCode;
+            document.getElementById('currentLanguage').textContent = languageCode;
+            
+            // Re-initialize icons
+            lucide.createIcons();
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            selectLanguage('tr');
+        });
+    </script>
+</body>
+</html>

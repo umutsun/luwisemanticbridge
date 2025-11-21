@@ -1004,10 +1004,7 @@ class LocalMetadataExtractorService {
         headings: []
       },
       contentAnalysis: {
-        mainCharacters: [],
-        narrativeStyle: 'unknown',
-        genre: 'unknown',
-        documentType: 'unknown'
+        documentType: 'general'
       },
       tables: [],
       entities: {
@@ -1240,9 +1237,25 @@ IMPORTANT RULES:
 - Extract ALL fields specified in the schema
 - Be precise and thorough
 - Only include entities that are clearly mentioned in the document
-- Use multi-language awareness for all text analysis
-- For legal documents: Focus on extracting law numbers, articles, dates, and authorities
-- For novels: Focus on character names (ONLY proper names, NOT pronouns)
+- Use multi-language awareness for all text analysis (Turkish, English, etc.)
+
+ENTITY EXTRACTION RULES (CRITICAL):
+- entities.people: ONLY real person names (e.g., "Ahmet Yılmaz", "Dr. Mehmet Can"). DO NOT include:
+  * Law names (e.g., "Kurumlar Vergisi Kanunu" is NOT a person)
+  * Book titles (e.g., "Jitterbug Perfume" is NOT a person)
+  * Organization names (e.g., "Maliye Bakanlığı" is NOT a person)
+  * Job titles without names (e.g., "Hesap Uzman" is NOT a person)
+- entities.organizations: Companies, institutions, government bodies, ministries, directorates
+  * Turkish examples: "Maliye Bakanlığı", "Gelir İdaresi Başkanlığı", "T.C. Hazine ve Maliye Bakanlığı"
+  * English examples: "Microsoft Corporation", "Harvard University"
+- entities.locations: ONLY geographical locations (cities, countries, addresses)
+- entities.dates: Extract ALL dates in document (use ISO format YYYY-MM-DD when possible)
+- entities.money: ALL monetary amounts with currency symbols or abbreviations
+- common.folderHierarchy: Create logical 2-4 level folder path for organizing this document
+
+TEMPLATE-SPECIFIC RULES:
+- For legal documents: Focus on extracting law numbers, articles, dates, and responsible authorities. Place organizations in entities.organizations (NOT people)
+- For novels: Focus on character names (ONLY proper names, NOT pronouns). Character names go in templateData.fields.mainCharacters
 - For research papers: Focus on methodology, findings, and citations
 - If focus keywords provided, MUST extract them and add to common.focusKeywords with contexts in common.keywordMatches
 - If tables provided from OCR, MUST include them in common.extractedTables field
@@ -1361,8 +1374,25 @@ IMPORTANT RULES:
 - Be precise and thorough
 - Only include entities that are clearly mentioned in the document
 - Output ONLY valid JSON, no markdown or extra text
-- For legal documents: Focus on extracting law numbers, articles, dates, and authorities
-- For novels: Focus on character names (ONLY proper names, NOT pronouns)
+- Use multi-language awareness for all text analysis (Turkish, English, etc.)
+
+ENTITY EXTRACTION RULES (CRITICAL):
+- entities.people: ONLY real person names (e.g., "Ahmet Yılmaz", "Dr. Mehmet Can"). DO NOT include:
+  * Law names (e.g., "Kurumlar Vergisi Kanunu" is NOT a person)
+  * Book titles (e.g., "Jitterbug Perfume" is NOT a person)
+  * Organization names (e.g., "Maliye Bakanlığı" is NOT a person)
+  * Job titles without names (e.g., "Hesap Uzman" is NOT a person)
+- entities.organizations: Companies, institutions, government bodies, ministries, directorates
+  * Turkish examples: "Maliye Bakanlığı", "Gelir İdaresi Başkanlığı", "T.C. Hazine ve Maliye Bakanlığı"
+  * English examples: "Microsoft Corporation", "Harvard University"
+- entities.locations: ONLY geographical locations (cities, countries, addresses)
+- entities.dates: Extract ALL dates in document (use ISO format YYYY-MM-DD when possible)
+- entities.money: ALL monetary amounts with currency symbols or abbreviations
+- common.folderHierarchy: Create logical 2-4 level folder path for organizing this document
+
+TEMPLATE-SPECIFIC RULES:
+- For legal documents: Focus on extracting law numbers, articles, dates, and responsible authorities. Place organizations in entities.organizations (NOT people)
+- For novels: Focus on character names (ONLY proper names, NOT pronouns). Character names go in templateData.fields.mainCharacters
 - For research papers: Focus on methodology, findings, and citations
 - If focus keywords provided, MUST extract them and add to common.focusKeywords with contexts in common.keywordMatches
 - If tables provided from OCR, MUST include them in common.extractedTables field
@@ -1484,12 +1514,15 @@ EXAMPLE OUTPUT STRUCTURE:
       },
 
       entities: {
-        people: "array of strings",
-        organizations: "array of strings",
-        locations: "array of strings",
-        dates: "array of strings (ISO format if possible)",
-        money: "array of strings"
+        people: "array of strings - ONLY person names (e.g., 'Ahmet Yılmaz', 'John Smith'). DO NOT include law names, book titles, or organizations",
+        organizations: "array of strings - organizations, companies, institutions, government bodies (e.g., 'Maliye Bakanlığı', 'Microsoft Corp.', 'Harvard Üniversitesi'). Include Turkish ministries, directorates, and official bodies",
+        locations: "array of strings - cities, countries, addresses (e.g., 'Ankara', 'İstanbul', 'New York')",
+        dates: "array of strings (ISO format if possible) - ALL dates mentioned in document",
+        money: "array of strings - monetary amounts with currency (e.g., '1000 TL', '$500', '50000₺')"
       },
+
+      // Smart folder categorization for document organization
+      folderHierarchy: "array of strings - suggested folder path for organizing this document (e.g., ['Legal', 'Tax Laws', 'Corporate Tax'] or ['Books', 'Fiction', 'Mystery']). Create logical 2-4 level hierarchy based on document type and content",
 
       // Extracted tables from Vision OCR
       extractedTables: "array of objects - tables detected by OCR with structure: {tableId: string, description: string, rows: array, columns: array, data: array}",
@@ -1921,11 +1954,9 @@ FIELD EXTRACTION INSTRUCTIONS:
         };
 
       default:
+        // For general documents, return minimal analysis
+        // Don't include book-specific fields (genre, narrativeStyle, mainCharacters)
         return {
-          ...baseAnalysis,
-          mainCharacters: [], // Keep for backward compatibility
-          narrativeStyle: 'unknown',
-          genre: 'unknown',
           documentType: this.detectDocumentType(text)
         };
     }

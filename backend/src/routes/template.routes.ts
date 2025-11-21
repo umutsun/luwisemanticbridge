@@ -428,18 +428,23 @@ router.post('/apply', async (req: Request, res: Response) => {
     const template = templateResult.rows[0];
 
     // Use LLM to extract metadata based on template
-    const llmManager = require('../services/llm-manager.service').default;
+    const LLMManager = require('../services/llm-manager.service').default;
+    const llmManager = LLMManager.getInstance();
 
     const extractionPrompt = template.extraction_prompt ||
-      `Extract the following fields from the document: ${template.target_fields.join(', ')}`;
+      `Extract the following fields from the document: ${template.target_fields.join(', ')}. Return ONLY valid JSON with no markdown formatting.`;
 
-    const extractedData = await llmManager.generateText(
-      `${extractionPrompt}\n\nDocument content:\n${content.substring(0, 8000)}`,
+    // Use generateChatResponse with system prompt
+    const llmResponse = await llmManager.generateChatResponse(
+      `Document content:\n${content.substring(0, 8000)}`,
       {
+        systemPrompt: extractionPrompt,
         temperature: 0.1,
         maxTokens: 2000
       }
     );
+
+    const extractedData = llmResponse.content;
 
     let metadata = {};
     try {

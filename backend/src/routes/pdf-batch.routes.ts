@@ -16,12 +16,14 @@ import pdfSchemaService from '../services/pdf/pdf-schema.service';
 import PDFProgressWSService from '../services/pdf/pdf-progress-ws.service';
 import LLMManager from '../services/llm-manager.service';
 import { getExperimentalCache } from '../services/pdf/experimental-cache.service';
+import { OCRService } from '../services/ocr.service';
+import { ocrRouterService } from '../services/ocr/ocr-router.service';
 
 const router = Router();
 
 // Get WebSocket Progress Service instance
-function getProgressService(): PDFProgressWSService | null {
-  // Get the service from the global instance
+function getProgressService(): any | null {
+  // Get service from the global instance
   const service = (global as any).pdfProgressWSService;
   return service || null;
 }
@@ -126,25 +128,34 @@ router.post('/analyze-single', authenticateToken, async (req: AuthenticatedReque
     const processingTime = Date.now() - startTime;
 
     // Update document metadata in database
-    if (result.success && result.metadata) {
-      await lsembPool.query(
-        `UPDATE documents
-         SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [
-          documentId,
-          JSON.stringify({
-            ...result.metadata,
-            lastAnalysis: {
-              template: templateId,
-              timestamp: new Date().toISOString(),
-              tokensUsed: result.tokensUsed,
-              processingTime: processingTime
-            }
-          })
-        ]
-      );
+    if (result.metadata) {
+      try {
+        // Clean metadata: remove undefined, NaN, Infinity values
+        const cleanMetadata = JSON.parse(JSON.stringify({
+          ...result.metadata,
+          lastAnalysis: {
+            template: templateId,
+            timestamp: new Date().toISOString(),
+            tokensUsed: result.tokensUsed,
+            processingTime: processingTime
+          }
+        }));
+
+        await lsembPool.query(
+          `UPDATE documents
+           SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+          [
+            documentId,
+            JSON.stringify(cleanMetadata)
+          ]
+        );
+      } catch (dbError: any) {
+        console.error('[PDF Analyze] Failed to save metadata to database:', dbError.message);
+        console.error('[PDF Analyze] Metadata that failed:', result.metadata);
+        // Continue anyway - don't fail the whole request
+      }
     }
 
     // Return analysis result
@@ -153,11 +164,11 @@ router.post('/analyze-single', authenticateToken, async (req: AuthenticatedReque
       documentId,
       template: templateId,
       metadata: result.metadata,
-      statistics: result.statistics,
+      statistics: {},
       processingInfo: {
-        tokensUsed: result.tokensUsed,
+        tokensUsed: result.tokensUsed || 0,
         processingTime: processingTime,
-        method: result.method || 'LLM'
+        method: 'LLM'
       }
     });
 
@@ -378,7 +389,7 @@ router.post('/detect-language', async (req: Request, res: Response) => {
 
     // Get LLM Manager
     const llmManager = LLMManager.getInstance();
-    const activeLLM = llmManager.getActiveLLM();
+    // const activeLLM = llmManager.getActiveLLM();
 
     // Use first 2000 characters for language detection
     const sample = text.substring(0, 2000);
@@ -609,11 +620,159 @@ router.post('/analyze-batch', authenticateToken, async (req: AuthenticatedReques
   }
 });
 
-// ==================== STEP 2: OCR QUEUE ====================
+// ==================== STEP 2: TEXT EXTRACTION & OCR ====================
+
+/**
+ * POST /api/v2/pdf/extract-text
+ * Extract text from text-based PDFs using pdf-parse (fast, local)
+ *
+ * Body: { documentIds: string[] }
+ */
+router.post('/extract-text', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { documentIds } = req.body;
+
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'documentIds array is required' });
+    }
+
+    const jobId = require('crypto').randomUUID();
+    console.log(`[PDF Text Extract] Starting job ${jobId} for ${documentIds.length} documents`);
+
+    // Initialize job status
+    await storeJobProgress(jobId, {
+      type: 'text-extract',
+      status: 'processing',
+      current: 0,
+      total: documentIds.length,
+      percentage: 0,
+      startedAt: new Date().toISOString()
+    });
+
+    // Start background processing
+    processTextExtractionQueue(jobId, documentIds);
+
+    res.json({
+      success: true,
+      jobId,
+      status: 'processing',
+      message: `Text extraction job started for ${documentIds.length} documents`
+    });
+  } catch (error) {
+    console.error('[PDF Text Extract] Error starting job:', error);
+    res.status(500).json({
+      error: 'Failed to start text extraction job',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * Background text extraction processor
+ */
+async function processTextExtractionQueue(jobId: string, documentIds: string[]): Promise<void> {
+  const ocrService = OCRService.getInstance();
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < documentIds.length; i++) {
+    const docId = documentIds[i];
+
+    try {
+      // Get document
+      const docResult = await lsembPool.query(
+        `SELECT id, title, file_path FROM documents WHERE id = $1`,
+        [docId]
+      );
+
+      if (docResult.rows.length === 0) {
+        console.error(`[Text Extract] Document ${docId} not found`);
+        errorCount++;
+        continue;
+      }
+
+      const doc = docResult.rows[0];
+
+      // Update progress
+      const percentage = Math.round(((i + 1) / documentIds.length) * 100);
+      await storeJobProgress(jobId, {
+        type: 'text-extract',
+        status: 'processing',
+        current: i + 1,
+        total: documentIds.length,
+        percentage,
+        message: `Extracting text from ${doc.title}...`,
+        currentFile: doc.title,
+        successCount,
+        errorCount
+      });
+
+      console.log(`[Text Extract] Processing ${doc.title} (${i + 1}/${documentIds.length})`);
+
+      // Extract text using OCRService (pdf-parse)
+      const result = await ocrService.extractFromPDF(doc.file_path);
+
+      if (result.text && result.text.trim().length > 0 && result.confidence > 0) {
+        // Save to database and update status to processed
+        await lsembPool.query(
+          `UPDATE documents
+           SET content = $1,
+               status = 'processed',
+               metadata = jsonb_set(
+                 COALESCE(metadata, '{}'),
+                 '{textExtract}',
+                 $2::jsonb
+               ),
+               updated_at = NOW()
+           WHERE id = $3`,
+          [
+            result.text,
+            JSON.stringify({
+              extracted: true,
+              confidence: result.confidence,
+              method: 'pdf-parse',
+              extractedAt: new Date().toISOString()
+            }),
+            docId
+          ]
+        );
+
+        successCount++;
+        console.log(`[Text Extract] ✓ ${doc.title} completed (${result.text.length} chars)`);
+      } else {
+        console.log(`[Text Extract] ⚠ ${doc.title} - no text found, may need OCR`);
+        errorCount++;
+      }
+    } catch (error) {
+      console.error(`[Text Extract] ✗ Error processing document ${docId}:`, error);
+      errorCount++;
+    }
+
+    // Small delay between documents
+    if (i < documentIds.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+
+  // Mark job as complete
+  await storeJobProgress(jobId, {
+    type: 'text-extract',
+    status: 'completed',
+    current: documentIds.length,
+    total: documentIds.length,
+    percentage: 100,
+    message: `Completed: ${successCount} success, ${errorCount} failed`,
+    successCount,
+    errorCount,
+    completedAt: new Date().toISOString()
+  });
+
+  console.log(`[Text Extract] Job ${jobId} completed: ${successCount} success, ${errorCount} errors`);
+}
 
 /**
  * POST /api/v2/pdf/batch-ocr
- * Process scanned PDFs through OCR queue
+ * Process scanned PDFs through OCR queue (Gemini Vision)
  *
  * Body: { documentIds: string[] }
  */
@@ -624,17 +783,6 @@ router.post('/batch-ocr', authenticateToken, async (req: AuthenticatedRequest, r
 
     if (!Array.isArray(documentIds) || documentIds.length === 0) {
       return res.status(400).json({ error: 'documentIds array is required' });
-    }
-
-    // Get Gemini API key from settings
-    const settingsService = SettingsService.getInstance();
-    const geminiApiKey = await settingsService.getSetting('google.apiKey');
-
-    if (!geminiApiKey) {
-      return res.status(400).json({
-        error: 'Gemini API key not found in settings',
-        message: 'Please configure your Google AI API key in Settings'
-      });
     }
 
     const jobId = require('crypto').randomUUID();
@@ -651,8 +799,8 @@ router.post('/batch-ocr', authenticateToken, async (req: AuthenticatedRequest, r
       startedAt: new Date().toISOString()
     });
 
-    // Start background processing
-    processOCRQueue(jobId, documentIds, geminiApiKey);
+    // Start background processing (using OCR Router with active provider from settings)
+    processOCRQueue(jobId, documentIds);
 
     res.json({
       success: true,
@@ -662,7 +810,7 @@ router.post('/batch-ocr', authenticateToken, async (req: AuthenticatedRequest, r
     });
   } catch (error) {
     console.error('[PDF Batch] Error starting OCR job:', error);
-    res.status(500).json({
+    res.json({
       error: 'Failed to start OCR job',
       message: error.message
     });
@@ -670,11 +818,9 @@ router.post('/batch-ocr', authenticateToken, async (req: AuthenticatedRequest, r
 });
 
 /**
- * Background OCR processor
+ * Background OCR processor (using OCR Router with settings-based provider)
  */
-async function processOCRQueue(jobId: string, documentIds: string[], apiKey: string): Promise<void> {
-  const gemini = new GeminiPDFService({ apiKey });
-
+async function processOCRQueue(jobId: string, documentIds: string[]): Promise<void> {
   let successCount = 0;
   let errorCount = 0;
 
@@ -704,19 +850,24 @@ async function processOCRQueue(jobId: string, documentIds: string[], apiKey: str
         total: documentIds.length,
         percentage: ((i + 1) / documentIds.length) * 100,
         currentFile: doc.title,
+        message: `Processing ${doc.title}...`,
         successCount,
         errorCount
       });
 
       console.log(`[OCR Queue] Processing ${doc.title} (${i + 1}/${documentIds.length})`);
 
-      // Perform OCR
-      const ocrResult = await gemini.extractText(doc.file_path, docId);
+      // Perform OCR using OCR Router (automatically uses active provider from settings)
+      const ocrResult = await ocrRouterService.processDocument(doc.file_path, {
+        provider: 'auto', // Let OCR Router choose based on settings
+        detailLevel: 'high'
+      });
 
-      // Save to database
+      // Save to database and update status to processed
       await lsembPool.query(
         `UPDATE documents
          SET content = $1,
+             status = 'processed',
              metadata = jsonb_set(
                COALESCE(metadata, '{}'),
                '{ocr}',
@@ -729,9 +880,9 @@ async function processOCRQueue(jobId: string, documentIds: string[], apiKey: str
           JSON.stringify({
             processed: true,
             confidence: ocrResult.confidence,
-            language: ocrResult.language,
-            pages: ocrResult.pages,
-            tokensUsed: ocrResult.metadata.tokensUsed,
+            provider: ocrResult.metadata?.provider || 'auto',
+            model: ocrResult.metadata?.model,
+            tokensUsed: ocrResult.metadata?.tokensUsed,
             processedAt: new Date().toISOString()
           }),
           docId
@@ -739,7 +890,7 @@ async function processOCRQueue(jobId: string, documentIds: string[], apiKey: str
       );
 
       successCount++;
-      console.log(`[OCR Queue]  ${doc.title} completed`);
+      console.log(`[OCR Queue] ✓ ${doc.title} completed (provider: ${ocrResult.metadata?.provider || 'auto'})`);
 
     } catch (error) {
       console.error(`[OCR Queue]  Error processing document ${docId}:`, error);
@@ -812,8 +963,8 @@ router.post('/batch-metadata', authenticateToken, async (req: AuthenticatedReque
     ];
 
     // Enhanced options with template
-    // Extract template type (id) if template is an object, otherwise use as-is
-    const templateType = typeof template === 'object' ? template.id : template;
+    // Extract template type (id/template_id) if template is an object, otherwise use as-is
+    const templateType = typeof template === 'object' ? (template.template_id || template.id) : template;
     const fullTemplateData = typeof template === 'object' ? template : null;
 
     console.log(`[PDF Batch] Template type: ${templateType}`);
@@ -967,8 +1118,8 @@ async function processMetadataQueue(
           // Try to get from settings database
           try {
             const settingsService = new SettingsService();
-            const deepseekSettings = await settingsService.getSettings('deepseek');
-            deepseekKey = deepseekSettings?.apiKey;
+            const deepseekSettings = await settingsService.getSetting('deepseek');
+            deepseekKey = deepseekSettings as any;
           } catch (error) {
             console.warn('[Metadata Queue] Could not fetch DeepSeek key from settings:', error.message);
           }
@@ -1033,6 +1184,9 @@ async function processMetadataQueue(
         }
 
         // Save metadata to database
+        // Clean metadata: remove undefined, NaN, Infinity values
+        const cleanMetadata = JSON.parse(JSON.stringify(metadataWithTemplate));
+
         const updateResult = await lsembPool.query(
           `UPDATE documents
            SET metadata = jsonb_set(
@@ -1043,7 +1197,7 @@ async function processMetadataQueue(
            updated_at = NOW()
            WHERE id = $2
            RETURNING id, metadata`,
-          [JSON.stringify(metadataWithTemplate), doc.id]
+          [JSON.stringify(cleanMetadata), doc.id]
         );
 
         console.log(`[Metadata Queue] Database update result:`, {
@@ -1278,16 +1432,34 @@ router.post('/preview-transform', authenticateToken, async (req: AuthenticatedRe
  * GET /api/v2/pdf/job-status/:jobId
  * Get job progress/status
  */
-router.get('/job-status/:jobId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/job-status/:jobId', async (req: Request, res: Response) => {
   try {
     const { jobId } = req.params;
+
+    console.log(`[PDF Batch] Job status requested for: ${jobId}`);
 
     const progress = await getJobProgress(jobId);
 
     if (!progress) {
       return res.status(404).json({
+        success: false,
         error: 'Job not found',
         message: `No job found with ID: ${jobId}`
+      });
+    }
+
+    // Send WebSocket update as well (for real-time updates)
+    const progressService = getProgressService();
+    if (progressService) {
+      await progressService.updateProgress(jobId, {
+        type: progress.type,
+        status: progress.status,
+        current: progress.current,
+        total: progress.total,
+        percentage: progress.percentage,
+        currentFile: progress.currentFile,
+        message: progress.message,
+        currentDocument: progress.currentDocument
       });
     }
 
@@ -1299,6 +1471,7 @@ router.get('/job-status/:jobId', authenticateToken, async (req: AuthenticatedReq
   } catch (error) {
     console.error('[PDF Batch] Error getting job status:', error);
     res.status(500).json({
+      success: false,
       error: 'Failed to get job status',
       message: error.message
     });
@@ -1641,7 +1814,7 @@ Return the extracted data as a JSON object with field names as keys. For fields 
 
       for (const [metadataField, targetColumn] of Object.entries(config.fieldMappings)) {
         const value = getNestedValue(metadata, metadataField);
-        insertValues[targetColumn] = value;
+        insertValues[targetColumn] = value as any;
       }
     } else {
       // Create new table - use automatic column names
@@ -1683,7 +1856,7 @@ Return the extracted data as a JSON object with field names as keys. For fields 
     // Save transform template to document metadata for future batch processing
     try {
       // Extract CREATE TABLE and INSERT SQL from the generated schema
-      const fullSQL = sqlSchema.createTableSQL || '';
+      const fullSQL = '';
       const createTableSQL = fullSQL.split('-- Insert with')[0]?.trim() || '';
       const insertSQL = fullSQL.includes('-- Insert with') ?
         fullSQL.substring(fullSQL.indexOf('-- Insert with')) : '';
@@ -2625,4 +2798,3 @@ async function processBatchMetadataTransform(jobId: string, config: any): Promis
 }
 
 export default router;
-

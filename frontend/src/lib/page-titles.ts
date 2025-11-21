@@ -30,6 +30,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dashboard/search': 'Search',
   '/dashboard/services': 'Services',
   '/dashboard/translations': 'Translations',
+  '/dashboard/data-translations': 'Veri Çevirileri',
   '/dashboard/workflows': 'Workflows',
   '/scraper': 'Advanced Scraper'
 };

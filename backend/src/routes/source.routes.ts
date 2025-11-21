@@ -14,68 +14,48 @@ let sourcePool: Pool;
 // Initialize source database pool from settings
 async function initializeSourcePool() {
   try {
-    // Get all settings from LSEMB settings table
-    const allSettings = await settingsService.getAllSettings();
-
-    // Extract customer database settings (source database for crawler data)
-    let dbConfig;
-
-    if (allSettings.customer_database) {
-      try {
-        // Parse JSON if it's a string
-        const customerDb = typeof allSettings.customer_database === 'string'
-          ? JSON.parse(allSettings.customer_database)
-          : allSettings.customer_database;
-
-        // Extract database config from nested structure
-        dbConfig = customerDb.database || customerDb;
-
-        const config = {
-          host: dbConfig.host || process.env.POSTGRES_HOST || '91.99.229.96',
-          port: parseInt(dbConfig.port || process.env.POSTGRES_PORT || '5432'),
-          database: dbConfig.name || dbConfig.database, // Source DB from settings only
-          user: dbConfig.user || process.env.POSTGRES_USER || 'postgres',
-          password: dbConfig.password || process.env.POSTGRES_PASSWORD || '',
-          ssl: dbConfig.ssl === 'true' || dbConfig.ssl === true || false,
-          max: 10
-        };
-
-        sourcePool = new Pool(config);
-
-        sourcePool.on('connect', () => {
-          console.log(` Source database connected: ${config.database} (from settings)`);
-        });
-
-        sourcePool.on('error', (err: any) => {
-          console.error(' Source database connection error:', err);
-        });
-
-        return sourcePool;
-      } catch (parseError) {
-        console.error('Failed to parse customer_database settings:', parseError);
-      }
+    // Close existing pool if any
+    if (sourcePool) {
+      await sourcePool.end();
+      sourcePool = null;
     }
 
-    // If no customer_database or parsing failed, use environment variables
-    throw new Error('No customer_database in settings');
-  } catch (error) {
-    console.error('Failed to initialize source pool from settings:', error);
+    // Get source database settings from app.database in settings
+    let sourceDatabaseName = process.env.POSTGRES_DB || 'scriptus_lsemb';
+    try {
+      const appSettings = await settingsService.getSettings('app');
+      if (appSettings?.database?.name) {
+        sourceDatabaseName = appSettings.database.name;
+        console.log(`[Source DB] Using database from settings: ${sourceDatabaseName}`);
+      }
+    } catch (settingsError) {
+      console.warn('[Source DB] Could not fetch database from settings, using env:', sourceDatabaseName);
+    }
 
-    // Fallback to environment variables
     const config = {
       host: process.env.POSTGRES_HOST || '91.99.229.96',
       port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      database: process.env.POSTGRES_DB || 'lsemb',
+      database: sourceDatabaseName, // Dynamic from settings
       user: process.env.POSTGRES_USER || 'postgres',
-      password: process.env.POSTGRES_PASSWORD || '',
+      password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
       ssl: false,
       max: 10
     };
 
     sourcePool = new Pool(config);
-    console.log(` Source database connected: ${config.database} (from env fallback)`);
+
+    sourcePool.on('connect', () => {
+      console.log(`✓ Source database connected: ${config.database}`);
+    });
+
+    sourcePool.on('error', (err: any) => {
+      console.error('✗ Source database connection error:', err);
+    });
 
     return sourcePool;
+  } catch (error) {
+    console.error('Failed to initialize source pool:', error);
+    throw error;
   }
 }
 
@@ -88,9 +68,14 @@ initializeSourcePool();
  */
 router.get('/tables', async (req: Request, res: Response) => {
   try {
-    // Ensure pool is initialized
+    // Ensure pool is initialized - always reinitialize to get fresh settings
+    await initializeSourcePool();
+
     if (!sourcePool) {
-      await initializeSourcePool();
+      return res.status(500).json({
+        success: false,
+        error: 'Source database pool not initialized'
+      });
     }
 
     const query = `

@@ -35,6 +35,15 @@ class PDFProgressWSService {
       retryStrategy: () => null
     });
 
+    // Test Redis connection
+    this.redis.on('connect', () => {
+      console.log('[PDF Progress WS] Redis connected successfully');
+    });
+
+    this.redis.on('error', (error) => {
+      console.error('[PDF Progress WS] Redis connection error:', error);
+    });
+
     this.setupHandlers();
   }
 
@@ -68,6 +77,7 @@ class PDFProgressWSService {
    */
   async updateProgress(jobId: string, progress: Omit<ProgressUpdate, 'timestamp'>): Promise<void> {
     const update: ProgressUpdate = {
+      jobId,
       ...progress,
       timestamp: new Date().toISOString()
     };
@@ -104,12 +114,12 @@ class PDFProgressWSService {
    * Complete a job
    */
   async completeJob(jobId: string, result?: any): Promise<void> {
-    await this.updateProgress(jobId, {
-      type: 'batch',
-      status: 'completed',
-      message: result ? `Completed: ${result.message}` : 'Processing completed successfully',
-      percentage: 100
-    });
+  await this.updateProgress(jobId, {
+    type: 'batch-metadata-transform',
+    status: 'completed',
+    message: result ? `Completed: ${result.message}` : 'Processing completed successfully',
+    percentage: 100
+  });
 
     // Clean up after 5 seconds
     setTimeout(() => {
@@ -122,7 +132,7 @@ class PDFProgressWSService {
    */
   async failJob(jobId: string, error: string): Promise<void> {
     await this.updateProgress(jobId, {
-      type: 'batch',
+      type: 'batch-metadata-transform',
       status: 'error',
       message: `Error: ${error}`,
       percentage: 0

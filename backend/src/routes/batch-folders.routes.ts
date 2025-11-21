@@ -13,8 +13,48 @@ import { redis } from '../server';
 import { io } from '../server';
 import { ocrService } from '../services/ocr.service';
 import documentProcessor from '../services/document-processor.service';
+import pdfMetadataService from '../services/pdf/pdf-metadata.service';
+import { LLMManager } from '../services/llm-manager.service';
 
 const router = Router();
+
+/**
+ * Helper function to extract JSON from markdown code fences
+ * Handles cases where LLM returns: "text ```json {...} ``` more text"
+ */
+function extractJsonFromMarkdown(text: string): any {
+  if (!text || typeof text !== 'string') {
+    return text;
+  }
+
+  // Try to find JSON in markdown code fence
+  const jsonMatch = text.match(/```json\s*\n([\s\S]*?)\n```/);
+  if (jsonMatch && jsonMatch[1]) {
+    try {
+      return JSON.parse(jsonMatch[1]);
+    } catch (e) {
+      console.warn('[Batch Folders] Failed to parse JSON from markdown fence:', e);
+    }
+  }
+
+  // Try to find JSON in any code fence
+  const codeMatch = text.match(/```\s*\n([\s\S]*?)\n```/);
+  if (codeMatch && codeMatch[1]) {
+    try {
+      return JSON.parse(codeMatch[1]);
+    } catch (e) {
+      console.warn('[Batch Folders] Failed to parse JSON from code fence:', e);
+    }
+  }
+
+  // If no markdown fence, try to parse directly
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Not valid JSON, return original text
+    return text;
+  }
+}
 
 interface BatchFile {
   path: string;
@@ -214,6 +254,11 @@ router.post('/process', async (req: Request, res: Response) => {
  */
 async function processFilesAsync(jobId: string, files: BatchFile[], options: any) {
   console.log(`[Batch Folders] Starting async processing for job ${jobId}`);
+  console.log(`[Batch Folders] Files to process:`, files.map(f => ({
+    filename: f.filename,
+    path: f.path,
+    size: f.size
+  })));
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -232,7 +277,7 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
       await redis.set(`job:${jobId}`, JSON.stringify(job), 'EX', 86400);
 
       // Emit progress via WebSocket
-      io.emit(`job-progress-${jobId}`, {
+      const progressData = {
         jobId,
         status: 'processing',
         current: i + 1,
@@ -240,7 +285,9 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
         percentage: Math.round(((i + 1) / files.length) * 100),
         currentFile: file.filename,
         message: `Processing ${file.filename}`
-      });
+      };
+      console.log(`[Batch Folders] Emitting progress: job-progress-${jobId}`, progressData);
+      io.emit(`job-progress-${jobId}`, progressData);
 
       // ═══════════════════════════════════════════════════════════════
       // DUPLICATE CHECK: Skip if file_path already exists in documents
@@ -270,9 +317,26 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
         continue; // Skip to next file
       }
 
-      // Read file
-      const fileBuffer = fs.readFileSync(file.path);
-      const base64 = fileBuffer.toString('base64');
+      // Normalize path for Windows (convert forward slashes to backslashes if needed)
+      const normalizedPath = path.normalize(file.path);
+      console.log(`[Batch Folders] Processing file: ${normalizedPath}`);
+      console.log(`[Batch Folders] Original path: ${file.path}`);
+      console.log(`[Batch Folders] File size from scan: ${file.size} bytes`);
+
+      if (!fs.existsSync(normalizedPath)) {
+        console.error(`[Batch Folders] ERROR: File does not exist: ${normalizedPath}`);
+        // Try alternative path resolution
+        const altPath = path.resolve(normalizedPath);
+        console.error(`[Batch Folders] Trying alternative path: ${altPath}`);
+        if (!fs.existsSync(altPath)) {
+          throw new Error(`File not found: ${normalizedPath} (also tried ${altPath})`);
+        }
+      }
+
+      // Get actual file stats
+      const fileStat = fs.statSync(normalizedPath);
+      const actualSize = fileStat.size;
+      console.log(`[Batch Folders] File exists, actual size: ${actualSize} bytes`);
 
       // 1. Save to documents table with generic metadata
       const metadata: any = {
@@ -295,8 +359,8 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
           file.filename,
           '', // Content will be filled after OCR
           'pdf',
-          file.size,
-          file.path,
+          actualSize, // Use actual file size from stat
+          normalizedPath, // Use normalized path
           JSON.stringify(metadata),
           'waiting' // Initial status: waiting for processing
         ]
@@ -305,22 +369,24 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
       const documentId = docResult.rows[0].id;
       console.log(`[Batch Folders] Document saved with ID: ${documentId}`);
 
-      // 2. OCR Processing
+      // 2. OCR Processing using file path
       console.log(`[Batch Folders] Starting OCR for ${file.filename}`);
-      const ocrResult = await ocrService.processOCR({
-        base64,
-        filename: file.filename,
-        documentId,
-        type: 'pdf'
+      const ocrResult = await ocrService.processDocument(normalizedPath, 'application/pdf');
+
+      console.log(`[Batch Folders] OCR Result for ${file.filename}:`, {
+        hasText: !!ocrResult.text,
+        textLength: ocrResult.text?.length || 0,
+        confidence: ocrResult.confidence,
+        type: ocrResult.type
       });
 
-      // 3. Update document with OCR content + set status to 'analyzed'
-      if (ocrResult.text) {
+      // 3. Update document with OCR content + set status to 'ocr_completed' (NOT analyzed yet)
+      if (ocrResult.text && ocrResult.text.trim().length > 0) {
         await lsembPool.query(
           `UPDATE documents
            SET content = $1,
                metadata = metadata || $2::jsonb,
-               processing_status = 'analyzed',
+               processing_status = 'ocr_completed',
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $3`,
           [
@@ -329,12 +395,49 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
               ocr_processed: true,
               ocr_confidence: ocrResult.confidence,
               ocr_type: ocrResult.type,
-              ocr_pages: ocrResult.pages
+              ocr_text_length: ocrResult.text.length
             }),
             documentId
           ]
         );
-        console.log(`[Batch Folders] Document ${documentId} status: waiting → analyzed`);
+        console.log(`[Batch Folders] ✅ Document ${documentId} OCR completed (${ocrResult.text.length} chars), status: waiting → ocr_completed`);
+      } else {
+        console.warn(`[Batch Folders] ⚠️  Document ${documentId} OCR returned empty text!`);
+        console.warn(`[Batch Folders] OCR Result details:`, ocrResult);
+
+        // Still mark as ocr_completed but with warning in metadata
+        await lsembPool.query(
+          `UPDATE documents
+           SET metadata = metadata || $1::jsonb,
+               processing_status = 'ocr_failed',
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = $2`,
+          [
+            JSON.stringify({
+              ocr_processed: false,
+              ocr_failed: true,
+              ocr_error: 'No text extracted from PDF',
+              ocr_confidence: ocrResult.confidence,
+              ocr_type: ocrResult.type
+            }),
+            documentId
+          ]
+        );
+      }
+
+      // Skip analysis if OCR failed (no content)
+      if (!ocrResult.text || ocrResult.text.trim().length === 0) {
+        console.log(`[Batch Folders] Skipping analysis for ${file.filename} - no OCR content`);
+        job.results.push({
+          documentId,
+          filename: file.filename,
+          relativePath: file.relativePath,
+          success: false,
+          error: 'OCR failed - no text extracted',
+          status: 'ocr_failed'
+        });
+        await redis.set(`job:${jobId}`, JSON.stringify(job), 'EX', 86400);
+        continue; // Skip to next file
       }
 
       // 4. Detect template from database (use folder_config if available)
@@ -367,89 +470,129 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
 
       console.log(`[Batch Folders] Using template: ${templateId || 'none'}`);
 
-      // 5. Apply template to extract metadata (if template detected)
+      // 5. Extract metadata using direct service call (not async job)
       let extractedMetadata: any = {};
-      if (templateId) {
+      if (template) {
         try {
-          const metadataResponse = await fetch(`http://localhost:8083/api/v2/templates/apply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              templateId,
-              documentId,
-              content: ocrResult.text,
-              createTables: false  // Don't create tables here - transform pipeline will handle it
-            })
+          console.log(`[Batch Folders] Extracting metadata for document ${documentId} with template ${templateId}`);
+
+          // Get LLM API keys
+          const llmManager = LLMManager.getInstance();
+          const geminiKey = llmManager.getApiKey('google') || llmManager.getApiKey('gemini');
+          const deepseekKey = llmManager.getApiKey('deepseek') || process.env.DEEPSEEK_API_KEY;
+
+          // Get document file path
+          const docResult = await lsembPool.query(
+            `SELECT file_path, title FROM documents WHERE id = $1`,
+            [documentId]
+          );
+
+          if (docResult.rows.length === 0 || !docResult.rows[0].file_path) {
+            console.error(`[Batch Folders] Document ${documentId} not found or has no file_path`);
+            throw new Error('Document not found or has no file path');
+          }
+
+          const filePath = docResult.rows[0].file_path;
+          const title = docResult.rows[0].title;
+
+          // Extract metadata with LLM enrichment
+          const enrichedOptions = {
+            apiKey: geminiKey,
+            deepseekApiKey: deepseekKey,
+            template: templateId,
+            templateData: template,
+            analysisPrompt: template.extraction_prompt,
+            focusKeywords: template.focus_keywords || []
+          };
+
+          console.log(`[Batch Folders] Calling pdfMetadataService.extractMetadata with:`, {
+            template: templateId,
+            hasGeminiKey: !!geminiKey,
+            hasDeepSeekKey: !!deepseekKey,
+            targetFields: template.target_fields
           });
 
-          if (metadataResponse.ok) {
-            const metadataData = await metadataResponse.json();
-            if (metadataData.success) {
-              extractedMetadata = metadataData.metadata;
+          const result = await pdfMetadataService.extractMetadata(
+            filePath,
+            documentId.toString(),
+            title,
+            enrichedOptions
+          );
 
-              // Update document metadata with extracted fields
-              await lsembPool.query(
-                `UPDATE documents
-                 SET metadata = metadata || $1::jsonb,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $2`,
-                [
-                  JSON.stringify({
-                    extracted_metadata: extractedMetadata,
-                    template_id: templateId
-                  }),
-                  documentId
-                ]
-              );
+          extractedMetadata = result.metadata;
+          console.log(`[Batch Folders] Extracted metadata keys:`, Object.keys(extractedMetadata));
 
-              // Transform to source table if template detected AND user opted-in
-              const autoTransform = options.autoTransform === true;
-              if (autoTransform && extractedMetadata && Object.keys(extractedMetadata).length > 0) {
-                try {
-                  console.log(`[Batch Folders] Starting transform to source DB for document ${documentId}`);
+          // Enrich extracted metadata with folder structure info
+          extractedMetadata._source = {
+            type: 'batch-folders',
+            uploadedAt: metadata.uploadedAt,
+            relativePath: file.relativePath,
+            folderStructure: file.folderStructure,
+            originalFilename: file.filename
+          };
 
-                  // Call transform service (uses pdf-batch routes transform logic)
-                  const transformResponse = await fetch(`http://localhost:8083/api/v2/pdf/metadata-transform`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${process.env.SYSTEM_TOKEN || 'internal'}`
-                    },
-                    body: JSON.stringify({
-                      documentId,
-                      selectedFields: Object.keys(extractedMetadata),
-                      tableName: templateId || 'batch_documents',
-                      useExistingTable: false,
-                      sourceDbId: process.env.SOURCE_DB_NAME || 'scriptus_lsemb'
-                    })
-                  });
+          // Save metadata to documents.metadata.analysis
+          await lsembPool.query(
+            `UPDATE documents
+             SET metadata = jsonb_set(
+               COALESCE(metadata, '{}'::jsonb),
+               '{analysis}',
+               $1::jsonb,
+               true
+             ),
+             processing_status = 'analyzed',
+             updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [JSON.stringify(extractedMetadata), documentId]
+          );
+          console.log(`[Batch Folders] Metadata saved to documents.metadata.analysis for document ${documentId} (including folder structure)`);
 
-                  if (transformResponse.ok) {
-                    const transformData = await transformResponse.json();
-                    console.log(`[Batch Folders] Transform job started: ${transformData.jobId}`);
+          // Transform to source table if template detected AND user opted-in
+          const autoTransform = options.autoTransform === true;
+          if (autoTransform && extractedMetadata && Object.keys(extractedMetadata).length > 0) {
+            try {
+              console.log(`[Batch Folders] Starting transform to source DB for document ${documentId}`);
 
-                    // Update status to transformed
-                    await lsembPool.query(
-                      `UPDATE documents
-                       SET metadata = metadata || $1::jsonb,
-                           processing_status = 'transformed',
-                           updated_at = CURRENT_TIMESTAMP
-                       WHERE id = $2`,
-                      [
-                        JSON.stringify({
-                          transform_job_id: transformData.jobId,
-                          transformed_at: new Date().toISOString()
-                        }),
-                        documentId
-                      ]
-                    );
-                    console.log(`[Batch Folders] Document ${documentId} status: analyzed → transformed`);
-                  }
-                } catch (transformError: any) {
-                  console.warn(`[Batch Folders] Transform failed (non-critical): ${transformError.message}`);
-                  // Don't fail the whole batch if transform fails - just log it
-                }
+              // Call transform service (uses pdf-batch routes transform logic)
+              const transformResponse = await fetch(`http://localhost:8083/api/v2/pdf/metadata-transform`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${process.env.SYSTEM_TOKEN || 'internal'}`
+                },
+                body: JSON.stringify({
+                  documentId,
+                  selectedFields: Object.keys(extractedMetadata),
+                  tableName: templateId || 'batch_documents',
+                  useExistingTable: false,
+                  sourceDbId: process.env.SOURCE_DB_NAME || 'scriptus_lsemb'
+                })
+              });
+
+              if (transformResponse.ok) {
+                const transformData = await transformResponse.json();
+                console.log(`[Batch Folders] Transform job started: ${transformData.jobId}`);
+
+                // Update status to transformed
+                await lsembPool.query(
+                  `UPDATE documents
+                   SET metadata = metadata || $1::jsonb,
+                       processing_status = 'transformed',
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE id = $2`,
+                  [
+                    JSON.stringify({
+                      transform_job_id: transformData.jobId,
+                      transformed_at: new Date().toISOString()
+                    }),
+                    documentId
+                  ]
+                );
+                console.log(`[Batch Folders] Document ${documentId} status: analyzed → transformed`);
               }
+            } catch (transformError: any) {
+              console.warn(`[Batch Folders] Transform failed (non-critical): ${transformError.message}`);
+              // Don't fail the whole batch if transform fails - just log it
             }
           }
         } catch (metadataError: any) {
@@ -880,14 +1023,7 @@ router.post('/:folderName/analyze', async (req: Request, res: Response) => {
     for (const pdfPath of sampledPdfs) {
       try {
         // OCR the PDF
-        const fileBuffer = fs.readFileSync(pdfPath);
-        const base64 = fileBuffer.toString('base64');
-
-        const ocrResult = await ocrService.processOCR({
-          base64,
-          filename: path.basename(pdfPath),
-          type: 'pdf'
-        });
+        const ocrResult = await ocrService.processDocument(pdfPath, 'application/pdf');
 
         // Detect template
         const templateResponse = await fetch(`http://localhost:8083/api/v2/templates/detect`, {

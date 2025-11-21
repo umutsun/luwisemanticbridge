@@ -215,7 +215,7 @@ export default function DocumentPreviewModal({
       // Click expand buttons for all parents (simulate expand)
       parentPaths.forEach(parentPath => {
         const nodeId = `json-node-${parentPath.replace(/\./g, '-')}`;
-        const node = document.getElementById(nodeId);
+        const node = window.document.getElementById(nodeId);
         if (node) {
           // Find the expand button (ChevronRight/ChevronDown)
           const expandButton = node.querySelector('button');
@@ -231,7 +231,7 @@ export default function DocumentPreviewModal({
       // Scroll to the target node after expansion
       setTimeout(() => {
         const targetId = `json-node-${fieldPath.replace(/\./g, '-')}`;
-        const targetNode = document.getElementById(targetId);
+        const targetNode = window.document.getElementById(targetId);
         if (targetNode) {
           targetNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -248,54 +248,96 @@ export default function DocumentPreviewModal({
   const checkPDFType = async () => {
     if (!document) return;
 
-    // First check if we already have content (cached OCR result)
-    if (document.content && document.content.trim().length > 0) {
-      console.log('[PDF Init] Using cached content');
-      setPdfExtractedText(document.content);
-      setPdfIsScanned(false); // Already processed
+    console.log('[PDF Init] checkPDFType started', {
+      documentId: document.id,
+      title: document.title,
+      hasContent: !!document.content,
+      contentLength: document.content?.length || 0,
+      type: document.type
+    });
 
-      // Automatically detect template for cached content
+    // If already have content, show it immediately
+    if (document.content && document.content.trim().length > 0) {
+      console.log('[PDF Init] Using cached content, length:', document.content.length);
+      setPdfExtractedText(document.content);
+      setPdfIsScanned(false);
       await detectTemplate(document.content);
       return;
     }
 
+    // No content - need to check if scanned or text-based
+    console.log('[PDF Init] No content, calling analyze-batch API...');
     setPdfAnalyzing(true);
+
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 15000); // 15 second timeout
+
     try {
       const response = await fetch(`/api/v2/pdf/analyze-batch`, {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ documentIds: [document.id] })
+        body: JSON.stringify({ documentIds: [document.id] }),
+        signal: abortController.signal
       });
+
+      clearTimeout(timeoutId);
+      console.log('[PDF Init] API response:', { ok: response.ok, status: response.status });
 
       if (response.ok) {
         const data = await response.json();
         const isScanned = data.analysis?.scannedPDFs?.length > 0;
+        console.log('[PDF Init] Analysis result:', { isScanned });
         setPdfIsScanned(isScanned);
 
-        // If text-based, extract text automatically
-        if (!isScanned && document.content) {
-          setPdfExtractedText(document.content);
-          // Automatically detect template for text-based PDFs
-          await detectTemplate(document.content);
-        } else if (isScanned) {
-          // Scanned PDF detected - automatically start OCR
-          console.log('[PDF Init] Scanned PDF detected, starting automatic OCR');
-          setPdfAnalyzing(false); // Stop initial analysis
-          await handleRunOCR(); // Start OCR automatically
+        if (!isScanned) {
+          // Text-based PDF - fetch content from document
+          console.log('[PDF Init] Text-based PDF detected, fetching content...');
+          try {
+            const docResponse = await fetch(`/api/v2/documents/${document.id}`, {
+              headers: getAuthHeaders()
+            });
+            if (docResponse.ok) {
+              const docData = await docResponse.json();
+              if (docData.content && docData.content.trim().length > 0) {
+                setPdfExtractedText(docData.content);
+                await detectTemplate(docData.content);
+              } else {
+                // No content - start text extraction (not OCR)
+                console.log('[PDF Init] No content found, extracting text...');
+                setPdfAnalyzing(false);
+                setPdfIsScanned(false);
+                setPdfProcessing(true);
+                setPdfStatus('Extracting text from PDF...');
+                setPdfProgress(0);
+
+                // Call text extraction for text-based PDFs
+                await handleExtractText();
+              }
+            }
+          } catch (err) {
+            console.error('[PDF Init] Failed to fetch document content:', err);
+            setPdfExtractedText('Failed to load content');
+          }
         } else {
-          // Neither scanned nor has content - just show the document as is
-          console.log('[PDF Init] PDF has no extractable content yet');
-          setPdfExtractedText(document.content || '');
+          // Scanned PDF - start OCR automatically
+          console.log('[PDF Init] Scanned PDF detected, starting OCR...');
+          setPdfAnalyzing(false);
+          await handleRunOCR();
         }
       } else {
-        console.error('PDF analysis failed with status:', response.status);
-        // Even if analysis fails, show document content if available
-        setPdfExtractedText(document.content || '');
+        console.error('[PDF Init] API failed:', response.status);
+        setPdfExtractedText('Failed to analyze document');
       }
     } catch (error) {
-      console.error('Failed to check PDF type:', error);
-      // On error, still show the document content if available
-      setPdfExtractedText(document.content || '');
+      clearTimeout(timeoutId);
+      const err = error as Error;
+      if (err.name === 'AbortError') {
+        console.error('[PDF Init] API timeout after 15 seconds');
+        setPdfExtractedText('Analysis timeout - please try again');
+      } else {
+        console.error('[PDF Init] API error:', error);
+        setPdfExtractedText('Error analyzing document');
+      }
     } finally {
       setPdfAnalyzing(false);
     }
@@ -338,10 +380,11 @@ export default function DocumentPreviewModal({
           }
         }
 
-        // Check PDF type (scanned vs text-based)
+        // Check PDF type (will handle scanned vs text-based)
         checkPDFType();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [document]);
 
 
@@ -1061,6 +1104,63 @@ export default function DocumentPreviewModal({
       toast({
         title: "Hata",
         description: error.message || 'OCR işlemi başarısız',
+        variant: "destructive"
+      });
+    } finally {
+      setPdfProcessing(false);
+    }
+  };
+
+  // Handle text extraction for text-based PDFs (fast, local)
+  const handleExtractText = async () => {
+    if (!document) return;
+
+    setPdfProcessing(true);
+    setPdfProgress(0);
+    setPdfStatus('Extracting text...');
+
+    try {
+      const extractResponse = await fetch(`/api/v2/pdf/extract-text`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ documentIds: [document.id] })
+      });
+
+      if (!extractResponse.ok) throw new Error('Text extraction failed');
+      const extractData = await extractResponse.json();
+
+      console.log('[Text Extract] Job started:', extractData.jobId);
+
+      // Poll extraction progress
+      await pollJobProgress(extractData.jobId, 0, 100);
+
+      setPdfProgress(100);
+      setPdfStatus('Text extraction completed!');
+
+      // Fetch extracted text from updated document
+      const response = await fetch(`/api/v2/documents/${document.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        const doc = data.document || data;
+        if (doc.content) {
+          console.log('[Text Extract] Extracted text length:', doc.content.length);
+          setPdfExtractedText(doc.content);
+          setPdfIsScanned(false);
+
+          // Automatically detect template after extraction
+          await detectTemplate(doc.content);
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Text extraction completed",
+      });
+    } catch (error: any) {
+      console.error('Text extraction error:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Text extraction failed',
         variant: "destructive"
       });
     } finally {
@@ -1858,6 +1958,16 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
     setPdfStatus('Creating table and inserting data...');
 
     try {
+      // Start Python service for transform
+      const serviceResponse = await fetch('/api/services/pythonService/start', {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+      });
+
+      if (!serviceResponse.ok) {
+        console.warn('[PDF Transform] Python service start failed, continuing with backend');
+      }
+
       const requestBody = {
         documentId: document.id,
         selectedFields: Array.from(pdfSelectedFields),
@@ -1995,7 +2105,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
           const data = await response.json();
 
           if (data.success && data.progress) {
-            const { status, percentage, message } = data.progress;
+            const { status, percentage, message, error } = data.progress;
 
             // Update progress proportionally
             const currentProgress = startProgress + ((endProgress - startProgress) * (percentage / 100));
@@ -2014,7 +2124,9 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
             if (status === 'completed') {
               resolve();
             } else if (status === 'error') {
-              reject(new Error('Job failed'));
+              // Include actual error message from backend
+              const errorMessage = error || message || 'Job failed';
+              reject(new Error(errorMessage));
             } else {
               setTimeout(checkStatus, 2000);
             }
@@ -2138,10 +2250,10 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
             Preview
           </TabsTrigger>
           <TabsTrigger value="map" disabled={!hasMetadata}>
-            JSON
+            Map Fields
           </TabsTrigger>
           <TabsTrigger value="transform" disabled={!hasMetadata}>
-            Transform
+            Create Table
           </TabsTrigger>
         </TabsList>
 
@@ -2187,8 +2299,12 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </ScrollArea>
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <FileText className="w-12 h-12 opacity-50" />
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-medium">No Content Available</p>
+                  <p className="text-xs">Document is waiting to be processed</p>
+                </div>
               </div>
             )}
           </div>
@@ -2200,164 +2316,206 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
               <div className="h-full flex gap-4">
                 {/* JSON Viewer - Left Side */}
                 <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Analyzed Data - Select Fields to Map
+                    </Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const jsonData = pdfEditMode && pdfEditedMetadata ? pdfEditedMetadata : pdfMetadata;
+                        navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2));
+                        toast({
+                          title: "Copied",
+                          description: "JSON data copied to clipboard"
+                        });
+                      }}
+                      className="h-7 w-7 p-0 hover:bg-primary/10 transition-colors"
+                      title="Copy JSON data"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                   <JsonViewer
-                  data={pdfEditMode && pdfEditedMetadata ? pdfEditedMetadata : pdfMetadata}
-                  selectedFields={pdfSelectedFields}
-                  onFieldToggle={(path) => {
-                    try {
-                      // Check if currently selected
-                      const isCurrentlySelected = pdfSelectedFields.has(path);
-                      // Toggle selection (with parent/child logic)
-                      toggleFieldSelection(path, !isCurrentlySelected);
-                    } catch (error) {
-                      console.error('[JsonViewer] onFieldToggle error:', error);
-                    }
-                  }}
-                  highlightPath={pdfHighlightedPath}
-                  editMode={pdfEditMode}
-                  onValueChange={(path, newValue) => {
-                    try {
-                      if (pdfEditMode) {
-                        const updated = { ...pdfEditedMetadata };
-                        const keys = path.split('.');
-                        let current = updated;
-                        for (let i = 0; i < keys.length - 1; i++) {
-                          // Create intermediate object if it doesn't exist
-                          if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
-                            current[keys[i]] = {};
-                          }
-                          current = current[keys[i]];
-                        }
-                        current[keys[keys.length - 1]] = newValue;
-                        setPdfEditedMetadata(updated);
+                    data={pdfEditMode && pdfEditedMetadata ? pdfEditedMetadata : pdfMetadata}
+                    selectedFields={pdfSelectedFields}
+                    onFieldToggle={(path) => {
+                      try {
+                        const isCurrentlySelected = pdfSelectedFields.has(path);
+                        toggleFieldSelection(path, !isCurrentlySelected);
+                      } catch (error) {
+                        console.error('[JsonViewer] onFieldToggle error:', error);
                       }
-                    } catch (error) {
-                      console.error('[JsonViewer] onValueChange error:', error);
-                      toast({
-                        title: "Error",
-                        description: "Failed to update value",
-                        variant: "destructive"
-                      });
-                    }
-                  }}
-                  className="h-full"
-                  toolbar={
-                    <div className="flex items-center gap-1">
+                    }}
+                    highlightPath={pdfHighlightedPath}
+                    editMode={pdfEditMode}
+                    onValueChange={(path, newValue) => {
+                      try {
+                        if (pdfEditMode) {
+                          const updated = { ...pdfEditedMetadata };
+                          const keys = path.split('.');
+                          let current = updated;
+                          for (let i = 0; i < keys.length - 1; i++) {
+                            if (!current[keys[i]] || typeof current[keys[i]] !== 'object') {
+                              current[keys[i]] = {};
+                            }
+                            current = current[keys[i]];
+                          }
+                          current[keys[keys.length - 1]] = newValue;
+                          setPdfEditedMetadata(updated);
+                        }
+                      } catch (error) {
+                        console.error('[JsonViewer] onValueChange error:', error);
+                        toast({
+                          title: "Error",
+                          description: "Failed to update value",
+                          variant: "destructive"
+                        });
+                      }
+                    }}
+                    className="h-full"
+                  />
+                </div>
+
+                {/* Field Mapping - Right Side */}
+<div className="w-[480px] flex-shrink-0 flex flex-col border-l pl-4 overflow-hidden">
+                  <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Field Mapping ({pdfSelectedFields.size})
+                    </Label>
+                    <div className="flex items-center gap-0.5 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => {
-                          setPdfEditMode(!pdfEditMode);
-                          if (!pdfEditMode) {
-                            setPdfEditedMetadata(JSON.parse(JSON.stringify(pdfMetadata)));
-                          } else {
-                            setPdfEditedMetadata(null);
-                          }
-                        }}
-                        className="h-6 w-6 p-0"
-                        title={pdfEditMode ? "Cancel Edit" : "Enable Edit Mode"}
-                      >
-                        <Settings2 className="h-3 w-3" />
-                      </Button>
-                      {pdfEditMode && (
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() => {
-                            try {
-                              setPdfMetadata(pdfEditedMetadata || pdfMetadata);
-                              setPdfEditMode(false);
-                              toast({
-                                title: "Saved",
-                                description: "Metadata changes saved successfully"
-                              });
-                            } catch (error) {
-                              toast({
-                                title: "Error",
-                                description: "Failed to save changes",
-                                variant: "destructive"
-                              });
+                          // Auto-select all top-level fields from metadata
+                          const getAllKeys = (obj: Record<string, unknown>, prefix = ''): string[] => {
+                            const keys: string[] = [];
+                            for (const key in obj) {
+                              if (!key.startsWith('_') && obj[key] !== null && obj[key] !== undefined) {
+                                const fullKey = prefix ? `${prefix}.${key}` : key;
+                                if (typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+                                  keys.push(...getAllKeys(obj[key] as Record<string, unknown>, fullKey));
+                                } else {
+                                  keys.push(fullKey);
+                                }
+                              }
                             }
-                          }}
-                          className="h-6 w-6 p-0"
-                          title="Save Changes"
-                        >
-                          <Save className="h-3 w-3" />
-                        </Button>
-                      )}
+                            return keys;
+                          };
+
+                          const allKeys = getAllKeys(pdfMetadata as Record<string, unknown>);
+                          const newSelection = new Set(allKeys);
+                          setPdfSelectedFields(newSelection);
+
+                          toast({
+                            title: "Auto-Selected",
+                            description: `${allKeys.length} fields selected`
+                          });
+                        }}
+                        className="h-7 w-7 p-0 hover:bg-primary/10 transition-colors"
+                        title="Auto-select all fields"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={handleCopyJSON}
-                        className="h-6 w-6 p-0"
-                        title="Copy JSON"
+                        onClick={() => {
+                          setPdfSelectedFields(new Set());
+                          toast({
+                            title: "Cleared",
+                            description: "All field mappings cleared"
+                          });
+                        }}
+                        className="h-7 w-7 p-0 hover:bg-destructive/10 transition-colors"
+                        title="Clear all mappings"
                       >
-                        <Copy className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const mappingData = {
+                            tableName: pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'analyzed_data',
+                            fields: Array.from(pdfSelectedFields).map(field => ({
+                              source: field,
+                              target: pdfFieldMappings[field] || field.replace(/\./g, '_').toLowerCase()
+                            }))
+                          };
+                          navigator.clipboard.writeText(JSON.stringify(mappingData, null, 2));
+                          toast({
+                            title: "Copied!",
+                            description: "Field mappings copied to clipboard"
+                          });
+                        }}
+                        className="h-7 w-7 p-0 hover:bg-primary/10 transition-colors"
+                        title="Copy mapping as JSON"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                  }
-                />
-                </div>
-
-                {/* Selected Fields - Right Side */}
-                <div className="w-64 flex-shrink-0 flex flex-col border-l pl-4">
-                  <div className="flex items-center justify-between mb-3 flex-shrink-0">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Selected Fields ({pdfSelectedFields.size})
-                    </Label>
                   </div>
+                  
+                  {/* Table Name Input */}
+                  <div className="mb-3 space-y-2">
+                    <Label htmlFor="mapping-table-name" className="text-xs font-medium text-foreground">
+                      Target Table Name
+                    </Label>
+                    <Input
+                      id="mapping-table-name"
+                      value={pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'analyzed_data'}
+                      onChange={(e) => setPdfTableName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                      placeholder="analyzed_data"
+                      className="text-sm font-mono h-8 px-3 py-1 w-full max-w-full"
+                      style={{ boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Mapped Fields */}
                   <ScrollArea className="flex-1 border rounded-md p-3 bg-muted/10">
                     {pdfSelectedFields.size === 0 ? (
                       <p className="text-xs text-muted-foreground text-center py-4">
-                        No fields selected.<br/>Click checkboxes in JSON to select.
+                        Select fields from JSON to map them to table columns
                       </p>
                     ) : (
                       <div className="space-y-3">
-                        {(() => {
-                          // Group fields by top-level category
-                          const grouped: Record<string, string[]> = {};
-                          Array.from(pdfSelectedFields)
-                            .filter(f => !f.startsWith('_'))
-                            .sort()
-                            .forEach(field => {
-                              const topLevel = field.split('.')[0];
-                              if (!grouped[topLevel]) grouped[topLevel] = [];
-                              grouped[topLevel].push(field);
-                            });
-
-                          return Object.entries(grouped).map(([category, fields]) => (
-                            <div key={category} className="space-y-1">
-                              {/* Category Header */}
-                              <div className="flex items-center gap-1.5 px-1">
-                                <div className="w-2 h-2 rounded-sm bg-blue-500/70 flex-shrink-0" />
-                                <span className="text-xs font-semibold text-foreground/80 uppercase tracking-wide">
-                                  {category}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  ({fields.length})
-                                </span>
+                        {Array.from(pdfSelectedFields)
+                          .filter(f => !f.startsWith('_'))
+                          .sort()
+                          .map(field => {
+                            const columnName = field.replace(/\./g, '_').toLowerCase();
+                            return (
+                              <div key={field} className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-mono text-muted-foreground truncate flex-1 mr-2">
+                                    {field}
+                                  </span>
+                                  <span className="text-xs text-blue-600">→</span>
+                                </div>
+                                <Input
+                                  value={pdfFieldMappings[field] || columnName}
+                                  onChange={(e) => handleFieldMappingChange(field, e.target.value)}
+                                  placeholder="column_name"
+                                  className="text-xs font-mono h-6 px-2 py-1 w-full max-w-full"
+                                  style={{ boxSizing: 'border-box' }}
+                                />
                               </div>
-                              {/* Category Fields */}
-                              <div className="ml-3 space-y-0.5">
-                                {fields.map(field => (
-                                  <div
-                                    key={field}
-                                    className="flex items-center gap-2 text-xs font-mono p-1 rounded hover:bg-muted/50 transition-colors cursor-pointer"
-                                    onClick={() => highlightField(field)}
-                                  >
-                                    <div className="w-1 h-1 rounded-full bg-blue-400 flex-shrink-0" />
-                                    <span className="text-muted-foreground truncate text-[11px]">
-                                      {field.split('.').slice(1).join('.') || field}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ));
-                        })()}
+                            );
+                          })}
                       </div>
                     )}
                   </ScrollArea>
+
+                  {/* Quick Actions */}
+                  <div className="mt-8 pt-6 pb-4 space-y-2 border-t">
+                    <div className="text-xs text-muted-foreground">
+                      <span className="font-medium">Tip:</span> Selected fields will become table columns.
+                      Similar documents can use this template for batch processing.
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -2374,187 +2532,17 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
         <TabsContent value="transform" className="mt-0">
           <div className="h-[360px] p-4 flex flex-col">
-            {/* Toggle between Template and Custom Schema */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={!useCustomSchema ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setUseCustomSchema(false)}
-                  className="h-7"
-                >
-                  <FileText className="w-3 h-3 mr-1" />
-                  From Template
-                </Button>
-                <Button
-                  variant={useCustomSchema ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    setUseCustomSchema(true);
-                    // Auto-populate custom schema from JSON selections if empty
-                    if (customTableSchema.fields.length === 0 && pdfSelectedFields.size > 0) {
-                      const fieldsFromJson = Array.from(pdfSelectedFields)
-                        .filter(path => !path.startsWith('_')) // Skip internal fields
-                        .map(path => ({
-                          id: Date.now().toString() + Math.random(),
-                          name: path.replace(/\./g, '_').toLowerCase(),
-                          type: 'TEXT' as const,
-                          description: `From JSON: ${path}`,
-                          required: false,
-                          isPrimaryKey: false
-                        }));
-
-                      setCustomTableSchema(prev => ({
-                        ...prev,
-                        tableName: prev.tableName || pdfMetadata?.dataQuality?.suggestedTableName || 'pdf_metadata',
-                        fields: fieldsFromJson
-                      }));
-                    }
-                  }}
-                  className="h-7"
-                >
-                  <Database className="w-3 h-3 mr-1" />
-                  Custom Schema
-                </Button>
-              </div>
-              {useCustomSchema && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      // Sync from JSON selections
-                      if (pdfSelectedFields.size > 0) {
-                        const fieldsFromJson = Array.from(pdfSelectedFields)
-                          .filter(path => !path.startsWith('_')) // Skip internal fields
-                          .map(path => ({
-                            id: Date.now().toString() + Math.random(),
-                            name: path.replace(/\./g, '_').toLowerCase(),
-                            type: 'TEXT' as const,
-                            description: `From JSON: ${path}`,
-                            required: false,
-                            isPrimaryKey: false
-                          }));
-
-                        setCustomTableSchema(prev => ({
-                          ...prev,
-                          fields: fieldsFromJson
-                        }));
-
-                        toast({
-                          title: "Synced",
-                          description: `${fieldsFromJson.length} fields imported from JSON selections`,
-                        });
-                      } else {
-                        toast({
-                          title: "No selections",
-                          description: "Please select fields in the JSON tab first",
-                          variant: "destructive"
-                        });
-                      }
-                    }}
-                    className="h-7 text-xs"
-                    title="Import fields from JSON selections"
-                  >
-                    <ArrowRight className="w-3 h-3 mr-1" />
-                    Sync from JSON
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // Add a new field
-                      setCustomTableSchema(prev => ({
-                        ...prev,
-                        fields: [...prev.fields, {
-                          id: Date.now().toString(),
-                          name: '',
-                          type: 'TEXT',
-                          description: '',
-                          required: false
-                        }]
-                      }));
-                    }}
-                    className="h-7"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add Field
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Template-based Transform (existing) */}
-            {!useCustomSchema && pdfMetadata && pdfSelectedFields.size > 0 ? (
+            {pdfSelectedFields.size > 0 ? (
               <>
-                {/* Table Selection - New or Existing */}
-                <div className="flex-shrink-0 mb-4 space-y-3">
-                  {/* Toggle between Create New / Use Existing */}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={!pdfUseExistingTable ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPdfUseExistingTable(false)}
-                      className="h-7 text-xs"
-                    >
-                      Create New Table
-                    </Button>
-                    <Button
-                      variant={pdfUseExistingTable ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPdfUseExistingTable(true)}
-                      className="h-7 text-xs"
-                      disabled={pdfAvailableTables.length === 0}
-                    >
-                      Use Existing Table
-                    </Button>
+                {/* Table Name Confirmation */}
+                <div className="flex-shrink-0 mb-4">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
+                    Create Table: {pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'analyzed_data'}
+                  </Label>
+                  <div className="text-xs text-muted-foreground">
+                    This will create a table with {pdfSelectedFields.size} columns from the analyzed data.
+                    Similar documents can be processed in batches using this structure.
                   </div>
-
-                  {/* New Table Input */}
-                  {!pdfUseExistingTable ? (
-                    <>
-                      <Label htmlFor="pdf-new-table-name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">
-                        Target Table Name
-                      </Label>
-                      <Input
-                        id="pdf-new-table-name"
-                        value={pdfTableName || pdfMetadata.dataQuality?.suggestedTableName || 'pdf_metadata'}
-                        onChange={(e) => setPdfTableName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
-                        className="text-sm font-mono font-bold px-4 w-full"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Table will be created in source database
-                      </p>
-                    </>
-                  ) : (
-                    /* Existing Table Dropdown */
-                    <>
-                      <Label htmlFor="pdf-existing-table" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">
-                        Select Existing Table
-                      </Label>
-                      <Select
-                        value={pdfExistingTableName}
-                        onValueChange={(value) => {
-                          setPdfExistingTableName(value);
-                          loadTableColumns(value);
-                        }}
-                      >
-                        <SelectTrigger className="text-sm font-mono font-bold">
-                          <SelectValue placeholder="Select a table..." />
-                        </SelectTrigger>
-                        <SelectContent className="z-[10000]">
-                          {pdfAvailableTables.map(table => (
-                            <SelectItem key={table} value={table} className="text-sm font-mono">
-                              {table}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Data will be inserted into existing table
-                      </p>
-                    </>
-                  )}
                 </div>
 
                 {/* Two Column Layout: Progress | SQL Schema */}
@@ -2570,7 +2558,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                         />
                         <div className="text-center space-y-1">
                           <p className="text-sm font-medium text-foreground">{pdfTransformStatus || 'Processing...'}</p>
-                          <p className="text-[10px] font-mono text-muted-foreground">Transforming</p>
+                          <p className="text-[10px] font-mono text-muted-foreground">Creating Table</p>
                         </div>
                       </div>
                     ) : (
@@ -2578,9 +2566,9 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                         <div className="w-24 h-24 mx-auto rounded-full border-4 border-muted flex items-center justify-center">
                           <Database className="w-10 h-10 text-muted-foreground" />
                         </div>
-                        <p className="text-sm font-medium">Ready to Transform</p>
+                        <p className="text-sm font-medium">Ready to Create Table</p>
                         <p className="text-xs text-muted-foreground px-4">
-                          {pdfSelectedFields.size} fields selected
+                          {pdfSelectedFields.size} fields mapped
                         </p>
                       </div>
                     )}
@@ -2590,7 +2578,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   <div className="flex flex-col h-full overflow-hidden">
                     <div className="flex items-center justify-between mb-3 flex-shrink-0">
                       <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        SQL Schema Preview
+                        Table Schema Preview
                       </Label>
                       <Button
                         variant="ghost"
@@ -2614,162 +2602,13 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   </div>
                 </div>
               </>
-            ) : useCustomSchema ? (
-              /* Custom Schema Builder */
-              <div className="flex-1 overflow-hidden flex flex-col">
-                {/* Table Name */}
-                <div className="mb-3">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1 block">
-                    Table Name
-                  </Label>
-                  <Input
-                    value={customTableSchema.tableName}
-                    onChange={(e) => setCustomTableSchema(prev => ({
-                      ...prev,
-                      tableName: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_')
-                    }))}
-                    placeholder="vergi_mevzuati"
-                    className="text-sm font-mono"
-                  />
-                </div>
-
-                {/* Fields Editor */}
-                <div className="flex-1 overflow-hidden">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 block">
-                    Table Fields
-                  </Label>
-                  <ScrollArea className="h-[200px] border rounded-md p-2">
-                    <div className="space-y-2">
-                      {customTableSchema.fields.length === 0 ? (
-                        <div className="text-center py-4 text-xs text-muted-foreground">
-                          Click "Add Field" to start building your schema
-                        </div>
-                      ) : (
-                        customTableSchema.fields.map((field, index) => (
-                          <div key={field.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded">
-                            <Input
-                              value={field.name}
-                              onChange={(e) => {
-                                const newFields = [...customTableSchema.fields];
-                                newFields[index].name = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-                                setCustomTableSchema(prev => ({ ...prev, fields: newFields }));
-                              }}
-                              placeholder="field_name"
-                              className="flex-1 text-xs h-7"
-                            />
-                            <Select
-                              value={field.type}
-                              onValueChange={(value) => {
-                                const newFields = [...customTableSchema.fields];
-                                newFields[index].type = value;
-                                setCustomTableSchema(prev => ({ ...prev, fields: newFields }));
-                              }}
-                            >
-                              <SelectTrigger className="w-24 h-7 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="TEXT">TEXT</SelectItem>
-                                <SelectItem value="VARCHAR">VARCHAR</SelectItem>
-                                <SelectItem value="INTEGER">INTEGER</SelectItem>
-                                <SelectItem value="NUMERIC">NUMERIC</SelectItem>
-                                <SelectItem value="DATE">DATE</SelectItem>
-                                <SelectItem value="TIMESTAMP">TIMESTAMP</SelectItem>
-                                <SelectItem value="JSONB">JSONB</SelectItem>
-                                <SelectItem value="UUID">UUID</SelectItem>
-                                <SelectItem value="BOOLEAN">BOOLEAN</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => {
-                                  const newFields = [...customTableSchema.fields];
-                                  newFields[index].isPrimaryKey = !newFields[index].isPrimaryKey;
-                                  setCustomTableSchema(prev => ({ ...prev, fields: newFields }));
-                                }}
-                                className={`p-1 rounded text-xs ${field.isPrimaryKey ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-                                title="Primary Key"
-                              >
-                                PK
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const newFields = [...customTableSchema.fields];
-                                  newFields[index].required = !newFields[index].required;
-                                  setCustomTableSchema(prev => ({ ...prev, fields: newFields }));
-                                }}
-                                className={`p-1 rounded text-xs ${field.required ? 'bg-orange-500 text-white' : 'bg-muted'}`}
-                                title="Required"
-                              >
-                                REQ
-                              </button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setCustomTableSchema(prev => ({
-                                    ...prev,
-                                    fields: prev.fields.filter(f => f.id !== field.id)
-                                  }));
-                                }}
-                                className="h-6 w-6 p-0"
-                              >
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                </div>
-
-                {/* Add Relationships Button */}
-                <div className="mt-3 flex justify-between">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // TODO: Open relationship builder dialog
-                      toast({
-                        title: "Coming Soon",
-                        description: "Relationship builder will be available soon"
-                      });
-                    }}
-                    className="h-7"
-                  >
-                    <Link className="w-3 h-3 mr-1" />
-                    Add Relationship
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // Generate SQL preview for custom schema
-                      const sql = `CREATE TABLE IF NOT EXISTS ${customTableSchema.tableName || 'custom_table'} (\n` +
-                        customTableSchema.fields.map(f =>
-                          `  ${f.name} ${f.type}${f.isPrimaryKey ? ' PRIMARY KEY' : ''}${f.required ? ' NOT NULL' : ''}`
-                        ).join(',\n') +
-                        '\n);';
-                      navigator.clipboard.writeText(sql);
-                      toast({ title: 'SQL Copied', description: 'Schema SQL copied to clipboard' });
-                    }}
-                    className="h-7"
-                  >
-                    <Copy className="w-3 h-3 mr-1" />
-                    Copy SQL
-                  </Button>
-                </div>
-              </div>
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center space-y-2">
                   <AlertCircle className="w-12 h-12 mx-auto text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {!pdfMetadata ? 'No metadata available' : 'No fields selected'}
-                  </p>
+                  <p className="text-sm text-muted-foreground">No fields mapped</p>
                   <p className="text-xs text-muted-foreground">
-                    {!pdfMetadata ? 'Run "Analyze" first to extract metadata' : 'Go back to JSON tab to select fields'}
+                    Go to "Map Fields" tab to select and configure field mappings
                   </p>
                 </div>
               </div>
@@ -3000,7 +2839,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </>
               )}
 
-              {/* JSON Tab: Continue to Transform button */}
+              {/* Map Fields Tab: Continue to Create Table button */}
               {isPDF && pdfActiveTab === 'map' && pdfMetadata && (
                 <Button
                   variant="default"
@@ -3009,21 +2848,20 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   disabled={pdfSelectedFields.size === 0}
                   className="h-8 px-3"
                 >
-                  Continue to Transform
+                  Continue to Create Table
                 </Button>
               )}
 
-              {/* Transform Tab: Transform button */}
-              {isPDF && pdfActiveTab === 'transform' && ((pdfMetadata && pdfSelectedFields.size > 0 && !useCustomSchema) || (useCustomSchema && customTableSchema.fields.length > 0)) && (
+              {/* Create Table Tab: Transform button */}
+              {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
                 <Button
                   variant="default"
                   size="sm"
                   onClick={handlePDFTransform}
                   disabled={
                     pdfProcessing ||
-                    (useCustomSchema
-                      ? !customTableSchema.tableName || customTableSchema.fields.length === 0
-                      : pdfSelectedFields.size === 0 || !(pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName))
+                    pdfSelectedFields.size === 0 ||
+                    !(pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName)
                   }
                   className="h-8 px-3"
                 >
@@ -3035,7 +2873,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   ) : (
                     <>
                       <Database className="w-3 h-3 mr-1" />
-                      Create Table & Insert
+                      Create Table & Insert Data
                     </>
                   )}
                 </Button>

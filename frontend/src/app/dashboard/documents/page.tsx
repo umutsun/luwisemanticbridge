@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getApiUrl, buildApiUrl, API_CONFIG } from '@/lib/config';
+import { io, Socket } from 'socket.io-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -28,6 +29,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Upload,
   FileText,
   Trash2,
@@ -47,7 +54,10 @@ import {
   File,
   X,
   XCircle,
-  FolderOpen
+  FolderOpen,
+  MoreHorizontal,
+  Sparkles,
+  Play
 } from 'lucide-react';
 import {
   Dialog,
@@ -128,6 +138,7 @@ export default function DocumentManagerPage() {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [showOperations, setShowOperations] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
   const [physicalFiles, setPhysicalFiles] = useState<any[]>([]);
   const [physicalFilesStats, setPhysicalFilesStats] = useState({ total: 0, inDatabase: 0, notInDatabase: 0, uploadDirectory: '' });
   const [folders, setFolders] = useState<any[]>([]);
@@ -393,37 +404,10 @@ export default function DocumentManagerPage() {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      // Step 1: Analyze folder
+      // Step 1: Scan folder to get all files
       toast({
-        title: 'Analyzing Folder',
-        description: `Sampling PDFs from ${folderName}...`
-      });
-
-      const analyzeResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/${folderName}/analyze`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ sampleSize: 3 })
-      });
-
-      if (!analyzeResponse.ok) {
-        throw new Error('Failed to analyze folder');
-      }
-
-      const analyzeData = await analyzeResponse.json();
-
-      if (!analyzeData.success) {
-        throw new Error(analyzeData.error || 'Analysis failed');
-      }
-
-      const { folderConfig, recommendation } = analyzeData;
-
-      // Show analysis results
-      toast({
-        title: 'Analysis Complete',
-        description: `${recommendation.message} - ${folderConfig.total_pdfs} PDFs found`
+        title: 'Scanning Folder',
+        description: `Scanning ${folderName} for PDF files...`
       });
 
       // Step 2: Scan folder to get all files
@@ -465,7 +449,6 @@ export default function DocumentManagerPage() {
         },
         body: JSON.stringify({
           files: newFiles,
-          folderConfig,
           options: {
             autoTransform: false  // Transform disabled for now - user will preview analysis first
           }
@@ -481,6 +464,10 @@ export default function DocumentManagerPage() {
       // Set job tracking state
       setBatchJobId(processData.jobId);
       setBatchProcessing(true);
+      setBatchTotal(newFiles.length);
+      setBatchCurrent(0);
+      setBatchProgress(0);
+      setBatchStatus(`Processing ${newFiles.length} files...`);
 
       toast({
         title: 'Batch Import Started',
@@ -488,63 +475,8 @@ export default function DocumentManagerPage() {
         duration: 5000
       });
 
-      // Poll for job progress
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/job-status/${processData.jobId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-
-          if (statusResponse.ok) {
-            const statusData = await statusResponse.json();
-            const progress = statusData.processedCount && statusData.totalFiles
-              ? Math.round((statusData.processedCount / statusData.totalFiles) * 100)
-              : 0;
-
-            setBatchProgress(progress);
-
-            if (statusData.status === 'completed' || statusData.status === 'failed') {
-              clearInterval(pollInterval);
-              setBatchProcessing(false);
-              setBatchJobId(null);
-
-              if (statusData.status === 'completed') {
-                toast({
-                  title: 'Import Completed!',
-                  description: `Successfully processed ${statusData.processedCount} files`
-                });
-              } else {
-                toast({
-                  title: 'Import Failed',
-                  description: statusData.error || 'Some files failed to process',
-                  variant: 'destructive'
-                });
-              }
-
-              // Refresh data
-              await Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
-
-              // Clear progress after animation
-              setTimeout(() => setBatchProgress(0), 1000);
-            }
-          }
-        } catch (error) {
-          console.error('Error polling job status:', error);
-        }
-      }, 1000); // Poll every 1 second for faster updates
-
-      // Timeout after 5 minutes
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        if (batchProcessing) {
-          setBatchProcessing(false);
-          setBatchJobId(null);
-          setBatchProgress(0);
-          Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
-        }
-      }, 300000);
+      // WebSocket will handle progress updates (already set up in useEffect)
+      // No polling needed - WebSocket listener is active
 
     } catch (error: any) {
       console.error('Folder batch import error:', error);
@@ -966,7 +898,7 @@ export default function DocumentManagerPage() {
 
   const handlePreview = async (doc: Document) => {
     // For CSV/JSON files, fetch raw file content if file_path exists
-    if ((doc.type === 'csv' || doc.type === 'json') && doc.metadata?.source) {
+    if (((doc.type || doc.file_type) === 'csv' || (doc.type || doc.file_type) === 'json') && doc.metadata?.source) {
       try {
         const filePath = doc.metadata.source;
         const filename = filePath.split(/[/\\]/).pop();
@@ -1188,6 +1120,112 @@ export default function DocumentManagerPage() {
   const [batchSelectedTable, setBatchSelectedTable] = useState('');
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
+  const [currentImportingFile, setCurrentImportingFile] = useState<string>('');
+
+  // WebSocket for batch job progress
+  useEffect(() => {
+    if (!batchJobId) return;
+
+    console.log('[WebSocket] Setting up connection for job:', batchJobId);
+
+    const socket = io(API_CONFIG.baseUrl, {
+      transports: ['websocket'],
+      reconnectionAttempts: 5,
+      timeout: 10000
+    });
+
+    socket.on('connect', () => {
+      console.log('[WebSocket] ✅ Connected for batch job:', batchJobId);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('[WebSocket] ❌ Connection error:', error);
+    });
+
+    socket.on(`job-progress-${batchJobId}`, (data: any) => {
+      console.log('[WebSocket] 📊 Progress update:', {
+        percentage: data.percentage,
+        current: data.current,
+        total: data.total,
+        currentFile: data.currentFile,
+        message: data.message,
+        status: data.status
+      });
+
+      if (data.percentage !== undefined) {
+        console.log('[WebSocket] Setting progress:', data.percentage);
+        setBatchProgress(data.percentage);
+      }
+
+      if (data.current !== undefined) {
+        console.log('[WebSocket] Setting current:', data.current);
+        setBatchCurrent(data.current);
+      }
+
+      if (data.total !== undefined) {
+        console.log('[WebSocket] Setting total:', data.total);
+        setBatchTotal(data.total);
+      }
+
+      if (data.message) {
+        console.log('[WebSocket] Setting status:', data.message);
+        setBatchStatus(data.message);
+      }
+
+      // Track current file being imported
+      if (data.currentFile || data.currentDocument) {
+        const fileName = data.currentFile || data.currentDocument;
+        console.log('[WebSocket] 📄 Current file:', fileName);
+        setCurrentImportingFile(fileName);
+      }
+
+      // Refresh documents list incrementally after each file completes
+      // Check if we moved to next file (current incremented)
+      if (data.current && data.current > 0) {
+        console.log('[WebSocket] 🔄 Refreshing documents list...');
+        fetchDocuments();
+      }
+
+      if (data.status === 'completed') {
+        setBatchProcessing(false);
+        setBatchJobId(null);
+        setBatchProgress(0);
+        setBatchStatus('');
+        setBatchCurrent(0);
+        setBatchTotal(0);
+        setCurrentImportingFile('');
+
+        // Refresh all data
+        Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
+
+        toast({
+          title: 'Batch Import Complete',
+          description: `Successfully processed ${data.total} files`
+        });
+      } else if (data.status === 'error') {
+        setBatchProcessing(false);
+        setBatchJobId(null);
+        setBatchProgress(0);
+        setBatchStatus('');
+        setBatchCurrent(0);
+        setBatchTotal(0);
+        setCurrentImportingFile('');
+
+        // Still refresh to show any partial imports
+        Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
+
+        toast({
+          title: 'Batch Import Failed',
+          description: data.error || 'An error occurred during processing',
+          variant: 'destructive'
+        });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [batchJobId]);
 
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1229,7 +1267,9 @@ export default function DocumentManagerPage() {
     if (selectAll) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(filteredDocuments.map(doc => doc.id)));
+      // Only select visible documents (current page)
+      const visibleDocs = filteredDocuments.slice(0, visibleDocumentsCount);
+      setSelectedRows(new Set(visibleDocs.map(doc => doc.id)));
     }
     setSelectAll(!selectAll);
   };
@@ -1302,51 +1342,53 @@ export default function DocumentManagerPage() {
   }, [batchSelectedSchema]);
 
 
-  // Handle batch transform to sourceDB
-  const handleBatchTransform = async () => {
+  // Handle batch transform - insert into database table
+  const handleBatchTransform = async (schemaId: string, targetTable: string) => {
     const selectedDocs = Array.from(selectedRows);
-    const pdfDocs = documents.filter(doc =>
+
+    // Filter CSV files OUT - they use different modal/flow
+    const nonCSVDocs = documents.filter(doc =>
       selectedDocs.includes(doc.id) &&
-      doc.type?.toLowerCase() === 'pdf' &&
-      doc.metadata?.analysis // Must have been analyzed
+      (doc.type || doc.file_type)?.toLowerCase() !== 'csv'
     );
 
-    if (pdfDocs.length === 0) {
+    if (nonCSVDocs.length === 0) {
       toast({
-        title: "No Analyzed Documents",
-        description: "Please select analyzed PDF documents for transform",
+        title: "No Eligible Documents",
+        description: "CSV files use a different transform flow. Please select PDF or other document types.",
         variant: "destructive"
       });
       return;
     }
 
-    if (!batchSelectedSchema) {
+    if (!targetTable) {
       toast({
-        title: "Template Required",
-        description: "Please select a template for transform",
+        title: "Target Table Required",
+        description: "Please select or enter a target table name",
         variant: "destructive"
       });
       return;
     }
 
-    // Find selected template
-    const selectedTemplate = batchSchemas.find(t => t.id === batchSelectedSchema);
-    const tableName = batchSelectedTable || `${selectedTemplate.id}_documents`;
-
-    const confirmed = confirm(
-      `Transform ${pdfDocs.length} documents to table "${tableName}"?\n\n` +
-      `Template: ${selectedTemplate.name}\n` +
-      `This will create/update the table in your source database.`
-    );
-
-    if (!confirmed) return;
+    // Find selected schema
+    const selectedSchema = batchSchemas.find(t => t.id === schemaId);
+    if (!selectedSchema) {
+      toast({
+        title: "Template Not Found",
+        description: "Please select a valid template",
+        variant: "destructive"
+      });
+      return;
+    }
 
     setBatchProcessing(true);
     setBatchProgress(0);
-    setBatchStatus(`Transforming ${pdfDocs.length} documents to database...`);
+    setBatchCurrent(0);
+    setBatchTotal(nonCSVDocs.length);
+    setBatchStatus(`Transforming ${nonCSVDocs.length} documents to table...`);
 
     try {
-      const documentIds = pdfDocs.map(doc => doc.id);
+      const documentIds = nonCSVDocs.map(doc => doc.id);
 
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/batch-metadata-transform`, {
         method: 'POST',
@@ -1356,19 +1398,21 @@ export default function DocumentManagerPage() {
         },
         body: JSON.stringify({
           documentIds,
+          schemaId: selectedSchema.id,
           schema: {
-            fieldSelections: selectedTemplate.target_fields,
-            tableName: tableName,
-            useExistingTable: false, // First run creates table
-            sourceDbId: 'scriptus_lsemb', // From settings
-            template: selectedTemplate.id
+            fieldSelections: selectedSchema.target_fields,
+            tableName: targetTable,
+            targetTableName: targetTable,
+            useExistingTable: false,
+            sourceDbId: 'scriptus_lsemb',
+            template: selectedSchema.id
           }
         })
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Transform failed');
+        throw new Error(error.message || 'Batch transform failed');
       }
 
       const data = await response.json();
@@ -1386,6 +1430,7 @@ export default function DocumentManagerPage() {
           if (progressData) {
             setBatchProgress(progressData.percentage || 0);
             setBatchStatus(progressData.message || 'Processing...');
+            if (progressData.current) setBatchCurrent(progressData.current);
 
             if (progressData.status === 'completed') {
               clearInterval(checkProgress);
@@ -1394,7 +1439,7 @@ export default function DocumentManagerPage() {
 
               toast({
                 title: "Success",
-                description: `${pdfDocs.length} documents transformed to table ${tableName}`,
+                description: `${nonCSVDocs.length} documents transformed to table "${targetTable}"`,
               });
 
               // Refresh documents and stats
@@ -1407,6 +1452,11 @@ export default function DocumentManagerPage() {
                 setBatchProcessing(false);
                 setBatchProgress(0);
                 setBatchStatus('');
+                setBatchCurrent(0);
+                setBatchTotal(0);
+                setShowBatchModal(false);
+                setBatchSelectedSchema('');
+                setBatchSelectedTable('');
               }, 2000);
             } else if (progressData.status === 'error') {
               clearInterval(checkProgress);
@@ -1417,24 +1467,26 @@ export default function DocumentManagerPage() {
           clearInterval(checkProgress);
           console.error('Progress check error:', error);
         }
-      }, 1000); // Poll every 1 second for faster updates
+      }, 1000); // Poll every 1 second
 
     } catch (error: any) {
-      console.error('Transform error:', error);
+      console.error('Batch transform error:', error);
       toast({
         title: "Error",
-        description: error.message || 'Transform failed',
+        description: error.message || 'Batch transform failed',
         variant: "destructive"
       });
       setBatchProcessing(false);
       setBatchProgress(0);
       setBatchStatus('');
+      setBatchCurrent(0);
+      setBatchTotal(0);
     }
   };
 
   const handleBatchProcess = async (schemaId: string) => {
     const selectedDocs = Array.from(selectedRows);
-    const pdfDocs = documents.filter(doc => selectedDocs.includes(doc.id) && doc.type?.toLowerCase() === 'pdf');
+    const pdfDocs = documents.filter(doc => selectedDocs.includes(doc.id) && (doc.type || doc.file_type)?.toLowerCase() === 'pdf');
 
     if (pdfDocs.length === 0) {
       toast({
@@ -1585,7 +1637,7 @@ export default function DocumentManagerPage() {
                 {(documents || []).filter(doc => doc.metadata?.ocr_processed === true).length.toLocaleString()}
               </div>
               <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                <span className="font-mono">{(documents || []).filter(doc => doc.type && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes(doc.type.toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
+                <span className="font-mono">{(documents || []).filter(doc => (doc.type || doc.file_type) && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes((doc.type || doc.file_type).toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
                 <span className="opacity-75 ml-1">pending</span>
               </div>
             </CardContent>
@@ -1674,11 +1726,16 @@ export default function DocumentManagerPage() {
                       </div>
 
                       {/* Right: Circular Progress + Filename + Progress Bar */}
+                      {/* Use for both upload and batch processing */}
                       <div className="flex flex-col items-center justify-center gap-3">
-                        {/* Circular Progress */}
+                        {/* Circular Progress with Pulse */}
                         <div className="relative w-32 h-32">
+                          {/* Pulse animation ring (only when processing) */}
+                          {(uploading || batchProcessing) && (
+                            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                          )}
                           {/* Background Circle */}
-                          <svg className="w-32 h-32 transform -rotate-90">
+                          <svg className="w-32 h-32 transform -rotate-90 relative z-10">
                             <circle
                               cx="64"
                               cy="64"
@@ -1688,7 +1745,7 @@ export default function DocumentManagerPage() {
                               fill="none"
                               className="text-gray-200 dark:text-gray-700"
                             />
-                            {/* Progress Circle */}
+                            {/* Progress Circle - Use batch progress if batch processing, otherwise upload progress */}
                             <circle
                               cx="64"
                               cy="64"
@@ -1697,30 +1754,44 @@ export default function DocumentManagerPage() {
                               strokeWidth="8"
                               fill="none"
                               strokeDasharray={`${2 * Math.PI * 56}`}
-                              strokeDashoffset={`${2 * Math.PI * 56 * (1 - uploadProgress / 100)}`}
-                              className={`transition-all duration-300 ${uploading ? 'text-primary' : 'text-gray-300 dark:text-gray-600'}`}
+                              strokeDashoffset={`${2 * Math.PI * 56 * (1 - (batchProcessing ? batchProgress : uploadProgress) / 100)}`}
+                              className={`transition-all duration-500 ease-out ${(uploading || batchProcessing) ? 'text-primary' : 'text-gray-300 dark:text-gray-600'}`}
                               strokeLinecap="round"
                             />
                           </svg>
-                          {/* Center Content - Only percentage */}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-3xl font-bold">
-                              {Math.round(uploadProgress)}%
+                          {/* Center Content - Show batch or upload percentage */}
+                          <div className="absolute inset-0 flex items-center justify-center z-20">
+                            <span className="text-3xl font-bold transition-all duration-300">
+                              {Math.round(batchProcessing ? batchProgress : uploadProgress)}%
                             </span>
                           </div>
                         </div>
 
-                        {/* Filename text below circle - smaller UPPERCASE */}
-                        {currentOperation && (
+                        {/* Status text below circle */}
+                        {(currentOperation || batchStatus) && (
                           <div className="text-center px-2 max-w-[240px]">
                             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate block">
-                              {currentOperation.replace('Uploading ', '').replace('...', '')}
+                              {batchProcessing ? batchStatus : currentOperation?.replace('Uploading ', '').replace('...', '')}
                             </span>
                           </div>
                         )}
 
-                        {/* Upload Stats - Speed, Size, Time Remaining - Smaller */}
-                        {uploading && uploadSpeed > 0 && (
+                        {/* Stats - Upload or Batch */}
+                        {batchProcessing && batchTotal > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
+                              <span className="font-mono">{batchCurrent} / {batchTotal} files</span>
+                              <span className="opacity-50">•</span>
+                              <span className="font-mono">{Math.round(batchProgress)}% complete</span>
+                            </div>
+                            {currentImportingFile && (
+                              <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium max-w-[240px] truncate">
+                                {currentImportingFile}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {!batchProcessing && uploading && uploadSpeed > 0 && (
                           <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
                             <span className="font-mono">{formatSpeed(uploadSpeed)}</span>
                             <span className="opacity-50">•</span>
@@ -1993,26 +2064,6 @@ export default function DocumentManagerPage() {
                   </CardContent>
                 </Card>
 
-                {/* Batch Processing Progress Card */}
-                {batchProcessing && (
-                  <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-6">
-                        <ProgressCircle progress={batchProgress} size={80} />
-                        <div className="flex-1">
-                          <h3 className="text-base font-semibold text-foreground mb-1">Batch PDF Processing</h3>
-                          <p className="text-sm text-muted-foreground mb-2">{batchStatus}</p>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span>{batchCurrent} / {batchTotal} documents</span>
-                            <span>•</span>
-                            <span>{batchProgress}% complete</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
                 <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col h-[calc(100vh-240px)]">
                   <CardContent className="p-0 flex flex-col flex-1 min-h-0">
                     {/* Fixed Header */}
@@ -2029,10 +2080,9 @@ export default function DocumentManagerPage() {
                             </TableHead>
                             <TableHead className="w-44">Name</TableHead>
                             <TableHead className="w-20">Type</TableHead>
-                            <TableHead className="w-28">Status</TableHead>
+                            <TableHead className="w-32">Status</TableHead>
                             <TableHead className="w-16">Size</TableHead>
                             <TableHead className="w-24">Date</TableHead>
-                            <TableHead className="w-28">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                       </Table>
@@ -2042,11 +2092,11 @@ export default function DocumentManagerPage() {
                     <div className="flex-1 overflow-auto">
                       <Table>
                         <TableBody>
-                          {loading ? (
+                          {(loading || batchProcessing) ? (
                             <TableBodySkeleton rows={20} columns={7} />
                           ) : filteredDocuments.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                              <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
                                 <File className="w-12 h-12 mx-auto mb-3 opacity-40" />
                                 <p className="text-base font-medium mb-1">No documents found</p>
                                 <p className="text-sm">Upload files to get started</p>
@@ -2072,14 +2122,14 @@ export default function DocumentManagerPage() {
                                   <Badge
                                     variant="outline"
                                     className={`text-xs font-semibold border-2 transition-all duration-150 ${
-                                      doc.type.toLowerCase() === 'pdf' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400' :
-                                      doc.type.toLowerCase() === 'csv' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' :
-                                      doc.type.toLowerCase() === 'json' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
-                                      ['md', 'txt', 'doc', 'docx'].includes(doc.type.toLowerCase()) ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400' :
+                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'pdf' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400' :
+                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'csv' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' :
+                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'json' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
+                                      ['md', 'txt', 'doc', 'docx'].includes((doc.type || doc.file_type || 'text')?.toLowerCase()) ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400' :
                                       'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-400'
                                     }`}
                                   >
-                                    {doc.type.toUpperCase()}
+                                    {(doc.type || doc.file_type || 'TEXT').toUpperCase()}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
@@ -2135,9 +2185,29 @@ export default function DocumentManagerPage() {
                                     }
 
                                     return (
-                                      <Badge variant="outline" className={`text-xs font-medium border transition-all duration-150 ${colorClass}`}>
-                                        {status}
-                                      </Badge>
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <div className="flex items-center gap-1 cursor-pointer group">
+                                            <Badge variant="outline" className={`text-xs font-medium border transition-all duration-150 ${colorClass} hover:opacity-80`}>
+                                              {status}
+                                            </Badge>
+                                            <MoreHorizontal className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                          </div>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem onClick={() => handlePreview(doc)}>
+                                            <Eye className="w-3 h-3 mr-2" />
+                                            Preview
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            onClick={() => handleDelete(doc.id, doc.title)}
+                                            className="text-red-600 focus:text-red-600"
+                                          >
+                                            <Trash2 className="w-3 h-3 mr-2" />
+                                            Delete
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     );
                                   })()}
                                 </TableCell>
@@ -2146,36 +2216,6 @@ export default function DocumentManagerPage() {
                                 </TableCell>
                                 <TableCell className="text-xs">
                                   {formatDate(doc.metadata.created_at)}
-                                </TableCell>
-                                <TableCell className="relative">
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handlePreview(doc);
-                                      }}
-                                      className="h-8 w-8 p-0 hover:bg-primary/10 transition-colors duration-150"
-                                      title="Preview"
-                                    >
-                                      <Eye className="w-3 h-3" />
-                                    </Button>
-                                    <ConfirmTooltip
-                                      onConfirm={() => handleDelete(doc.id, doc.title)}
-                                      message="Delete from DB & disk?"
-                                      side="top"
-                                    >
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="h-8 w-8 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600 hover:text-red-700 transition-colors duration-150"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </Button>
-                                    </ConfirmTooltip>
-                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))
@@ -2210,102 +2250,16 @@ export default function DocumentManagerPage() {
                             {getSelectedCount()} {getSelectedCount() === 1 ? 'document' : 'documents'} selected
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {/* Template Selection */}
-                          <Select value={batchSelectedSchema} onValueChange={setBatchSelectedSchema}>
-                            <SelectTrigger className="h-7 w-32 text-xs">
-                              <SelectValue placeholder="Template..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {batchSchemas.filter(s => s.is_active !== false).length > 0 ? (
-                                batchSchemas.filter(s => s.is_active !== false).map(schema => (
-                                  <SelectItem key={schema.id} value={schema.id} className="text-xs">
-                                    {schema.name}
-                                  </SelectItem>
-                                ))
-                              ) : (
-                                <SelectItem value="_none" disabled className="text-xs">
-                                  No active templates
-                                </SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-
-                          {/* Table Selection */}
-                          <Select value={batchSelectedTable || undefined} onValueChange={setBatchSelectedTable}>
-                            <SelectTrigger className="h-7 w-40 text-xs">
-                              <SelectValue placeholder="Target table..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {batchSelectedTable && (
-                                <SelectItem value={batchSelectedTable} className="text-xs font-semibold">
-                                  ✨ {batchSelectedTable}
-                                </SelectItem>
-                              )}
-                              {availableTables.length > 0 && (
-                                <>
-                                  {batchSelectedTable && <div className="my-1 h-px bg-border" />}
-                                  <div className="text-xs text-muted-foreground px-2 py-1">Existing tables:</div>
-                                  {availableTables.map(table => (
-                                    <SelectItem key={table} value={table} className="text-xs">
-                                      {table}
-                                    </SelectItem>
-                                  ))}
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
-
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              if (!batchSelectedSchema) {
-                                toast({
-                                  title: "Template Required",
-                                  description: "Please select a template",
-                                  variant: "destructive"
-                                });
-                                return;
-                              }
-                              handleBatchProcess(batchSelectedSchema);
-                            }}
-                            disabled={batchProcessing || !batchSelectedSchema}
-                            className="h-7 text-xs px-3"
-                          >
-                            {batchProcessing ? (
-                              <>
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                Processing...
-                              </>
-                            ) : (
-                              <>
-                                <Zap className="w-3 h-3 mr-1" />
-                                Process
-                              </>
-                            )}
-                          </Button>
+                        <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
+                          {/* Batch Process Icon */}
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => {
-                              clearSelection();
-                              setBatchSelectedSchema('');
-                            }}
-                            className="h-7 text-xs px-2"
-                            disabled={batchProcessing}
+                            onClick={() => setShowBatchModal(true)}
+                            className="h-8 w-8 p-0 hover:bg-primary/10 transition-colors"
+                            title="Batch process documents"
                           >
-                            Clear
-                          </Button>
-                          {/* Transform Button - After Analysis */}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleBatchTransform()}
-                            disabled={batchProcessing || !batchSelectedSchema}
-                            className="h-7 text-xs px-3 border-green-600 text-green-600 hover:bg-green-50"
-                          >
-                            <Database className="w-3 h-3 mr-1" />
-                            Transform
+                            <Zap className="w-4 h-4" />
                           </Button>
 
                           {/* Bulk Delete Icon */}
@@ -2317,7 +2271,8 @@ export default function DocumentManagerPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                              className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
+                              title="Delete selected documents"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
@@ -2341,6 +2296,227 @@ export default function DocumentManagerPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+
+      {/* Batch Process Modal */}
+      <Dialog open={showBatchModal} onOpenChange={setShowBatchModal}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary" />
+              Batch Process Documents
+            </DialogTitle>
+            <DialogDescription>
+              Configure template and target table for {selectedRows.size} selected document{selectedRows.size !== 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-6 py-4">
+            {/* Template Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="batch-template" className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Analysis Template
+              </Label>
+              <Select
+                value={batchSelectedSchema}
+                onValueChange={(value) => {
+                  setBatchSelectedSchema(value);
+                  // Auto-suggest table name
+                  const template = batchSchemas.find(t => t.id === value);
+                  if (template) {
+                    setBatchSelectedTable(`${template.name.toLowerCase().replace(/\s+/g, '_')}_documents`);
+                  }
+                }}
+              >
+                <SelectTrigger id="batch-template">
+                  <SelectValue placeholder="Select a template..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {batchSchemas.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        <span>{template.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {batchSelectedSchema && (
+                <p className="text-xs text-muted-foreground">
+                  {batchSchemas.find(t => t.id === batchSelectedSchema)?.description || 'No description'}
+                </p>
+              )}
+            </div>
+
+            {/* Target Table Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="batch-table" className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Target Table
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="batch-table"
+                  value={batchSelectedTable}
+                  onChange={(e) => setBatchSelectedTable(e.target.value)}
+                  placeholder="Enter table name..."
+                  className="flex-1"
+                />
+                {availableTables.length > 0 && (
+                  <Select
+                    value={batchSelectedTable}
+                    onValueChange={setBatchSelectedTable}
+                  >
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Existing tables..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTables.map((table) => (
+                        <SelectItem key={table} value={table}>
+                          {table}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Data will be inserted into this table in the source database
+              </p>
+            </div>
+
+            {/* Field Mapping Preview */}
+            {batchSelectedSchema && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Target className="h-4 w-4" />
+                  Field Mappings
+                </Label>
+                <div className="bg-muted/30 rounded-lg p-4 space-y-2 max-h-[200px] overflow-y-auto">
+                  {(() => {
+                    const template = batchSchemas.find(t => t.id === batchSelectedSchema);
+                    if (!template?.target_fields || template.target_fields.length === 0) {
+                      return (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No field mappings configured for this template
+                        </p>
+                      );
+                    }
+                    return template.target_fields.map((field: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 text-sm">
+                        <CheckCircle className="h-3 w-3 text-green-600" />
+                        <span className="font-mono text-xs bg-background/50 px-2 py-0.5 rounded">
+                          {field.targetField || field.name || `field_${idx}`}
+                        </span>
+                        {field.sourceField && (
+                          <>
+                            <span className="text-muted-foreground">←</span>
+                            <span className="text-muted-foreground text-xs">
+                              {field.sourceField}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Processing Progress */}
+            {batchProcessing && (
+              <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{batchStatus}</span>
+                  <span className="text-muted-foreground">
+                    {batchCurrent} / {batchTotal}
+                  </span>
+                </div>
+                <Progress value={batchProgress} className="h-2" />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{Math.round(batchProgress)}% complete</span>
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Processing...
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            <div className="bg-muted/20 rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Activity className="h-4 w-4" />
+                Processing Summary
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Documents:</span>
+                  <span className="ml-2 font-mono font-medium">{selectedRows.size}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Template:</span>
+                  <span className="ml-2 font-medium">
+                    {batchSelectedSchema ? batchSchemas.find(t => t.id === batchSelectedSchema)?.name : 'None'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Target Table:</span>
+                  <span className="ml-2 font-mono font-medium">
+                    {batchSelectedTable || 'Not set'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className="ml-2 font-medium">
+                    {batchProcessing ? 'Processing' : 'Ready'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowBatchModal(false);
+                if (!batchProcessing) {
+                  setBatchSelectedSchema('');
+                  setBatchSelectedTable('');
+                }
+              }}
+              disabled={batchProcessing}
+            >
+              {batchProcessing ? 'Processing...' : 'Cancel'}
+            </Button>
+            <Button
+              onClick={() => {
+                if (batchSelectedSchema && batchSelectedTable) {
+                  handleBatchTransform(batchSelectedSchema, batchSelectedTable);
+                  // Keep modal open to show progress
+                }
+              }}
+              disabled={!batchSelectedSchema || !batchSelectedTable || batchProcessing}
+              className="gap-2"
+            >
+              {batchProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Start Processing
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Document Operations Modal */}
       <Dialog open={showOperations} onOpenChange={setShowOperations}>

@@ -9,6 +9,7 @@ const ServicesPage = dynamic(() => import('./services/page'), {
   loading: () => <div className="flex items-center justify-center h-64">Loading services...</div>
 });
 import { useToast } from '../../../hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -3343,6 +3344,7 @@ function SecuritySettings() {
 
 // App Settings Component
 function AppSettings() {
+  const { t } = useTranslation();
   const [appConfig, setAppConfig] = useState<any>({});
   const [tempConfig, setTempConfig] = useState<any>({});
   const [loading, setLoading] = useState(false);
@@ -3354,7 +3356,8 @@ function AppSettings() {
     try {
       const data = await getAppSettingsOnly();
       setAppConfig(data);
-      setTempConfig(data);
+      // Extract app-specific settings from the full settings object
+      setTempConfig(data?.app || {});
     } catch (error) {
       console.error('Failed to load app settings:', error);
     } finally {
@@ -3375,6 +3378,14 @@ function AppSettings() {
       };
       await updateSettingsCategory('app', settingsToSave);
       setAppConfig({ app: tempConfig });
+
+      // Notify ConfigContext and other components about the settings update
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settingsUpdated', {
+          detail: { category: 'app', settings: tempConfig }
+        }));
+      }
+
       toast({
         title: "Success",
         description: "App settings saved successfully",
@@ -3398,57 +3409,252 @@ function AppSettings() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Application Configuration</CardTitle>
+          <CardTitle>{t('settings.generalSettingsTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Application Name</Label>
+              <Label>{t('settings.appNameLabel')}</Label>
               <Input
-                value={tempConfig?.name || appConfig?.app?.name || 'ASB Assistant'}
+                value={tempConfig?.name || 'Luwi Semantic Bridge'}
                 onChange={(e) => setTempConfig({ ...tempConfig, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Version</Label>
-              <Input
-                value={tempConfig?.version || appConfig?.app?.version || '1.0.0'}
-                onChange={(e) => setTempConfig({ ...tempConfig, version: e.target.value })}
+                placeholder={t('settings.appNamePlaceholder')}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Locale</Label>
+              <Label className="text-base font-medium flex items-center gap-2">
+                <Languages className="w-4 h-4" />
+                {t('settings.languageLabel')}
+              </Label>
+              <p className="text-xs text-muted-foreground mt-1 mb-3">
+                {t('settings.languageDescription')}
+              </p>
               <Select
                 value={tempConfig?.locale || appConfig?.app?.locale || 'tr'}
-                onValueChange={(value) => setTempConfig({ ...tempConfig, locale: value })}
+                onValueChange={async (value) => {
+                  setTempConfig({ ...tempConfig, locale: value });
+                  // Dil değiştiğinde i18n dilini de güncelle
+                  try {
+                    const i18nModule = await import('@/lib/i18n');
+                    const i18n = i18nModule.default || i18nModule.i18n;
+                    await i18n.changeLanguage(value);
+                    
+                    // HTML lang attribute'ini güncelle
+                    if (typeof document !== 'undefined') {
+                      document.documentElement.lang = value;
+                    }
+                    
+                    // Local storage'a kaydet
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('selectedLanguage', value);
+                    }
+                  } catch (error) {
+                    console.error('Failed to change language:', error);
+                  }
+                }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select locale" />
+                <SelectTrigger className="h-12">
+                  <SelectValue placeholder={t('settings.languageLabel')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tr">Turkish</SelectItem>
-                  <SelectItem value="en">English</SelectItem>
+                  <SelectItem value="tr" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇹🇷</span>
+                      <span className="font-medium">Türkçe</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="en" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇺🇸</span>
+                      <span className="font-medium">English</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="fr" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇫🇷</span>
+                      <span className="font-medium">Français</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="es" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇪🇸</span>
+                      <span className="font-medium">Español</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="de" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇩🇪</span>
+                      <span className="font-medium">Deutsch</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="zh" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇨🇳</span>
+                      <span className="font-medium">中文</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="el" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇬🇷</span>
+                      <span className="font-medium">Ελληνικά</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="th" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇹🇭</span>
+                      <span className="font-medium">ไทย</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="ru" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇷🇺</span>
+                      <span className="font-medium">Русский</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="ar" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇸🇦</span>
+                      <span className="font-medium">العربية</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="ja" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇯🇵</span>
+                      <span className="font-medium">日本語</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="ko" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🇰🇷</span>
+                      <span className="font-medium">한국어</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
+              
+              {/* Dil Değiştirme Bilgilendirmesi */}
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Languages className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-blue-800 dark:text-blue-200">
+                    <strong>{t('settings.languageInfo.title')}:</strong> {t('settings.languageInfo.description')}
+                  </div>
+                </div>
+              </div>
             </div>
             <div>
-              <Label>Logo URL</Label>
-              <Input
-                value={tempConfig?.logoUrl || appConfig?.app?.logoUrl || ''}
-                placeholder="Enter logo URL"
-                onChange={(e) => setTempConfig({ ...tempConfig, logoUrl: e.target.value })}
-              />
+              <Label>{t('settings.logoUrlLabel')}</Label>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    value={tempConfig?.logoUrl || appConfig?.app?.logoUrl || ''}
+                    placeholder={t('settings.logoUrlLabel')}
+                    onChange={(e) => setTempConfig({ ...tempConfig, logoUrl: e.target.value })}
+                    className="flex-1"
+                  />
+                  {(tempConfig?.logoUrl || appConfig?.app?.logoUrl) && (
+                    <div className="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 flex items-center justify-center bg-white dark:bg-gray-800 flex-shrink-0">
+                      <img
+                        src={tempConfig?.logoUrl || appConfig?.app?.logoUrl}
+                        alt="Logo"
+                        className="w-6 h-6 object-contain"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                {/* SVG Logo Seçenekleri */}
+                <div className="mt-4">
+                  <Label className="text-sm font-medium mb-2">Hazır SVG Logolar</Label>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[
+                      {
+                        id: 'shield',
+                        name: 'Kalkan',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 1L3 5V11C3 16.55 5.84 19.74 10 20.73V21H14V20.73C18.16 19.74 21 16.55 21 12V5L12 1Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      },
+                      {
+                        id: 'star',
+                        name: 'Yıldız',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 2L15.09 8.26L22 9.27L22 16.5C22 17.33 21.67 17.33 21 16.5C20.33 16.5 20 17.33 19 16.5C19 17.33 18.67 17.33 18 16.5C17.33 16.5 18 17.33 19 16.5C19 17.33 19.67 17.33 21 16.5C21 17.33 22 16.5C22 15.67 22 14.5C22 14.5 21.67 14.5 21 12L12 2Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      },
+                      {
+                        id: 'rocket',
+                        name: 'Roket',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 2L12 22L17.5 16.5L21 12L19 8L12 2Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      },
+                      {
+                        id: 'lightning',
+                        name: 'Yıldırım',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M13 2L3 14H12C11.45 14 11 14.55V22H13V2Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M21 12L19 4H20C20.55 4 21 4.45V12H21Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      },
+                      {
+                        id: 'cloud',
+                        name: 'Bulut',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M18 10H6C4.69 10 4 11.31V14C4 14.69 4.69 16 6 16H18C19.31 16 20 14.69 20 10H18ZM18 12H6C4.69 12 4 13.31V16C4 16.69 4.69 18 6 18H18Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      },
+                      {
+                        id: 'globe',
+                        name: 'Dünya',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                          <path d="M2 12C2 6.48 6.48 2 12S6.48 2 12 2 12S2 6.48 2 12Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M22 12C22 17.52 22 17.52 22 12S22 17.52 22 12 22 17.52 22 12Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          <path d="M12 22V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      },
+                      {
+                        id: 'diamond',
+                        name: 'Elmas',
+                        svg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M6 3L12 13L18 3L12 21L6 3Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>`
+                      }
+                    ].map((logo) => (
+                      <button
+                        key={logo.id}
+                        type="button"
+                        onClick={() => {
+                          setTempConfig({ ...tempConfig, logoUrl: `data:image/svg+xml;base64,${btoa(logo.svg)}` });
+                        }}
+                        className="p-3 border rounded-lg hover:bg-accent transition-colors flex flex-col items-center justify-center h-16 w-full"
+                        title={logo.name}
+                      >
+                        <div
+                          className="w-8 h-8 mb-2"
+                          dangerouslySetInnerHTML={{ __html: logo.svg }}
+                        />
+                        <span className="text-xs">{logo.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <div>
-            <Label>Description</Label>
+            <Label>{t('settings.descriptionLabel')}</Label>
             <Textarea
               value={tempConfig?.description || appConfig?.app?.description || ''}
-              placeholder="Enter application description"
+              placeholder={t('settings.descriptionPlaceholder')}
               rows={3}
               onChange={(e) => setTempConfig({ ...tempConfig, description: e.target.value })}
             />
@@ -3459,10 +3665,10 @@ function AppSettings() {
               {saving ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
+                  {t('settings.savingButton')}
                 </>
               ) : (
-                'Save'
+                t('settings.saveButton')
               )}
             </Button>
           </div>

@@ -821,7 +821,7 @@ export default function DashboardPage() {
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
         addConsoleLog('📊 SYSTEM STATUS REPORT', 'info', 'system');
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
-        const dbName = databaseSettings?.name || 'rag_chatbot';
+        const dbName = databaseSettings?.name || 'unknown';
         addConsoleLog(`🗄️  Database:     ${data?.database?.status || 'unknown'} (${dbName})`, 'info', 'system');
         addConsoleLog(`⚡ Vectorizer:   ${data?.vectorizer?.status || 'unknown'} (${data?.vectorizer?.model || 'N/A'})`, 'info', 'system');
         addConsoleLog(`🔴 Redis:        ${data?.redis?.status || 'unknown'} (${data?.redis?.uptime || 'N/A'})`, 'info', 'system');
@@ -1123,7 +1123,7 @@ export default function DashboardPage() {
       {
         id: '2',
         type: 'info',
-        message: '[BACKEND] Database connected to rag_chatbot',
+        message: `[BACKEND] Database connected`,
         timestamp: '09:00:02',
         source: 'backend'
       },
@@ -1539,7 +1539,7 @@ export default function DashboardPage() {
                 <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
                   <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">Database</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
-                    {databaseSettings?.name || 'rag_chatbot'}
+                    {databaseSettings?.name || 'Not configured'}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     {databaseSettings?.host}:{databaseSettings?.port}

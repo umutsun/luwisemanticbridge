@@ -87,6 +87,7 @@ import whisperRoutes from "./routes/whisper.routes";
 import pdfBatchRoutes from "./routes/pdf-batch.routes";
 import batchFoldersRoutes from "./routes/batch-folders.routes";
 import transformConfigRoutes from "./routes/transform-config.routes";
+import servicesRoutes from "./routes/services.routes";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
@@ -115,7 +116,7 @@ const corsOrigins = (
 // Initialize Socket.io if WebSocket is enabled
 console.log(` WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'} | Port: ${SERVER.WEBSOCKET.PORT}`);
 
-const io = SERVER.WEBSOCKET.ENABLED
+export const io = SERVER.WEBSOCKET.ENABLED
   ? new SocketServer(httpServer, {
       cors: {
         origin: corsOrigins,
@@ -216,7 +217,7 @@ if (SERVER.WEBSOCKET.ENABLED && (wss || logWss || chatWss)) {
 // Use the ASEMB pool from database.config - it will be initialized properly
 
 // Initialize Redis - ALWAYS use port 6379 for this project
-const redis = new Redis({
+export const redis = new Redis({
   host: process.env.REDIS_HOST || "localhost",
   port: 6379, // ALWAYS use port 6379 for this project, ignore system env
   db: parseInt(process.env.REDIS_DB || "2"),
@@ -497,6 +498,7 @@ app.use("/api/v2/frontend", frontendLogsRoutes);
 app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
 app.use("/api/v2/integrations", integrationsRoutes);
+app.use("/api/v2/services", servicesRoutes);
 app.use("/api/whisper", whisperRoutes);
 
 // GraphQL server

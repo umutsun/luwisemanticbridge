@@ -29,7 +29,7 @@ import {
 import { io, Socket } from 'socket.io-client';
 import { useRouter } from 'next/navigation';
 
-interface MurganFile {
+interface BatchFile {
   path: string;
   category: string;
   subcategory: string;
@@ -52,13 +52,13 @@ interface BatchJob {
   errors: any[];
 }
 
-export default function MurganBatchUpload() {
+export default function BatchFolderUpload() {
   const router = useRouter();
   const { toast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [files, setFiles] = useState<MurganFile[]>([]);
-  const [groupedFiles, setGroupedFiles] = useState<Record<string, MurganFile[]>>({});
+  const [files, setFiles] = useState<BatchFile[]>([]);
+  const [groupedFiles, setGroupedFiles] = useState<Record<string, BatchFile[]>>({});
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [currentJob, setCurrentJob] = useState<BatchJob | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -84,7 +84,11 @@ export default function MurganBatchUpload() {
   useEffect(() => {
     if (!socket || !currentJob) return;
 
+    console.log('[BatchUpload] Subscribing to progress for job:', currentJob.jobId);
+
     const progressHandler = (data: any) => {
+      console.log('[BatchUpload] Progress update received:', data);
+
       setCurrentJob(prev => prev ? {
         ...prev,
         status: data.status,
@@ -93,16 +97,19 @@ export default function MurganBatchUpload() {
         percentage: data.percentage
       } : null);
 
+      // Reload documents on every progress update to show real-time additions
+      loadProcessedDocuments();
+
       if (data.status === 'completed') {
         toast({
           title: 'Batch Processing Complete',
           description: data.message
         });
-        loadProcessedDocuments();
       }
     };
 
     socket.on(`job-progress-${currentJob.jobId}`, progressHandler);
+    console.log('[BatchUpload] Listener registered for:', `job-progress-${currentJob.jobId}`);
 
     return () => {
       socket.off(`job-progress-${currentJob.jobId}`, progressHandler);
@@ -522,6 +529,24 @@ export default function MurganBatchUpload() {
             <CardContent className="pt-6">
               <ScrollArea className="h-[500px]">
                 <div className="space-y-2">
+                  {/* Show loading skeleton if processing */}
+                  {currentJob && currentJob.status === 'processing' && (
+                    <div className="space-y-2">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20 animate-pulse">
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-muted rounded w-2/3" />
+                            <div className="flex gap-2">
+                              <div className="h-5 bg-muted rounded w-20" />
+                              <div className="h-5 bg-muted rounded w-16" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Show documents */}
                   {processedDocuments.map((doc) => (
                     <div
                       key={doc.id}
@@ -558,6 +583,15 @@ export default function MurganBatchUpload() {
                       </Button>
                     </div>
                   ))}
+
+                  {/* Show "No documents" only if not processing and empty */}
+                  {!currentJob && processedDocuments.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                      <Database className="w-12 h-12 mb-4 opacity-20" />
+                      <p className="text-sm">No documents found</p>
+                      <p className="text-xs mt-1">Process files to see them here</p>
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
               {processedDocuments.length > 0 && (

@@ -13,6 +13,8 @@ const configRouter = require("./config-router");
 const serviceRouter = require("./service-router");
 const modelsRouter = require("./models-router");
 const chatbotRouter = require("./chatbot-router");
+const translationsRouter = require("./translations-router");
+const documentsRouter = require("./documents-router");
 
 const errorHandler = require("./middleware/errorHandler");
 const { getRedisClient } = require("./redis-client");
@@ -79,6 +81,8 @@ app.use("/api/v2/settings", settingsRouter);
 app.use("/api/v2/services", serviceRouter);
 app.use("/api/v2/models", modelsRouter);
 app.use("/api/v2/chatbot", chatbotRouter);
+app.use("/api/v2/translations", translationsRouter);
+app.use("/api/v2/documents", documentsRouter);
 
 // --- Global Error Handler ---
 app.use(errorHandler);
