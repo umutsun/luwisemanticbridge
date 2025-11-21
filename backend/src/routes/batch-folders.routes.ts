@@ -553,6 +553,25 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
             try {
               console.log(`[Batch Folders] Starting transform to source DB for document ${documentId}`);
 
+              // Determine table name from template or use default
+              const targetTableName = template?.target_table_name ||
+                                     (templateId ? `${templateId.toLowerCase().replace(/[^a-z0-9_]/g, '_')}_data` : 'batch_documents');
+
+              // Check if table already exists in this batch job
+              const existingTableKey = `batch:${jobId}:table:${targetTableName}`;
+              const tableExists = await redis.get(existingTableKey);
+
+              // First document creates table, subsequent ones use existing
+              const useExisting = !!tableExists;
+
+              if (!tableExists) {
+                // Mark table as created for this batch
+                await redis.set(existingTableKey, 'created', 'EX', 86400);
+                console.log(`[Batch Folders] Creating new table: ${targetTableName}`);
+              } else {
+                console.log(`[Batch Folders] Using existing table: ${targetTableName}`);
+              }
+
               // Call transform service (uses pdf-batch routes transform logic)
               const transformResponse = await fetch(`http://localhost:8083/api/v2/pdf/metadata-transform`, {
                 method: 'POST',
@@ -563,8 +582,8 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
                 body: JSON.stringify({
                   documentId,
                   selectedFields: Object.keys(extractedMetadata),
-                  tableName: templateId || 'batch_documents',
-                  useExistingTable: false,
+                  tableName: targetTableName,
+                  useExistingTable: useExisting,
                   sourceDbId: process.env.SOURCE_DB_NAME || 'scriptus_lsemb'
                 })
               });
@@ -583,12 +602,14 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
                   [
                     JSON.stringify({
                       transform_job_id: transformData.jobId,
-                      transformed_at: new Date().toISOString()
+                      transformed_at: new Date().toISOString(),
+                      target_table: targetTableName,
+                      table_created: !useExisting
                     }),
                     documentId
                   ]
                 );
-                console.log(`[Batch Folders] Document ${documentId} status: analyzed → transformed`);
+                console.log(`[Batch Folders] Document ${documentId} ${useExisting ? 'inserted to existing' : 'created'} table: ${targetTableName}`);
               }
             } catch (transformError: any) {
               console.warn(`[Batch Folders] Transform failed (non-critical): ${transformError.message}`);

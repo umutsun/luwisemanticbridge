@@ -450,7 +450,7 @@ export default function DocumentManagerPage() {
         body: JSON.stringify({
           files: newFiles,
           options: {
-            autoTransform: false  // Transform disabled for now - user will preview analysis first
+            autoTransform: true  // ✅ Auto-transform enabled: template match → insert to DB
           }
         })
       });
@@ -2298,78 +2298,74 @@ export default function DocumentManagerPage() {
       )}
 
       {/* Batch Process Modal */}
-      <Dialog open={showBatchModal} onOpenChange={setShowBatchModal}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              Batch Process Documents
-            </DialogTitle>
-            <DialogDescription>
-              Configure template and target table for {selectedRows.size} selected document{selectedRows.size !== 1 ? 's' : ''}
-            </DialogDescription>
-          </DialogHeader>
+      <Dialog open={showBatchModal} onOpenChange={(open) => {
+        setShowBatchModal(open);
+        if (open) {
+          fetchAvailableTables();
+          fetchBatchSchemas();
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
+          {/* Header - Like Preview Modal */}
+          <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-b border-border/50 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <DialogTitle className="text-base font-bold">Batch Process Documents</DialogTitle>
+                <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
+                  {selectedRows.size} FILES
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Extract & insert to database
+              </p>
+            </div>
+          </div>
 
-          <div className="flex-1 overflow-y-auto space-y-6 py-4">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
             {/* Template Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="batch-template" className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
+            <div className="space-y-3">
+              <Label htmlFor="batch-template" className="text-sm font-medium">
                 Analysis Template
               </Label>
               <Select
                 value={batchSelectedSchema}
                 onValueChange={(value) => {
                   setBatchSelectedSchema(value);
-                  // Auto-suggest table name
-                  const template = batchSchemas.find(t => t.id === value);
-                  if (template) {
-                    setBatchSelectedTable(`${template.name.toLowerCase().replace(/\s+/g, '_')}_documents`);
-                  }
+                  fetchAvailableTables();
                 }}
               >
                 <SelectTrigger id="batch-template">
-                  <SelectValue placeholder="Select a template..." />
+                  <SelectValue placeholder="Select template..." />
                 </SelectTrigger>
                 <SelectContent>
                   {batchSchemas.map((template) => (
                     <SelectItem key={template.id} value={template.id}>
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        <span>{template.name}</span>
-                      </div>
+                      {template.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {batchSelectedSchema && (
                 <p className="text-xs text-muted-foreground">
-                  {batchSchemas.find(t => t.id === batchSelectedSchema)?.description || 'No description'}
+                  {batchSchemas.find(t => t.id === batchSelectedSchema)?.description || ''}
                 </p>
               )}
             </div>
 
             {/* Target Table Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="batch-table" className="flex items-center gap-2">
-                <Database className="h-4 w-4" />
+            <div className="space-y-3">
+              <Label htmlFor="batch-table" className="text-sm font-medium">
                 Target Table
               </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="batch-table"
-                  value={batchSelectedTable}
-                  onChange={(e) => setBatchSelectedTable(e.target.value)}
-                  placeholder="Enter table name..."
-                  className="flex-1"
-                />
-                {availableTables.length > 0 && (
+              {availableTables.length > 0 ? (
+                <>
                   <Select
                     value={batchSelectedTable}
                     onValueChange={setBatchSelectedTable}
                   >
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Existing tables..." />
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select table..." />
                     </SelectTrigger>
                     <SelectContent>
                       {availableTables.map((table) => (
@@ -2379,46 +2375,47 @@ export default function DocumentManagerPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Data will be inserted into this table in the source database
-              </p>
+                  <p className="text-xs text-muted-foreground">
+                    Data will be inserted into this table
+                  </p>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded border border-dashed">
+                  No tables available. Create from single document preview first.
+                </div>
+              )}
             </div>
 
-            {/* Field Mapping Preview */}
+            {/* Field Mappings */}
             {batchSelectedSchema && (
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Target className="h-4 w-4" />
-                  Field Mappings
-                </Label>
-                <div className="bg-muted/30 rounded-lg p-4 space-y-2 max-h-[200px] overflow-y-auto">
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Field Mappings</Label>
+                <div className="bg-muted/30 dark:bg-black/20 border border-border/50 rounded p-4 max-h-[200px] overflow-y-auto">
                   {(() => {
                     const template = batchSchemas.find(t => t.id === batchSelectedSchema);
                     if (!template?.target_fields || template.target_fields.length === 0) {
                       return (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No field mappings configured for this template
+                        <p className="text-sm text-muted-foreground text-center py-3">
+                          No mappings configured
                         </p>
                       );
                     }
-                    return template.target_fields.map((field: any, idx: number) => (
-                      <div key={idx} className="flex items-center gap-2 text-sm">
-                        <CheckCircle className="h-3 w-3 text-green-600" />
-                        <span className="font-mono text-xs bg-background/50 px-2 py-0.5 rounded">
-                          {field.targetField || field.name || `field_${idx}`}
-                        </span>
-                        {field.sourceField && (
-                          <>
-                            <span className="text-muted-foreground">←</span>
-                            <span className="text-muted-foreground text-xs">
-                              {field.sourceField}
-                            </span>
-                          </>
-                        )}
+                    return (
+                      <div className="space-y-2">
+                        {template.target_fields.map((field: any, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs">
+                            <div className="w-1 h-1 rounded-full bg-green-500" />
+                            <span className="font-mono">{field.targetField || field.name || `field_${idx}`}</span>
+                            {field.sourceField && (
+                              <>
+                                <span className="text-muted-foreground">←</span>
+                                <span className="text-muted-foreground">{field.sourceField}</span>
+                              </>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ));
+                    );
                   })()}
                 </div>
               </div>
@@ -2426,94 +2423,68 @@ export default function DocumentManagerPage() {
 
             {/* Processing Progress */}
             {batchProcessing && (
-              <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <div className="flex items-center justify-between text-sm">
+              <div className="space-y-3 p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded border border-blue-200/50">
+                <div className="flex justify-between text-sm">
                   <span className="font-medium">{batchStatus}</span>
-                  <span className="text-muted-foreground">
-                    {batchCurrent} / {batchTotal}
-                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">{batchCurrent} / {batchTotal}</span>
                 </div>
                 <Progress value={batchProgress} className="h-2" />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{Math.round(batchProgress)}% complete</span>
-                  <span className="flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Processing...
-                  </span>
-                </div>
+                <p className="text-xs text-muted-foreground">{Math.round(batchProgress)}% complete</p>
               </div>
             )}
-
-            {/* Summary */}
-            <div className="bg-muted/20 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Activity className="h-4 w-4" />
-                Processing Summary
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Documents:</span>
-                  <span className="ml-2 font-mono font-medium">{selectedRows.size}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Template:</span>
-                  <span className="ml-2 font-medium">
-                    {batchSelectedSchema ? batchSchemas.find(t => t.id === batchSelectedSchema)?.name : 'None'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Target Table:</span>
-                  <span className="ml-2 font-mono font-medium">
-                    {batchSelectedTable || 'Not set'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className="ml-2 font-medium">
-                    {batchProcessing ? 'Processing' : 'Ready'}
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowBatchModal(false);
-                if (!batchProcessing) {
-                  setBatchSelectedSchema('');
-                  setBatchSelectedTable('');
-                }
-              }}
-              disabled={batchProcessing}
-            >
-              {batchProcessing ? 'Processing...' : 'Cancel'}
-            </Button>
-            <Button
-              onClick={() => {
-                if (batchSelectedSchema && batchSelectedTable) {
-                  handleBatchTransform(batchSelectedSchema, batchSelectedTable);
-                  // Keep modal open to show progress
-                }
-              }}
-              disabled={!batchSelectedSchema || !batchSelectedTable || batchProcessing}
-              className="gap-2"
-            >
-              {batchProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Processing
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Start Processing
-                </>
-              )}
-            </Button>
+          {/* Footer - Like Preview Modal */}
+          <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/50 px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span className="font-medium">{selectedRows.size} documents</span>
+                {batchSelectedSchema && (
+                  <>
+                    <span>•</span>
+                    <span>{batchSchemas.find(t => t.id === batchSelectedSchema)?.name}</span>
+                  </>
+                )}
+                {batchSelectedTable && (
+                  <>
+                    <span>•</span>
+                    <span className="font-mono">{batchSelectedTable}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowBatchModal(false);
+                    if (!batchProcessing) {
+                      setBatchSelectedSchema('');
+                      setBatchSelectedTable('');
+                    }
+                  }}
+                  disabled={batchProcessing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (batchSelectedSchema && batchSelectedTable) {
+                      handleBatchTransform(batchSelectedSchema, batchSelectedTable);
+                    }
+                  }}
+                  disabled={!batchSelectedSchema || !batchSelectedTable || batchProcessing}
+                >
+                  {batchProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Processing
+                    </>
+                  ) : (
+                    'Start Processing'
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
