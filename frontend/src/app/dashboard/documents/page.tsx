@@ -2338,7 +2338,7 @@ export default function DocumentManagerPage() {
                 <SelectTrigger id="batch-template">
                   <SelectValue placeholder="Select template..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[100000]">
                   {batchSchemas.map((template) => (
                     <SelectItem key={template.id} value={template.id}>
                       {template.name}
@@ -2367,7 +2367,7 @@ export default function DocumentManagerPage() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select table..." />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100000]">
                       {availableTables.map((table) => (
                         <SelectItem key={table} value={table}>
                           {table}
@@ -2421,15 +2421,55 @@ export default function DocumentManagerPage() {
               </div>
             )}
 
-            {/* Processing Progress */}
+            {/* Processing Progress with Circle */}
             {batchProcessing && (
-              <div className="space-y-3 p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded border border-blue-200/50">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">{batchStatus}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{batchCurrent} / {batchTotal}</span>
+              <div className="space-y-4 p-6 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg border border-blue-200/50">
+                <div className="flex items-center gap-6">
+                  {/* Progress Circle */}
+                  <div className="relative w-20 h-20 flex-shrink-0">
+                    <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                    <svg className="w-20 h-20 transform -rotate-90 relative z-10">
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="36"
+                        stroke="currentColor"
+                        strokeWidth="6"
+                        fill="none"
+                        className="text-gray-200 dark:text-gray-700"
+                      />
+                      <circle
+                        cx="40"
+                        cy="40"
+                        r="36"
+                        stroke="currentColor"
+                        strokeWidth="6"
+                        fill="none"
+                        strokeDasharray={`${2 * Math.PI * 36}`}
+                        strokeDashoffset={`${2 * Math.PI * 36 * (1 - batchProgress / 100)}`}
+                        className="text-primary transition-all duration-500 ease-out"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center z-20">
+                      <span className="text-lg font-bold">{Math.round(batchProgress)}%</span>
+                    </div>
+                  </div>
+
+                  {/* Status Info */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-sm">{batchStatus}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{batchCurrent} / {batchTotal} files</span>
+                    </div>
+                    <Progress value={batchProgress} className="h-2" />
+                    {currentImportingFile && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 font-medium truncate">
+                        {currentImportingFile}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <Progress value={batchProgress} className="h-2" />
-                <p className="text-xs text-muted-foreground">{Math.round(batchProgress)}% complete</p>
               </div>
             )}
           </div>
