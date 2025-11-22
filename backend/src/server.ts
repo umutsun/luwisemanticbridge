@@ -88,6 +88,7 @@ import pdfBatchRoutes from "./routes/pdf-batch.routes";
 import batchFoldersRoutes from "./routes/batch-folders.routes";
 import transformConfigRoutes from "./routes/transform-config.routes";
 import servicesRoutes from "./routes/services.routes";
+import aiServicesRoutes from "./routes/ai-services.routes";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
@@ -321,6 +322,10 @@ app.use((req, res, next) => {
 // Serve static files from uploads directory
 app.use("/uploads", express.static("uploads"));
 
+// Serve static files from docs directory (for crawled PDFs and documents)
+const docsPath = process.env.DOCUMENTS_PATH || process.env.UPLOAD_DIR || './docs';
+app.use("/documents/view", express.static(docsPath));
+
 // Enhanced health check endpoint
 app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
   try {
@@ -499,6 +504,7 @@ app.use("/api/v2/document-processing", documentProcessingRoutes);
 app.use("/api/v2/ocr", ocrRoutes);
 app.use("/api/v2/integrations", integrationsRoutes);
 app.use("/api/v2/services", servicesRoutes);
+app.use("/api/v2/ai-services", aiServicesRoutes);
 app.use("/api/whisper", whisperRoutes);
 
 // GraphQL server
