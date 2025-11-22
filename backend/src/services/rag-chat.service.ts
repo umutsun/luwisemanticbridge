@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { semanticSearch, SemanticSearchService } from './semantic-search.service';
 import { LLMManager } from './llm-manager.service';
 import pool from '../config/database';
+import { redis } from '../config/redis';
 import dotenv from 'dotenv';
 import { TIMEOUTS } from '../config';
 
@@ -143,7 +144,7 @@ export class RAGChatService {
     console.log(' RAG Chat Service initialized with LLM Manager');
   }
 
-  
+
   /**
    * Get system prompt from database
    */
@@ -457,19 +458,19 @@ export class RAGChatService {
       // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
       const citationInstruction = responseLanguage === 'en'
         ? `\n\nCRITICAL FORMATTING RULES:\n` +
-          ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
-          ` Add citations at paragraph ends using ONLY source numbers 1-${initialDisplayCount}: **[1]**, **[2, 3]**, etc.\n` +
-          ` NEVER cite sources beyond number ${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
-          ` NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
-          ` NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
-          `Just write flowing paragraphs with citation numbers at the end.`
+        ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
+        ` Add citations at paragraph ends using ONLY source numbers 1-${initialDisplayCount}: **[1]**, **[2, 3]**, etc.\n` +
+        ` NEVER cite sources beyond number ${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+        ` NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
+        ` NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
+        `Just write flowing paragraphs with citation numbers at the end.`
         : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
-          ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
-          ` Paragraf sonlarına SADECE 1-${initialDisplayCount} arası kaynak numarası kullan: **[1]**, **[2, 3]**, vb.\n` +
-          ` ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme (sadece ${initialDisplayCount} kaynak var)\n` +
-          ` ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
-          ` ASLA etiket ekleme\n` +
-          `Sadece akıcı paragraflar yaz, sonunda kaynak numaraları olsun.`;
+        ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
+        ` Paragraf sonlarına SADECE 1-${initialDisplayCount} arası kaynak numarası kullan: **[1]**, **[2, 3]**, vb.\n` +
+        ` ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme (sadece ${initialDisplayCount} kaynak var)\n` +
+        ` ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
+        ` ASLA etiket ekleme\n` +
+        `Sadece akıcı paragraflar yaz, sonunda kaynak numaraları olsun.`;
 
       const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
@@ -530,32 +531,32 @@ export class RAGChatService {
       const relatedTopics = []; // Disable for now
 
       // Multilingual provider names
-    const getProviderDisplayName = (provider: string, language: string = 'tr') => {
-      const providerNames = {
-        tr: {
-          'Claude': 'Claude',
-          'Gemini': 'Gemini',
-          'OpenAI': 'OpenAI',
-          'Demo': 'Demo'
-        },
-        en: {
-          'Claude': 'Claude',
-          'Gemini': 'Gemini',
-          'OpenAI': 'OpenAI',
-          'Demo': 'Demo'
-        }
+      const getProviderDisplayName = (provider: string, language: string = 'tr') => {
+        const providerNames = {
+          tr: {
+            'Claude': 'Claude',
+            'Gemini': 'Gemini',
+            'OpenAI': 'OpenAI',
+            'Demo': 'Demo'
+          },
+          en: {
+            'Claude': 'Claude',
+            'Gemini': 'Gemini',
+            'OpenAI': 'OpenAI',
+            'Demo': 'Demo'
+          }
+        };
+
+        return providerNames[language]?.[provider] || provider;
       };
 
-      return providerNames[language]?.[provider] || provider;
-    };
+      // Log sources content for debugging
+      console.log(` Returning ${formattedSources.length} sources to frontend`);
+      formattedSources.forEach((source, idx) => {
+        console.log(`  Source ${idx + 1}: title="${source.title?.substring(0, 30)}...", content length=${source.content?.length || 0}, excerpt length=${source.excerpt?.length || 0}`);
+      });
 
-    // Log sources content for debugging
-    console.log(` Returning ${formattedSources.length} sources to frontend`);
-    formattedSources.forEach((source, idx) => {
-      console.log(`  Source ${idx + 1}: title="${source.title?.substring(0, 30)}...", content length=${source.content?.length || 0}, excerpt length=${source.excerpt?.length || 0}`);
-    });
-
-    return {
+      return {
         response: response.content,
         sources: formattedSources,
         relatedTopics: relatedTopics,
@@ -687,15 +688,15 @@ export class RAGChatService {
    */
   private truncateExcerpt(text: string, maxLength: number): string {
     if (!text || text.length <= maxLength) return text;
-    
+
     // Cut at sentence end
     const truncated = text.substring(0, maxLength);
     const lastPeriod = truncated.lastIndexOf('.');
-    
+
     if (lastPeriod > maxLength * 0.8) {
       return truncated.substring(0, lastPeriod + 1);
     }
-    
+
     return truncated + '...';
   }
 
@@ -933,7 +934,7 @@ export class RAGChatService {
   private generateDynamicQuestion(title: string, excerpt: string, category: string): string {
     // Detect language
     const isTurkish = /[çğıöşüÇĞİÖŞÜ]/.test(excerpt) ||
-                     /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
+      /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
 
     // Extract keywords from title and excerpt
     const titleWords = title.toLowerCase().split(' ').filter(w => w.length > 3);
@@ -979,7 +980,7 @@ export class RAGChatService {
     return smartQuestion;
   }
 
-  
+
   /**
    * BATCH: Generate LLM-processed content and questions for multiple results at once
    * This is 10x faster than processing individually!
@@ -1371,13 +1372,13 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     }
   }
 
-  
+
   /**
    * Ensure conversation exists with better title
    */
   private async ensureConversation(conversationId: string, userId: string, firstMessage: string) {
     // Generate a better title from first message
-    const title = firstMessage.length > 50 
+    const title = firstMessage.length > 50
       ? firstMessage.substring(0, 47) + '...'
       : firstMessage;
 
@@ -1632,7 +1633,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     const conversationQuery = `
       SELECT * FROM conversations WHERE id = $1
     `;
-    
+
     const messagesQuery = `
       SELECT * FROM messages 
       WHERE conversation_id = $1
@@ -1895,7 +1896,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           console.warn('LLM processing for paginated result failed, using fallback:', error);
           // Generate fallback question based on content language
           const isTurkishContent = /[çğıöşüÇĞİÖŞÜ]/.test(cleanExcerpt) ||
-                                   /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
+            /(\b(ve|ile|için|hakkında|bilgi|detaylı|verir|misiniz)\b)/i.test(cleanExcerpt);
           generatedQuestion = isTurkishContent ?
             `${title} hakkında detaylı bilgi verir misiniz?` :
             `Can you provide detailed information about ${title}?`;
@@ -2092,10 +2093,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
     return 'genel';
   }
-/**
-   * Process a single source with LLM enrichment
-   * Used by enhanced parallel processing
-   */
+  /**
+     * Process a single source with LLM enrichment
+     * Used by enhanced parallel processing
+     */
   private async processSourceWithLLM(r: any, idx: number, enableLLMGeneration: boolean): Promise<any> {
     const category = this.categorizeSource(r);
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);

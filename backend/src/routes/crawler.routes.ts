@@ -528,9 +528,44 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
     // If autoEmbeddings is enabled, trigger embedding generation
     let embeddingMessage = '';
     if (autoEmbeddings) {
-      // TODO: Trigger embedding generation for the inserted data
-      // This could call the existing embedding service
-      embeddingMessage = ' (Embeddings queued for generation)';
+      try {
+        // Import embedding processor service
+        const embeddingProcessor = require('../services/embedding-processor.service').default;
+
+        // Queue embedding generation for the table
+        console.log(` Triggering embedding generation for table: ${tableName}`);
+
+        // Get sample data to generate embeddings
+        const sampleResult = await lsembPool.query(
+          `SELECT * FROM ${tableName} LIMIT 100`
+        );
+
+        let embeddingsGenerated = 0;
+        for (const row of sampleResult.rows) {
+          // Combine all text fields for embedding
+          const textContent = Object.values(row)
+            .filter(val => typeof val === 'string')
+            .join(' ');
+
+          if (textContent.trim().length > 0) {
+            try {
+              await embeddingProcessor.processEmbeddings(textContent, {
+                model: 'text-embedding-3-small',
+                chunkSize: 1000
+              });
+              embeddingsGenerated++;
+            } catch (embErr) {
+              console.error(` Failed to generate embedding for row:`, embErr);
+            }
+          }
+        }
+
+        embeddingMessage = ` (${embeddingsGenerated} embeddings generated)`;
+        console.log(` Generated ${embeddingsGenerated} embeddings for ${tableName}`);
+      } catch (embErr) {
+        console.error(' Failed to generate embeddings:', embErr);
+        embeddingMessage = ' (Embedding generation failed)';
+      }
     }
 
     // Publish final completion status (use same jobId)
@@ -613,40 +648,91 @@ router.post('/crawler-directories/:crawlerName/generate-embeddings', async (req:
 
     const validData = fetchedData.filter(d => d !== null);
 
-    // For each item, generate embeddings (mock for now)
-    // In production, you'd call OpenAI or other embedding service
+
+    // Generate embeddings using the embedding processor service
     const embeddingResults = [];
+    const embeddingProcessor = require('../services/embedding-processor.service').default;
 
     for (const item of validData) {
       const content = item?.data?.content || item?.data?.text || JSON.stringify(item?.data);
       const title = item?.data?.title || item?.data?.name || item?.key;
       const url = item?.data?.url || item?.data?.source_url || null;
 
-      // TODO: Call actual embedding service
-      // For now, we just insert placeholder
-      await lsembPool.query(`
-        INSERT INTO scrape_embeddings (
+      try {
+        // Generate actual embeddings
+        const embeddingResult = await embeddingProcessor.processEmbeddings(content, {
+          model: 'text-embedding-3-small',
+          chunkSize: 1000,
+          chunkOverlap: 200
+        });
+
+        // Insert with actual embedding data
+        const insertResult = await lsembPool.query(`
+          INSERT INTO scrape_embeddings (
+            content,
+            title,
+            source_url,
+            metadata,
+            category,
+            embedding,
+            embedding_generated,
+            model_used,
+            total_chunks
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT DO NOTHING
+          RETURNING id
+        `, [
           content,
           title,
-          source_url,
-          metadata,
-          category,
-          embedding_generated
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT DO NOTHING
-      `, [
-        content,
-        title,
-        url,
-        JSON.stringify({ crawlerName, itemKey: item?.key }),
-        crawlerName,
-        false // Will be set to true after actual embedding generation
-      ]);
+          url,
+          JSON.stringify({
+            crawlerName,
+            itemKey: item?.key,
+            totalTokens: embeddingResult.totalTokens,
+            processingTimeMs: embeddingResult.processingTimeMs
+          }),
+          crawlerName,
+          JSON.stringify(embeddingResult.embedding),
+          true,
+          embeddingResult.model,
+          embeddingResult.totalChunks
+        ]);
 
-      embeddingResults.push({
-        itemKey: item?.key,
-        status: 'queued'
-      });
+        embeddingResults.push({
+          itemKey: item?.key,
+          status: 'completed',
+          embeddingId: insertResult.rows[0]?.id,
+          chunks: embeddingResult.totalChunks
+        });
+      } catch (embErr) {
+        console.error(` Failed to generate embedding for item ${item?.key}:`, embErr);
+
+        // Insert without embedding as fallback
+        await lsembPool.query(`
+          INSERT INTO scrape_embeddings (
+            content,
+            title,
+            source_url,
+            metadata,
+            category,
+            embedding_generated
+          ) VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT DO NOTHING
+        `, [
+          content,
+          title,
+          url,
+          JSON.stringify({ crawlerName, itemKey: item?.key, error: embErr.message }),
+          crawlerName,
+          false
+        ]);
+
+        embeddingResults.push({
+          itemKey: item?.key,
+          status: 'failed',
+          error: embErr.message
+        });
+      }
     }
 
     res.json({
@@ -706,7 +792,7 @@ router.post('/analyze-table', async (req: Request, res: Response) => {
 
         // Collect unique examples (max 3)
         if (fieldAnalysis[key].examples.length < 3 &&
-            !fieldAnalysis[key].examples.some(ex => JSON.stringify(ex) === JSON.stringify(value))) {
+          !fieldAnalysis[key].examples.some(ex => JSON.stringify(ex) === JSON.stringify(value))) {
           fieldAnalysis[key].examples.push(value);
         }
 

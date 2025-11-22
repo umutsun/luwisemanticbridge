@@ -24,6 +24,7 @@ export const API_CONFIG = {
     documentStats: '/api/v2/documents/stats',
     documentOcr: '/api/v2/documents/ocr',
     documentEmbeddings: '/api/v2/documents/embeddings',
+    bulkEmbed: '/api/v2/documents/bulk-embed',
     physicalFiles: '/api/v2/documents/physical-files',
     physicalFilesAdd: '/api/v2/documents/physical-files/add',
     preview: '/api/v2/documents/preview',

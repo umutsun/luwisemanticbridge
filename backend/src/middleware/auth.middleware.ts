@@ -19,11 +19,14 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
     }
 
     if (!token) {
+      console.log('[AUTH] No token found in request to:', req.path);
       return res.status(401).json({
         error: 'Access token required',
         code: 'TOKEN_MISSING'
       });
     }
+
+    console.log('[AUTH] Verifying token for:', req.path, 'Token prefix:', token.substring(0, 20) + '...');
 
     const authService = new AuthService();
     const user = await authService.verifyToken(token);
@@ -38,8 +41,10 @@ export const authenticateToken = async (req: AuthenticatedRequest, res: Response
     }
 
     req.user = user;
+    console.log('[AUTH] ✓ Token verified for user:', user.userId);
     next();
   } catch (error: any) {
+    console.log('[AUTH] ✗ Token verification failed:', error.message);
     return res.status(401).json({
       error: 'Invalid or expired token',
       code: 'TOKEN_INVALID'

@@ -626,14 +626,138 @@ router.post('/analyze-batch', authenticateToken, async (req: AuthenticatedReques
  * POST /api/v2/pdf/extract-text
  * Extract text from text-based PDFs using pdf-parse (fast, local)
  *
- * Body: { documentIds: string[] }
+ * Body: { documentIds: string[] } OR { filePath: string }
  */
 router.post('/extract-text', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { documentIds } = req.body;
+    const { documentIds, filePath } = req.body;
 
+    // Single file extraction from path
+    if (filePath) {
+      const ocrService = OCRService.getInstance();
+      const path = require('path');
+      const fs = require('fs');
+
+      // Normalize path
+      let normalizedPath = filePath.replace(/\\/g, '/');
+      const docsPath = process.env.DOCUMENTS_PATH || process.env.UPLOAD_DIR || './docs';
+
+      // If path doesn't exist, try different variations
+      if (!fs.existsSync(normalizedPath)) {
+        // Strategy 1: Try filename only in docs root
+        let tryPath = path.join(docsPath, path.basename(normalizedPath));
+        if (fs.existsSync(tryPath)) {
+          normalizedPath = tryPath;
+        } else {
+          // Strategy 2: Try to find in subdirectories (e.g., docs/neyzen/filename)
+          const filename = path.basename(normalizedPath);
+          const subdirs = ['neyzen', 'emlakai', 'imsdb', 'yky', 'iskultur', 'can'];
+
+          for (const subdir of subdirs) {
+            tryPath = path.join(docsPath, subdir, filename);
+            if (fs.existsSync(tryPath)) {
+              normalizedPath = tryPath;
+              break;
+            }
+          }
+
+          // Strategy 3: Try relative to project root
+          if (!fs.existsSync(normalizedPath)) {
+            normalizedPath = path.resolve(filePath);
+          }
+        }
+      }
+
+      console.log(`[PDF Extract] Attempting to extract text from: ${normalizedPath}`);
+
+      if (!fs.existsSync(normalizedPath)) {
+        return res.status(404).json({
+          error: 'File not found',
+          path: filePath,
+          tried: normalizedPath
+        });
+      }
+
+      try {
+        console.log('[PDF Extract] Starting extraction for:', normalizedPath);
+        console.log('[PDF Extract] File exists:', require('fs').existsSync(normalizedPath));
+
+        // Try simple pdf-parse first (fastest, works for text-based PDFs)
+        try {
+          console.log('[PDF Extract] Trying pdf-parse...');
+          const pdfParse = require('pdf-parse');
+          const dataBuffer = require('fs').readFileSync(normalizedPath);
+          const pdfData = await pdfParse(dataBuffer);
+
+          console.log('[PDF Extract] pdf-parse result - text length:', pdfData.text?.length || 0, 'pages:', pdfData.numpages);
+
+          if (pdfData.text && pdfData.text.trim().length > 50) {
+            console.log('[PDF Extract] ✓ Extracted with pdf-parse:', pdfData.text.length, 'chars');
+
+            // Format as markdown
+            let markdown = pdfData.text.trim();
+
+            // Clean up multiple newlines
+            markdown = markdown.replace(/\n{3,}/g, '\n\n');
+
+            // Add markdown formatting for better readability
+            const lines = markdown.split('\n');
+            const formatted = lines.map(line => {
+              const trimmed = line.trim();
+              // If line is all caps and short, make it a header
+              if (trimmed.length > 0 && trimmed.length < 50 && trimmed === trimmed.toUpperCase()) {
+                return `## ${trimmed}`;
+              }
+              return line;
+            }).join('\n');
+
+            return res.json({
+              success: true,
+              text: formatted,
+              pages: pdfData.numpages || 1,
+              confidence: 95,
+              method: 'pdf-parse',
+              path: normalizedPath
+            });
+          } else {
+            console.log('[PDF Extract] pdf-parse returned insufficient text, will try OCR...');
+          }
+        } catch (pdfParseError) {
+          console.log('[PDF Extract] pdf-parse failed:', pdfParseError.message);
+        }
+
+        // Fallback to OCR Router (Gemini/OpenAI/Tesseract)
+        console.log('[PDF Extract] Trying OCR Router Service...');
+        const result = await ocrRouterService.processDocument(normalizedPath, {
+          fileType: 'pdf',
+          language: 'tur+eng',
+          prompt: 'Extract all text from this PDF and format it as clean markdown. Preserve structure and formatting.'
+        });
+
+        console.log('[PDF Extract] OCR Router result - text length:', result.text?.length || 0, 'method:', result.metadata?.provider);
+
+        return res.json({
+          success: true,
+          text: result.text || '',
+          pages: result.pages || 1,
+          confidence: result.confidence || 0,
+          method: result.metadata?.provider || 'ocr',
+          path: normalizedPath
+        });
+      } catch (extractError) {
+        console.error('[PDF Extract] Error:', extractError);
+        console.error('[PDF Extract] Stack:', extractError.stack);
+        return res.status(500).json({
+          error: 'Failed to extract text',
+          message: extractError.message,
+          path: normalizedPath
+        });
+      }
+    }
+
+    // Batch processing with documentIds
     if (!Array.isArray(documentIds) || documentIds.length === 0) {
-      return res.status(400).json({ error: 'documentIds array is required' });
+      return res.status(400).json({ error: 'documentIds array or filePath is required' });
     }
 
     const jobId = require('crypto').randomUUID();

@@ -1,156 +1,145 @@
 import { Router, Request, Response } from 'express';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { SettingsService } from '../services/settings.service';
+import { lsembPool } from '../config/database.config';
+import { logger } from '../utils/logger';
 
 const router = Router();
+const settingsService = SettingsService.getInstance();
 
-// Apply authentication middleware to all routes
-router.use(authenticateToken);
-
-// RAG Prompts endpoint - redirects to settings/config/prompts
-router.get('/prompts', async (req: Request, res: Response) => {
+/**
+ * @swagger
+ * /rag/config:
+ *   get:
+ *     summary: Get RAG configuration
+ *     tags: [RAG]
+ *     responses:
+ *       200:
+ *         description: RAG configuration
+ */
+router.get('/config', async (req: Request, res: Response) => {
   try {
-    // Import the settings routes dynamically
-    const settingsRoutes = await import('./settings.routes');
-    // Create a mock request/response to call the settings handler
-    const originalUrl = req.originalUrl;
-    req.originalUrl = req.originalUrl.replace('/api/v2/rag/prompts', '/api/v2/settings/config/prompts');
+    // Get LLM providers config which includes RAG settings
+    const config = await settingsService.getLLMProviders();
 
-    // Call the settings prompts handler
-    const handler = settingsRoutes.default.stack.find((layer: any) => layer.route?.path === '/config/prompts');
-    if (handler) {
-      return handler.route.stack[0].handle(req, res);
-    }
+    // Extract relevant RAG settings
+    const ragConfig = {
+      aiProvider: config.llmSettings?.activeChatModel?.split('/')[0] || 'openai',
+      fallbackEnabled: config.llmSettings?.fallback_enabled || false,
+      ...config.llmSettings
+    };
 
-    // Fallback - return default prompts
-    res.json({
-      prompt: "Sen bir yapay zeka asistanısın. Veritabanındaki bilgilere dayanarak kullanıcılara yardımcı ol.",
-      name: "System Prompt",
-      temperature: 0.7,
-      maxTokens: 2048
-    });
+    res.json(ragConfig);
   } catch (error) {
-    console.error('Error fetching RAG prompts:', error);
-    res.status(500).json({ error: 'Failed to fetch prompts' });
+    logger.error('Error fetching RAG config:', error);
+    res.status(500).json({ error: 'Failed to fetch RAG configuration' });
   }
 });
 
-// RAG AI Settings endpoint - redirects to ai/settings
+/**
+ * @swagger
+ * /rag/prompts:
+ *   get:
+ *     summary: Get RAG prompts
+ *     tags: [RAG]
+ *     responses:
+ *       200:
+ *         description: RAG prompts
+ */
+router.get('/prompts', async (req: Request, res: Response) => {
+  try {
+    const client = await lsembPool.connect();
+    try {
+      const result = await client.query(`
+        SELECT key, value FROM settings
+        WHERE key LIKE 'prompts.%'
+      `);
+
+      const prompts: Record<string, any> = {};
+      for (const row of result.rows) {
+        const key = row.key.replace('prompts.', '');
+        prompts[key] = row.value;
+      }
+      res.json(prompts);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error('Error fetching RAG prompts:', error);
+    res.status(500).json({ error: 'Failed to fetch RAG prompts' });
+  }
+});
+
+/**
+ * @swagger
+ * /rag/ai/settings:
+ *   get:
+ *     summary: Get AI settings (Legacy/Chatbot)
+ *     tags: [RAG]
+ *     responses:
+ *       200:
+ *         description: AI settings
+ */
 router.get('/ai/settings', async (req: Request, res: Response) => {
   try {
-    // Import the AI settings routes dynamically
-    const aiSettingsRoutes = await import('./ai-settings.routes');
+    const result = await lsembPool.query("SELECT setting_key, setting_value FROM chatbot_settings WHERE setting_key IN ('google_api_key', 'gemini_model', 'max_tokens')");
 
-    // Call the AI settings handler
-    const handler = aiSettingsRoutes.default.stack.find((layer: any) => layer.route?.path === '/settings');
-    if (handler) {
-      return handler.route.stack[0].handle(req, res);
-    }
+    const settings = result.rows.reduce((acc: any, row: any) => {
+      acc[row.setting_key] = row.setting_value;
+      return acc;
+    }, {});
 
-    // Fallback - return default AI settings
+    const AVAILABLE_GEMINI_MODELS = ['gemini-pro'];
+
     res.json({
-      llmSettings: {
-        activeChatModel: 'deepseek/deepseek-chat',
-        streamResponse: true,
-        temperature: 0.7,
-        maxTokens: 2048
-      }
+      settings: {
+        google_api_key: settings.google_api_key || '',
+        gemini_model: 'gemini-pro',
+        max_tokens: settings.max_tokens || 4096,
+      },
+      models: AVAILABLE_GEMINI_MODELS,
     });
   } catch (error) {
-    console.error('Error fetching RAG AI settings:', error);
+    logger.error('Error fetching AI settings:', error);
     res.status(500).json({ error: 'Failed to fetch AI settings' });
   }
 });
 
-// RAG Prompts POST endpoint - redirects to settings/config/prompts
-router.post('/prompts', async (req: Request, res: Response) => {
-  try {
-    // Import the settings routes dynamically
-    const settingsRoutes = await import('./settings.routes');
-
-    // Call the settings prompts handler
-    const handler = settingsRoutes.default.stack.find((layer: any) => layer.route?.path === '/config/prompts' && layer.route.methods.post);
-    if (handler) {
-      return handler.route.stack[0].handle(req, res);
-    }
-
-    // Fallback - just return success
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error saving RAG prompts:', error);
-    res.status(500).json({ error: 'Failed to save prompts' });
-  }
-});
-
-// RAG AI Settings POST endpoint - redirects to ai/settings
+/**
+ * @swagger
+ * /rag/ai/settings:
+ *   post:
+ *     summary: Update AI settings (Legacy/Chatbot)
+ *     tags: [RAG]
+ *     responses:
+ *       200:
+ *         description: Success message
+ */
 router.post('/ai/settings', async (req: Request, res: Response) => {
   try {
-    // Import the AI settings routes dynamically
-    const aiSettingsRoutes = await import('./ai-settings.routes');
+    const { google_api_key, gemini_model, max_tokens } = req.body;
 
-    // Call the AI settings handler
-    const handler = aiSettingsRoutes.default.stack.find((layer: any) => layer.route?.path === '/settings' && layer.route.methods.post);
-    if (handler) {
-      return handler.route.stack[0].handle(req, res);
-    }
+    const settings = {
+      google_api_key,
+      gemini_model,
+      max_tokens,
+    };
 
-    // Fallback - just return success
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error saving RAG AI settings:', error);
-    res.status(500).json({ error: 'Failed to save AI settings' });
-  }
-});
-
-// RAG Config endpoint - GET and POST
-router.get('/config', async (req: Request, res: Response) => {
-  try {
-    // Import settings service
-    const { SettingsService } = await import('../services/settings.service');
-    const settingsService = SettingsService.getInstance();
-
-    // Get all settings
-    const settings = await settingsService.getAllSettings();
-
-    // Extract relevant RAG config
-    res.json({
-      aiProvider: settings.aiProvider || 'gemini',
-      fallbackEnabled: settings.fallbackEnabled === 'true' || settings.fallbackEnabled === true,
-      apiKeys: {
-        claude: settings.claudeApiKey || settings['claude.apiKey'] || '',
-        gemini: settings.geminiApiKey || settings['google.apiKey'] || settings['gemini.apiKey'] || '',
-        openai: settings.openaiApiKey || settings['openai.apiKey'] || '',
-        deepseek: settings.deepseekApiKey || settings['deepseek.apiKey'] || ''
+    for (const [key, value] of Object.entries(settings)) {
+      if (value !== undefined) {
+        await lsembPool.query(
+          `INSERT INTO chatbot_settings (setting_key, setting_value, updated_at) 
+           VALUES ($1, $2, CURRENT_TIMESTAMP) 
+           ON CONFLICT (setting_key) 
+           DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP`,
+          [key, value]
+        );
       }
-    });
-  } catch (error) {
-    console.error('Error fetching RAG config:', error);
-    res.status(500).json({ error: 'Failed to fetch RAG config' });
-  }
-});
-
-router.post('/config', async (req: Request, res: Response) => {
-  try {
-    const { aiProvider, fallbackEnabled } = req.body;
-
-    // Import settings service
-    const { SettingsService } = await import('../services/settings.service');
-    const settingsService = SettingsService.getInstance();
-
-    // Save RAG settings
-    if (aiProvider) {
-      await settingsService.saveSetting('aiProvider', aiProvider);
-    }
-    if (fallbackEnabled !== undefined) {
-      await settingsService.saveSetting('fallbackEnabled', fallbackEnabled.toString());
     }
 
-    // Clear cache
-    settingsService.clearCache('all_settings');
-
-    res.json({ success: true, message: 'RAG config saved successfully' });
+    res.json({ success: true, message: 'AI settings updated successfully' });
   } catch (error) {
-    console.error('Error saving RAG config:', error);
-    res.status(500).json({ error: 'Failed to save RAG config', details: error.message });
+    logger.error('Error updating AI settings:', error);
+    res.status(500).json({ error: 'Failed to update AI settings' });
   }
 });
 

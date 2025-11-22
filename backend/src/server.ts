@@ -89,6 +89,7 @@ import batchFoldersRoutes from "./routes/batch-folders.routes";
 import transformConfigRoutes from "./routes/transform-config.routes";
 import servicesRoutes from "./routes/services.routes";
 import aiServicesRoutes from "./routes/ai-services.routes";
+import websocketLogStreamRoutes from "./api/websocket-log-stream.router";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
@@ -119,38 +120,38 @@ console.log(` WebSocket: ${SERVER.WEBSOCKET.ENABLED ? 'Enabled' : 'Disabled'} | 
 
 export const io = SERVER.WEBSOCKET.ENABLED
   ? new SocketServer(httpServer, {
-      cors: {
-        origin: corsOrigins,
-        credentials: true,
-        methods: ["GET", "POST"],
-      },
-      path: SERVER.WEBSOCKET.PATH,
-      transports: ["websocket", "polling"],
-    })
+    cors: {
+      origin: corsOrigins,
+      credentials: true,
+      methods: ["GET", "POST"],
+    },
+    path: SERVER.WEBSOCKET.PATH,
+    transports: ["websocket", "polling"],
+  })
   : null;
 
 // Initialize Standard WebSocket Server for notifications if enabled
 const wss = SERVER.WEBSOCKET.ENABLED
   ? new StandardWebSocketServer({
-      noServer: true,
-      path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH,
-    })
+    noServer: true,
+    path: SERVER.WEBSOCKET.NOTIFICATIONS_PATH,
+  })
   : null;
 
 // Initialize WebSocket Server for chat streaming
 const chatWss = SERVER.WEBSOCKET.ENABLED
   ? new StandardWebSocketServer({
-      noServer: true,
-      path: "/ws/chat",
-    })
+    noServer: true,
+    path: "/ws/chat",
+  })
   : null;
 
 // Initialize WebSocket Server for logs
 const logWss = SERVER.WEBSOCKET.ENABLED
   ? new StandardWebSocketServer({
-      noServer: true,
-      path: "/ws/logs",
-    })
+    noServer: true,
+    path: "/ws/logs",
+  })
   : null;
 
 // Initialize log WebSocket service
@@ -393,8 +394,8 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
     const overallStatus = postgresStatus === "connected" && redisStatus === "connected"
       ? "healthy"
       : postgresStatus === "connected" || redisStatus === "connected"
-      ? "degraded"
-      : "unhealthy";
+        ? "degraded"
+        : "unhealthy";
 
     res.json({
       status: overallStatus,
@@ -431,10 +432,10 @@ app.get(API.ENDPOINTS.V2.HEALTH, async (req: Request, res: Response) => {
       recommendations: overallStatus === "healthy"
         ? ["System is operating normally"]
         : postgresStatus === "disconnected"
-        ? ["Check database connection and credentials"]
-        : redisStatus === "disconnected"
-        ? ["Check Redis service and connection"]
-        : ["Multiple services need attention"]
+          ? ["Check database connection and credentials"]
+          : redisStatus === "disconnected"
+            ? ["Check Redis service and connection"]
+            : ["Multiple services need attention"]
     });
   } catch (error: any) {
     res.status(500).json({
@@ -505,6 +506,7 @@ app.use("/api/v2/ocr", ocrRoutes);
 app.use("/api/v2/integrations", integrationsRoutes);
 app.use("/api/v2/services", servicesRoutes);
 app.use("/api/v2/ai-services", aiServicesRoutes);
+app.use("/api/v2/websocket-log-stream", websocketLogStreamRoutes);
 app.use("/api/whisper", whisperRoutes);
 
 // GraphQL server
@@ -1148,8 +1150,8 @@ async function startServer() {
             percentage:
               process.total_chunks > 0
                 ? Math.round(
-                    (process.processed_chunks / process.total_chunks) * 100
-                  )
+                  (process.processed_chunks / process.total_chunks) * 100
+                )
                 : 0,
             currentTable: process.document_type,
             error: process.error_message,

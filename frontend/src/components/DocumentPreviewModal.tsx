@@ -105,6 +105,8 @@ export default function DocumentPreviewModal({
   const [parsedData, setParsedData] = useState<any>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [totalRowCount, setTotalRowCount] = useState<number>(0); // Total rows in CSV (for large files)
+  const [csvVisibleRows, setCsvVisibleRows] = useState<number>(20); // Paging for CSV preview
+  const CSV_ROWS_PER_PAGE = 20; // Load 20 rows at a time
   const [isGenerating, setIsGenerating] = useState(false);
   const [sqlPreview, setSqlPreview] = useState<string>('');
   const [graphqlData, setGraphqlData] = useState<GraphQLDocumentPreview | null>(null);
@@ -802,7 +804,7 @@ export default function DocumentPreviewModal({
     }
   };
 
-  // CSV Table View with Generate Table Section
+  // CSV Table View with paging (like documents table)
   const renderCSVTable = () => {
     if (!parsedData || parsedData.length === 0) {
       return <div className="text-muted-foreground text-center py-8">No data available</div>;
@@ -826,31 +828,39 @@ export default function DocumentPreviewModal({
       return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
     };
 
-    // Show first 10 rows for preview (performance optimization)
-    const displayedRows = parsedData.slice(0, 10);
+    // Show rows with paging (like documents table)
+    const displayedRows = parsedData.slice(0, csvVisibleRows);
+    const hasMore = parsedData.length > csvVisibleRows;
 
     return (
       <TooltipProvider delayDuration={300}>
-        <div className="h-full overflow-hidden">
-          <div className="h-full overflow-auto scrollbar-thin mt-2">
-            <Table className="w-auto min-w-full">
-              <TableHeader className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col h-full overflow-hidden">
+          {/* Fixed Header */}
+          <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
+            <Table>
+              <TableHeader className="bg-gray-50 dark:bg-gray-900">
                 <TableRow>
                   {csvHeaders.map((header, idx) => (
                     <TableHead
                       key={idx}
-                      className="font-medium text-foreground px-4 py-3 whitespace-nowrap text-sm"
+                      className="font-medium text-xs px-3 py-2 whitespace-nowrap"
                     >
                       {header}
                     </TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
+            </Table>
+          </div>
+
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-auto">
+            <Table>
               <TableBody>
                 {displayedRows.map((row: any, rowIdx: number) => (
                   <TableRow
                     key={rowIdx}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
+                    className="hover:bg-muted/50 transition-colors duration-150"
                   >
                     {csvHeaders.map((header, colIdx) => {
                       const cellValue = String(row[header] || '');
@@ -866,11 +876,11 @@ export default function DocumentPreviewModal({
                       return (
                         <TableCell
                           key={colIdx}
-                          className="px-4 py-3 text-sm"
+                          className="px-3 py-2 text-xs"
                         >
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="max-w-[200px] truncate text-foreground/90 cursor-help">
+                              <div className="max-w-[200px] truncate cursor-help">
                                 {truncateText(row[header], 50)}
                               </div>
                             </TooltipTrigger>
@@ -891,6 +901,23 @@ export default function DocumentPreviewModal({
               </TableBody>
             </Table>
           </div>
+
+          {/* Fixed Footer: Load More */}
+          {hasMore && (
+            <div className="flex-shrink-0 flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
+                className="gap-2"
+              >
+                Daha Fazla Yükle
+                <span className="text-xs text-muted-foreground">
+                  ({parsedData.length - csvVisibleRows} kaldı)
+                </span>
+              </Button>
+            </div>
+          )}
         </div>
       </TooltipProvider>
     );
@@ -1660,7 +1687,7 @@ export default function DocumentPreviewModal({
 
     try {
       // Generate SQL schema structure
-      const tableName = pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'pdf_metadata';
+      const tableName = pdfTableName || getDefaultTableName();
       const selectedArray = Array.from(pdfSelectedFields);
 
       const columns = selectedArray.map(field => {
@@ -1753,11 +1780,16 @@ export default function DocumentPreviewModal({
     }
   };
 
+  // Helper: Get default table name from document title
+  const getDefaultTableName = () => {
+    return document.title?.replace(/\.pdf$/i, '').toLowerCase().replace(/[^a-z0-9_]/g, '_') || 'document_data';
+  };
+
   // Generate SQL schema from selected fields
   const generateSQLSchema = () => {
     if (!pdfMetadata || pdfSelectedFields.size === 0) return '';
 
-    let tableName = pdfTableName || pdfMetadata.dataQuality?.suggestedTableName || 'pdf_metadata';
+    let tableName = pdfTableName || getDefaultTableName();
 
     // Sanitize table name: PostgreSQL table names cannot start with a number
     if (/^\d/.test(tableName)) {
@@ -1914,7 +1946,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
     // Template-based mode (existing logic)
     if (!pdfMetadata) return;
 
-    let finalTableName = pdfTableName || pdfMetadata.dataQuality?.suggestedTableName || 'pdf_metadata';
+    let finalTableName = pdfTableName || getDefaultTableName();
 
     // Sanitize table name: PostgreSQL table names cannot start with a number
     if (/^\d/.test(finalTableName)) {
@@ -2378,7 +2410,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   />
                 </div>
 
-                {/* Field Mapping - Right Side */}
+                {/* Field Mapping - Right Side - Two Column Layout */}
 <div className="w-[480px] flex-shrink-0 flex flex-col border-l pl-4 overflow-hidden">
                   <div className="flex items-center justify-between mb-3 flex-shrink-0">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -2439,7 +2471,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                         size="sm"
                         onClick={() => {
                           const mappingData = {
-                            tableName: pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'analyzed_data',
+                            tableName: pdfTableName || getDefaultTableName(),
                             fields: Array.from(pdfSelectedFields).map(field => ({
                               source: field,
                               target: pdfFieldMappings[field] || field.replace(/\./g, '_').toLowerCase()
@@ -2458,50 +2490,93 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                       </Button>
                     </div>
                   </div>
-                  
-                  {/* Table Name Input */}
-                  <div className="mb-3 space-y-2">
-                    <Label htmlFor="mapping-table-name" className="text-xs font-medium text-foreground">
-                      Target Table Name
-                    </Label>
+
+                  {/* Table Name Input - Auto from PDF name */}
+                  <div className="mb-3 min-w-0">
                     <Input
                       id="mapping-table-name"
-                      value={pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'analyzed_data'}
+                      value={pdfTableName || getDefaultTableName()}
                       onChange={(e) => setPdfTableName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
-                      placeholder="analyzed_data"
-                      className="text-sm font-mono h-8 px-3 py-1 w-full max-w-full"
-                      style={{ boxSizing: 'border-box' }}
+                      placeholder={getDefaultTableName()}
+                      className="text-sm font-mono h-8 px-3 py-1 w-full min-w-0"
                     />
                   </div>
 
-                  {/* Mapped Fields */}
+                  {/* Mapped Fields - Two Column Layout with Preview */}
                   <ScrollArea className="flex-1 border rounded-md p-3 bg-muted/10">
                     {pdfSelectedFields.size === 0 ? (
                       <p className="text-xs text-muted-foreground text-center py-4">
                         Select fields from JSON to map them to table columns
                       </p>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
+                        {/* Column Headers */}
+                        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 pb-2 border-b border-border/50 sticky top-0 bg-muted/10 z-10">
+                          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                            Source Field
+                          </div>
+                          <div className="w-6" />
+                          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                            Target Column
+                          </div>
+                        </div>
+
                         {Array.from(pdfSelectedFields)
                           .filter(f => !f.startsWith('_'))
                           .sort()
                           .map(field => {
                             const columnName = field.replace(/\./g, '_').toLowerCase();
+                            // Get preview value from metadata
+                            const getFieldValue = (obj: any, path: string): any => {
+                              const parts = path.split('.');
+                              let value = obj;
+                              for (const part of parts) {
+                                if (value && typeof value === 'object') {
+                                  value = value[part];
+                                } else {
+                                  return undefined;
+                                }
+                              }
+                              return value;
+                            };
+
+                            const previewValue = getFieldValue(pdfMetadata, field);
+                            const displayValue = previewValue !== undefined && previewValue !== null
+                              ? String(previewValue).substring(0, 30) + (String(previewValue).length > 30 ? '...' : '')
+                              : '—';
+
                             return (
-                              <div key={field} className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-mono text-muted-foreground truncate flex-1 mr-2">
+                              <div key={field} className="grid grid-cols-[1fr_auto_1fr] gap-2 py-2 border-b border-border/30 hover:bg-muted/20 transition-colors rounded px-2 -mx-2">
+                                {/* Source Field Column */}
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                  <span className="text-xs font-mono font-medium text-foreground truncate">
                                     {field}
                                   </span>
-                                  <span className="text-xs text-blue-600">→</span>
+                                  <span className="text-[10px] font-mono text-muted-foreground truncate" title={String(previewValue || '')}>
+                                    {displayValue}
+                                  </span>
                                 </div>
-                                <Input
-                                  value={pdfFieldMappings[field] || columnName}
-                                  onChange={(e) => handleFieldMappingChange(field, e.target.value)}
-                                  placeholder="column_name"
-                                  className="text-xs font-mono h-6 px-2 py-1 w-full max-w-full"
-                                  style={{ boxSizing: 'border-box' }}
-                                />
+
+                                {/* Arrow */}
+                                <div className="flex items-center justify-center pt-1">
+                                  <span className="text-xs text-blue-600 dark:text-blue-400">→</span>
+                                </div>
+
+                                {/* Target Column */}
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                  <Input
+                                    value={pdfFieldMappings[field] || columnName}
+                                    onChange={(e) => handleFieldMappingChange(field, e.target.value)}
+                                    placeholder="column_name"
+                                    className="text-xs font-mono h-6 px-2 py-1 w-full min-w-0 bg-background/50"
+                                  />
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {typeof previewValue === 'number' ? 'NUMBER' :
+                                     typeof previewValue === 'boolean' ? 'BOOLEAN' :
+                                     Array.isArray(previewValue) ? 'ARRAY' :
+                                     typeof previewValue === 'object' ? 'JSON' : 'TEXT'}
+                                  </span>
+                                </div>
                               </div>
                             );
                           })}
@@ -2509,13 +2584,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     )}
                   </ScrollArea>
 
-                  {/* Quick Actions */}
-                  <div className="mt-8 pt-6 pb-4 space-y-2 border-t">
-                    <div className="text-xs text-muted-foreground">
-                      <span className="font-medium">Tip:</span> Selected fields will become table columns.
-                      Similar documents can use this template for batch processing.
-                    </div>
-                  </div>
+                  {/* Quick Actions - Removed tip section for more field name space */}
                 </div>
               </div>
             ) : (
@@ -2537,7 +2606,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 {/* Table Name Confirmation */}
                 <div className="flex-shrink-0 mb-4">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
-                    Create Table: {pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName || 'analyzed_data'}
+                    Create Table: {pdfTableName || getDefaultTableName()}
                   </Label>
                   <div className="text-xs text-muted-foreground">
                     This will create a table with {pdfSelectedFields.size} columns from the analyzed data.
@@ -2618,6 +2687,13 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
       </Tabs>
     );
   };
+
+  // Reset CSV visible rows when modal opens or document changes
+  useEffect(() => {
+    if (isOpen && document) {
+      setCsvVisibleRows(CSV_ROWS_PER_PAGE);
+    }
+  }, [isOpen, document?.id]);
 
   if (!document) return null;
 
@@ -2852,8 +2928,8 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </Button>
               )}
 
-              {/* Create Table Tab: Transform button */}
-              {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
+              {/* Create Table Tab: Transform button - REMOVED per user request */}
+              {/* {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
                 <Button
                   variant="default"
                   size="sm"
@@ -2861,7 +2937,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                   disabled={
                     pdfProcessing ||
                     pdfSelectedFields.size === 0 ||
-                    !(pdfTableName || pdfMetadata?.dataQuality?.suggestedTableName)
+                    !pdfTableName
                   }
                   className="h-8 px-3"
                 >
@@ -2877,7 +2953,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     </>
                   )}
                 </Button>
-              )}
+              )} */}
             </div>
           </div>
         </div>

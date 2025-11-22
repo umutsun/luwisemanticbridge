@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getApiUrl, buildApiUrl, API_CONFIG } from '@/lib/config';
 import { io, Socket } from 'socket.io-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -79,6 +80,7 @@ interface Document {
   title: string;
   content: string;
   type: string;
+  file_type?: string; // Alternative field name from backend
   size: number;
   file_path?: string; // Physical file path on server
   hasEmbeddings?: boolean; // from backend
@@ -129,6 +131,7 @@ interface Stats {
 
 export default function DocumentManagerPage() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [physicalFilesLoading, setPhysicalFilesLoading] = useState(true);
@@ -203,8 +206,8 @@ export default function DocumentManagerPage() {
           setDocuments([]);
           // Optionally redirect to login page or show login modal
           toast({
-            title: 'Authentication Error',
-            description: 'Please login again to continue',
+            title: t('documents.toast.authenticationError'),
+            description: t('documents.toast.pleaseLoginAgain'),
             variant: 'destructive'
           });
           setLoading(false);
@@ -226,8 +229,8 @@ export default function DocumentManagerPage() {
       console.error('Failed to fetch documents:', error);
       setDocuments([]); // Set empty array on error to avoid undefined issues
       toast({
-        title: 'Error',
-        description: 'Failed to load documents. Please try refreshing the page.',
+        title: t('documents.toast.error'),
+        description: t('documents.toast.failedToLoadDocuments'),
         variant: 'destructive'
       });
     } finally {
@@ -348,7 +351,7 @@ export default function DocumentManagerPage() {
       // Show warning if database is not available
       if (data.warning) {
         toast({
-          title: 'Database Offline',
+          title: t('documents.toast.databaseOffline'),
           description: data.warning,
           variant: 'default'
         });
@@ -356,8 +359,8 @@ export default function DocumentManagerPage() {
     } catch (error) {
       console.error('Failed to fetch physical files:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to load physical files',
+        title: t('documents.toast.error'),
+        description: t('documents.toast.failedToLoadPhysicalFiles'),
         variant: 'destructive'
       });
     } finally {
@@ -406,8 +409,8 @@ export default function DocumentManagerPage() {
 
       // Step 1: Scan folder to get all files
       toast({
-        title: 'Scanning Folder',
-        description: `Scanning ${folderName} for PDF files...`
+        title: t('documents.toast.scanningFolder'),
+        description: t('documents.toast.scanningFolderForPdfs', { folder: folderName })
       });
 
       // Step 2: Scan folder to get all files
@@ -429,16 +432,16 @@ export default function DocumentManagerPage() {
 
       if (newFiles.length === 0) {
         toast({
-          title: 'No New Files',
-          description: 'All files are already in database'
+          title: t('documents.toast.noNewFiles'),
+          description: t('documents.toast.allFilesAlreadyInDb')
         });
         return;
       }
 
       // Step 3: Start batch processing with folder_config
       toast({
-        title: 'Starting Batch Import',
-        description: `Processing ${newFiles.length} new files...`
+        title: t('documents.toast.startingBatchImport'),
+        description: t('documents.toast.processingNewFiles', { count: newFiles.length })
       });
 
       const processResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/process`, {
@@ -470,8 +473,8 @@ export default function DocumentManagerPage() {
       setBatchStatus(`Processing ${newFiles.length} files...`);
 
       toast({
-        title: 'Batch Import Started',
-        description: `Processing ${processData.totalFiles} files...`,
+        title: t('documents.toast.batchImportStarted'),
+        description: t('documents.toast.processingFiles', { count: processData.totalFiles }),
         duration: 5000
       });
 
@@ -481,7 +484,7 @@ export default function DocumentManagerPage() {
     } catch (error: any) {
       console.error('Folder batch import error:', error);
       toast({
-        title: 'Import Failed',
+        title: t('documents.toast.importFailed'),
         description: error.message,
         variant: 'destructive'
       });
@@ -531,8 +534,8 @@ export default function DocumentManagerPage() {
       setUploadProgress(100);
 
       toast({
-        title: 'Success',
-        description: 'File added to database successfully'
+        title: t('documents.toast.success'),
+        description: t('documents.toast.fileAddedToDb')
       });
 
       // Refresh both lists and wait for them to complete
@@ -547,8 +550,8 @@ export default function DocumentManagerPage() {
 
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to add file to database',
+        title: t('documents.toast.error'),
+        description: error.message || t('documents.toast.failedToAddFileToDb'),
         variant: 'destructive'
       });
       setUploading(false);
@@ -566,7 +569,7 @@ export default function DocumentManagerPage() {
   const handlePreviewPhysicalFile = async (filename: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(getApiUrl(`preview/${filename}`), {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/preview/${filename}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -596,8 +599,8 @@ export default function DocumentManagerPage() {
       setPreviewDoc(previewDoc);
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to preview file',
+        title: t('documents.toast.error'),
+        description: error.message || t('documents.toast.failedToPreviewFile'),
         variant: 'destructive'
       });
     }
@@ -620,8 +623,8 @@ export default function DocumentManagerPage() {
       }
 
       toast({
-        title: 'Success',
-        description: 'File deleted successfully'
+        title: t('documents.toast.success'),
+        description: t('documents.toast.fileDeletedSuccessfully')
       });
 
       fetchPhysicalFiles();
@@ -630,8 +633,8 @@ export default function DocumentManagerPage() {
       }
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to delete file',
+        title: t('documents.toast.error'),
+        description: error.message || t('documents.toast.failedToDeleteFile'),
         variant: 'destructive'
       });
     }
@@ -679,7 +682,7 @@ export default function DocumentManagerPage() {
     setUploading(true);
     setUploadProgress(0);
     setUploadFiles(files);
-    setCurrentOperation('Preparing...');
+    setCurrentOperation(t('documents.upload.preparing'));
 
     try {
       const token = localStorage.getItem('token');
@@ -820,7 +823,7 @@ export default function DocumentManagerPage() {
       }
 
       setUploadProgress(100);
-      setCurrentOperation('Completed!');
+      setCurrentOperation(t('documents.upload.completed'));
 
       // Fetch updates
       await fetchPhysicalFiles();
@@ -839,16 +842,16 @@ export default function DocumentManagerPage() {
         setTotalBytes(0);
 
         toast({
-          title: 'Başarılı',
-          description: `${files.length} döküman yüklendi`,
+          title: t('documents.toast.success'),
+          description: t('documents.toast.documentsUploaded', { count: files.length }),
         });
       }, 800);
 
     } catch (error: any) {
       console.error('Upload error:', error);
       toast({
-        title: 'Hata',
-        description: error.message || 'Yükleme başarısız',
+        title: t('documents.toast.uploadError'),
+        description: error.message || t('documents.toast.uploadFailed'),
         variant: 'destructive'
       });
       setUploadProgress(0);
@@ -889,7 +892,7 @@ export default function DocumentManagerPage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('tr-TR', {
+    return new Date(dateString).toLocaleDateString('en-US', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
@@ -955,11 +958,11 @@ export default function DocumentManagerPage() {
         // Provide user-friendly error messages
         let userMessage = errorMessage;
         if (errorMessage.includes('File not found on disk')) {
-          userMessage = 'Dosya sunucuda bulunamadı. Lütfen dosyayı tekrar yükleyin.';
+          userMessage = t('documents.toast.fileNotFoundOnServer');
         } else if (errorMessage.includes('already processed with OCR')) {
-          userMessage = 'Bu belge zaten OCR ile işlenmiş.';
+          userMessage = t('documents.toast.alreadyProcessedWithOcr');
         } else if (errorMessage.includes('Document not found')) {
-          userMessage = 'Belge bulunamadı.';
+          userMessage = t('documents.toast.documentNotFound');
         }
 
         throw new Error(userMessage);
@@ -968,16 +971,16 @@ export default function DocumentManagerPage() {
       const result = await response.json();
 
       toast({
-        title: 'Başarılı',
-        description: `OCR işlemi tamamlandı. Güven: ${result.data?.confidence || 'N/A'}%`,
+        title: t('documents.toast.ocrSuccessful'),
+        description: t('documents.toast.ocrCompleted', { confidence: result.data?.confidence || 'N/A' }),
       });
 
       fetchDocuments();
     } catch (error: any) {
       console.error('OCR error:', error);
       toast({
-        title: 'OCR Hatası',
-        description: error.message || 'OCR işlemi başarısız oldu',
+        title: t('documents.toast.ocrError'),
+        description: error.message || t('documents.toast.ocrFailed'),
         variant: 'destructive'
       });
     }
@@ -1001,16 +1004,16 @@ export default function DocumentManagerPage() {
       const result = await response.json();
 
       toast({
-        title: 'Başarılı',
-        description: `Generated ${result.embeddingCount} embeddings`,
+        title: t('documents.toast.embeddingSuccessful'),
+        description: t('documents.toast.embeddingsGenerated', { count: result.embeddingCount }),
       });
 
       fetchDocuments();
     } catch (error: any) {
       console.error('Embedding error:', error);
       toast({
-        title: 'Hata',
-        description: error.message || 'Embedding generation failed',
+        title: t('documents.toast.embeddingError'),
+        description: error.message || t('documents.toast.embeddingGenerationFailed'),
         variant: 'destructive'
       });
     }
@@ -1035,8 +1038,8 @@ export default function DocumentManagerPage() {
       console.log('Delete result:', result);
 
       toast({
-        title: 'Başarılı',
-        description: 'Document deleted successfully',
+        title: t('documents.toast.deleteSuccessful'),
+        description: t('documents.toast.documentDeletedSuccessfully'),
       });
 
       // Refresh documents list
@@ -1045,8 +1048,8 @@ export default function DocumentManagerPage() {
     } catch (error: any) {
       console.error('Delete error:', error);
       toast({
-        title: 'Hata',
-        description: error.message || 'Failed to delete document',
+        title: t('documents.toast.deleteError'),
+        description: error.message || t('documents.toast.failedToDeleteDocument'),
         variant: 'destructive'
       });
     }
@@ -1055,8 +1058,8 @@ export default function DocumentManagerPage() {
   const handleBulkDelete = async () => {
     if (selectedRows.size === 0) {
       toast({
-        title: 'Uyarı',
-        description: 'Lütfen silmek için en az bir döküman seçin',
+        title: t('documents.toast.warning'),
+        description: t('documents.toast.selectAtLeastOneDocument'),
         variant: 'destructive'
       });
       return;
@@ -1083,8 +1086,8 @@ export default function DocumentManagerPage() {
       console.log('Bulk delete result:', result);
 
       toast({
-        title: 'Başarılı',
-        description: `${result.deletedCount} döküman silindi`,
+        title: t('documents.toast.bulkDeleteSuccessful'),
+        description: t('documents.toast.documentsDeleted', { count: result.deletedCount }),
       });
 
       // Clear selection and refresh
@@ -1095,8 +1098,8 @@ export default function DocumentManagerPage() {
     } catch (error: any) {
       console.error('Bulk delete error:', error);
       toast({
-        title: 'Hata',
-        description: error.message || 'Toplu silme başarısız oldu',
+        title: t('documents.toast.bulkDeleteError'),
+        description: error.message || t('documents.toast.bulkDeleteFailed'),
         variant: 'destructive'
       });
     }
@@ -1199,8 +1202,8 @@ export default function DocumentManagerPage() {
         Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
 
         toast({
-          title: 'Batch Import Complete',
-          description: `Successfully processed ${data.total} files`
+          title: t('documents.toast.batchImportComplete'),
+          description: t('documents.toast.filesProcessedSuccessfully', { count: data.total })
         });
       } else if (data.status === 'error') {
         setBatchProcessing(false);
@@ -1215,8 +1218,8 @@ export default function DocumentManagerPage() {
         Promise.all([fetchDocuments(), fetchFolders(), fetchStats()]);
 
         toast({
-          title: 'Batch Import Failed',
-          description: data.error || 'An error occurred during processing',
+          title: t('documents.toast.batchImportFailed'),
+          description: data.error || t('documents.toast.errorDuringProcessing'),
           variant: 'destructive'
         });
       }
@@ -1346,16 +1349,17 @@ export default function DocumentManagerPage() {
   const handleBatchTransform = async (schemaId: string, targetTable: string) => {
     const selectedDocs = Array.from(selectedRows);
 
-    // Filter CSV files OUT - they use different modal/flow
-    const nonCSVDocs = documents.filter(doc =>
+    // ✅ ONLY CSV files can use table transform
+    // PDF/TXT/MD/DOC should use embeddings instead
+    const csvDocs = documents.filter(doc =>
       selectedDocs.includes(doc.id) &&
-      (doc.type || doc.file_type)?.toLowerCase() !== 'csv'
+      (doc.type || doc.file_type)?.toLowerCase() === 'csv'
     );
 
-    if (nonCSVDocs.length === 0) {
+    if (csvDocs.length === 0) {
       toast({
-        title: "No Eligible Documents",
-        description: "CSV files use a different transform flow. Please select PDF or other document types.",
+        title: t('documents.batch.noCsvDocuments'),
+        description: t('documents.batch.csvOnlyDescription'),
         variant: "destructive"
       });
       return;
@@ -1363,8 +1367,8 @@ export default function DocumentManagerPage() {
 
     if (!targetTable) {
       toast({
-        title: "Target Table Required",
-        description: "Please select or enter a target table name",
+        title: t('documents.batch.targetTableRequired'),
+        description: t('documents.batch.selectTargetTable'),
         variant: "destructive"
       });
       return;
@@ -1374,8 +1378,8 @@ export default function DocumentManagerPage() {
     const selectedSchema = batchSchemas.find(t => t.id === schemaId);
     if (!selectedSchema) {
       toast({
-        title: "Template Not Found",
-        description: "Please select a valid template",
+        title: t('documents.batch.templateNotFound'),
+        description: t('documents.batch.selectValidTemplate'),
         variant: "destructive"
       });
       return;
@@ -1384,11 +1388,11 @@ export default function DocumentManagerPage() {
     setBatchProcessing(true);
     setBatchProgress(0);
     setBatchCurrent(0);
-    setBatchTotal(nonCSVDocs.length);
-    setBatchStatus(`Transforming ${nonCSVDocs.length} documents to table...`);
+    setBatchTotal(csvDocs.length);
+    setBatchStatus(`Transforming ${csvDocs.length} CSV files to table...`);
 
     try {
-      const documentIds = nonCSVDocs.map(doc => doc.id);
+      const documentIds = csvDocs.map(doc => doc.id);
 
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/batch-metadata-transform`, {
         method: 'POST',
@@ -1435,11 +1439,11 @@ export default function DocumentManagerPage() {
             if (progressData.status === 'completed') {
               clearInterval(checkProgress);
               setBatchProgress(100);
-              setBatchStatus('Transform complete!');
+              setBatchStatus(t('documents.batch.transformComplete'));
 
               toast({
-                title: "Success",
-                description: `${nonCSVDocs.length} documents transformed to table "${targetTable}"`,
+                title: t('documents.batch.success'),
+                description: t('documents.batch.transformSuccess', { count: csvDocs.length, table: targetTable }),
               });
 
               // Refresh documents and stats
@@ -1484,14 +1488,90 @@ export default function DocumentManagerPage() {
     }
   };
 
+  // Handle batch embedding for PDF/TXT/MD/DOC files
+  const handleBatchEmbed = async () => {
+    const selectedDocs = Array.from(selectedRows);
+    const embedDocs = documents.filter(doc =>
+      selectedDocs.includes(doc.id) &&
+      ['pdf', 'txt', 'md', 'doc', 'docx'].includes((doc.type || doc.file_type)?.toLowerCase() || '')
+    );
+
+    if (embedDocs.length === 0) {
+      toast({
+        title: t('documents.batch.noDocumentsToEmbed'),
+        description: t('documents.batch.selectDocumentsToEmbed'),
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    setBatchProgress(0);
+    setBatchCurrent(0);
+    setBatchTotal(embedDocs.length);
+    setBatchStatus(t('documents.batch.creatingEmbeddings', { count: embedDocs.length }));
+
+    try {
+      const documentIds = embedDocs.map(doc => doc.id);
+
+      const response = await fetch(getApiUrl('bulkEmbed'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ documentIds })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Bulk embed failed');
+      }
+
+      const data = await response.json();
+
+      setBatchProgress(100);
+      setBatchStatus(t('documents.batch.embeddingsCreated'));
+
+      toast({
+        title: t('documents.batch.success'),
+        description: t('documents.batch.embedSuccess', { embedded: data.embedded, skipped: data.skipped || 0 }),
+      });
+
+      // Refresh documents and stats
+      setTimeout(async () => {
+        await Promise.all([fetchDocuments(), fetchStats()]);
+        clearSelection();
+        setBatchProcessing(false);
+        setBatchProgress(0);
+        setBatchStatus('');
+        setBatchCurrent(0);
+        setBatchTotal(0);
+      }, 1500);
+
+    } catch (error: any) {
+      console.error('Batch embed error:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Batch embedding failed',
+        variant: "destructive"
+      });
+      setBatchProcessing(false);
+      setBatchProgress(0);
+      setBatchStatus('');
+      setBatchCurrent(0);
+      setBatchTotal(0);
+    }
+  };
+
   const handleBatchProcess = async (schemaId: string) => {
     const selectedDocs = Array.from(selectedRows);
     const pdfDocs = documents.filter(doc => selectedDocs.includes(doc.id) && (doc.type || doc.file_type)?.toLowerCase() === 'pdf');
 
     if (pdfDocs.length === 0) {
       toast({
-        title: "No PDF Documents",
-        description: "Please select PDF documents for batch processing",
+        title: t('documents.batch.noPdfDocuments'),
+        description: t('documents.batch.selectPdfDocuments'),
         variant: "destructive"
       });
       return;
@@ -1501,7 +1581,7 @@ export default function DocumentManagerPage() {
     setBatchProgress(0);
     setBatchCurrent(0);
     setBatchTotal(pdfDocs.length);
-    setBatchStatus(`Processing ${pdfDocs.length} documents...`);
+    setBatchStatus(t('documents.batch.processing', { count: pdfDocs.length }));
 
     try {
       const documentIds = pdfDocs.map(doc => doc.id);
@@ -1546,11 +1626,11 @@ export default function DocumentManagerPage() {
             if (progressData.status === 'completed') {
               clearInterval(checkProgress);
               setBatchProgress(100);
-              setBatchStatus('Batch processing complete!');
+              setBatchStatus(t('documents.batch.batchProcessingComplete'));
 
               toast({
-                title: "Success",
-                description: `Successfully processed ${pdfDocs.length} documents`,
+                title: t('documents.batch.success'),
+                description: t('documents.batch.processSuccess', { count: pdfDocs.length }),
               });
 
               // Refresh documents and stats
@@ -1595,7 +1675,7 @@ export default function DocumentManagerPage() {
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
-            Document Management
+            {t('documents.title')}
           </h1>
         </div>
 
@@ -1604,13 +1684,13 @@ export default function DocumentManagerPage() {
           {/* Total Documents - Blue Pastel */}
           <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-blue-200 dark:border-blue-800">
             <CardContent className="p-4">
-              <div className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">Total Documents</div>
+              <div className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">{t('documents.stats.totalDocuments')}</div>
               <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                 {(documents || []).length.toLocaleString()}
               </div>
               <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                 <span className="font-mono">+{stats.history?.uploaded_today || 0}</span>
-                <span className="opacity-75 ml-1">today</span>
+                <span className="opacity-75 ml-1">{t('documents.stats.today')}</span>
               </div>
             </CardContent>
           </Card>
@@ -1618,13 +1698,13 @@ export default function DocumentManagerPage() {
           {/* Embedded - Green Pastel */}
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
             <CardContent className="p-4">
-              <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">Embedded</div>
+              <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.embedded')}</div>
               <div className="text-2xl font-bold text-green-900 dark:text-green-100">
                 {(documents || []).filter(doc => doc.metadata?.embeddings > 0).length.toLocaleString()}
               </div>
               <div className="text-xs text-green-600 dark:text-green-400 mt-1">
                 <span className="font-mono">{(documents || []).filter(doc => !doc.metadata?.embeddings || doc.metadata.embeddings === 0).length.toLocaleString()}</span>
-                <span className="opacity-75 ml-1">pending</span>
+                <span className="opacity-75 ml-1">{t('documents.stats.pending')}</span>
               </div>
             </CardContent>
           </Card>
@@ -1632,13 +1712,13 @@ export default function DocumentManagerPage() {
           {/* OCR Processed - Purple Pastel */}
           <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
             <CardContent className="p-4">
-              <div className="text-sm text-purple-700 dark:text-purple-300 font-medium mb-1">OCR Processed</div>
+              <div className="text-sm text-purple-700 dark:text-purple-300 font-medium mb-1">{t('documents.stats.ocrProcessed')}</div>
               <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
                 {(documents || []).filter(doc => doc.metadata?.ocr_processed === true).length.toLocaleString()}
               </div>
               <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
                 <span className="font-mono">{(documents || []).filter(doc => (doc.type || doc.file_type) && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes((doc.type || doc.file_type).toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
-                <span className="opacity-75 ml-1">pending</span>
+                <span className="opacity-75 ml-1">{t('documents.stats.pending')}</span>
               </div>
             </CardContent>
           </Card>
@@ -1646,644 +1726,687 @@ export default function DocumentManagerPage() {
           {/* Physical Files - Orange Pastel */}
           <Card className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
             <CardContent className="p-4">
-              <div className="text-sm text-orange-700 dark:text-orange-300 font-medium mb-1">Physical Files</div>
+              <div className="text-sm text-orange-700 dark:text-orange-300 font-medium mb-1">{t('documents.stats.physicalFiles')}</div>
               <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                 {physicalFilesStats.total.toLocaleString()}
               </div>
               <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
                 <span className="font-mono">{physicalFilesStats.notInDatabase.toLocaleString()}</span>
-                <span className="opacity-75 ml-1">not in DB</span>
+                <span className="opacity-75 ml-1">{t('documents.stats.notInDb')}</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Files Section - 2 Column Layout */}
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column (40%) - Upload & Physical Files */}
-              <div className="lg:col-span-5 flex flex-col gap-4">
-                {/* Upload Area */}
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Left: Upload Area (50%) */}
-                      <div>
-                        <div
-                          className={`rounded-lg p-3 text-center transition-colors duration-200 ${
-                            isDragging
-                              ? 'bg-blue-50 dark:bg-blue-950/20'
-                              : 'bg-muted/30 hover:bg-muted/50'
+        <div className="space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-start">
+            {/* Left Column (40%) - Upload & Physical Files */}
+            <div className="xl:col-span-5 lg:col-span-6 flex flex-col gap-4">
+              {/* Upload Area */}
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left: Upload Area (50%) */}
+                    <div>
+                      <div
+                        className={`rounded-lg p-3 text-center transition-colors duration-200 ${isDragging
+                          ? 'bg-blue-50 dark:bg-blue-950/20'
+                          : 'bg-muted/30 hover:bg-muted/50'
                           }`}
-                          onDragOver={handleDragOver}
-                          onDragLeave={handleDragLeave}
-                          onDrop={handleDrop}
-                        >
-                          <Upload className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-                          <p className="text-sm font-medium mb-1">Drop files here</p>
-                          <p className="text-xs text-neutral-500 mb-3">or click to browse</p>
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
+                        <Upload className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
+                        <p className="text-sm font-medium mb-1">{t('documents.upload.dropFiles')}</p>
+                        <p className="text-xs text-neutral-500 mb-3">{t('documents.upload.clickToBrowse')}</p>
 
-                          <input
-                            type="file"
-                            multiple
-                            onChange={handleFileUpload}
-                            className="hidden"
-                            id="file-upload-area"
-                          />
-                          <label htmlFor="file-upload-area" className="w-full cursor-pointer">
-                            <Button
-                              size="sm"
-                              className="w-full pointer-events-none"
-                              disabled={uploading}
-                              type="button"
-                            >
-                              {uploading ? (
-                                <>
-                                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                                  Uploading...
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="w-3 h-3 mr-2" />
-                                  Select Files
-                                </>
-                              )}
-                            </Button>
-                          </label>
-
-                          {/* Save to DB Toggle */}
-                          <div className="flex items-center justify-center gap-2 mt-3 pt-3">
-                            <Label htmlFor="save-to-db" className="text-xs cursor-pointer">
-                              Save to Database
-                            </Label>
-                            <Switch
-                              id="save-to-db"
-                              checked={saveToDb}
-                              onCheckedChange={setSaveToDb}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right: Circular Progress + Filename + Progress Bar */}
-                      {/* Use for both upload and batch processing */}
-                      <div className="flex flex-col items-center justify-center gap-3">
-                        {/* Circular Progress with Pulse */}
-                        <div className="relative w-32 h-32">
-                          {/* Pulse animation ring (only when processing) */}
-                          {(uploading || batchProcessing) && (
-                            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-                          )}
-                          {/* Background Circle */}
-                          <svg className="w-32 h-32 transform -rotate-90 relative z-10">
-                            <circle
-                              cx="64"
-                              cy="64"
-                              r="56"
-                              stroke="currentColor"
-                              strokeWidth="8"
-                              fill="none"
-                              className="text-gray-200 dark:text-gray-700"
-                            />
-                            {/* Progress Circle - Use batch progress if batch processing, otherwise upload progress */}
-                            <circle
-                              cx="64"
-                              cy="64"
-                              r="56"
-                              stroke="currentColor"
-                              strokeWidth="8"
-                              fill="none"
-                              strokeDasharray={`${2 * Math.PI * 56}`}
-                              strokeDashoffset={`${2 * Math.PI * 56 * (1 - (batchProcessing ? batchProgress : uploadProgress) / 100)}`}
-                              className={`transition-all duration-500 ease-out ${(uploading || batchProcessing) ? 'text-primary' : 'text-gray-300 dark:text-gray-600'}`}
-                              strokeLinecap="round"
-                            />
-                          </svg>
-                          {/* Center Content - Show batch or upload percentage */}
-                          <div className="absolute inset-0 flex items-center justify-center z-20">
-                            <span className="text-3xl font-bold transition-all duration-300">
-                              {Math.round(batchProcessing ? batchProgress : uploadProgress)}%
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Status text below circle */}
-                        {(currentOperation || batchStatus) && (
-                          <div className="text-center px-2 max-w-[240px]">
-                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate block">
-                              {batchProcessing ? batchStatus : currentOperation?.replace('Uploading ', '').replace('...', '')}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Stats - Upload or Batch */}
-                        {batchProcessing && batchTotal > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
-                              <span className="font-mono">{batchCurrent} / {batchTotal} files</span>
-                              <span className="opacity-50">•</span>
-                              <span className="font-mono">{Math.round(batchProgress)}% complete</span>
-                            </div>
-                            {currentImportingFile && (
-                              <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium max-w-[240px] truncate">
-                                {currentImportingFile}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {!batchProcessing && uploading && uploadSpeed > 0 && (
-                          <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
-                            <span className="font-mono">{formatSpeed(uploadSpeed)}</span>
-                            <span className="opacity-50">•</span>
-                            <span className="font-mono">{formatFileSize(uploadedBytes)} / {formatFileSize(totalBytes)}</span>
-                            <span className="opacity-50">•</span>
-                            <span className="font-mono">{formatTime(timeRemaining)}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Physical Files List */}
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
-                  <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <FolderOpen className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        <span className="text-gray-900 dark:text-white font-semibold">docs</span>
-                      </CardTitle>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                        {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex flex-col overflow-hidden p-4">
-                    {/* Search & Filter */}
-                    <div className="flex gap-2 mb-4">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search files..."
-                          value={physicalFilesSearch}
-                          onChange={(e) => setPhysicalFilesSearch(e.target.value)}
-                          className="pl-10 h-9"
+                        <input
+                          type="file"
+                          multiple
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          id="file-upload-area"
                         />
+                        <label htmlFor="file-upload-area" className="w-full cursor-pointer" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('file-upload-area')?.click(); }}>
+                          <Button
+                            size="sm"
+                            className="w-full pointer-events-none"
+                            disabled={uploading}
+                            type="button"
+                          >
+                            {uploading ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                                {t('documents.upload.uploading')}
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-3 h-3 mr-2" />
+                                {t('documents.upload.selectFiles')}
+                              </>
+                            )}
+                          </Button>
+                        </label>
+
+                        {/* Save to DB Toggle */}
+                        <div className="flex items-center justify-center gap-2 mt-3 pt-3">
+                          <Label htmlFor="save-to-db" className="text-xs cursor-pointer" role="label">
+                            {t('documents.upload.saveToDatabase')}
+                          </Label>
+                          <Switch
+                            id="save-to-db"
+                            checked={saveToDb}
+                            onCheckedChange={setSaveToDb}
+                          />
+                        </div>
                       </div>
-                      <Select value={physicalFilesFilter} onValueChange={setPhysicalFilesFilter}>
-                        <SelectTrigger className="h-9 w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="folders">Folders</SelectItem>
-                          <SelectItem value="txt">TXT</SelectItem>
-                          <SelectItem value="md">Markdown</SelectItem>
-                          <SelectItem value="json">JSON</SelectItem>
-                          <SelectItem value="csv">CSV</SelectItem>
-                          <SelectItem value="pdf">PDF</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
 
-                    {/* Files List */}
-                    <ScrollArea className="h-[600px]">
-                      {(physicalFilesLoading || foldersLoading) ? (
-                        <div className="divide-y divide-border">
-                          {[...Array(8)].map((_, i) => (
-                            <div key={i} className="flex items-center gap-2 p-3">
-                              {/* Action buttons skeleton on left */}
-                              <div className="flex gap-1 flex-shrink-0">
-                                <div className="w-7 h-7 bg-muted rounded animate-pulse" />
-                                <div className="w-7 h-7 bg-muted rounded animate-pulse" />
-                              </div>
-                              {/* File name skeleton */}
-                              <div className="flex-1 space-y-2 min-w-0">
-                                <div className="h-4 bg-muted rounded animate-pulse w-3/4" />
-                                <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
-                              </div>
-                            </div>
-                          ))}
+                    {/* Right: Circular Progress + Filename + Progress Bar */}
+                    {/* Use for both upload and batch processing */}
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      {/* Circular Progress with Pulse */}
+                      <div className="relative w-32 h-32">
+                        {/* Pulse animation ring (only when processing) */}
+                        {(uploading || batchProcessing) && (
+                          <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                        )}
+                        {/* Background Circle */}
+                        <svg className="w-32 h-32 transform -rotate-90 relative z-10">
+                          <circle
+                            cx="64"
+                            cy="64"
+                            r="56"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            className="text-gray-200 dark:text-gray-700"
+                          />
+                          {/* Progress Circle - Use batch progress if batch processing, otherwise upload progress */}
+                          <circle
+                            cx="64"
+                            cy="64"
+                            r="56"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            strokeDasharray={`${2 * Math.PI * 56}`}
+                            strokeDashoffset={`${2 * Math.PI * 56 * (1 - (batchProcessing ? batchProgress : uploadProgress) / 100)}`}
+                            className={`transition-all duration-500 ease-out ${(uploading || batchProcessing) ? 'text-primary' : 'text-gray-300 dark:text-gray-600'}`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        {/* Center Content - Show batch or upload percentage */}
+                        <div className="absolute inset-0 flex items-center justify-center z-20">
+                          <span className="text-3xl font-bold transition-all duration-300">
+                            {Math.round(batchProcessing ? batchProgress : uploadProgress)}%
+                          </span>
                         </div>
-                      ) : physicalFilesFilter === 'folders' ? (
-                        /* Folders View */
-                        folders.length === 0 ? (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                            <p className="text-sm">No folders found</p>
+                      </div>
+
+                      {/* Status text below circle */}
+                      {(currentOperation || batchStatus) && (
+                        <div className="text-center px-2 max-w-[240px]">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider truncate block">
+                            {batchProcessing ? batchStatus : currentOperation?.replace('Uploading ', '').replace('...', '')}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Stats - Upload or Batch */}
+                      {batchProcessing && batchTotal > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
+                            <span className="font-mono">{batchCurrent} / {batchTotal} files</span>
+                            <span className="opacity-50">•</span>
+                            <span className="font-mono">{Math.round(batchProgress)}% complete</span>
                           </div>
-                        ) : (
-                          <div className="divide-y divide-border">
-                            {folders
-                              .filter(folder => {
-                                // Search filter
-                                if (physicalFilesSearch && !folder.name.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
-                                  return false;
-                                }
-                                return true;
-                              })
-                              .map((folder) => (
-                                <div
-                                  key={folder.path}
-                                  className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
-                                >
-                                  {/* Actions on the left */}
-                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                    {/* DB icon - for batch import */}
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleFolderBatchImport(folder.name)}
-                                      disabled={processingFolders.has(folder.name) || folder.newFilesCount === 0}
-                                      className={`h-7 px-2 ${
-                                        folder.newFilesCount === 0
-                                          ? 'cursor-not-allowed opacity-50'
-                                          : 'hover:bg-green-100 dark:hover:bg-green-900/20'
-                                      }`}
-                                      title={folder.newFilesCount === 0 ? "All files already in database" : "Import folder to database (OCR + Analysis)"}
-                                    >
-                                      {processingFolders.has(folder.name) ? (
-                                        <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
-                                      ) : (
-                                        <Database className={`w-3 h-3 ${folder.newFilesCount === 0 ? 'text-gray-400' : 'text-green-600'}`} />
-                                      )}
-                                    </Button>
+                          {currentImportingFile && (
+                            <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium max-w-[240px] truncate">
+                              {currentImportingFile}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!batchProcessing && uploading && uploadSpeed > 0 && (
+                        <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
+                          <span className="font-mono">{formatSpeed(uploadSpeed)}</span>
+                          <span className="opacity-50">•</span>
+                          <span className="font-mono">{formatFileSize(uploadedBytes)} / {formatFileSize(totalBytes)}</span>
+                          <span className="opacity-50">•</span>
+                          <span className="font-mono">{formatTime(timeRemaining)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                                    {/* Delete icon */}
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 px-2 hover:bg-red-100 dark:hover:bg-red-900/20"
-                                      title="Delete folder"
-                                    >
-                                      <Trash2 className="w-3 h-3 text-red-600" />
-                                    </Button>
-                                  </div>
+              {/* Physical Files List */}
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+                <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <FolderOpen className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                      <span className="text-gray-900 dark:text-white font-semibold">docs</span>
+                    </CardTitle>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                      {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex flex-col overflow-hidden p-4">
+                  {/* Search & Filter */}
+                  <div className="flex gap-2 mb-4" role="search" aria-label={t('documents.physicalFiles.searchFiles')}>
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder={t('documents.physicalFiles.searchFiles')}
+                        value={physicalFilesSearch}
+                        onChange={(e) => setPhysicalFilesSearch(e.target.value)}
+                        className="pl-10 h-9"
+                        aria-label={t('documents.physicalFiles.searchFiles')}
+                      />
+                    </div>
+                    <Select value={physicalFilesFilter} onValueChange={setPhysicalFilesFilter}>
+                      <SelectTrigger className="h-9 w-32" aria-label={t('documents.physicalFiles.filterFiles')}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('documents.physicalFiles.allTypes')}</SelectItem>
+                        <SelectItem value="folders">{t('documents.physicalFiles.folders')}</SelectItem>
+                        <SelectItem value="txt">TXT</SelectItem>
+                        <SelectItem value="md">Markdown</SelectItem>
+                        <SelectItem value="json">JSON</SelectItem>
+                        <SelectItem value="csv">CSV</SelectItem>
+                        <SelectItem value="pdf">PDF</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                                  {/* Folder icon */}
-                                  <FolderOpen className="w-4 h-4 text-amber-600 flex-shrink-0" />
-
-                                  {/* Folder name and stats */}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate" title={folder.name}>
-                                      {folder.name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {folder.pdfCount} PDFs • {folder.inDatabaseCount} in DB • {folder.newFilesCount} new
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
+                  {/* Files List */}
+                  <ScrollArea className="h-[400px] sm:h-[500px] lg:h-[600px] max-h-[60vh]">
+                    {(physicalFilesLoading || foldersLoading) ? (
+                      <div className="divide-y divide-border">
+                        {[...Array(8)].map((_, i) => (
+                          <div key={i} className="flex items-center gap-2 p-3">
+                            {/* Action buttons skeleton on left */}
+                            <div className="flex gap-1 flex-shrink-0">
+                              <div className="w-7 h-7 bg-muted rounded animate-pulse" />
+                              <div className="w-7 h-7 bg-muted rounded animate-pulse" />
+                            </div>
+                            {/* File name skeleton */}
+                            <div className="flex-1 space-y-2 min-w-0">
+                              <div className="h-4 bg-muted rounded animate-pulse w-3/4" />
+                              <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
+                            </div>
                           </div>
-                        )
+                        ))}
+                      </div>
+                    ) : physicalFilesFilter === 'folders' ? (
+                      /* Folders View */
+                      folders.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">{t('documents.physicalFiles.noFoldersFound')}</p>
+                        </div>
                       ) : (
-                        /* Files View */
-                        physicalFiles.length === 0 ? (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <File className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                            <p className="text-sm">No files found</p>
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-border">
-                            {physicalFiles
-                              .filter(file => {
-                                // Search filter
-                                if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
-                                  return false;
-                                }
-                                // File type filter
-                                if (physicalFilesFilter !== 'all') {
-                                  const fileExt = file.ext.toLowerCase();
-                                  // Handle markdown separately
-                                  if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
-                                    return false;
-                                  }
-                                  if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-                                    return false;
-                                  }
-                                }
-                                return true;
-                              })
-                            .map((file) => (
-                            <div
-                              key={file.path}
-                              className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
-                            >
-                              {/* Actions on the left - always visible */}
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                {/* DB icon - always visible, disabled if already in DB */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => !file.inDatabase && handleAddPhysicalFileToDb(file.path)}
-                                  className={`h-7 px-2 ${
-                                    file.inDatabase
+                        <div className="divide-y divide-border">
+                          {folders
+                            .filter(folder => {
+                              // Search filter
+                              if (physicalFilesSearch && !folder.name.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+                                return false;
+                              }
+                              return true;
+                            })
+                            .map((folder) => (
+                              <div
+                                key={folder.path}
+                                className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
+                              >
+                                {/* Actions on the left */}
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {/* DB icon - for batch import */}
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleFolderBatchImport(folder.name)}
+                                    disabled={processingFolders.has(folder.name) || folder.newFilesCount === 0}
+                                    className={`h-7 px-2 ${folder.newFilesCount === 0
                                       ? 'cursor-not-allowed opacity-50'
                                       : 'hover:bg-green-100 dark:hover:bg-green-900/20'
-                                  }`}
-                                  title={file.inDatabase ? "Already in Database" : "Add to Database"}
-                                  disabled={file.inDatabase || processingFiles.has(file.path)}
-                                >
-                                  {processingFiles.has(file.path) ? (
-                                    <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
-                                  ) : (
-                                    <Database className={`w-3 h-3 ${file.inDatabase ? 'text-gray-400' : 'text-green-600'}`} />
-                                  )}
-                                </Button>
+                                      }`}
+                                    title={folder.newFilesCount === 0 ? t('documents.physicalFiles.allFilesInDb') : t('documents.physicalFiles.importFolder')}
+                                  >
+                                    {processingFolders.has(folder.name) ? (
+                                      <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
+                                    ) : (
+                                      <Database className={`w-3 h-3 ${folder.newFilesCount === 0 ? 'text-gray-400' : 'text-green-600'}`} />
+                                    )}
+                                  </Button>
 
-                                {/* Delete icon */}
-                                <ConfirmTooltip
-                                  onConfirm={() => handleDeletePhysicalFile(file.path, file.inDatabase)}
-                                  message={`Delete ${file.inDatabase ? 'from disk & DB' : 'from disk'}?`}
-                                  side="top"
-                                >
+                                  {/* Delete icon */}
                                   <Button
                                     size="sm"
                                     variant="ghost"
                                     className="h-7 px-2 hover:bg-red-100 dark:hover:bg-red-900/20"
+                                    title={t('documents.physicalFiles.deleteFolder')}
                                   >
                                     <Trash2 className="w-3 h-3 text-red-600" />
                                   </Button>
-                                </ConfirmTooltip>
-                              </div>
+                                </div>
 
-                              {/* File name and size */}
-                              <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                                <p className="text-sm font-medium truncate flex-1" title={file.displayName || file.filename}>
-                                  {file.displayName || file.filename}
-                                </p>
-                                <span className="text-[10px] text-muted-foreground flex-shrink-0 font-mono">
-                                  {formatFileSize(file.size)}
-                                </span>
+                                {/* Folder icon */}
+                                <FolderOpen className="w-4 h-4 text-amber-600 flex-shrink-0" />
+
+                                {/* Folder name and stats */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate" title={folder.name}>
+                                    {folder.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {folder.pdfCount} PDFs • {folder.inDatabaseCount} in DB • {folder.newFilesCount} new
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                        </div>
+                      )
+                    ) : (
+                      /* Files View */
+                      physicalFiles.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <File className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">{t('documents.physicalFiles.noFilesFound')}</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border">
+                          {physicalFiles
+                            .filter(file => {
+                              // Search filter
+                              if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+                                return false;
+                              }
+                              // File type filter
+                              if (physicalFilesFilter !== 'all') {
+                                const fileExt = file.ext.toLowerCase();
+                                // Handle markdown separately
+                                if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+                                  return false;
+                                }
+                                if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
+                                  return false;
+                                }
+                              }
+                              return true;
+                            })
+                            .map((file) => (
+                              <div
+                                key={file.path}
+                                className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
+                              >
+                                {/* Actions on the left - always visible */}
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {/* DB icon - always visible, disabled if already in DB */}
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => !file.inDatabase && handleAddPhysicalFileToDb(file.path)}
+                                    className={`h-7 px-2 ${file.inDatabase
+                                      ? 'cursor-not-allowed opacity-50'
+                                      : 'hover:bg-green-100 dark:hover:bg-green-900/20'
+                                      }`}
+                                    title={file.inDatabase ? t('documents.physicalFiles.alreadyInDatabase') : t('documents.physicalFiles.addToDatabase')}
+                                    disabled={file.inDatabase || processingFiles.has(file.path)}
+                                  >
+                                    {processingFiles.has(file.path) ? (
+                                      <Loader2 className="w-3 h-3 text-green-600 animate-spin" />
+                                    ) : (
+                                      <Database className={`w-3 h-3 ${file.inDatabase ? 'text-gray-400' : 'text-green-600'}`} />
+                                    )}
+                                  </Button>
+
+                                  {/* Delete icon */}
+                                  <ConfirmTooltip
+                                    onConfirm={() => handleDeletePhysicalFile(file.path, file.inDatabase)}
+                                    message={`${t('documents.physicalFiles.deleteFromDisk')}${file.inDatabase ? ' & DB' : ''}?`}
+                                    side="top"
+                                  >
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 hover:bg-red-100 dark:hover:bg-red-900/20"
+                                    >
+                                      <Trash2 className="w-3 h-3 text-red-600" />
+                                    </Button>
+                                  </ConfirmTooltip>
+                                </div>
+
+                                {/* File name and size */}
+                                <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                                  <p className="text-sm font-medium truncate flex-1" title={file.displayName || file.filename}>
+                                    {file.displayName || file.filename}
+                                  </p>
+                                  <span className="text-[10px] text-muted-foreground flex-shrink-0 font-mono">
+                                    {formatFileSize(file.size)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
                         </div>
                       )
                     )}
-                    </ScrollArea>
-                  </CardContent>
-                </Card>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
 
+            </div>
+
+            {/* Right Column (60%) - Database Files */}
+            <div className="xl:col-span-7 lg:col-span-6 flex flex-col gap-4">
+              {/* Search and Filter - Moved Above Table */}
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-start sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" aria-hidden="true" />
+                      <Input
+                        placeholder={t('documents.search.searchDocuments')}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                        aria-label={t('documents.search.searchDocuments')}
+                      />
+                    </div>
+                    <Select value={filterType} onValueChange={setFilterType}>
+                      <SelectTrigger className="w-full sm:w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('documents.search.allFiles')}</SelectItem>
+                        <SelectItem value="analyzed">{t('documents.search.analyzed')}</SelectItem>
+                        <SelectItem value="processing">{t('documents.search.processing')}</SelectItem>
+                        <SelectItem value="pending">{t('documents.search.pending')}</SelectItem>
+                        <SelectItem value="completed">{t('documents.search.completed')}</SelectItem>
+                        <SelectItem value="failed">{t('documents.search.failed')}</SelectItem>
+                        <SelectItem value="embedded">{t('documents.search.embedded')}</SelectItem>
+                        <SelectItem value="not-embedded">{t('documents.search.notEmbedded')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Badge variant="outline" className="px-3 py-2">
+                      {filteredDocuments.length} of {documents.length} files
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col min-h-[400px] max-h-[calc(100vh-240px)]">
+                <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+                  {/* Fixed Header */}
+                  <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
+                    <Table>
+                      <TableHeader className="bg-gray-50 dark:bg-gray-900">
+                        <TableRow>
+                          <TableHead className="w-10">
+                            <Checkbox
+                              checked={selectAll && filteredDocuments.length > 0}
+                              onCheckedChange={handleSelectAll}
+                              className=""
+                            />
+                          </TableHead>
+                          <TableHead className="w-44">{t('documents.table.name')}</TableHead>
+                          <TableHead className="w-20">{t('documents.table.type')}</TableHead>
+                          <TableHead className="w-32">{t('documents.table.status')}</TableHead>
+                          <TableHead className="w-16">{t('documents.table.size')}</TableHead>
+                          <TableHead className="w-24">{t('documents.table.date')}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                    </Table>
                   </div>
 
-              {/* Right Column (60%) - Database Files */}
-              <div className="lg:col-span-7 flex flex-col gap-4">
-                {/* Search and Filter - Moved Above Table */}
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex gap-4 items-center">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" />
-                        <Input
-                          placeholder="Search documents..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                      <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger className="w-48">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Files</SelectItem>
-                          <SelectItem value="analyzed">Analyzed</SelectItem>
-                          <SelectItem value="processing">Processing</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="completed">Completed</SelectItem>
-                          <SelectItem value="failed">Failed</SelectItem>
-                          <SelectItem value="embedded">Embedded</SelectItem>
-                          <SelectItem value="not-embedded">Not Embedded</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Badge variant="outline" className="px-3 py-2">
-                        {filteredDocuments.length} of {documents.length} files
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col h-[calc(100vh-240px)]">
-                  <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-                    {/* Fixed Header */}
-                    <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
-                      <Table>
-                        <TableHeader className="bg-gray-50 dark:bg-gray-900">
+                  {/* Scrollable Body */}
+                  <div className="flex-1 overflow-auto min-h-[300px]">
+                    <Table>
+                      <TableBody>
+                        {(loading || batchProcessing) ? (
+                          <TableBodySkeleton rows={20} columns={7} />
+                        ) : filteredDocuments.length === 0 ? (
                           <TableRow>
-                            <TableHead className="w-10">
-                              <Checkbox
-                                checked={selectAll && filteredDocuments.length > 0}
-                                onCheckedChange={handleSelectAll}
-                                className=""
-                              />
-                            </TableHead>
-                            <TableHead className="w-44">Name</TableHead>
-                            <TableHead className="w-20">Type</TableHead>
-                            <TableHead className="w-32">Status</TableHead>
-                            <TableHead className="w-16">Size</TableHead>
-                            <TableHead className="w-24">Date</TableHead>
+                            <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                              <File className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                              <p className="text-base font-medium mb-1">{t('documents.search.noDocumentsFound')}</p>
+                              <p className="text-sm">{t('documents.search.uploadToStart')}</p>
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
-                      </Table>
-                    </div>
+                        ) : (
+                          filteredDocuments.slice(0, visibleDocumentsCount).map(doc => (
+                            <TableRow
+                              key={doc.id}
+                              className={`hover:bg-muted/50 transition-colors duration-150 ${selectedRows.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
+                            >
+                              <TableCell className="flex justify-center">
+                                <Checkbox
+                                  checked={selectedRows.has(doc.id)}
+                                  onCheckedChange={() => handleRowSelect(doc.id)}
+                                  className=""
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium truncate max-w-40" title={doc.title}>
+                                {doc.title}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs font-semibold border-2 transition-all duration-150 ${(doc.type || doc.file_type || 'text')?.toLowerCase() === 'pdf' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400' :
+                                    (doc.type || doc.file_type || 'text')?.toLowerCase() === 'csv' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' :
+                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'json' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
+                                        ['md', 'txt', 'doc', 'docx'].includes((doc.type || doc.file_type || 'text')?.toLowerCase()) ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400' :
+                                          'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-400'
+                                    }`}
+                                >
+                                  {(doc.type || doc.file_type || 'TEXT').toUpperCase()}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {(() => {
+                                  // Use actual processing_status from database if available
+                                  const processingStatus = doc.processing_status;
+                                  const isEmbedded = doc.metadata?.embeddings;
+                                  const isOCRProcessed = doc.metadata?.ocr_processed;
 
-                    {/* Scrollable Body */}
-                    <div className="flex-1 overflow-auto">
-                      <Table>
-                        <TableBody>
-                          {(loading || batchProcessing) ? (
-                            <TableBodySkeleton rows={20} columns={7} />
-                          ) : filteredDocuments.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                                <File className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                                <p className="text-base font-medium mb-1">No documents found</p>
-                                <p className="text-sm">Upload files to get started</p>
+                                  let status = '';
+                                  let colorClass = '';
+
+                                  // Map processing_status values to display
+                                  if (processingStatus) {
+                                    switch (processingStatus) {
+                                      case 'waiting':
+                                        status = t('documents.status.waiting');
+                                        colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                        break;
+                                      case 'analyzing':
+                                        status = t('documents.status.analyzing');
+                                        colorClass = 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400';
+                                        break;
+                                      case 'analyzed':
+                                        status = t('documents.status.analyzed');
+                                        colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                        break;
+                                      case 'transformed':
+                                        status = t('documents.status.transformed');
+                                        colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
+                                        break;
+                                      case 'failed':
+                                        status = t('documents.status.failed');
+                                        colorClass = 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400';
+                                        break;
+                                      default:
+                                        // Fallback for unknown status
+                                        status = processingStatus;
+                                        colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                    }
+                                  } else {
+                                    // Fallback to old logic if processing_status is not available
+                                    if (isEmbedded) {
+                                      status = t('documents.status.embedded');
+                                      colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
+                                    } else if (isOCRProcessed) {
+                                      status = t('documents.status.ocrDone');
+                                      colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
+                                    } else {
+                                      status = t('documents.status.raw');
+                                      colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
+                                    }
+                                  }
+
+                                  return (
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <div className="flex items-center gap-1 cursor-pointer group">
+                                          <Badge variant="outline" className={`text-xs font-medium border transition-all duration-150 ${colorClass} hover:opacity-80`}>
+                                            {status}
+                                          </Badge>
+                                          <MoreHorizontal className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => handlePreview(doc)}>
+                                          <Eye className="w-3 h-3 mr-2" />
+                                          {t('documents.table.preview')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => handleDelete(doc.id, doc.title)}
+                                          className="text-red-600 focus:text-red-600"
+                                        >
+                                          <Trash2 className="w-3 h-3 mr-2" />
+                                          {t('documents.table.delete')}
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {formatFileSize(doc.size || 0)}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {formatDate(doc.metadata.created_at)}
                               </TableCell>
                             </TableRow>
-                          ) : (
-                            filteredDocuments.slice(0, visibleDocumentsCount).map(doc => (
-                              <TableRow
-                                key={doc.id}
-                                className={`hover:bg-muted/50 transition-colors duration-150 ${selectedRows.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
-                              >
-                                <TableCell className="flex justify-center">
-                                  <Checkbox
-                                    checked={selectedRows.has(doc.id)}
-                                    onCheckedChange={() => handleRowSelect(doc.id)}
-                                    className=""
-                                  />
-                                </TableCell>
-                                <TableCell className="font-medium truncate max-w-40" title={doc.title}>
-                                  {doc.title}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant="outline"
-                                    className={`text-xs font-semibold border-2 transition-all duration-150 ${
-                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'pdf' ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400' :
-                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'csv' ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400' :
-                                      (doc.type || doc.file_type || 'text')?.toLowerCase() === 'json' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
-                                      ['md', 'txt', 'doc', 'docx'].includes((doc.type || doc.file_type || 'text')?.toLowerCase()) ? 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400' :
-                                      'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-400'
-                                    }`}
-                                  >
-                                    {(doc.type || doc.file_type || 'TEXT').toUpperCase()}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {(() => {
-                                    // Use actual processing_status from database if available
-                                    const processingStatus = doc.processing_status;
-                                    const isEmbedded = doc.metadata?.embeddings;
-                                    const isOCRProcessed = doc.metadata?.ocr_processed;
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
 
-                                    let status = '';
-                                    let colorClass = '';
-
-                                    // Map processing_status values to display
-                                    if (processingStatus) {
-                                      switch(processingStatus) {
-                                        case 'waiting':
-                                          status = 'Waiting';
-                                          colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
-                                          break;
-                                        case 'analyzing':
-                                          status = 'Analyzing';
-                                          colorClass = 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400';
-                                          break;
-                                        case 'analyzed':
-                                          status = 'Analyzed';
-                                          colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
-                                          break;
-                                        case 'transformed':
-                                          status = 'Transformed';
-                                          colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
-                                          break;
-                                        case 'failed':
-                                          status = 'Failed';
-                                          colorClass = 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400';
-                                          break;
-                                        default:
-                                          // Fallback for unknown status
-                                          status = processingStatus;
-                                          colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
-                                      }
-                                    } else {
-                                      // Fallback to old logic if processing_status is not available
-                                      if (isEmbedded) {
-                                        status = 'Embedded';
-                                        colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
-                                      } else if (isOCRProcessed) {
-                                        status = 'OCR Done';
-                                        colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
-                                      } else {
-                                        status = 'Raw';
-                                        colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
-                                      }
-                                    }
-
-                                    return (
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <div className="flex items-center gap-1 cursor-pointer group">
-                                            <Badge variant="outline" className={`text-xs font-medium border transition-all duration-150 ${colorClass} hover:opacity-80`}>
-                                              {status}
-                                            </Badge>
-                                            <MoreHorizontal className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                          </div>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                          <DropdownMenuItem onClick={() => handlePreview(doc)}>
-                                            <Eye className="w-3 h-3 mr-2" />
-                                            Preview
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() => handleDelete(doc.id, doc.title)}
-                                            className="text-red-600 focus:text-red-600"
-                                          >
-                                            <Trash2 className="w-3 h-3 mr-2" />
-                                            Delete
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    );
-                                  })()}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {formatFileSize(doc.size || 0)}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {formatDate(doc.metadata.created_at)}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
+                  {/* Fixed Footer: Load More */}
+                  {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
+                    <div className="flex-shrink-0 flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
+                        className="gap-2"
+                      >
+                        {t('documents.table.loadMore')}
+                        <span className="text-xs text-muted-foreground">
+                          ({filteredDocuments.length - visibleDocumentsCount} {t('documents.table.remaining')})
+                        </span>
+                      </Button>
                     </div>
-
-                    {/* Fixed Footer: Load More */}
-                    {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
-                      <div className="flex-shrink-0 flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                          className="gap-2"
-                        >
-                          Daha Fazla Yükle
-                          <span className="text-xs text-muted-foreground">
-                            ({filteredDocuments.length - visibleDocumentsCount} kaldı)
-                          </span>
-                        </Button>
+                  )}
+                </CardContent>
+                {getSelectedCount() > 0 && (
+                  <div className="px-6 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="font-medium">
+                          {getSelectedCount()} {getSelectedCount() === 1 ? t('documents.actions.documentSelected') : t('documents.actions.documentsSelected')}
+                        </span>
                       </div>
-                    )}
-                  </CardContent>
-                  {getSelectedCount() > 0 && (
-                    <div className="px-6 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="font-medium">
-                            {getSelectedCount()} {getSelectedCount() === 1 ? 'document' : 'documents'} selected
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
-                          {/* Batch Process Icon */}
+                      <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
+                        {/* Smart Batch Actions - CSV: Transform, Others: Embed */}
+                        {(() => {
+                          const selected = documents.filter(doc => selectedRows.has(doc.id));
+                          const csvDocs = selected.filter(doc => (doc.type || doc.file_type)?.toLowerCase() === 'csv');
+                          const embedDocs = selected.filter(doc => ['pdf', 'txt', 'md', 'doc', 'docx'].includes((doc.type || doc.file_type)?.toLowerCase() || ''));
+
+                          return (
+                            <>
+                              {/* CSV Transform Button */}
+                              {csvDocs.length > 0 && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setShowBatchModal(true)}
+                                        className="h-8 px-2 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors"
+                                      >
+                                        <Database className="w-4 h-4 text-green-600 mr-1" />
+                                        <span className="text-xs font-medium">Transform ({csvDocs.length})</span>
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{t('documents.actions.transform')}</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+
+                              {/* PDF/TXT/MD/DOC Embed Button */}
+                              {embedDocs.length > 0 && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={handleBatchEmbed}
+                                        disabled={batchProcessing}
+                                        className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+                                      >
+                                        {batchProcessing ? (
+                                          <Loader2 className="w-4 h-4 text-blue-600 mr-1 animate-spin" />
+                                        ) : (
+                                          <Zap className="w-4 h-4 text-blue-600 mr-1" />
+                                        )}
+                                        <span className="text-xs font-medium">Embed ({embedDocs.length})</span>
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{t('documents.actions.embed')}</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </>
+                          );
+                        })()}
+
+                        {/* Bulk Delete Icon */}
+                        <ConfirmTooltip
+                          onConfirm={handleBulkDelete}
+                          message={t('documents.actions.deleteSelected', { count: selectedRows.size })}
+                          side="top"
+                        >
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setShowBatchModal(true)}
-                            className="h-8 w-8 p-0 hover:bg-primary/10 transition-colors"
-                            title="Batch process documents"
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
+                            title={t('documents.actions.deleteSelectedDocuments')}
                           >
-                            <Zap className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" />
                           </Button>
-
-                          {/* Bulk Delete Icon */}
-                          <ConfirmTooltip
-                            onConfirm={handleBulkDelete}
-                            message={`${selectedRows.size} dökümanı silmek istediğinizden emin misiniz?`}
-                            side="top"
-                          >
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
-                              title="Delete selected documents"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </ConfirmTooltip>
-                        </div>
+                        </ConfirmTooltip>
                       </div>
                     </div>
-                  )}
-                </Card>
-              </div>
+                  </div>
+                )}
+              </Card>
             </div>
+          </div>
         </div>
       </div>
 
@@ -2310,13 +2433,13 @@ export default function DocumentManagerPage() {
           <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-b border-border/50 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <DialogTitle className="text-base font-bold">Batch Process Documents</DialogTitle>
+                <DialogTitle className="text-base font-bold">{t('documents.modal.batchProcessDocuments')}</DialogTitle>
                 <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
-                  {selectedRows.size} FILES
+                  {selectedRows.size} {t('documents.modal.files')}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Extract & insert to database
+                {t('documents.modal.extractAndInsert')}
               </p>
             </div>
           </div>
@@ -2326,7 +2449,7 @@ export default function DocumentManagerPage() {
             {/* Template Selection */}
             <div className="space-y-3">
               <Label htmlFor="batch-template" className="text-sm font-medium">
-                Analysis Template
+                {t('documents.modal.analysisTemplate')}
               </Label>
               <Select
                 value={batchSelectedSchema}
@@ -2336,9 +2459,9 @@ export default function DocumentManagerPage() {
                 }}
               >
                 <SelectTrigger id="batch-template">
-                  <SelectValue placeholder="Select template..." />
+                  <SelectValue placeholder={t('documents.modal.selectTemplate')} />
                 </SelectTrigger>
-                <SelectContent className="z-[100000]">
+                <SelectContent className="z-[1002]">
                   {batchSchemas.map((template) => (
                     <SelectItem key={template.id} value={template.id}>
                       {template.name}
@@ -2356,7 +2479,7 @@ export default function DocumentManagerPage() {
             {/* Target Table Selection */}
             <div className="space-y-3">
               <Label htmlFor="batch-table" className="text-sm font-medium">
-                Target Table
+                {t('documents.modal.targetTable')}
               </Label>
               {availableTables.length > 0 ? (
                 <>
@@ -2365,9 +2488,9 @@ export default function DocumentManagerPage() {
                     onValueChange={setBatchSelectedTable}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select table..." />
+                      <SelectValue placeholder={t('documents.modal.selectTable')} />
                     </SelectTrigger>
-                    <SelectContent className="z-[100000]">
+                    <SelectContent className="z-[1002]">
                       {availableTables.map((table) => (
                         <SelectItem key={table} value={table}>
                           {table}
@@ -2376,12 +2499,12 @@ export default function DocumentManagerPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Data will be inserted into this table
+                    {t('documents.modal.dataInsertedToTable')}
                   </p>
                 </>
               ) : (
                 <div className="text-sm text-muted-foreground p-4 bg-muted/30 rounded border border-dashed">
-                  No tables available. Create from single document preview first.
+                  {t('documents.modal.noTablesAvailable')}
                 </div>
               )}
             </div>
@@ -2389,14 +2512,14 @@ export default function DocumentManagerPage() {
             {/* Field Mappings */}
             {batchSelectedSchema && (
               <div className="space-y-3">
-                <Label className="text-sm font-medium">Field Mappings</Label>
+                <Label className="text-sm font-medium">{t('documents.modal.fieldMappings')}</Label>
                 <div className="bg-muted/30 dark:bg-black/20 border border-border/50 rounded p-4 max-h-[200px] overflow-y-auto">
                   {(() => {
                     const template = batchSchemas.find(t => t.id === batchSelectedSchema);
                     if (!template?.target_fields || template.target_fields.length === 0) {
                       return (
                         <p className="text-sm text-muted-foreground text-center py-3">
-                          No mappings configured
+                          {t('documents.modal.noMappingsConfigured')}
                         </p>
                       );
                     }
@@ -2504,7 +2627,7 @@ export default function DocumentManagerPage() {
                   }}
                   disabled={batchProcessing}
                 >
-                  Cancel
+                  {t('documents.modal.cancel')}
                 </Button>
                 <Button
                   onClick={() => {
@@ -2517,10 +2640,10 @@ export default function DocumentManagerPage() {
                   {batchProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Processing
+                      {t('documents.modal.processing')}
                     </>
                   ) : (
-                    'Start Processing'
+                    t('documents.modal.startProcessing')
                   )}
                 </Button>
               </div>

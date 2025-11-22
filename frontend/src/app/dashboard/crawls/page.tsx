@@ -72,7 +72,8 @@ import {
   RefreshCw,
   Radar,
   MoreHorizontal,
-  Filter
+  Filter,
+  Copy
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -190,6 +191,7 @@ export default function CrawlerDataPage() {
   const [editingItem, setEditingItem] = useState<CrawledItem | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editedData, setEditedData] = useState<string>('');
+  const [extractingPdfText, setExtractingPdfText] = useState(false);
   const [pythonScripts, setPythonScripts] = useState<Map<string, File>>(new Map());
   const [uploadingScript, setUploadingScript] = useState<string | null>(null);
   const [itemsOffset, setItemsOffset] = useState(0);
@@ -644,14 +646,68 @@ export default function CrawlerDataPage() {
     }
   };
 
-  const handleEditItem = (item: CrawledItem) => {
+  const handleEditItem = async (item: CrawledItem) => {
     setEditingItem(item);
 
     // Extract only the content from the data, preserving line breaks
     let contentText = '';
 
+    // Check if it's a PDF - extract text automatically
+    if (item.data.file_path && item.data.file_path.toLowerCase().endsWith('.pdf')) {
+      // Check if text already exists in item.data
+      if (item.data.extracted_text) {
+        contentText = item.data.extracted_text;
+      } else {
+        setShowEditDialog(true);
+        setExtractingPdfText(true);
+        setEditedData('');
+
+        try {
+          const apiUrl = `${config.api.baseUrl}/api/v2/pdf/extract-text`;
+          console.log('[PDF Extract] Calling API:', apiUrl);
+          console.log('[PDF Extract] config.api.baseUrl:', config.api.baseUrl);
+
+          const response = await fetchWithAuth(
+            apiUrl,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filePath: item.data.file_path })
+            }
+          );
+          const data = await response.json();
+          setExtractingPdfText(false);
+
+          if (data.text) {
+            contentText = data.text;
+
+            // Save extracted text back to Redis
+            try {
+              await fetchWithAuth(
+                `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${item.crawlerName}/items/${item.key}`,
+                {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    ...item.data,
+                    extracted_text: data.text
+                  })
+                }
+              );
+              console.log('✅ Saved extracted text to Redis');
+            } catch (saveError) {
+              console.warn('⚠️ Could not save extracted text to Redis:', saveError);
+            }
+          } else {
+            contentText = `PDF File: ${item.data.filename}\n\nNo text content available.\nThis PDF may be scanned or empty.\n\nFile: ${item.data.file_path}`;
+          }
+        } catch (error) {
+          contentText = `PDF File: ${item.data.filename}\n\nFailed to extract text from PDF.\n\nFile: ${item.data.file_path}`;
+        }
+      }
+    }
     // Check for various content field names used by different scrapers
-    if (item.data.script_text) {
+    else if (item.data.script_text) {
       // IMSDB crawler uses script_text
       contentText = item.data.script_text;
     } else if (item.data.markdown) {
@@ -2293,9 +2349,7 @@ export default function CrawlerDataPage() {
                                     />
                                   </TableHead>
                                   <TableHead>Name</TableHead>
-                                  <TableHead>URL</TableHead>
                                   <TableHead className="w-32">Status</TableHead>
-                                  <TableHead className="w-32">Template</TableHead>
                                   <TableHead className="w-24">Date</TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -2348,11 +2402,10 @@ export default function CrawlerDataPage() {
                                               }}
                                             />
                                           </TableCell>
-                                          <TableCell className="font-medium truncate max-w-xs" title={item.title}>
-                                            {item.title}
-                                          </TableCell>
-                                          <TableCell className="text-xs text-muted-foreground truncate max-w-xs" title={item.url || item.key}>
-                                            {item.url || item.key}
+                                          <TableCell className="font-medium max-w-[400px]" title={item.title}>
+                                            <div className="truncate">
+                                              {item.title}
+                                            </div>
                                           </TableCell>
                                           <TableCell>
                                             <DropdownMenu>
@@ -2380,7 +2433,7 @@ export default function CrawlerDataPage() {
                                                 </div>
                                               </DropdownMenuTrigger>
                                               <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => handleEditItem(item)}>
+                                                <DropdownMenuItem onClick={async () => await handleEditItem(item)}>
                                                   <Eye className="w-3 h-3 mr-2" />
                                                   Preview
                                                 </DropdownMenuItem>
@@ -2401,9 +2454,6 @@ export default function CrawlerDataPage() {
                                               </DropdownMenuContent>
                                             </DropdownMenu>
                                           </TableCell>
-                                          <TableCell className="text-xs text-muted-foreground">
-                                            {template || '-'}
-                                          </TableCell>
                                           <TableCell className="text-xs">
                                             {item.scrapedAt ? new Date(item.scrapedAt).toLocaleDateString('en-US', {
                                               month: '2-digit',
@@ -2418,7 +2468,7 @@ export default function CrawlerDataPage() {
                                     {/* Load More Row */}
                                     {hasMoreItems && !loadingMore && (
                                       <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-4">
+                                        <TableCell colSpan={4} className="text-center py-4">
                                           <Button
                                             variant="outline"
                                             size="sm"
@@ -2734,11 +2784,34 @@ export default function CrawlerDataPage() {
             <div className="absolute inset-0 backdrop-blur-xl" />
             <div className="absolute inset-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_8px_32px_0_rgba(0,0,0,0.4)] border-b border-slate-300/50 dark:border-slate-700/50" />
 
-            <div className="flex items-center gap-2.5 relative z-10">
-              <DialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">{editingItem?.title}</DialogTitle>
-              <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
-                CRAWL DATA
-              </Badge>
+            <div className="relative z-10">
+              {/* Single line header: key (description) • [TYPE] • size */}
+              {editingItem && (
+                <DialogTitle className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span>
+                    {editingItem.key}
+                    {editingItem.data.description && (
+                      <span className="text-muted-foreground text-[11px] ml-1">
+                        ({editingItem.data.description})
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  {editingItem.data.type && (
+                    <>
+                      <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                        {editingItem.data.type.toUpperCase()}
+                      </Badge>
+                      {editingItem.data.file_size && <span className="text-slate-300 dark:text-slate-700">•</span>}
+                    </>
+                  )}
+                  {editingItem.data.file_size && (
+                    <span className="text-muted-foreground text-[11px]">
+                      {(editingItem.data.file_size / 1024).toFixed(1)} KB
+                    </span>
+                  )}
+                </DialogTitle>
+              )}
             </div>
             <DialogDescription className="sr-only">
               Edit crawl data for {editingItem?.title}
@@ -2747,70 +2820,31 @@ export default function CrawlerDataPage() {
 
           {/* Modal Content - Scrollable */}
           <div className="overflow-hidden px-6 py-4 bg-white dark:bg-slate-900">
-            {/* Metadata Section */}
-            {editingItem && (
-              <div className="mb-4 p-4 bg-muted/30 rounded-lg">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
-                  <div>
-                    <span className="text-muted-foreground">Key</span>
-                    <p className="font-mono text-foreground mt-1 font-semibold truncate" title={editingItem.key}>
-                      {editingItem.key}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">URL</span>
-                    <p className="font-mono text-foreground mt-1 font-semibold truncate" title={editingItem.data.url}>
-                      {editingItem.data.url}
-                    </p>
-                  </div>
-                  {editingItem.data.metadata && (
-                    <>
-                      {editingItem.data.metadata.word_count && (
-                        <div>
-                          <span className="text-muted-foreground">Word Count</span>
-                          <p className="font-mono text-foreground mt-1 font-semibold">
-                            {editingItem.data.metadata.word_count.toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                      {editingItem.data.metadata.success !== undefined && (
-                        <div>
-                          <span className="text-muted-foreground">Status</span>
-                          <p className="font-mono text-foreground mt-1 font-semibold">
-                            {editingItem.data.metadata.success ? '✓ Success' : '✗ Failed'}
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Content Editor */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="contentEditor" className="text-sm font-medium">
-                  Content
-                </Label>
-                <span className="text-[10px] text-muted-foreground">
-                  Line breaks and formatting preserved
-                </span>
-              </div>
-              <ScrollArea className="h-[360px]">
-                <textarea
-                  id="contentEditor"
-                  value={editedData}
-                  onChange={(e) => setEditedData(e.target.value)}
-                  className="w-full min-h-[360px] p-4 font-mono text-sm bg-muted/30 rounded-lg text-foreground border-0 focus:outline-none resize-none"
-                  spellCheck={false}
-                  style={{
-                    whiteSpace: 'pre-wrap',
-                    wordWrap: 'break-word',
-                    lineHeight: '1.6'
-                  }}
-                />
-              </ScrollArea>
+              {extractingPdfText ? (
+                <div className="h-[360px] flex flex-col items-center justify-center bg-muted/30 rounded-lg">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">OCR Analyzing...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Extracting text from PDF</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[360px]">
+                  <textarea
+                    id="contentEditor"
+                    value={editedData}
+                    onChange={(e) => setEditedData(e.target.value)}
+                    className="w-full min-h-[360px] p-4 font-mono text-sm bg-muted/30 rounded-lg text-foreground border-0 focus:outline-none resize-none"
+                    spellCheck={false}
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordWrap: 'break-word',
+                      lineHeight: '1.6'
+                    }}
+                  />
+                </ScrollArea>
+              )}
             </div>
           </div>
 
@@ -2823,8 +2857,8 @@ export default function CrawlerDataPage() {
             <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
 
             <div className="flex items-center justify-between relative z-10">
-              <div className="text-[10px] text-slate-600 dark:text-slate-400">
-                Press Ctrl+F to search within content
+              <div className="text-[10px] text-slate-600 dark:text-slate-400 truncate max-w-[60%]" title={editingItem?.data?.url}>
+                {editingItem?.data?.url || editingItem?.key || ''}
               </div>
               <div className="flex gap-2">
                 <Button

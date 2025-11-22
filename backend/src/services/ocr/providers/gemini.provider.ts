@@ -10,6 +10,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '../../../utils/logger';
 import { settingsService } from '../../settings.service';
 
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 2000; // 2 seconds
+
 export class GeminiProvider extends BaseOCRProvider {
   readonly name: OCRProviderType = 'gemini';
   readonly enabled: boolean = true;
@@ -68,7 +71,7 @@ export class GeminiProvider extends BaseOCRProvider {
       const prompt = options.prompt || this.getDefaultPrompt(options.language);
 
       // Gemini Vision API çağrısı
-      const result = await model.generateContent([
+      const result = await this.generateContentWithRetry(model, [
         {
           inlineData: {
             data: base64Image,
@@ -126,7 +129,7 @@ export class GeminiProvider extends BaseOCRProvider {
       const prompt = options.prompt || this.getDefaultPrompt(options.language);
 
       // Gemini PDF desteği (beta)
-      const result = await model.generateContent([
+      const result = await this.generateContentWithRetry(model, [
         {
           inlineData: {
             data: base64PDF,
@@ -174,7 +177,7 @@ export class GeminiProvider extends BaseOCRProvider {
 
       const prompt = options.prompt || this.getDefaultPrompt(options.language);
 
-      const result = await model.generateContent([
+      const result = await this.generateContentWithRetry(model, [
         {
           inlineData: {
             data: base64Data,
@@ -265,5 +268,51 @@ SADECE çıkarılan metni döndür, açıklama veya ek yorum ekleme.`;
   private calculateCost(tokens: number): number {
     const costPerToken = 0.00000015; // ~$0.15 / 1M tokens
     return tokens * costPerToken;
+  }
+
+  /**
+   * Retry logic for Gemini API calls
+   */
+  private async generateContentWithRetry(model: any, parts: any[]): Promise<any> {
+    let lastError: any;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await model.generateContent(parts);
+      } catch (error: any) {
+        lastError = error;
+
+        // Check if retryable
+        const isRetryable =
+          error.status === 429 ||
+          error.status === 503 ||
+          (error.message && (
+            error.message.includes('429') ||
+            error.message.includes('503') ||
+            error.message.includes('RESOURCE_EXHAUSTED') ||
+            error.message.includes('retryDelay')
+          ));
+
+        if (!isRetryable || attempt === MAX_RETRIES) {
+          throw error;
+        }
+
+        // Calculate delay
+        let delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt - 1);
+
+        // Extract delay from error message if available (e.g., "retryDelay":"14s")
+        if (error.message && error.message.includes('retryDelay')) {
+          const match = error.message.match(/retryDelay\\?":\\?"(\d+(\.\d+)?)s\\?"/);
+          if (match && match[1]) {
+            delay = parseFloat(match[1]) * 1000 + 1000; // Add 1s buffer
+          }
+        }
+
+        logger.warn(`Gemini API error (Attempt ${attempt}/${MAX_RETRIES}). Retrying in ${delay}ms... Error: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
   }
 }

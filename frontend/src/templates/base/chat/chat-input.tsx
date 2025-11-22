@@ -17,7 +17,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [questionPool, setQuestionPool] = useState<string[]>([]);
   const [enableSuggestions, setEnableSuggestions] = useState(true);
 
-  // Rastgele soru seçme
+  // Random question selection
   const getRandomQuestions = (pool: string[], count: number = 3) => {
     if (pool.length === 0) return [];
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
@@ -89,7 +89,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   return (
     <div className="p-4 bg-gradient-to-t from-white to-gray-50/50 dark:from-gray-800 dark:to-gray-900/50 backdrop-blur-sm">
       <div className="max-w-4xl mx-auto">
-        {/* Hazır sorular - Backend'den gelen enableSuggestions ayarına göre göster */}
+        {/* Ready questions - Show based on enableSuggestions setting from backend */}
         {enableSuggestions && sampleQuestions.length > 0 && !message && (
           <div className="mb-3 flex items-center gap-2 flex-wrap">
             <span className="text-xs text-gray-500 flex items-center gap-1">

@@ -11,11 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
-  Loader2
+  Loader2,
+  CheckCircle,
+  AlertTriangle
 } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
+import AdvancedConsole from "@/components/terminal/AdvancedConsole";
 
 interface SystemStatus {
   database: {
@@ -120,7 +123,7 @@ const StatusCard = ({ title, value, status, description }: {
   // Kart rengini status'e göre ayarla
   const getCardStyle = () => {
     if (!status) return 'border-gray-200 bg-white dark:bg-gray-900';
-    
+
     switch (status) {
       case 'online':
         return 'border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800';
@@ -1203,8 +1206,8 @@ export default function DashboardPage() {
 
   return (
     <div className="w-[90%] mx-auto p-8 space-y-10">
-  
-      
+
+
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-10">
         {/* Session Metrics & Token Usage - Moved to Top */}
@@ -1264,264 +1267,99 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-    {/* Embeddings Kaynak Paneli */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader>
-          <div>
-            <h3 className="text-base font-semibold tracking-tight">Embeddings Kaynakları</h3>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Migrated Data */}
-            <div className="p-5 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
-              <div className="mb-3">
-                <h4 className="text-base font-medium">Migrated Data</h4>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Rows:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Documents Embeddings */}
-            <div className="p-5 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
-              <div className="mb-3">
-                <h4 className="text-base font-medium">Documents</h4>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Documents:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.documents?.embeddings?.toLocaleString() || '0'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Scraped Embeddings */}
-            <div className="p-5 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
-              <div className="mb-3">
-                <h4 className="text-base font-medium">Scraped</h4>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Data:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Message History Embeddings */}
-            <div className="p-5 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
-              <div className="mb-3">
-                <h4 className="text-base font-medium">Message History</h4>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Messages:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Embeddings:</span>
-                  <span className="font-semibold">{embeddingStats?.by_category?.messages?.embeddings?.toLocaleString() || '0'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-  
-        {/* Real Console - Full Width with Filters */}
+        {/* Embeddings Kaynak Paneli */}
         <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="text-sm font-semibold tracking-tight">Console</h3>
-                <span className={`text-xs ${wsConnected ? 'text-green-600' : 'text-orange-600'}`}>
-                  {isConsolePaused ? 'PAUSED' : wsConnected ? 'LIVE' : 'CONNECTING'}
-                </span>
-                <span className="text-xs text-gray-500">
-                  ({filteredConsoleLogs.length} / {consoleLog.length} logs)
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsConsolePaused(!isConsolePaused)}
-                  className={`h-6 px-2 text-xs ${isConsolePaused ? 'text-orange-600' : 'text-gray-600'}`}
-                >
-                  {isConsolePaused ? 'Resume' : 'Pause'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setConsoleLog([]);
-                    addConsoleLog('Console cleared', 'info');
-                  }}
-                  className="h-6 px-2 text-xs"
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-
-            {/* Filter Buttons */}
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-gray-500 dark:text-gray-500">Filter:</span>
-              {(['all', 'backend', 'frontend', 'error', 'warn', 'info'] as const).map((filter) => (
-                <Button
-                  key={filter}
-                  variant={consoleFilter === filter ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setConsoleFilter(filter)}
-                  className={`h-6 px-2 text-xs capitalize ${
-                    consoleFilter === filter
-                      ? filter === 'error' ? 'bg-red-500 hover:bg-red-600' :
-                        filter === 'warn' ? 'bg-yellow-500 hover:bg-yellow-600' :
-                        filter === 'backend' ? 'bg-blue-500 hover:bg-blue-600' :
-                        filter === 'frontend' ? 'bg-green-500 hover:bg-green-600' :
-                        'bg-gray-500 hover:bg-gray-600'
-                      : 'text-gray-600 dark:text-gray-600 hover:text-gray-800 dark:hover:text-gray-300'
-                  }`}
-                >
-                  {filter}
-                  {filter !== 'all' && (
-                    <span className="ml-1">
-                      ({consoleLog.filter(log =>
-                        filter === 'backend' ? (log.source === 'backend' || log.message.includes('[BACKEND]')) :
-                        filter === 'frontend' ? (log.source === 'frontend' || log.message.includes('[FRONTEND]')) :
-                        log.type === filter
-                      ).length})
-                    </span>
-                  )}
-                </Button>
-              ))}
+          <CardHeader>
+            <div>
+              <h3 className="text-base font-semibold tracking-tight">Embeddings Kaynakları</h3>
             </div>
           </CardHeader>
-          <CardContent className="pt-0">
-            <div
-              className="relative backdrop-blur-xl p-4 rounded-xl font-mono text-xs overflow-auto border shadow-2xl transition-all duration-300
-                         bg-white/20 dark:bg-black/40
-                         border-white/30 dark:border-white/10
-                         text-gray-800 dark:text-gray-100
-                         before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-br
-                         before:from-white/10 before:to-transparent before:via-white/5
-                         dark:before:from-white/5 dark:before:to-transparent dark:before:via-white/2
-                         after:absolute after:inset-0 after:rounded-xl after:bg-gradient-to-tr
-                         after:from-blue-500/5 after:to-purple-500/5 after:via-transparent
-                         dark:after:from-blue-500/10 dark:after:to-purple-500/10 dark:after:via-transparent"
-              style={{ height: `${consoleHeight}px`, maxHeight: '600px' }}
-            >
-              {filteredConsoleLogs.length > 0 ? (
-                filteredConsoleLogs.slice(-50).map((log, index) => (
-                  <div key={`${log.id || index}-${log.timestamp || Date.now()}-${index}`} className={`mb-0.5 font-mono relative z-10 p-1 rounded text-[10px] leading-tight
-                    ${log.type === 'error' ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-l-2 border-red-500' :
-                      log.type === 'warn' ? 'text-yellow-700 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-500/10 border-l-2 border-yellow-500' :
-                      log.type === 'info' ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-l-2 border-blue-400' :
-                      'text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-black/20 border-l-2 border-gray-300 dark:border-gray-600'
-                    }`}>
-                    <span className="text-gray-500 dark:text-gray-400 select-none font-medium text-[9px]">[{log.timestamp}]</span>
-                    <span className={`ml-2 ${
-                      log.source === 'user' ? 'text-purple-600 dark:text-purple-400 font-semibold' :
-                      log.source === 'system' ? 'text-cyan-600 dark:text-cyan-400' :
-                      'text-gray-800 dark:text-gray-200'
-                    }`}>{log.message}</span>
-                    {log.source && (
-                      <span className={`ml-2 text-[9px] px-1 py-0.5 rounded-full ${
-                        log.source === 'user' ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 font-medium' :
-                        log.source === 'system' ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400' :
-                        log.source === 'backend' ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' :
-                        log.source === 'frontend' ? 'bg-green-500/20 text-green-600 dark:text-green-400' :
-                        'bg-gray-500/20 text-gray-600 dark:text-gray-400'
-                      }`}>
-                        [{log.source.toUpperCase()}]
-                      </span>
-                    )}
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Migrated Data */}
+              <div className="p-5 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">Migrated Data</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Rows:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
                   </div>
-                ))
-              ) : (
-                <div className="text-gray-500 dark:text-gray-600 text-center py-8">
-                  {consoleFilter === 'all' ?
-                    'Console output will appear here...' :
-                    `No ${consoleFilter} logs found. Try changing the filter.`
-                  }
-                </div>
-              )}
-            </div>
-
-            {/* Console Command Input */}
-            <div className="mt-3 border-t border-white/20 dark:border-white/10 pt-3">
-              <div className="flex items-center gap-2">
-                <span className="text-gray-500 dark:text-gray-400 font-mono text-sm font-medium">$</span>
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={consoleCommand}
-                    onChange={(e) => setConsoleCommand(e.target.value)}
-                    onKeyDown={handleConsoleKeyDown}
-                    placeholder="Type /help for available commands..."
-                    className="w-full px-3 py-2 pr-10 text-sm font-mono rounded-lg outline-none transition-all duration-300
-                               bg-white/30 dark:bg-black/30
-                               border border-white/40 dark:border-white/20
-                               text-gray-800 dark:text-gray-200
-                               placeholder-gray-500 dark:placeholder-gray-400
-                               focus:bg-white/40 dark:focus:bg-black/40
-                               focus:border-blue-500/50 dark:focus:border-blue-400/50
-                               focus:shadow-lg focus:shadow-blue-500/20 dark:focus:shadow-blue-400/20
-                               backdrop-blur-sm"
-                  />
-                  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-blue-500/5 to-purple-500/5 dark:from-blue-500/10 dark:to-purple-500/10 pointer-events-none" />
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
                 </div>
               </div>
-              {commandHistory.length > 0 && (
-                <div className="mt-2 text-xs text-gray-500">
-                  Press ↑/↓ to navigate command history ({commandHistory.length} commands)
-                </div>
-              )}
-            </div>
 
-            {/* Resize Handle */}
-            <div className="flex items-center justify-between mt-2">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>Height: {consoleHeight}px</span>
+              {/* Documents Embeddings */}
+              <div className="p-5 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">Documents</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Documents:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.documents?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConsoleHeight(Math.max(200, consoleHeight - 50))}
-                  className="h-5 px-1 text-xs"
-                >
-                  -
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConsoleHeight(Math.min(600, consoleHeight + 50))}
-                  className="h-5 px-1 text-xs"
-                >
-                  +
-                </Button>
+
+              {/* Scraped Embeddings */}
+              <div className="p-5 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">Scraped</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Data:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Message History Embeddings */}
+              <div className="p-5 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">Message History</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Messages:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.messages?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
         </Card>
+
+
+        {/* Advanced Console Component */}
+        <AdvancedConsole
+          height={500}
+          maxHeight={700}
+          showHeader={true}
+          showControls={true}
+          showFilters={true}
+          showBookmarks={true}
+          showHistory={true}
+          autoScroll={true}
+          maxLogs={1000}
+        />
 
         {/* Performance & System Resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1614,26 +1452,24 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500 dark:text-gray-400">CPU</span>
-                    <span className={`font-medium ${
-                      realtimeResources.cpu > 80 ? 'text-red-600 dark:text-red-400' :
+                    <span className={`font-medium ${realtimeResources.cpu > 80 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.cpu > 60 ? 'text-yellow-600 dark:text-yellow-400' :
-                      'text-blue-600 dark:text-blue-400'
-                    }`}>
+                        'text-blue-600 dark:text-blue-400'
+                      }`}>
                       {Math.round(realtimeResources.cpu)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${
-                        realtimeResources.cpu > 80 ? 'bg-red-500' :
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.cpu > 80 ? 'bg-red-500' :
                         realtimeResources.cpu > 60 ? 'bg-yellow-500' :
-                        'bg-blue-500'
-                      }`}
+                          'bg-blue-500'
+                        }`}
                       style={{
                         width: `${realtimeResources.cpu}%`,
                         boxShadow: realtimeResources.cpu > 80 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                                   realtimeResources.cpu > 60 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                                   '0 0 8px rgba(59, 130, 246, 0.4)'
+                          realtimeResources.cpu > 60 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                            '0 0 8px rgba(59, 130, 246, 0.4)'
                       }}
                     />
                   </div>
@@ -1641,26 +1477,24 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500 dark:text-gray-400">Memory</span>
-                    <span className={`font-medium ${
-                      realtimeResources.memory > 85 ? 'text-red-600 dark:text-red-400' :
+                    <span className={`font-medium ${realtimeResources.memory > 85 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.memory > 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                      'text-green-600 dark:text-green-400'
-                    }`}>
+                        'text-green-600 dark:text-green-400'
+                      }`}>
                       {Math.round(realtimeResources.memory)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${
-                        realtimeResources.memory > 85 ? 'bg-red-500' :
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.memory > 85 ? 'bg-red-500' :
                         realtimeResources.memory > 70 ? 'bg-yellow-500' :
-                        'bg-green-500'
-                      }`}
+                          'bg-green-500'
+                        }`}
                       style={{
                         width: `${realtimeResources.memory}%`,
                         boxShadow: realtimeResources.memory > 85 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                                   realtimeResources.memory > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                                   '0 0 8px rgba(34, 197, 94, 0.4)'
+                          realtimeResources.memory > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                            '0 0 8px rgba(34, 197, 94, 0.4)'
                       }}
                     />
                   </div>
@@ -1668,26 +1502,24 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500 dark:text-gray-400">Disk</span>
-                    <span className={`font-medium ${
-                      realtimeResources.disk > 90 ? 'text-red-600 dark:text-red-400' :
+                    <span className={`font-medium ${realtimeResources.disk > 90 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.disk > 75 ? 'text-yellow-600 dark:text-yellow-400' :
-                      'text-green-600 dark:text-green-400'
-                    }`}>
+                        'text-green-600 dark:text-green-400'
+                      }`}>
                       {Math.round(realtimeResources.disk)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${
-                        realtimeResources.disk > 90 ? 'bg-red-500' :
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.disk > 90 ? 'bg-red-500' :
                         realtimeResources.disk > 75 ? 'bg-yellow-500' :
-                        'bg-green-500'
-                      }`}
+                          'bg-green-500'
+                        }`}
                       style={{
                         width: `${realtimeResources.disk}%`,
                         boxShadow: realtimeResources.disk > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                                   realtimeResources.disk > 75 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                                   '0 0 8px rgba(34, 197, 94, 0.4)'
+                          realtimeResources.disk > 75 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                            '0 0 8px rgba(34, 197, 94, 0.4)'
                       }}
                     />
                   </div>
@@ -1695,29 +1527,27 @@ export default function DashboardPage() {
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-500 dark:text-gray-400">GPU</span>
-                    <span className={`font-medium ${
-                      realtimeResources.gpu > 90 ? 'text-red-600 dark:text-red-400' :
+                    <span className={`font-medium ${realtimeResources.gpu > 90 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.gpu > 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                      realtimeResources.gpu > 30 ? 'text-purple-600 dark:text-purple-400' :
-                      'text-gray-600 dark:text-gray-400'
-                    }`}>
+                        realtimeResources.gpu > 30 ? 'text-purple-600 dark:text-purple-400' :
+                          'text-gray-600 dark:text-gray-400'
+                      }`}>
                       {Math.round(realtimeResources.gpu)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${
-                        realtimeResources.gpu > 90 ? 'bg-red-500' :
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.gpu > 90 ? 'bg-red-500' :
                         realtimeResources.gpu > 70 ? 'bg-yellow-500' :
-                        realtimeResources.gpu > 30 ? 'bg-purple-500' :
-                        'bg-gray-500'
-                      }`}
+                          realtimeResources.gpu > 30 ? 'bg-purple-500' :
+                            'bg-gray-500'
+                        }`}
                       style={{
                         width: `${realtimeResources.gpu}%`,
                         boxShadow: realtimeResources.gpu > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                                   realtimeResources.gpu > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                                   realtimeResources.gpu > 30 ? '0 0 8px rgba(168, 85, 247, 0.4)' :
-                                   'none'
+                          realtimeResources.gpu > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
+                            realtimeResources.gpu > 30 ? '0 0 8px rgba(168, 85, 247, 0.4)' :
+                              'none'
                       }}
                     />
                   </div>
@@ -1728,8 +1558,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-  
-      </div>
+
+    </div >
   );
 }
 

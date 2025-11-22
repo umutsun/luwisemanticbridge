@@ -666,3 +666,8 @@ export class SettingsService {
     }
   }
 }
+// Export singleton instance
+export const settingsService = SettingsService.getInstance();
+
+// Export default
+export default settingsService;

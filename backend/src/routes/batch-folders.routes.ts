@@ -287,7 +287,12 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
         message: `Processing ${file.filename}`
       };
       console.log(`[Batch Folders] Emitting progress: job-progress-${jobId}`, progressData);
-      io.emit(`job-progress-${jobId}`, progressData);
+      if (io) {
+        io.emit(`job-progress-${jobId}`, progressData);
+        console.log(`[Batch Folders] ✅ WebSocket emit successful`);
+      } else {
+        console.warn(`[Batch Folders] ⚠️  WebSocket (io) is null - cannot emit progress`);
+      }
 
       // ═══════════════════════════════════════════════════════════════
       // DUPLICATE CHECK: Skip if file_path already exists in documents
@@ -664,14 +669,19 @@ async function processFilesAsync(jobId: string, files: BatchFile[], options: any
     await redis.set(`job:${jobId}`, JSON.stringify(finalJob), 'EX', 86400);
 
     // Final progress emit
-    io.emit(`job-progress-${jobId}`, {
-      jobId,
-      status: 'completed',
-      current: files.length,
-      total: files.length,
-      percentage: 100,
-      message: `Batch processing completed. ${finalJob.results.length} successful, ${finalJob.errors.length} errors.`
-    });
+    if (io) {
+      io.emit(`job-progress-${jobId}`, {
+        jobId,
+        status: 'completed',
+        current: files.length,
+        total: files.length,
+        percentage: 100,
+        message: `Batch processing completed. ${finalJob.results.length} successful, ${finalJob.errors.length} errors.`
+      });
+      console.log(`[Batch Folders] ✅ Final completion WebSocket emit successful`);
+    } else {
+      console.warn(`[Batch Folders] ⚠️  WebSocket (io) is null - cannot emit completion`);
+    }
   }
 
   console.log(`[Batch Folders] Job ${jobId} completed`);

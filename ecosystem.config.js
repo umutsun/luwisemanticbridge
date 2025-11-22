@@ -1,20 +1,28 @@
-module.exports = {
+pdfmodule.exports = {
   apps: [
     {
       name: 'lsemb-backend',
-      script: 'node_modules/nodemon/bin/nodemon.js',
-      args: '--exec "node -r dotenv/config -r ts-node/register src/server.ts" dotenv_config_path=../.env.lsemb',
+      script: 'src/server.ts',
       cwd: 'c:/xampp/htdocs/lsemb/backend',
       interpreter: 'node',
+      interpreter_args: '-r dotenv/config -r ts-node/register',
       env: {
         NODE_ENV: 'development',
-        PORT: 8083
+        PORT: 8083,
+        ENABLE_WEBSOCKET: 'true',
+        WEBSOCKET_PORT: '8083',
+        WEBSOCKET_PATH: '/socket.io',
+        dotenv_config_path: '../.env.lsemb'
       },
       error_file: './logs/backend-error.log',
       out_file: './logs/backend-out.log',
       log_file: './logs/backend-combined.log',
       time: true,
-      watch: false
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      windowsHide: true
     },
     {
       name: 'lsemb-frontend',
@@ -30,7 +38,11 @@ module.exports = {
       error_file: './logs/frontend-error.log',
       out_file: './logs/frontend-out.log',
       log_file: './logs/frontend-combined.log',
-      time: true
+      time: true,
+      autorestart: true,
+      max_restarts: 5,
+      min_uptime: '10s',
+      windowsHide: true
     },
     {
       name: 'lsemb-python',
@@ -46,7 +58,8 @@ module.exports = {
       error_file: './logs/python-error.log',
       out_file: './logs/python-out.log',
       log_file: './logs/python-combined.log',
-      time: true
+      time: true,
+      windowsHide: true
     }
   ]
 };

@@ -61,15 +61,19 @@ export class SemanticSearchService {
     try {
       const result = await lsembPool.query(`
         SELECT
-          indexname,
-          indexdef,
-          pg_size_pretty(pg_relation_size(indexrelid)) as index_size
-        FROM pg_indexes
-        WHERE tablename = 'unified_embeddings'
-          AND indexname LIKE '%embedding%'
-          AND indexname NOT LIKE '%record_type%'
-          AND indexname NOT LIKE '%has_embedding%'
-        ORDER BY indexname
+          i.indexname,
+          i.indexdef,
+          pg_size_pretty(pg_relation_size(s.indexrelid)) as index_size
+        FROM pg_indexes i
+        LEFT JOIN pg_stat_user_indexes s
+          ON i.schemaname = s.schemaname
+          AND i.tablename = s.tablename
+          AND i.indexname = s.indexname
+        WHERE i.tablename = 'unified_embeddings'
+          AND i.indexname LIKE '%embedding%'
+          AND i.indexname NOT LIKE '%record_type%'
+          AND i.indexname NOT LIKE '%has_embedding%'
+        ORDER BY i.indexname
       `);
 
       if (result.rows.length === 0) {
@@ -92,7 +96,8 @@ export class SemanticSearchService {
         console.log(`   Index: ${index.indexname}, Size: ${index.index_size}`);
       }
     } catch (error) {
-      console.error('[SemanticSearch] Failed to verify vector index:', error);
+      // Silent - vector index verification is optional
+      // console.error('[SemanticSearch] Failed to verify vector index:', error);
     }
   }
 
@@ -145,7 +150,8 @@ export class SemanticSearchService {
       this.unifiedRecordTypes = result.rows.map(row => row.record_type).filter(t => t);
       this.lastRecordTypesRefresh = Date.now();
 
-      console.log('[SemanticSearch] Loaded unified record types:', this.unifiedRecordTypes);
+      // Silent - no need to log record types on every refresh
+      // console.log('[SemanticSearch] Loaded unified record types:', this.unifiedRecordTypes);
     } catch (error) {
       console.error('[SemanticSearch] Failed to load unified record types:', error);
       this.unifiedRecordTypes = [];

@@ -1390,9 +1390,8 @@ router.post('/search', authenticateToken, async (req: AuthenticatedRequest, res:
 });
 
 // Bulk create embeddings - REQUIRES AUTHENTICATION
+// ✅ Uses document_embeddings table (vector store)
 router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const client = await lsembPool.connect();
-
   try {
     const { documentIds } = req.body;
 
@@ -1401,78 +1400,127 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
     }
 
     let embeddedCount = 0;
+    let skippedCount = 0;
     const errors: string[] = [];
+    const results: any[] = [];
 
     for (const docId of documentIds) {
       try {
-        await client.query('BEGIN');
-
-        // Check if document exists and has no embeddings
-        const docResult = await client.query(
-          'SELECT id, title, content FROM documents WHERE id = $1',
+        // Get document details
+        const docResult = await lsembPool.query(
+          'SELECT id, title, content, file_type, metadata FROM documents WHERE id = $1',
           [docId]
         );
 
         if (docResult.rows.length === 0) {
           errors.push(`Document ${docId} not found`);
-          await client.query('ROLLBACK');
           continue;
         }
 
         const document = docResult.rows[0];
 
-        // Check if embeddings already exist
-        const existingEmbeds = await client.query(
-          'SELECT COUNT(*) FROM embeddings WHERE document_id = $1',
+        // Check if embeddings already exist in document_embeddings table
+        const existingEmbeds = await lsembPool.query(
+          'SELECT COUNT(*) as count FROM document_embeddings WHERE document_id = $1',
           [docId]
         );
 
         if (parseInt(existingEmbeds.rows[0].count) > 0) {
-          errors.push(`Document ${docId} already has embeddings`);
-          await client.query('ROLLBACK');
+          console.log(`⏭️ Document ${docId} (${document.title}) already has embeddings, skipping`);
+          skippedCount++;
+          results.push({
+            id: docId,
+            title: document.title,
+            status: 'skipped',
+            reason: 'Already has embeddings'
+          });
           continue;
         }
 
-        // Process document and create embeddings
-        const chunks = await documentProcessor.processDocument(document.content);
+        // Determine document type
+        const documentType = document.metadata?.document_type ||
+          (document.title.match(/\.(csv|json)$/i) ? 'tabular' :
+           document.title.match(/\.(pdf|doc|docx|md)$/i) ? 'structured' : 'text');
 
-        // Insert chunks
-        for (const chunk of chunks) {
-          await client.query(
-            `INSERT INTO embeddings (document_id, chunk_index, content, metadata)
-             VALUES ($1, $2, $3, $4)`,
-            [docId, chunk.index, chunk.text, JSON.stringify(chunk.metadata || {})]
+        console.log(`📄 Embedding document ${docId}: ${document.title} (type: ${documentType})`);
+
+        // Create embeddings using contextual processor
+        await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
+          document.id,
+          document.content,
+          document.title,
+          documentType
+        );
+
+        // Get embedding statistics
+        const embeddingStats = await lsembPool.query(
+          `SELECT
+             model_name,
+             SUM(tokens_used) as total_tokens,
+             COUNT(*) as chunk_count,
+             COALESCE(SUM(tokens_used) * 0.000002, 0) as total_cost
+           FROM document_embeddings
+           WHERE document_id = $1
+           GROUP BY model_name`,
+          [docId]
+        );
+
+        // Update document with model info and tokens
+        if (embeddingStats.rows.length > 0) {
+          const stats = embeddingStats.rows[0];
+          await lsembPool.query(
+            `UPDATE documents
+             SET model_used = $1,
+                 tokens_used = $2,
+                 cost_usd = $3,
+                 verified_at = CURRENT_TIMESTAMP,
+                 auto_verified = true,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [
+              stats.model_name || 'text-embedding-ada-002',
+              stats.total_tokens || 0,
+              stats.total_cost || 0,
+              docId
+            ]
           );
         }
 
-        // Update document metadata
-        await client.query(
-          'UPDATE documents SET metadata = metadata || $1 WHERE id = $2',
-          [JSON.stringify({ chunks: chunks.length, embeddings: true, last_embedded: new Date().toISOString() }), docId]
-        );
-
-        await client.query('COMMIT');
         embeddedCount++;
+        results.push({
+          id: docId,
+          title: document.title,
+          status: 'success',
+          chunks: embeddingStats.rows[0]?.chunk_count || 0,
+          tokens: embeddingStats.rows[0]?.total_tokens || 0
+        });
+
+        console.log(`✅ Embedded document ${docId}: ${document.title} (${embeddingStats.rows[0]?.chunk_count || 0} chunks)`);
 
       } catch (error) {
-        await client.query('ROLLBACK');
-        console.error(`Failed to embed document ${docId}:`, error);
+        console.error(`❌ Failed to embed document ${docId}:`, error);
         errors.push(`Document ${docId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        results.push({
+          id: docId,
+          status: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     }
 
     res.json({
       success: true,
       embedded: embeddedCount,
+      skipped: skippedCount,
+      failed: errors.length,
       total: documentIds.length,
+      results,
       errors: errors.length > 0 ? errors : undefined
     });
 
   } catch (error) {
     console.error('Bulk embed failed:', error);
     res.status(500).json({ error: 'Failed to create bulk embeddings' });
-  } finally {
-    client.release();
   }
 });
 

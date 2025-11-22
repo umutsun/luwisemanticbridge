@@ -9,6 +9,10 @@ import { OCRResult, OCROptions, OCRProviderConfig, OCRProviderType } from '../ty
 import axios from 'axios';
 import { logger } from '../../../utils/logger';
 import { settingsService } from '../../settings.service';
+import fs from 'fs/promises';
+import path from 'path';
+// @ts-ignore
+import { fromPath } from 'pdf2pic';
 
 interface ReplicateResponse {
   id: string;
@@ -128,10 +132,77 @@ export class DeepSeekProvider extends BaseOCRProvider {
   }
 
   /**
-   * PDF OCR - şimdilik desteklenmiyor
+   * PDF OCR - Convert to images then process
    */
   async processPDF(filePath: string, options: OCROptions = {}): Promise<OCRResult> {
-    throw new Error('DeepSeek Vision için PDF desteği henüz eklenmedi. PDF\'i görsellere ayırın.');
+    this.startTimer();
+    const tempDir = path.join(path.dirname(filePath), `deepseek_ocr_${Date.now()}`);
+
+    try {
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // Initialize converter
+      const converter = fromPath(filePath, {
+        density: 300,
+        saveFilename: "page",
+        savePath: tempDir,
+        format: "png",
+        width: 2048,
+        height: 2048
+      });
+
+      // Convert all pages
+      logger.info(`Converting PDF to images: ${filePath}`);
+      const result = await converter.bulk(-1, { responseType: "image" });
+
+      if (!result || result.length === 0) {
+        throw new Error('PDF conversion failed: No images generated');
+      }
+
+      logger.info(`PDF converted to ${result.length} images. Starting OCR...`);
+
+      const texts: string[] = [];
+      let totalConfidence = 0;
+      let processedCount = 0;
+
+      // Process each page
+      for (const image of result) {
+        if (!image.path) continue;
+
+        logger.info(`Processing page ${processedCount + 1}/${result.length}`);
+        const ocrResult = await this.processImage(image.path, options);
+
+        texts.push(ocrResult.text);
+        totalConfidence += ocrResult.confidence;
+        processedCount++;
+      }
+
+      const combinedText = texts.join('\n\n--- Page Break ---\n\n');
+      const avgConfidence = processedCount > 0 ? totalConfidence / processedCount : 0;
+
+      return {
+        text: combinedText,
+        confidence: avgConfidence,
+        metadata: {
+          provider: this.name,
+          model: this.modelVersion,
+          processingTimeMs: this.getProcessingTime(),
+          pageCount: processedCount,
+          imageFormat: 'application/pdf'
+        }
+      };
+
+    } catch (error) {
+      logger.error('DeepSeek PDF OCR error:', error);
+      throw new Error(`DeepSeek Vision PDF OCR başarısız: ${error.message}`);
+    } finally {
+      // Cleanup temp dir
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch (e) {
+        logger.warn('Failed to cleanup temp dir:', tempDir);
+      }
+    }
   }
 
   /**

@@ -387,7 +387,6 @@ settings-test-*.json
 
 # Submodules / Test Directories
 awesome-claude-code-agents/
-.claude/
 .kimi/
 .zai/
 
