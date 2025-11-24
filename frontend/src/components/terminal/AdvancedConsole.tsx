@@ -171,7 +171,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
 
                 wsRef.current.onopen = () => {
                     setIsConnected(true);
-                    addLog('info', 'Connected to log stream server', 'system');
+                    addLog('info', t('terminal.status.connected'), 'system');
                 };
 
                 wsRef.current.onmessage = (event) => {
@@ -185,7 +185,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
 
                 wsRef.current.onclose = () => {
                     setIsConnected(false);
-                    addLog('warn', 'Disconnected from log stream server', 'system');
+                    addLog('warn', t('terminal.status.disconnected'), 'system');
 
                     // Attempt to reconnect after 3 seconds
                     setTimeout(connectWebSocket, 3000);
@@ -194,11 +194,11 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 wsRef.current.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     addLog('error', 'WebSocket connection error', 'system');
-                    addLog('error', `WebSocket error: ${error.message || 'Unknown error'}`, 'system');
+                    addLog('error', t('terminal.status.wsConnectionError'), 'system');
                 };
             } catch (error) {
                 console.error('Failed to connect to WebSocket:', error);
-                addLog('error', 'Failed to connect to log stream server', 'system');
+                addLog('error', t('terminal.status.wsConnectionLost'), 'system');
             }
         };
 
@@ -324,7 +324,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 setLogs([]);
                 // Force re-render by creating a new array reference
                 setTimeout(() => {
-                    addLog('success', 'Console cleared', 'system');
+                    addLog('success', t('terminal.status.consoleCleared'), 'system');
                 }, 10);
                 break;
             case '/export':
@@ -334,7 +334,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 if (args[0]) {
                     addBookmark(args[0], command);
                 } else {
-                    addLog('error', 'Usage: /bookmark <name>', 'system');
+                    addLog('error', t('terminal.status.usageBookmark'), 'system');
                 }
                 break;
             case '/status':
@@ -344,7 +344,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 if (args[0]) {
                     searchWithPattern(args.join(' '));
                 } else {
-                    addLog('error', 'Usage: /grep <pattern>', 'system');
+                    addLog('error', t('terminal.status.usageGrep'), 'system');
                 }
                 break;
             case '/tail':
@@ -355,7 +355,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 if (args[0]) {
                     searchInLogs(args.join(' '));
                 } else {
-                    addLog('error', 'Usage: /search <term>', 'system');
+                    addLog('error', t('terminal.status.usageSearch'), 'system');
                 }
                 break;
             case '/metrics':
@@ -368,31 +368,31 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 showHealthCheck();
                 break;
             case '/time':
-                addLog('info', `Current time: ${new Date().toLocaleString()}`, 'system');
+                addLog('info', t('terminal.currentTime'), 'system');
                 break;
             case '/calc':
                 if (args[0]) {
                     try {
                         // Simple calculator for basic expressions
                         const result = Function('"use strict"; return (' + args.join(' ') + ')')();
-                        addLog('info', `Result: ${result}`, 'system');
+                        addLog('info', t('terminal.calc.result', { result }), 'system');
                     } catch (error) {
-                        addLog('error', `Invalid expression: ${args.join(' ')}`, 'system');
+                        addLog('error', t('terminal.status.invalidExpression', { expression: args.join(' ') }), 'system');
                     }
                 } else {
-                    addLog('error', 'Usage: /calc <expression>', 'system');
+                    addLog('error', t('terminal.status.usageCalc'), 'system');
                 }
                 break;
             case '/theme':
                 if (args[0] === 'toggle') {
                     // This would require theme context integration
-                    addLog('info', 'Theme toggle functionality requires theme context integration', 'system');
+                    addLog('info', t('terminal.status.themeToggle'), 'system');
                 } else {
-                    addLog('error', 'Usage: /theme toggle', 'system');
+                    addLog('error', t('terminal.status.themeUsage'), 'system');
                 }
                 break;
             default:
-                addLog('warn', `Unknown command: ${cmd}. Type /help for available commands.`, 'system');
+                addLog('warn', t('terminal.status.unknownCommand', { cmd: cmd }), 'system');
         }
     }, [addLog]);
 
@@ -400,33 +400,33 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
     const showHelp = useCallback(() => {
         const helpText = `
 ═══════════════════════════════════════════════════════════════════════════════
-📋 ADVANCED CONSOLE COMMANDS
+${t('terminal.help.title')}
 ═══════════════════════════════════════════════════════════════════════════════
 
 🔧 SYSTEM COMMANDS:
-  /status         - Show complete system status
-  /refresh        - Refresh all dashboard data
-  /health         - Check service health
-  /uptime         - Show system uptime
+  /status         - ${t('terminal.help.status')}
+  /refresh        - ${t('terminal.help.refresh')}
+  /health         - ${t('terminal.help.health')}
+  /uptime         - ${t('terminal.help.uptime')}
 
 📊 DATA COMMANDS:
-  /stats          - Show chat statistics
-  /logs [filter]  - Show logs with optional filter
-  /export         - Export console logs as JSON
-  /search <term>  - Search logs for specific term
+  /stats          - ${t('terminal.help.stats')}
+  /logs [filter]  - ${t('terminal.help.logsUsage')}
+  /export         - ${t('terminal.help.exportDesc')}
+  /search <term>  - ${t('terminal.help.searchDesc')}
 
-🎮 CONSOLE COMMANDS:
-  /clear          - Clear console
-  /bookmark <name>- Save current command as bookmark
-  /history        - Show command history
-  /filter         - Show filter options
-  /settings       - Console settings
+${t('terminal.help.consoleCommands')}
+  /clear          - ${t('terminal.help.clearDesc')}
+  /bookmark <name>- ${t('terminal.help.bookmarkUsage')}
+  /history        - ${t('terminal.help.historyDesc')}
+  /filter         - ${t('terminal.help.filterDesc')}
+  /settings       - ${t('terminal.help.settingsDesc')}
 
-🔍 ADVANCED COMMANDS:
-  /grep <pattern> - Search logs using regex pattern
-  /tail [n]       - Show last n log entries
-  /metrics        - Show performance metrics
-  /services       - Show service status
+${t('terminal.help.advancedCommands')}
+  /grep <pattern> - ${t('terminal.help.grepDesc')}
+  /tail [n]       - ${t('terminal.help.tailDesc')}
+  /metrics        - ${t('terminal.help.metricsDesc')}
+  /services       - ${t('terminal.help.servicesDesc')}
 
 ═══════════════════════════════════════════════════════════════════════════════
     `;
@@ -434,7 +434,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
         helpText.split('\n').forEach(line => {
             addLog('info', line, 'system');
         });
-    }, [addLog]);
+    }, [addLog, t]);
 
     // Export logs
     const exportLogs = useCallback(() => {
@@ -458,7 +458,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
         a.click();
         URL.revokeObjectURL(url);
 
-        addLog('success', 'Console data exported successfully', 'system');
+        addLog('success', t('terminal.status.dataExported'), 'system');
     }, [filteredLogs, commands, bookmarks, filterLevel, filterSource, searchTerm, addLog]);
 
     // Add bookmark
@@ -471,7 +471,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
         };
 
         setBookmarks(prev => [...prev, newBookmark]);
-        addLog('success', `Bookmark added: ${name}`, 'system');
+        addLog('success', t('terminal.status.bookmarkAdded', { name }), 'system');
     }, [addLog]);
 
     // Show system status
@@ -925,7 +925,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
 
                     {commandHistory.length > 0 && (
                         <div className="mt-2 text-xs text-gray-500">
-                            Press ↑/↓ to navigate command history ({commandHistory.length} commands)
+                            {t('terminal.status.navigateHistory', { count: commandHistory.length })}
                         </div>
                     )}
                 </div>
@@ -933,7 +933,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 {/* Bookmarks Panel */}
                 {showBookmarksPanel && bookmarks.length > 0 && (
                     <div className="mt-3 border-t border-white/20 dark:border-white/10 pt-3">
-                        <h4 className="text-sm font-semibold mb-2">Bookmarks</h4>
+                        <h4 className="text-sm font-semibold mb-2">{t('terminal.bookmarks')}</h4>
                         <div className="space-y-1">
                             {bookmarks.map((bookmark) => (
                                 <div key={bookmark.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
@@ -950,7 +950,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                                         }}
                                         className="h-6 px-2 text-xs"
                                     >
-                                        Execute
+                                        {t('common.execute')}
                                     </Button>
                                 </div>
                             ))}
@@ -961,7 +961,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 {/* Command History Panel */}
                 {showCommandHistory && commandHistory.length > 0 && (
                     <div className="mt-3 border-t border-white/20 dark:border-white/10 pt-3">
-                        <h4 className="text-sm font-semibold mb-2">Command History</h4>
+                        <h4 className="text-sm font-semibold mb-2">{t('terminal.commandHistory')}</h4>
                         <div className="space-y-1 max-h-32 overflow-y-auto">
                             {commandHistory.map((cmd, index) => (
                                 <div

@@ -81,7 +81,7 @@ interface SessionMessage {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
 export default function MessagesPage() {
-  const { t } = useTranslation();
+  const { t } = useTranslation('messages');
   const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -254,7 +254,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.sessionFlushed'));
+        alert(t('alerts.sessionFlushed'));
         loadSessions();
       }
     } catch (error) {
@@ -273,7 +273,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.embeddingsGenerationStarted'));
+        alert(t('alerts.embeddingsGenerationStarted'));
         loadAnalytics();
         if (selectedSession) {
           loadSessionDetails(selectedSession.session_id);
@@ -295,7 +295,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.responseEmbedded'));
+        alert(t('alerts.responseEmbedded'));
         if (selectedSession) {
           loadSessionDetails(selectedSession.session_id);
         }
@@ -318,7 +318,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.batchEmbeddingStarted'));
+        alert(t('alerts.batchEmbeddingStarted'));
         loadSessionDetails(selectedSession.session_id);
       }
     } catch (error) {
@@ -342,7 +342,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.selectedEmbeddingStarted'));
+        alert(t('alerts.selectedEmbeddingStarted'));
         setSelectedMessages([]);
         setShowBatchActions(false);
         if (selectedSession) {
@@ -364,7 +364,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.sessionDeleted'));
+        alert(t('alerts.sessionDeleted'));
         loadSessions();
         if (selectedSession?.session_id === sessionId) {
           setSelectedSession(null);
@@ -392,7 +392,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert(t('messages.alerts.selectedSessionsDeleted'));
+        alert(t('alerts.selectedSessionsDeleted'));
         setSelectedSessions([]);
         loadSessions();
       }
@@ -533,9 +533,9 @@ export default function MessagesPage() {
   })) || [];
 
   const messageTypesData = stats.messageTypes?.map((m: any) => ({
-    name: m.message_type === 'question' ? t('messages.messageTypes.questions') :
-      m.message_type === 'answer' ? t('messages.messageTypes.answers') :
-        m.message_type === 'search_result' ? t('messages.messageTypes.searchResults') : m.message_type,
+    name: m.message_type === 'question' ? t('messageTypes.questions') :
+      m.message_type === 'answer' ? t('messageTypes.answers') :
+        m.message_type === 'search_result' ? t('messageTypes.searchResults') : m.message_type,
     value: parseInt(m.count),
     color: m.message_type === 'question' ? '#3B82F6' :
       m.message_type === 'answer' ? '#10B981' : '#F59E0B'
@@ -551,9 +551,9 @@ export default function MessagesPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">{t('messages.title')}</h1>
+          <h1 className="text-xl font-semibold">{t('title')}</h1>
           <p className="text-muted-foreground mt-1">
-            {t('messages.subtitle')}
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -562,9 +562,9 @@ export default function MessagesPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="7">{t('messages.timeRange.last7Days')}</SelectItem>
-              <SelectItem value="30">{t('messages.timeRange.last30Days')}</SelectItem>
-              <SelectItem value="90">{t('messages.timeRange.last90Days')}</SelectItem>
+              <SelectItem value="7">{t('timeRange.last7Days')}</SelectItem>
+              <SelectItem value="30">{t('timeRange.last30Days')}</SelectItem>
+              <SelectItem value="90">{t('timeRange.last90Days')}</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => handleExport('json')}>
@@ -579,19 +579,19 @@ export default function MessagesPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">
-            {t('messages.tabs.overview')}
+            {t('tabs.overview')}
           </TabsTrigger>
           <TabsTrigger value="sessions">
-            {t('messages.tabs.sessions')}
+            {t('tabs.sessions')}
           </TabsTrigger>
           <TabsTrigger value="topics">
-            {t('messages.tabs.topics')}
+            {t('tabs.topics')}
           </TabsTrigger>
           <TabsTrigger value="search">
-            {t('messages.tabs.research')}
+            {t('tabs.research')}
           </TabsTrigger>
           <TabsTrigger value="analytics">
-            {t('messages.tabs.analytics')}
+            {t('tabs.analytics')}
           </TabsTrigger>
         </TabsList>
 
@@ -601,7 +601,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">{t('messages.stats.totalMessages')}</p>
+                  <p className="text-sm text-muted-foreground">{t('stats.totalMessages')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -616,7 +616,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">{t('messages.stats.sessionCount')}</p>
+                  <p className="text-sm text-muted-foreground">{t('stats.sessionCount')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -631,7 +631,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">{t('messages.stats.averagePerSession')}</p>
+                  <p className="text-sm text-muted-foreground">{t('stats.averagePerSession')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -646,7 +646,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">{t('messages.stats.embeddings')}</p>
+                  <p className="text-sm text-muted-foreground">{t('stats.embeddings')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -664,14 +664,14 @@ export default function MessagesPage() {
           {/* Top Queries */}
           <Card>
             <CardHeader>
-              <CardTitle>{t('messages.popularQueries.title')}</CardTitle>
+              <CardTitle>{t('popularQueries.title')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {stats.topQueries?.slice(0, 10).map((query: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-muted-foreground">{t('messages.popularQueries.rank')}{idx + 1}</span>
+                      <span className="text-sm font-medium text-muted-foreground">{t('popularQueries.rank')}{idx + 1}</span>
                       <p className="text-sm">{query.content}</p>
                     </div>
                     <Badge variant="secondary">{query.frequency}</Badge>
@@ -688,9 +688,9 @@ export default function MessagesPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>{t('messages.sessions.title')}</CardTitle>
+                  <CardTitle>{t('sessions.title')}</CardTitle>
                   <CardDescription>
-                    {t('messages.sessions.subtitle')}
+                    {t('sessions.subtitle')}
                   </CardDescription>
                 </div>
                 {selectedSessions.length > 0 && (
@@ -700,7 +700,7 @@ export default function MessagesPage() {
                       size="sm"
                       onClick={handleDeleteSelectedSessions}
                     >
-                      {t('messages.sessions.batchActions.deleteSelected', { count: selectedSessions.length })}
+                      {t('sessions.batchActions.deleteSelected', { count: selectedSessions.length })}
                     </Button>
                     <Button
                       variant="outline"
@@ -710,7 +710,7 @@ export default function MessagesPage() {
                         setSelectAllChecked(false);
                       }}
                     >
-                      {t('messages.sessions.batchActions.clear')}
+                      {t('sessions.batchActions.clear')}
                     </Button>
                   </div>
                 )}
@@ -722,7 +722,7 @@ export default function MessagesPage() {
                 <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      {t('messages.sessions.batchActions.sessionsSelected', { count: selectedSessions.length })}
+                      {t('sessions.batchActions.sessionsSelected', { count: selectedSessions.length })}
                     </span>
                     <div className="flex gap-2">
                       <Button size="sm" onClick={handleSelectAll}>
@@ -763,16 +763,16 @@ export default function MessagesPage() {
                         >
                           <div className="flex items-center gap-3">
                             <h3 className="font-medium">{session.session_id}</h3>
-                            <Badge variant="outline">{session.message_count} {t('messages.sessions.messages')}</Badge>
-                            <Badge variant="secondary">{session.message_types} {t('messages.sessions.types')}</Badge>
+                            <Badge variant="outline">{session.message_count} {t('sessions.messages')}</Badge>
+                            <Badge variant="secondary">{session.message_types} {t('sessions.types')}</Badge>
                           </div>
                           <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <span>{t('messages.sessions.start')}: {new Date(session.started_at).toLocaleString('tr-TR')}</span>
-                            <span>{t('messages.sessions.lastActivity')}: {new Date(session.last_activity).toLocaleString('tr-TR')}</span>
+                            <span>{t('sessions.start')}: {new Date(session.started_at).toLocaleString('tr-TR')}</span>
+                            <span>{t('sessions.lastActivity')}: {new Date(session.last_activity).toLocaleString('tr-TR')}</span>
                           </div>
                           {session.questions?.length > 0 && (
                             <div className="mt-2">
-                              <p className="text-sm text-muted-foreground">{t('messages.sessions.lastQuestion')}:</p>
+                              <p className="text-sm text-muted-foreground">{t('sessions.lastQuestion')}:</p>
                               <p className="text-sm">{session.questions[0].content}</p>
                             </div>
                           )}
@@ -787,7 +787,7 @@ export default function MessagesPage() {
                             handleFlushSession(session.session_id);
                           }}
                         >
-                          {t('messages.sessions.send')}
+                          {t('sessions.send')}
                         </Button>
                         <Button
                           variant="outline"
@@ -797,7 +797,7 @@ export default function MessagesPage() {
                             handleDeleteSession(session.session_id);
                           }}
                         >
-                          {t('messages.sessions.delete')}
+                          {t('sessions.delete')}
                         </Button>
                         <span
                           className={`text-muted-foreground cursor-pointer hover:text-primary ${selectedSession?.session_id === session.session_id ? 'text-primary' : ''
@@ -825,22 +825,22 @@ export default function MessagesPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>{t('messages.sessionOverview.title')}</CardTitle>
+                      <CardTitle>{t('sessionOverview.title')}</CardTitle>
                       <CardDescription>
-                        {selectedSession.session_id} - {sessionMessages.length} {t('messages.sessionOverview.interactions')}
+                        {selectedSession.session_id} - {sessionMessages.length} {t('sessionOverview.interactions')}
                       </CardDescription>
                     </div>
                     {selectedMessages.length > 0 && (
                       <div className="flex gap-2">
                         <Button onClick={handleBatchEmbedSelected} size="sm">
-                          {t('messages.sessionOverview.batchActions.embedSelected', { count: selectedMessages.length })}
+                          {t('sessionOverview.batchActions.embedSelected', { count: selectedMessages.length })}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedMessages([])}
                         >
-                          {t('messages.sessionOverview.batchActions.clear')}
+                          {t('sessionOverview.batchActions.clear')}
                         </Button>
                       </div>
                     )}
@@ -849,39 +849,39 @@ export default function MessagesPage() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('messages.sessionOverview.tokenUsage.title')}</h4>
+                      <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('sessionOverview.tokenUsage.title')}</h4>
                       <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                         {tokenUsage.totalTokens.toLocaleString()}
                       </p>
                       <p className="text-xs text-blue-600 dark:text-blue-400">
-                        {t('messages.sessionOverview.tokenUsage.average', { tokens: tokenUsage.avgTokensPerMessage })}
+                        {t('sessionOverview.tokenUsage.average', { tokens: tokenUsage.avgTokensPerMessage })}
                       </p>
                     </div>
                     <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('messages.sessionOverview.embeddings.title')}</h4>
+                      <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('sessionOverview.embeddings.title')}</h4>
                       <p className="text-2xl font-bold text-green-900 dark:text-blue-100">
                         {embeddingStats.processed}/{sessionMessages.length}
                       </p>
                       <p className="text-xs text-green-600 dark:text-green-400">
-                        {t('messages.sessionOverview.embeddings.processed')}
+                        {t('sessionOverview.embeddings.processed')}
                       </p>
                     </div>
                     <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('messages.sessionOverview.pending.title')}</h4>
+                      <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('sessionOverview.pending.title')}</h4>
                       <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                         {embeddingStats.pending}
                       </p>
                       <p className="text-xs text-orange-600 dark:text-orange-400">
-                        {t('messages.sessionOverview.pending.description')}
+                        {t('sessionOverview.pending.description')}
                       </p>
                     </div>
                     <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('messages.sessionOverview.selected.title')}</h4>
+                      <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('sessionOverview.selected.title')}</h4>
                       <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
                         {selectedMessages.length}
                       </p>
                       <p className="text-xs text-purple-600 dark:text-purple-400">
-                        {t('messages.sessionOverview.selected.messages')}
+                        {t('sessionOverview.selected.messages')}
                       </p>
                     </div>
                   </div>
@@ -889,28 +889,28 @@ export default function MessagesPage() {
                   {/* Filters and Sort Controls */}
                   <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">{t('messages.sessionOverview.filters.filter')}:</span>
+                      <span className="text-sm text-muted-foreground">{t('sessionOverview.filters.filter')}:</span>
                       <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
                         <SelectTrigger className="w-[140px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">{t('messages.sessionOverview.filters.all')}</SelectItem>
-                          <SelectItem value="embedded">{t('messages.sessionOverview.filters.embedded')}</SelectItem>
-                          <SelectItem value="not-embedded">{t('messages.sessionOverview.filters.notEmbedded')}</SelectItem>
+                          <SelectItem value="all">{t('sessionOverview.filters.all')}</SelectItem>
+                          <SelectItem value="embedded">{t('sessionOverview.filters.embedded')}</SelectItem>
+                          <SelectItem value="not-embedded">{t('sessionOverview.filters.notEmbedded')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">{t('messages.sessionOverview.filters.sort')}:</span>
+                      <span className="text-sm text-muted-foreground">{t('sessionOverview.filters.sort')}:</span>
                       <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
                         <SelectTrigger className="w-[120px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="date">{t('messages.sessionOverview.filters.date')}</SelectItem>
-                          <SelectItem value="tokens">{t('messages.sessionOverview.filters.token')}</SelectItem>
-                          <SelectItem value="quality">{t('messages.sessionOverview.filters.quality')}</SelectItem>
+                          <SelectItem value="date">{t('sessionOverview.filters.date')}</SelectItem>
+                          <SelectItem value="tokens">{t('sessionOverview.filters.token')}</SelectItem>
+                          <SelectItem value="quality">{t('sessionOverview.filters.quality')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -928,10 +928,10 @@ export default function MessagesPage() {
 
                   <div className="flex gap-2 mb-4">
                     <Button onClick={handleBatchEmbedResponses} size="sm">
-                      {t('messages.sessionOverview.batchActions.embedAll')}
+                      {t('sessionOverview.batchActions.embedAll')}
                     </Button>
                     <Button variant="outline" onClick={handleGenerateEmbeddings} size="sm">
-                      {t('messages.sessionOverview.batchActions.systemEmbeddings')}
+                      {t('sessionOverview.batchActions.systemEmbeddings')}
                     </Button>
                   </div>
                 </CardContent>
@@ -940,9 +940,9 @@ export default function MessagesPage() {
               {/* Session Messages */}
               <Card>
                 <CardHeader>
-                  <CardTitle>{t('messages.conversation.title')}</CardTitle>
+                  <CardTitle>{t('conversation.title')}</CardTitle>
                   <CardDescription>
-                    {t('messages.conversation.subtitle')}
+                    {t('conversation.subtitle')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -968,14 +968,14 @@ export default function MessagesPage() {
                                   <span className="text-xs font-bold text-blue-600 dark:text-blue-400">K</span>
                                 </div>
                                 <div>
-                                  <h4 className="font-medium text-sm">{t('messages.conversation.user')}</h4>
+                                  <h4 className="font-medium text-sm">{t('conversation.user')}</h4>
                                   <p className="text-xs text-muted-foreground">
                                     {new Date(interaction.timestamp).toLocaleString('tr-TR')}
                                   </p>
                                 </div>
                                 {interaction.user_message.tokens_used && (
                                   <Badge variant="outline" className="text-xs">
-                                    {interaction.user_message.tokens_used} {t('messages.conversation.token')}
+                                    {interaction.user_message.tokens_used} {t('conversation.token')}
                                   </Badge>
                                 )}
                               </div>
@@ -993,14 +993,14 @@ export default function MessagesPage() {
                                   <span className="text-xs font-bold text-green-600 dark:text-green-400">AI</span>
                                 </div>
                                 <div>
-                                  <h4 className="font-medium text-sm">{t('messages.conversation.alice')}</h4>
+                                  <h4 className="font-medium text-sm">{t('conversation.alice')}</h4>
                                   <p className="text-xs text-muted-foreground">
                                     {new Date(interaction.timestamp).toLocaleString('tr-TR')}
                                   </p>
                                 </div>
                                 {interaction.ai_response.tokens_used && (
                                   <Badge variant="outline" className="text-xs">
-                                    {interaction.ai_response.tokens_used} {t('messages.conversation.token')}
+                                    {interaction.ai_response.tokens_used} {t('conversation.token')}
                                   </Badge>
                                 )}
                                 {interaction.ai_response.response_quality && (
@@ -1009,13 +1009,13 @@ export default function MessagesPage() {
                                       interaction.ai_response.response_quality === 'medium' ? 'secondary' : 'destructive'}
                                     className="text-xs"
                                   >
-                                    {interaction.ai_response.response_quality === 'high' ? t('messages.conversation.quality.high') :
-                                      interaction.ai_response.response_quality === 'medium' ? t('messages.conversation.quality.medium') : t('messages.conversation.quality.low')}
+                                    {interaction.ai_response.response_quality === 'high' ? t('conversation.quality.high') :
+                                      interaction.ai_response.response_quality === 'medium' ? t('conversation.quality.medium') : t('conversation.quality.low')}
                                   </Badge>
                                 )}
                                 {interaction.ai_response.embedding_processed && (
                                   <Badge variant="secondary" className="text-xs">
-                                    {t('messages.conversation.embedded')}
+                                    {t('conversation.embedded')}
                                   </Badge>
                                 )}
                               </div>
@@ -1025,7 +1025,7 @@ export default function MessagesPage() {
                                   size="sm"
                                   onClick={() => handleEmbedSpecificResponse(interaction.id)}
                                 >
-                                  {t('messages.conversation.embed')}
+                                  {t('conversation.embed')}
                                 </Button>
                               </div>
                             </div>
@@ -1038,18 +1038,18 @@ export default function MessagesPage() {
                               {interaction.ai_response.sources && interaction.ai_response.sources.length > 0 && (
                                 <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                                   <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 mb-2">
-                                    {t('messages.conversation.ragSources')}
+                                    {t('conversation.ragSources')}
                                   </p>
                                   <div className="flex flex-wrap gap-1">
                                     {interaction.ai_response.sources.slice(0, 3).map((source: any, idx: number) => (
                                       <Badge key={idx} variant="outline" className="text-xs">
-                                        {source.sourceType || t('messages.conversation.source')}
+                                        {source.sourceType || t('conversation.source')}
                                       </Badge>
                                     ))}
                                   </div>
                                   {interaction.ai_response.sources.length > 3 && (
                                     <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                                      +{interaction.ai_response.sources.length - 3} {t('messages.conversation.moreSources', { count: interaction.ai_response.sources.length - 3 })}
+                                      +{interaction.ai_response.sources.length - 3} {t('conversation.moreSources', { count: interaction.ai_response.sources.length - 3 })}
                                     </p>
                                   )}
                                 </div>
@@ -1067,46 +1067,46 @@ export default function MessagesPage() {
               {userBehaviorAnalysis && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>{t('messages.userBehavior.title')}</CardTitle>
+                    <CardTitle>{t('userBehavior.title')}</CardTitle>
                     <CardDescription>
-                      {t('messages.userBehavior.subtitle')}
+                      {t('userBehavior.subtitle')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                       <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('messages.userBehavior.totalQuestions')}</h4>
+                        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('userBehavior.totalQuestions')}</h4>
                         <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                           {userBehaviorAnalysis.totalQuestions}
                         </p>
                       </div>
                       <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('messages.userBehavior.avgQuestionLength')}</h4>
+                        <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('userBehavior.avgQuestionLength')}</h4>
                         <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                          {userBehaviorAnalysis.avgQuestionLength} {t('messages.userBehavior.characters')}
+                          {userBehaviorAnalysis.avgQuestionLength} {t('userBehavior.characters')}
                         </p>
                       </div>
                       <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('messages.userBehavior.avgResponseTime')}</h4>
+                        <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('userBehavior.avgResponseTime')}</h4>
                         <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                           {userBehaviorAnalysis.avgResponseTime}s
                         </p>
                       </div>
                       <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('messages.userBehavior.sessionDuration')}</h4>
+                        <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('userBehavior.sessionDuration')}</h4>
                         <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                          {Math.round(userBehaviorAnalysis.sessionDuration / 1000 / 60)} {t('messages.userBehavior.minutes')}
+                          {Math.round(userBehaviorAnalysis.sessionDuration / 1000 / 60)} {t('userBehavior.minutes')}
                         </p>
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="text-lg font-medium mb-3">{t('messages.userBehavior.popularTopics')}</h4>
+                      <h4 className="text-lg font-medium mb-3">{t('userBehavior.popularTopics')}</h4>
                       <div className="space-y-2">
                         {userBehaviorAnalysis.mostFrequentTopics.map((topic, idx) => (
                           <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                             <span className="font-medium">{topic.topic}</span>
-                            <Badge variant="secondary">{topic.freq} {t('messages.userBehavior.times')}</Badge>
+                            <Badge variant="secondary">{topic.freq} {t('userBehavior.times')}</Badge>
                           </div>
                         ))}
                       </div>

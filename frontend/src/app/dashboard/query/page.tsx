@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
+import {
   Search,
   Loader2,
   Brain,
@@ -41,18 +42,19 @@ interface QueryResult {
 }
 
 export default function UnifiedQueryPage() {
+  const { t } = useTranslation('query');
 
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState('');
-  
+
   // Query settings
   const [queryMode, setQueryMode] = useState('hybrid');
   const [temperature, setTemperature] = useState([0.3]);
   const [topK, setTopK] = useState([5]);
   const [useCache, setUseCache] = useState(true);
-  
+
   // System stats
   const [systemStats, setSystemStats] = useState<any>(null);
 
@@ -66,10 +68,10 @@ export default function UnifiedQueryPage() {
         fetch(`${API_BASE_URL}/api/v2/lightrag/stats`),
         fetch(`${API_BASE_URL}/api/v2/dashboard`)
       ]);
-      
+
       const lightrag = await lightragRes.json();
       const dashboard = await dashboardRes.json();
-      
+
       setSystemStats({
         lightrag,
         dashboard,
@@ -82,7 +84,7 @@ export default function UnifiedQueryPage() {
 
   const handleQuery = async () => {
     if (!query.trim()) {
-      toast.error('Lütfen bir soru girin');
+      toast.error(t('alerts.enterQuestion'));
       return;
     }
 
@@ -148,23 +150,23 @@ export default function UnifiedQueryPage() {
           tokensUsed: data.tokens_used || data.tokensUsed || estimateTokens(data),
           provider: data.provider || queryMode
         });
-        
-        toast.success('Sorgu başarıyla tamamlandı');
+
+        toast.success(t('alerts.queryCompleted'));
       } else {
-        setError(data.error || 'Sorgu başarısız oldu');
-        toast.error(data.error || 'Sorgu başarısız oldu');
+        setError(data.error || t('alerts.queryFailed'));
+        toast.error(data.error || t('alerts.queryFailed'));
       }
     } catch (err: any) {
-      setError(err.message || 'Bağlantı hatası');
-      toast.error('Bağlantı hatası');
+      setError(err.message || t('alerts.connectionError'));
+      toast.error(t('alerts.connectionError'));
     } finally {
       setLoading(false);
     }
   };
 
   const formatSemanticResults = (results: any[]) => {
-    if (!results || results.length === 0) return 'Sonuç bulunamadı.';
-    
+    if (!results || results.length === 0) return t('alerts.noResults');
+
     return results
       .map((r, i) => `${i + 1}. ${r.content || r.text}`)
       .join('\n\n');
@@ -172,9 +174,9 @@ export default function UnifiedQueryPage() {
 
   const extractSources = (results: any[]) => {
     if (!results) return [];
-    
+
     return results.map(r => ({
-      title: r.document_type || r.source || 'Unknown',
+      title: r.document_type || r.source || t('common.unknown'),
       url: r.url || '#',
       relevance: r.similarity || r.score || 0
     }));
@@ -182,10 +184,10 @@ export default function UnifiedQueryPage() {
 
   const calculateConfidence = (results: any[]) => {
     if (!results || results.length === 0) return 0;
-    
-    const avgScore = results.reduce((acc, r) => 
+
+    const avgScore = results.reduce((acc, r) =>
       acc + (r.similarity || r.score || 0), 0) / results.length;
-    
+
     return Math.round(avgScore * 100);
   };
 
@@ -195,19 +197,19 @@ export default function UnifiedQueryPage() {
   };
 
   const queryModes = [
-    { value: 'hybrid', label: 'Hybrid RAG', icon: Sparkles, description: 'Semantic + Keyword' },
-    { value: 'lightrag', label: 'LightRAG', icon: Brain, description: 'Graph-based RAG' },
-    { value: 'semantic', label: 'Semantic', icon: Hash, description: 'Vector search' },
-    { value: 'raganything', label: 'RAGAnything', icon: Zap, description: 'Universal RAG' }
+    { value: 'hybrid', label: t('modes.hybrid.title'), icon: Sparkles, description: t('modes.hybrid.description') },
+    { value: 'lightrag', label: t('modes.lightrag.title'), icon: Brain, description: t('modes.lightrag.description') },
+    { value: 'semantic', label: t('modes.semantic.title'), icon: Hash, description: t('modes.semantic.description') },
+    { value: 'raganything', label: t('modes.raganything.title'), icon: Zap, description: t('modes.raganything.description') }
   ];
 
   return (
     <div className="py-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Unified RAG Query</h1>
+          <h1 className="text-2xl font-bold">{t('title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Tüm RAG sistemlerini tek yerden sorgulayın
+            {t('subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -215,7 +217,7 @@ export default function UnifiedQueryPage() {
             <>
               <Badge variant="outline" className="gap-1">
                 <FileText className="h-3 w-3" />
-                {systemStats.totalDocuments} Doküman
+                {systemStats.totalDocuments} {t('documents')}
               </Badge>
               <Badge variant={systemStats.lightrag?.initialized ? "success" : "secondary"} className="gap-1">
                 <Brain className="h-3 w-3" />
@@ -235,14 +237,14 @@ export default function UnifiedQueryPage() {
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Soru Sorun</CardTitle>
+              <CardTitle>{t('askQuestion')}</CardTitle>
               <CardDescription>
-                Dokümanlarınızdan bilgi almak için soru sorun
+                {t('askQuestionDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label>Query Mode</Label>
+                <Label>{t('queryMode')}</Label>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   {queryModes.map((mode) => {
                     const Icon = mode.icon;
@@ -250,11 +252,10 @@ export default function UnifiedQueryPage() {
                       <button
                         key={mode.value}
                         onClick={() => setQueryMode(mode.value)}
-                        className={`p-3 rounded-lg border-2 transition-all ${
-                          queryMode === mode.value 
-                            ? 'border-primary bg-primary/5' 
-                            : 'border-border hover:border-primary/50'
-                        }`}
+                        className={`p-3 rounded-lg border-2 transition-all ${queryMode === mode.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
+                          }`}
                       >
                         <div className="flex items-center gap-2">
                           <Icon className="h-4 w-4" />
@@ -270,23 +271,23 @@ export default function UnifiedQueryPage() {
               </div>
 
               <div>
-                <Label>Sorunuz</Label>
+                <Label>{t('yourQuestion')}</Label>
                 <Textarea
-                  placeholder="Örn: Vergi indirimi koşulları nelerdir?"
+                  placeholder={t('questionPlaceholder')}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   rows={4}
                   className="resize-none"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  {query.length} karakter
+                  {query.length} {t('characters')}
                 </p>
               </div>
 
               {/* Advanced Settings */}
               <div className="space-y-3 pt-3 border-t">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm">Temperature: {temperature[0]}</Label>
+                  <Label className="text-sm">{t('temperature')}: {temperature[0]}</Label>
                   <Slider
                     value={temperature}
                     onValueChange={setTemperature}
@@ -296,9 +297,9 @@ export default function UnifiedQueryPage() {
                     className="w-32"
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm">Top K: {topK[0]}</Label>
+                  <Label className="text-sm">{t('topK')}: {topK[0]}</Label>
                   <Slider
                     value={topK}
                     onValueChange={setTopK}
@@ -310,7 +311,7 @@ export default function UnifiedQueryPage() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm">Cache Kullan</Label>
+                  <Label className="text-sm">{t('useCache')}</Label>
                   <Switch
                     checked={useCache}
                     onCheckedChange={setUseCache}
@@ -318,7 +319,7 @@ export default function UnifiedQueryPage() {
                 </div>
               </div>
 
-              <Button 
+              <Button
                 onClick={handleQuery}
                 disabled={loading || !query.trim()}
                 className="w-full"
@@ -327,12 +328,12 @@ export default function UnifiedQueryPage() {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sorgulanıyor...
+                    {t('querying')}
                   </>
                 ) : (
                   <>
                     <Search className="h-4 w-4 mr-2" />
-                    Sorgula
+                    {t('query')}
                   </>
                 )}
               </Button>
@@ -346,13 +347,13 @@ export default function UnifiedQueryPage() {
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-5 w-5 text-green-600" />
-                    <CardTitle>Sorgu Sonucu</CardTitle>
+                    <CardTitle>{t('queryResult')}</CardTitle>
                   </div>
                   <div className="flex gap-2">
                     <Badge variant="outline">{result.provider}</Badge>
                     <Badge variant="outline">{result.executionTime}</Badge>
                     {result.tokensUsed && (
-                      <Badge variant="outline">{result.tokensUsed} token</Badge>
+                      <Badge variant="outline">{result.tokensUsed} {t('common.token')}</Badge>
                     )}
                   </div>
                 </div>
@@ -367,7 +368,7 @@ export default function UnifiedQueryPage() {
                 {result.confidence !== undefined && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span>Güven Skoru</span>
+                      <span>{t('confidence')}</span>
                       <span>{result.confidence}%</span>
                     </div>
                     <Progress value={result.confidence} />
@@ -376,7 +377,7 @@ export default function UnifiedQueryPage() {
 
                 {result.sources && result.sources.length > 0 && (
                   <div className="space-y-2">
-                    <Label className="text-sm">Kaynaklar</Label>
+                    <Label className="text-sm">{t('sources')}</Label>
                     <div className="space-y-1">
                       {result.sources.map((source, i) => (
                         <div key={i} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
@@ -405,26 +406,26 @@ export default function UnifiedQueryPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Sistem Durumu</CardTitle>
+              <CardTitle className="text-sm">{t('systemStatus')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>LightRAG</span>
+                  <span>{t('lightrag')}</span>
                   <Badge variant={systemStats?.lightrag?.initialized ? "success" : "secondary"}>
-                    {systemStats?.lightrag?.initialized ? 'Aktif' : 'Pasif'}
+                    {systemStats?.lightrag?.initialized ? t('active') : t('inactive')}
                   </Badge>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>pgvector</span>
-                  <Badge variant="success">Aktif</Badge>
+                  <span>{t('pgvector')}</span>
+                  <Badge variant="success">{t('active')}</Badge>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Toplam Doküman</span>
+                  <span>{t('totalDocuments')}</span>
                   <span className="font-mono">{systemStats?.totalDocuments || 0}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>Embeddings</span>
+                  <span>{t('embeddings')}</span>
                   <span className="font-mono">{systemStats?.dashboard?.database?.embeddings || 0}</span>
                 </div>
               </div>
@@ -433,47 +434,47 @@ export default function UnifiedQueryPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Query Mode Özellikleri</CardTitle>
+              <CardTitle className="text-sm">{t('queryModeFeatures')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3 text-sm">
                 {queryMode === 'hybrid' && (
                   <div className="space-y-2">
-                    <p className="font-medium">Hybrid RAG</p>
+                    <p className="font-medium">{t('features.hybrid.title')}</p>
                     <ul className="text-xs text-muted-foreground space-y-1">
-                      <li>• Semantic + Keyword search</li>
-                      <li>• En iyi sonuçlar için</li>
-                      <li>• pgvector + FTS kullanır</li>
+                      {(t('features.hybrid.items') as unknown as string[]).map((item: string, i: number) => (
+                        <li key={i}>• {item}</li>
+                      ))}
                     </ul>
                   </div>
                 )}
                 {queryMode === 'lightrag' && (
                   <div className="space-y-2">
-                    <p className="font-medium">LightRAG</p>
+                    <p className="font-medium">{t('features.lightrag.title')}</p>
                     <ul className="text-xs text-muted-foreground space-y-1">
-                      <li>• Graph-based RAG</li>
-                      <li>• İlişkisel sorgular için</li>
-                      <li>• Langchain kullanır</li>
+                      {(t('features.lightrag.items') as unknown as string[]).map((item: string, i: number) => (
+                        <li key={i}>• {item}</li>
+                      ))}
                     </ul>
                   </div>
                 )}
                 {queryMode === 'semantic' && (
                   <div className="space-y-2">
-                    <p className="font-medium">Semantic Search</p>
+                    <p className="font-medium">{t('features.semantic.title')}</p>
                     <ul className="text-xs text-muted-foreground space-y-1">
-                      <li>• Vektör benzerliği</li>
-                      <li>• Anlamsal arama</li>
-                      <li>• OpenAI embeddings</li>
+                      {(t('features.semantic.items') as unknown as string[]).map((item: string, i: number) => (
+                        <li key={i}>• {item}</li>
+                      ))}
                     </ul>
                   </div>
                 )}
                 {queryMode === 'raganything' && (
                   <div className="space-y-2">
-                    <p className="font-medium">RAGAnything</p>
+                    <p className="font-medium">{t('features.raganything.title')}</p>
                     <ul className="text-xs text-muted-foreground space-y-1">
-                      <li>• Universal RAG</li>
-                      <li>• Multi-modal destekli</li>
-                      <li>• Otomatik indeksleme</li>
+                      {(t('features.raganything.items') as unknown as string[]).map((item: string, i: number) => (
+                        <li key={i}>• {item}</li>
+                      ))}
                     </ul>
                   </div>
                 )}
@@ -483,15 +484,11 @@ export default function UnifiedQueryPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Örnek Sorular</CardTitle>
+              <CardTitle className="text-sm">{t('exampleQuestions')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {[
-                  'KDV indirimi şartları nelerdir?',
-                  'E-fatura zorunluluğu kimleri kapsar?',
-                  'Vergi cezası affı nasıl yapılır?'
-                ].map((example, i) => (
+                {(t('examples') as unknown as string[]).map((example: string, i: number) => (
                   <button
                     key={i}
                     onClick={() => setQuery(example)}
