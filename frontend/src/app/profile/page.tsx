@@ -12,11 +12,13 @@ import { useAuth } from '@/contexts/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import apiConfig from '@/config/api.config';
+import { useTranslation } from 'react-i18next';
 
 export default function ProfilePage() {
   const { user, token } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -65,7 +67,7 @@ export default function ProfilePage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin h-8 w-8 border-2 border-gray-300 border-t-primary rounded-full mx-auto"></div>
-          <p className="mt-4 text-gray-600">Yönlendiriliyorsunuz...</p>
+          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -261,8 +263,8 @@ export default function ProfilePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Profil Ayarları</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Hesap bilgilerinizi yönetin</p>
+              <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">{t('profile.title')}</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('profile.subtitle')}</p>
             </div>
           </div>
         </div>
@@ -278,21 +280,21 @@ export default function ProfilePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <User className="h-5 w-5" />
-                  Temel Bilgiler
+                  {t('profile.basicInfo.title')}
                 </CardTitle>
                 <CardDescription>
-                  Kişisel bilgilerinizi güncelleyin
+                  {t('profile.basicInfo.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleProfileUpdate} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Ad Soyad</Label>
+                    <Label htmlFor="name">{t('profile.basicInfo.nameLabel')}</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Adınızı ve soyadınızı girin"
+                      placeholder={t('profile.basicInfo.namePlaceholder')}
                       disabled={loading}
                     />
                     {errors.name && (
@@ -301,13 +303,13 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-posta Adresi</Label>
+                    <Label htmlFor="email">{t('profile.basicInfo.emailLabel')}</Label>
                     <Input
                       id="email"
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="E-posta adresinizi girin"
+                      placeholder={t('profile.basicInfo.emailPlaceholder')}
                       disabled={loading}
                     />
                     {errors.email && (
@@ -317,7 +319,7 @@ export default function ProfilePage() {
 
                   <Button type="submit" disabled={loading} className="w-full">
                     <Save className="h-4 w-4 mr-2" />
-                    {loading ? 'Kaydediliyor...' : 'Bilgileri Kaydet'}
+                    {loading ? t('profile.basicInfo.savingButton') : t('profile.basicInfo.saveButton')}
                   </Button>
                 </form>
               </CardContent>
@@ -328,10 +330,10 @@ export default function ProfilePage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Lock className="h-5 w-5" />
-                  Şifre Değiştirme
+                  {t('profile.passwordChange.title')}
                 </CardTitle>
                 <CardDescription>
-                  Hesap şifrenizi güncelleyin
+                  {t('profile.passwordChange.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -347,14 +349,14 @@ export default function ProfilePage() {
                 ) : (
                   <form onSubmit={handlePasswordChange} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="currentPassword">Mevcut Şifre</Label>
+                      <Label htmlFor="currentPassword">{t('profile.passwordChange.currentPasswordLabel')}</Label>
                       <div className="relative">
                         <Input
                           id="currentPassword"
                           type={showCurrentPassword ? "text" : "password"}
                           value={passwordData.currentPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                          placeholder="Mevcut şifrenizi girin"
+                          placeholder={t('profile.passwordChange.currentPasswordPlaceholder')}
                           disabled={loading}
                         />
                         <Button
@@ -377,14 +379,14 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="newPassword">Yeni Şifre</Label>
+                      <Label htmlFor="newPassword">{t('profile.passwordChange.newPasswordLabel')}</Label>
                       <div className="relative">
                         <Input
                           id="newPassword"
                           type={showNewPassword ? "text" : "password"}
                           value={passwordData.newPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                          placeholder="Yeni şifrenizi girin"
+                          placeholder={t('profile.passwordChange.newPasswordPlaceholder')}
                           disabled={loading}
                         />
                         <Button
@@ -407,14 +409,14 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="confirmPassword">Şifre Onayı</Label>
+                      <Label htmlFor="confirmPassword">{t('profile.passwordChange.confirmPasswordLabel')}</Label>
                       <div className="relative">
                         <Input
                           id="confirmPassword"
                           type={showConfirmPassword ? "text" : "password"}
                           value={passwordData.confirmPassword}
                           onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                          placeholder="Yeni şifrenizi tekrar girin"
+                          placeholder={t('profile.passwordChange.confirmPasswordPlaceholder')}
                           disabled={loading}
                         />
                         <Button
@@ -439,7 +441,7 @@ export default function ProfilePage() {
                     <div className="flex gap-2">
                       <Button type="submit" disabled={loading} className="flex-1">
                         <Save className="h-4 w-4 mr-2" />
-                        {loading ? 'Değiştiriliyor...' : 'Şifreyi Değiştir'}
+                        {loading ? t('profile.passwordChange.changingButton') : t('profile.passwordChange.changeButton')}
                       </Button>
                       <Button
                         type="button"
@@ -454,7 +456,7 @@ export default function ProfilePage() {
                           setErrors({});
                         }}
                       >
-                        İptal
+                        {t('profile.passwordChange.cancelButton')}
                       </Button>
                     </div>
                   </form>

@@ -2114,7 +2114,7 @@ export default function CrawlerDataPage() {
                                     {directory.itemCount}
                                   </Badge>
                                 </div>
-                                <p className="text-xs text-muted-foreground truncate mb-2">{directory.name}</p>
+                                <p className="text-xs text-muted-foreground truncate mb-2">{directory.displayName}</p>
 
                                 {/* Python script indicator/upload */}
                                 <div className="space-y-2">
@@ -3167,7 +3167,7 @@ export default function CrawlerDataPage() {
                       <div className="w-3 h-3 rounded-full bg-yellow-500" />
                       <div className="w-3 h-3 rounded-full bg-green-500" />
                     </div>
-                    <span className="text-slate-400 text-xs font-mono">
+                    <span className="text-slate-400 text-[10px] font-mono">
                       {urlDialogDirectory?.name}.py
                     </span>
                     {scriptStartTime && (

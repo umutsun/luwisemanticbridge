@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -39,8 +40,10 @@ interface CSVViewerProps {
   };
 }
 
-export default function CSVTableViewer({ data, title = "CSV Data", className = "", metadata }: CSVViewerProps) {
+export default function CSVTableViewer({ data, title, className = "", metadata }: CSVViewerProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
+  const defaultTitle = title || t('tableViewer.title');
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedColumn, setSelectedColumn] = useState<string>('all');
@@ -64,7 +67,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
       // Parse rows
       const rows = lines.slice(1).map((line, index) => {
         const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-        const row: any = { _id: index + 1 };
+        const row: Record<string, string | number> = { _id: index + 1 };
         headers.forEach((header, i) => {
           row[header] = values[i] || '';
         });
@@ -77,7 +80,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
         totalColumns: headers.length,
         columnTypes: headers.map(header => {
           const values = rows.map(row => row[header]);
-          const numericValues = values.filter(v => !isNaN(parseFloat(v)) && v !== '');
+          const numericValues = values.filter(v => !isNaN(parseFloat(String(v))) && String(v) !== '');
 
           return {
             name: header,
@@ -103,7 +106,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
     if (searchTerm) {
       filtered = filtered.filter(row =>
         Object.values(row).some(value =>
-          value.toString().toLowerCase().includes(searchTerm.toLowerCase())
+          value?.toString().toLowerCase().includes(searchTerm.toLowerCase())
         )
       );
     }
@@ -122,8 +125,8 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
         const bVal = b[sortColumn];
 
         // Handle numeric sorting
-        const aNum = parseFloat(aVal);
-        const bNum = parseFloat(bVal);
+        const aNum = parseFloat(String(aVal));
+        const bNum = parseFloat(String(bVal));
 
         if (!isNaN(aNum) && !isNaN(bNum)) {
           return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
@@ -150,7 +153,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
   const paginatedRows = filteredAndSortedRows.slice(startIndex, startIndex + rowsPerPage);
 
   // Reset page when filters change
-  useState(() => {
+  useMemo(() => {
     setCurrentPage(1);
   }, [searchTerm, selectedColumn, sortColumn]);
 
@@ -163,12 +166,12 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
     }
   };
 
-  
+
   if (!stats) {
     return (
       <div className={`p-6 text-center text-muted-foreground ${className}`}>
         <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-        <p>No CSV data available</p>
+        <p>{t('tableViewer.noDataAvailable')}</p>
       </div>
     );
   }
@@ -180,14 +183,14 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
         <div className="space-y-1">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Table className="h-5 w-5" />
-            {title}
+            {defaultTitle}
           </h3>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>{stats.totalRows.toLocaleString()} rows</span>
+            <span>{stats.totalRows.toLocaleString()} {t('tableViewer.rows')}</span>
             <span>•</span>
-            <span>{stats.totalColumns} columns</span>
+            <span>{stats.totalColumns} {t('tableViewer.columns')}</span>
             <span>•</span>
-            <span>{filteredAndSortedRows.length.toLocaleString()} filtered</span>
+            <span>{filteredAndSortedRows.length.toLocaleString()} {t('tableViewer.filtered')}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -212,7 +215,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
           >
             {col.name}
             <span className="ml-1 text-xs opacity-75">
-              ({col.type === 'numeric' ? '#' : 'T'})
+              ({col.type === 'numeric' ? t('tableViewer.numericType') : t('tableViewer.textType')})
             </span>
           </Badge>
         ))}
@@ -223,7 +226,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search in all columns..."
+            placeholder={t('tableViewer.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -231,13 +234,13 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
         </div>
         <Select value={selectedColumn} onValueChange={setSelectedColumn}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by column" />
+            <SelectValue placeholder={t('tableViewer.filterByColumn')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Columns</SelectItem>
+            <SelectItem value="all">{t('tableViewer.allColumns')}</SelectItem>
             {stats.columnTypes.map((col, index) => (
               <SelectItem key={index} value={col.name}>
-                {col.name} ({col.uniqueValues} unique)
+                {col.name} ({col.uniqueValues} {t('tableViewer.unique')})
               </SelectItem>
             ))}
           </SelectContent>
@@ -265,7 +268,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
                         </span>
                       )}
                       <Badge variant="outline" className="ml-1 text-xs">
-                        {stats.columnTypes[index]?.type === 'numeric' ? '#' : 'T'}
+                        {stats.columnTypes[index]?.type === 'numeric' ? t('tableViewer.numericType') : t('tableViewer.textType')}
                       </Badge>
                     </div>
                   </th>
@@ -281,12 +284,11 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
                   {headers.map((header, colIndex) => (
                     <td
                       key={colIndex}
-                      className={`p-2 max-w-xs truncate ${
-                        stats.columnTypes[colIndex]?.type === 'numeric'
-                          ? 'text-right font-mono'
-                          : 'text-left'
-                      }`}
-                      title={row[header]}
+                      className={`p-2 max-w-xs truncate ${stats.columnTypes[colIndex]?.type === 'numeric'
+                        ? 'text-right font-mono'
+                        : 'text-left'
+                        }`}
+                      title={String(row[header])}
                     >
                       {row[header] || (
                         <span className="text-muted-foreground/50">—</span>
@@ -303,7 +305,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
       {/* Pagination */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Showing {startIndex + 1}-{Math.min(startIndex + rowsPerPage, filteredAndSortedRows.length)} of {filteredAndSortedRows.length} rows
+          {t('tableViewer.showing')} {startIndex + 1}-{Math.min(startIndex + rowsPerPage, filteredAndSortedRows.length)} {t('tableViewer.of')} {filteredAndSortedRows.length} {t('tableViewer.rows')}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -313,10 +315,10 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
             disabled={currentPage === 1}
           >
             <ChevronLeft className="h-4 w-4" />
-            Previous
+            {t('tableViewer.previous')}
           </Button>
           <span className="text-sm px-3">
-            Page {currentPage} of {totalPages}
+            {t('tableViewer.pageOf', { current: currentPage, total: totalPages })}
           </span>
           <Button
             variant="outline"
@@ -324,7 +326,7 @@ export default function CSVTableViewer({ data, title = "CSV Data", className = "
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}
           >
-            Next
+            {t('tableViewer.next')}
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

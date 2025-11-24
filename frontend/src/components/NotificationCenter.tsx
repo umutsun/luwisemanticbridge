@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { useSocketIO } from '@/hooks/useSocketIO';
+import { useTranslation } from 'react-i18next';
 
 interface Notification {
   id: string;
@@ -34,15 +35,16 @@ interface NotificationCenterProps {
   enableWebSocket?: boolean; // Yeni: WebSocket'i kontrol et
 }
 
-export default function NotificationCenter({ 
+export default function NotificationCenter({
   onSettingsClick,
   enableWebSocket = false // Varsayılan: KAPALI (şimdilik WebSocket kullanmıyoruz)
 }: NotificationCenterProps) {
+  const { t } = useTranslation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   // WebSocket URL - sadece enableWebSocket=true ise kullanılır
-  const websocketUrl = enableWebSocket 
+  const websocketUrl = enableWebSocket
     ? (process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || '')
     : '';
 
@@ -59,8 +61,8 @@ export default function NotificationCenter({
       {
         id: '1',
         type: 'info',
-        title: 'Sistem Hazır',
-        message: 'Luwi Semantic Bridge başarıyla başlatıldı',
+        title: t('notifications.systemReady'),
+        message: t('notifications.welcomeToLuwiSemanticBridge'),
         timestamp: new Date(Date.now() - 300000).toISOString(),
         read: false,
         source: 'System'
@@ -68,7 +70,7 @@ export default function NotificationCenter({
     ];
     setNotifications(initialNotifications);
     setUnreadCount(initialNotifications.filter(n => !n.read).length);
-  }, []);
+  }, [t]);
 
   // WebSocket mesajlarını dinle (sadece enabled ise)
   useEffect(() => {
@@ -81,7 +83,7 @@ export default function NotificationCenter({
           const newNotification: Notification = {
             id: data.id || Date.now().toString(),
             type: data.severity || 'info',
-            title: data.title || 'Notification',
+            title: data.title || t('notifications.title'),
             message: data.message || '',
             timestamp: data.timestamp || new Date().toISOString(),
             read: false,
@@ -154,9 +156,9 @@ export default function NotificationCenter({
         <div className="p-4 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Bildirimler</span>
+              <span className="text-sm font-medium">{t('notifications.title')}</span>
               {unreadCount > 0 && (
-                <Badge variant="destructive" className="h-5 px-2 text-xs">
+                <Badge variant="error" className="h-5 px-2 text-xs">
                   {unreadCount}
                 </Badge>
               )}
@@ -170,7 +172,7 @@ export default function NotificationCenter({
                   className="h-7 px-2 text-xs"
                 >
                   <Check className="h-3 w-3 mr-1" />
-                  Tümünü Okundu İşaretle
+                  {t('notifications.markAllAsRead')}
                 </Button>
               )}
             </div>
@@ -182,16 +184,15 @@ export default function NotificationCenter({
           {notifications.length === 0 ? (
             <div className="p-4 text-center">
               <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">Bildirim yok</p>
+              <p className="text-sm text-muted-foreground">{t('notifications.noNotifications')}</p>
             </div>
           ) : (
             <div className="p-2">
               {notifications.slice(0, 10).map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-3 rounded-lg mb-2 cursor-pointer transition-colors hover:bg-muted/50 ${
-                    !notification.read ? 'bg-muted/30' : ''
-                  }`}
+                  className={`p-3 rounded-lg mb-2 cursor-pointer transition-colors hover:bg-muted/50 ${!notification.read ? 'bg-muted/30' : ''
+                    }`}
                   onClick={() => markAsRead(notification.id)}
                 >
                   <div className="flex items-start gap-2">

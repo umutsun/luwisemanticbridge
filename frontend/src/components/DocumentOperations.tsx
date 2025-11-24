@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -122,6 +123,7 @@ export default function DocumentOperations({
   onOperationComplete
 }: DocumentOperationsProps) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'ocr' | 'translate' | 'embedding'>('ocr');
   const [ocrProgress, setOcrProgress] = useState<OperationProgress>({
     status: 'idle',
@@ -187,8 +189,8 @@ export default function DocumentOperations({
   const startOCRProcessing = async () => {
     if (ocrEligibleDocuments.length === 0) {
       toast({
-        title: "No documents to process",
-        description: "There are no PDF documents that need OCR processing.",
+        title: t('documents.operations.noDocumentsToProcess'),
+        description: t('documents.operations.noDocumentsDescription'),
         variant: "destructive"
       });
       return;
@@ -263,8 +265,10 @@ export default function DocumentOperations({
     }));
 
     toast({
-      title: "OCR Processing Complete",
-      description: `Processed ${ocrEligibleDocuments.length} documents with ${successCount} successes and ${errorCount} errors.`
+      title: t('documents.operations.ocrProcessingCompleted'),
+      description: t('documents.toast.ocrCompleted', {
+        confidence: successCount > 0 ? `${ocrProgress.confidence?.toFixed(1)}%` : 'N/A'
+      })
     });
 
     onOperationComplete();
@@ -278,8 +282,8 @@ export default function DocumentOperations({
 
     if (docsToProcess.length === 0) {
       toast({
-        title: "No documents to process",
-        description: "There are no documents that need embedding processing.",
+        title: t('documents.operations.noDocumentsToProcess'),
+        description: t('documents.operations.noDocumentsDescription'),
         variant: "destructive"
       });
       return;
@@ -348,8 +352,8 @@ export default function DocumentOperations({
     }));
 
     toast({
-      title: "Embedding Processing Complete",
-      description: `Processed ${docsToProcess.length} documents with ${successCount} successes and ${errorCount} errors.`
+      title: t('documents.operations.embeddingProcessingCompleted'),
+      description: t('documents.operations.successfullyCreatedEmbeddings', { count: docsToProcess.length })
     });
 
     onOperationComplete();
@@ -374,14 +378,14 @@ export default function DocumentOperations({
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Document Operations
+            {t('documents.operations.title')}
           </CardTitle>
           <div className="flex gap-2">
             <Badge variant="outline" className="text-xs">
-              {ocrEligibleDocuments.length} OCR Ready
+              {ocrEligibleDocuments.length} {t('documents.operations.ocrReady')}
             </Badge>
             <Badge variant="outline" className="text-xs">
-              {embeddingEligibleDocuments.length} Embed Ready
+              {embeddingEligibleDocuments.length} {t('documents.operations.embedReady')}
             </Badge>
           </div>
         </div>
@@ -391,10 +395,10 @@ export default function DocumentOperations({
         <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="batch">
-              Transform
+              {t('documents.operations.transform')}
             </TabsTrigger>
             <TabsTrigger value="ocr">
-              OCR
+              {t('documents.operations.ocr')}
             </TabsTrigger>
           </TabsList>
 
@@ -413,7 +417,7 @@ export default function DocumentOperations({
                   <div className="flex items-center gap-4 mb-6">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                      <span className="text-sm font-medium text-foreground">Processing OCR</span>
+                      <span className="text-sm font-medium text-foreground">{t('documents.operations.processingOcr')}</span>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {ocrProgress.currentItem}
@@ -471,7 +475,7 @@ export default function DocumentOperations({
                     ) : (
                       <>
                         <Play className="h-4 w-4 mr-2" />
-                        Start OCR
+                        {t('documents.operations.startOcr')}
                       </>
                     )}
                   </Button>
@@ -483,11 +487,11 @@ export default function DocumentOperations({
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      OCR Processing Completed
+                      {t('documents.operations.ocrProcessingCompleted')}
                     </span>
                   </div>
                   <div className="text-sm text-green-700 dark:text-green-300">
-                    Successfully processed documents with average confidence:
+                    {t('documents.toast.ocrCompleted', { confidence: ocrProgress.confidence?.toFixed(1) })}
                     {ocrProgress.confidence?.toFixed(1)}%
                   </div>
                 </div>
@@ -499,15 +503,15 @@ export default function DocumentOperations({
             <div className="space-y-4">
               <div className="text-center p-6 bg-muted/20 rounded-lg">
                 <Globe className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">Document Translation</h3>
+                <h3 className="text-lg font-semibold mb-2">{t('documents.operations.documentTranslation')}</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Translate documents before embedding for better RAG performance
+                  {t('documents.operations.translateForRag')}
                 </p>
               </div>
 
               {/* Document Selection */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium">Select Documents to Translate</h4>
+                <h4 className="text-sm font-medium">{t('documents.operations.selectDocumentsToTranslate')}</h4>
                 <div className="grid gap-2 max-h-40 overflow-y-auto">
                   {allDocuments.slice(0, 5).map(doc => (
                     <div key={doc.id} className="flex items-center gap-3 p-3 border rounded-lg">
@@ -536,7 +540,7 @@ export default function DocumentOperations({
 
               {/* Language Selection */}
               <div className="space-y-3">
-                <h4 className="text-sm font-medium">Target Language</h4>
+                <h4 className="text-sm font-medium">{t('documents.operations.targetLanguage')}</h4>
                 <select
                   value={targetLanguage}
                   onChange={(e) => setTargetLanguage(e.target.value)}
@@ -557,7 +561,7 @@ export default function DocumentOperations({
               {/* Preview Translation */}
               {translatedDocuments.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-medium">Preview Translation</h4>
+                  <h4 className="text-sm font-medium">{t('documents.operations.previewTranslation')}</h4>
                   <Translator
                     text={allDocuments.find(d => d.id === translatedDocuments[0])?.content || ''}
                     title={`Translate: ${allDocuments.find(d => d.id === translatedDocuments[0])?.title}`}
@@ -569,15 +573,19 @@ export default function DocumentOperations({
               <Button
                 onClick={() => {
                   toast({
-                    title: "Translation Started",
-                    description: `Translating ${translatedDocuments.length} documents to ${targetLanguage.toUpperCase()}`
+                    title: t('documents.operations.translationStarted'),
+                    description: t('documents.operations.translateDocuments', {
+                      count: translatedDocuments.length
+                    })
                   });
                 }}
                 disabled={translatedDocuments.length === 0}
                 className="w-full"
               >
                 <Languages className="h-4 w-4 mr-2" />
-                Translate {translatedDocuments.length} Document{translatedDocuments.length !== 1 ? 's' : ''}
+                {t('documents.operations.translateDocuments', {
+                  count: translatedDocuments.length
+                })}
               </Button>
             </div>
           </TabsContent>
@@ -589,7 +597,7 @@ export default function DocumentOperations({
                   <div className="flex items-center gap-4 mb-6">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                      <span className="text-sm font-medium text-foreground">Creating Embeddings</span>
+                      <span className="text-sm font-medium text-foreground">{t('documents.operations.creatingEmbeddings')}</span>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {embeddingProgress.currentItem}
@@ -631,9 +639,9 @@ export default function DocumentOperations({
                   <div className="flex items-center gap-3">
                     <Brain className="h-8 w-8 text-blue-500" />
                     <div>
-                      <h3 className="font-medium text-foreground">Embedding Processing</h3>
+                      <h3 className="font-medium text-foreground">{t('documents.operations.embeddingProcessing')}</h3>
                       <p className="text-sm text-muted-foreground">
-                        Create vector embeddings for semantic search
+                        {t('documents.operations.createVectorEmbeddings')}
                       </p>
                       {selectedDocuments.size > 0 && (
                         <Badge variant="secondary" className="mt-1">
@@ -652,7 +660,7 @@ export default function DocumentOperations({
                     ) : (
                       <>
                         <Play className="h-4 w-4 mr-2" />
-                        {selectedDocuments.size > 0 ? 'Embed Selected' : 'Embed All'}
+                        {selectedDocuments.size > 0 ? t('documents.operations.embedSelected') : t('documents.operations.embedAll')}
                       </>
                     )}
                   </Button>
@@ -664,11 +672,11 @@ export default function DocumentOperations({
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
                     <span className="font-medium text-green-800 dark:text-green-200">
-                      Embedding Processing Completed
+                      {t('documents.operations.embeddingProcessingCompleted')}
                     </span>
                   </div>
                   <div className="text-sm text-green-700 dark:text-green-300">
-                    Successfully created embeddings for {embeddingProgress.total} documents
+                    {t('documents.operations.successfullyCreatedEmbeddings', { count: embeddingProgress.total })}
                   </div>
                 </div>
               )}
@@ -684,25 +692,25 @@ export default function DocumentOperations({
                 <div className="text-lg font-semibold text-foreground">
                   {processingStats.totalProcessed}
                 </div>
-                <div className="text-xs text-muted-foreground">Total Processed</div>
+                <div className="text-xs text-muted-foreground">{t('documents.operations.totalProcessed')}</div>
               </div>
               <div>
                 <div className="text-lg font-semibold text-green-600">
                   {processingStats.successCount}
                 </div>
-                <div className="text-xs text-muted-foreground">Success</div>
+                <div className="text-xs text-muted-foreground">{t('documents.operations.success')}</div>
               </div>
               <div>
                 <div className="text-lg font-semibold text-red-600">
                   {processingStats.errorCount}
                 </div>
-                <div className="text-xs text-muted-foreground">Errors</div>
+                <div className="text-xs text-muted-foreground">{t('documents.operations.errors')}</div>
               </div>
               <div>
                 <div className="text-lg font-semibold text-blue-600">
                   {processingStats.avgConfidence.toFixed(1)}%
                 </div>
-                <div className="text-xs text-muted-foreground">Avg Confidence</div>
+                <div className="text-xs text-muted-foreground">{t('documents.operations.avgConfidenceLabel')}</div>
               </div>
             </div>
           </div>

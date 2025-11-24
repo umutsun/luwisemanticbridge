@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { User, Mail, Lock, Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useTranslation } from 'react-i18next';
 
 interface RegisterData {
   username: string;
@@ -17,6 +18,7 @@ interface RegisterData {
 }
 
 export default function RegisterForm() {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<RegisterData>({
     username: '',
     email: '',
@@ -44,14 +46,14 @@ export default function RegisterForm() {
 
     // Validate passwords match
     if (formData.password !== confirmPassword) {
-      setError('Şifreler eşleşmiyor');
+      setError(t('register.errors.passwordMismatch'));
       setLoading(false);
       return;
     }
 
     // Validate password length
     if (formData.password.length < 8) {
-      setError('Şifre en az 8 karakter olmalıdır');
+      setError(t('register.errors.passwordTooShort'));
       setLoading(false);
       return;
     }
@@ -69,7 +71,7 @@ export default function RegisterForm() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message || 'Kayıt başarısız');
+        setError(data.message || t('register.errors.registrationFailed'));
         setLoading(false);
         return;
       }
@@ -80,11 +82,11 @@ export default function RegisterForm() {
       if (loginResult.success) {
         router.push('/dashboard');
       } else {
-        setError('Kayıt başarılı ancak giriş yapılamadı');
+        setError(t('register.errors.loginAfterRegistrationFailed'));
       }
 
     } catch (err) {
-      setError('Kayıt sırasında bir hata oluştu');
+      setError(t('register.errors.registrationError'));
     } finally {
       setLoading(false);
     }
@@ -100,14 +102,14 @@ export default function RegisterForm() {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="name">Ad Soyad</Label>
+        <Label htmlFor="name">{t('register.nameLabel')}</Label>
         <div className="relative">
           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             id="name"
             name="name"
             type="text"
-            placeholder="Adınız ve soyadınız"
+            placeholder={t('register.namePlaceholder')}
             value={formData.name}
             onChange={handleChange}
             className="pl-10"
@@ -117,14 +119,14 @@ export default function RegisterForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="username">Kullanıcı Adı</Label>
+        <Label htmlFor="username">{t('register.usernameLabel')}</Label>
         <div className="relative">
           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             id="username"
             name="username"
             type="text"
-            placeholder="kullanici.adi"
+            placeholder={t('register.usernamePlaceholder')}
             value={formData.username}
             onChange={handleChange}
             className="pl-10"
@@ -134,14 +136,14 @@ export default function RegisterForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t('register.emailLabel')}</Label>
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             id="email"
             name="email"
             type="email"
-            placeholder="Email adresiniz"
+            placeholder={t('register.emailPlaceholder')}
             value={formData.email}
             onChange={handleChange}
             className="pl-10"
@@ -151,14 +153,14 @@ export default function RegisterForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Şifre</Label>
+        <Label htmlFor="password">{t('register.passwordLabel')}</Label>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             id="password"
             name="password"
             type={showPassword ? 'text' : 'password'}
-            placeholder="En az 8 karakter"
+            placeholder={t('register.passwordPlaceholder')}
             value={formData.password}
             onChange={handleChange}
             className="pl-10 pr-10"
@@ -177,19 +179,19 @@ export default function RegisterForm() {
           </button>
         </div>
         {formData.password && formData.password.length < 8 && (
-          <p className="text-sm text-red-600">Şifre en az 8 karakter olmalıdır</p>
+          <p className="text-sm text-red-600">{t('register.validation.passwordMinLength')}</p>
         )}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="confirmPassword">Şifre Tekrar</Label>
+        <Label htmlFor="confirmPassword">{t('register.confirmPasswordLabel')}</Label>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             id="confirmPassword"
             name="confirmPassword"
             type="password"
-            placeholder="Şifrenizi tekrar girin"
+            placeholder={t('register.confirmPasswordPlaceholder')}
             value={confirmPassword}
             onChange={(e) => {
               setConfirmPassword(e.target.value);
@@ -200,7 +202,7 @@ export default function RegisterForm() {
           />
         </div>
         {confirmPassword && formData.password !== confirmPassword && (
-          <p className="text-sm text-red-600">Şifreler eşleşmiyor</p>
+          <p className="text-sm text-red-600">{t('register.errors.passwordMismatch')}</p>
         )}
       </div>
 
@@ -219,10 +221,10 @@ export default function RegisterForm() {
         {loading ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Kayıt yapılıyor...
+            {t('register.registering')}
           </>
         ) : (
-          'Kayıt Ol'
+          t('register.registerButton')
         )}
       </Button>
     </form>

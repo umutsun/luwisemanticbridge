@@ -2668,9 +2668,9 @@ export default function DocumentManagerPage() {
       <Dialog open={showOperations} onOpenChange={setShowOperations}>
         <DialogContent className="max-w-4xl max-h-[90vh] p-0">
           <DialogHeader className="p-6">
-            <DialogTitle>Document Operations</DialogTitle>
+            <DialogTitle>{t('documents.operations.title')}</DialogTitle>
             <DialogDescription>
-              Process documents with OCR and embedding operations
+              {t('documents.operations.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-hidden p-6">

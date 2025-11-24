@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,19 +11,19 @@ import {
 } from 'lucide-react';
 
 interface JsonViewerProps {
-  data: any;
+  data: unknown;
   title?: string;
   className?: string;
   selectedFields?: Set<string>;
   onFieldToggle?: (path: string) => void;
   highlightPath?: string;
   editMode?: boolean;
-  onValueChange?: (path: string, newValue: any) => void;
+  onValueChange?: (path: string, newValue: unknown) => void;
   toolbar?: React.ReactNode;
 }
 
 interface JsonNodeProps {
-  data: any;
+  data: unknown;
   keyName?: string;
   level: number;
   isLast: boolean;
@@ -31,7 +32,7 @@ interface JsonNodeProps {
   onFieldToggle?: (path: string) => void;
   highlightPath?: string;
   editMode?: boolean;
-  onValueChange?: (path: string, newValue: any) => void;
+  onValueChange?: (path: string, newValue: unknown) => void;
 }
 
 const JsonNode: React.FC<JsonNodeProps> = ({
@@ -46,6 +47,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({
   editMode,
   onValueChange
 }) => {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -54,7 +56,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({
   const isHighlighted = highlightPath === currentPath;
   const isSelected = selectedFields?.has(currentPath);
 
-  const getType = (value: any) => {
+  const getType = (value: unknown) => {
     if (value === null) return 'null';
     if (Array.isArray(value)) return 'array';
     return typeof value;
@@ -109,15 +111,15 @@ const JsonNode: React.FC<JsonNodeProps> = ({
 
     switch (type) {
       case 'string':
-        return <span className="text-green-600 dark:text-green-400 text-xs" onDoubleClick={handleEdit}>"{data}"</span>;
+        return <span className="text-green-600 dark:text-green-400 text-xs" onDoubleClick={handleEdit}>"{String(data)}"</span>;
       case 'number':
-        return <span className="text-blue-600 dark:text-blue-400 text-xs" onDoubleClick={handleEdit}>{data}</span>;
+        return <span className="text-blue-600 dark:text-blue-400 text-xs" onDoubleClick={handleEdit}>{String(data)}</span>;
       case 'boolean':
-        return <span className="text-purple-600 dark:text-purple-400 text-xs" onDoubleClick={handleEdit}>{data.toString()}</span>;
+        return <span className="text-purple-600 dark:text-purple-400 text-xs" onDoubleClick={handleEdit}>{String(data)}</span>;
       case 'null':
-        return <span className="text-gray-500 dark:text-gray-400 text-xs">null</span>;
+        return <span className="text-gray-500 dark:text-gray-400 text-xs">{t('jsonViewer.null')}</span>;
       case 'undefined':
-        return <span className="text-gray-500 dark:text-gray-400 text-xs">undefined</span>;
+        return <span className="text-gray-500 dark:text-gray-400 text-xs">{t('jsonViewer.undefined')}</span>;
       default:
         return null;
     }
@@ -127,8 +129,8 @@ const JsonNode: React.FC<JsonNodeProps> = ({
     if (!isExpandable || !isExpanded) return null;
 
     const entries = type === 'array'
-      ? data.map((item: any, index: number) => ({ key: index, value: item }))
-      : Object.entries(data).map(([key, value]) => ({ key, value }));
+      ? (data as unknown[]).map((item: unknown, index: number) => ({ key: index, value: item }))
+      : Object.entries(data as Record<string, unknown>).map(([key, value]) => ({ key, value }));
 
     return (
       <div className="ml-6 border-l border-border/30 pl-2">
@@ -159,11 +161,9 @@ const JsonNode: React.FC<JsonNodeProps> = ({
   return (
     <div
       id={`json-node-${currentPath.replace(/\./g, '-')}`}
-      className={`py-1 ${
-        isHighlighted ? 'bg-yellow-100 dark:bg-yellow-900/30 rounded px-2' : ''
-      } ${
-        isSelected ? 'bg-blue-100 dark:bg-blue-900/40 rounded px-2 border-l-2 border-blue-500' : ''
-      }`}
+      className={`py-1 ${isHighlighted ? 'bg-yellow-100 dark:bg-yellow-900/30 rounded px-2' : ''
+        } ${isSelected ? 'bg-blue-100 dark:bg-blue-900/40 rounded px-2 border-l-2 border-blue-500' : ''
+        }`}
     >
       <div className="flex items-start gap-2">
         {/* Checkbox for all nodes (both parent and leaf) */}
@@ -209,7 +209,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({
               {!isExpanded && (
                 <>
                   <span className="text-muted-foreground text-xs">
-                    {type === 'array' ? `${data.length} items` : `${Object.keys(data).length} keys`}
+                    {type === 'array' ? `${(data as unknown[]).length} items` : `${Object.keys(data as Record<string, unknown>).length} keys`}
                   </span>
                   <span className="text-gray-500 dark:text-gray-400">
                     {type === 'array' ? ']' : '}'}
@@ -218,7 +218,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({
               )}
               {isExpanded && (
                 <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                  {type === 'array' ? `${data.length} items` : `${Object.keys(data).length} keys`}
+                  {type === 'array' ? `${(data as unknown[]).length} items` : `${Object.keys(data as Record<string, unknown>).length} keys`}
                 </Badge>
               )}
             </>
@@ -241,7 +241,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({
 
 export default function JsonViewer({
   data,
-  title = "",
+  title,
   className = "",
   selectedFields,
   onFieldToggle,
@@ -250,6 +250,8 @@ export default function JsonViewer({
   onValueChange,
   toolbar
 }: JsonViewerProps) {
+  const { t } = useTranslation();
+  const defaultTitle = title || "";
   // Scroll to highlighted element when highlightPath changes
   useEffect(() => {
     if (highlightPath) {
@@ -269,7 +271,7 @@ export default function JsonViewer({
             {title && <h3 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{title}</h3>}
             {selectedFields && (
               <Badge variant="secondary" className="text-[9px] h-3.5 px-1">
-                {selectedFields.size} selected
+                {selectedFields.size} {t('jsonViewer.selected')}
               </Badge>
             )}
           </div>

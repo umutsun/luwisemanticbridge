@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginPage() {
   const { config, loading: configLoading } = useConfig();
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,9 +22,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (config?.app?.name) {
-      document.title = `Giriş Yap - ${config.app.name}`;
+      document.title = `${t('login.title')} - ${config.app.name}`;
     }
-  }, [config]);
+  }, [config, t]);
 
   // DISABLED: check-admin endpoint not available
   // Check if admin user exists and redirect to deployment setup if needed
@@ -42,8 +44,8 @@ export default function LoginPage() {
     if (result.success) {
       // Show success toast
       toast({
-        title: "Giriş başarılı!",
-        description: "Dashboard'a yönlendiriliyorsunuz...",
+        title: t('login.success'),
+        description: t('login.redirectingToDashboard'),
         variant: "default"
       });
 
@@ -64,8 +66,8 @@ export default function LoginPage() {
     } else {
       // Show error toast only (no form error display)
       toast({
-        title: "Giriş başarısız",
-        description: result.error || 'Giriş başarısız oldu',
+        title: t('login.failed'),
+        description: result.error || t('login.failedMessage'),
         variant: "destructive"
       });
     }
@@ -78,7 +80,7 @@ export default function LoginPage() {
   // This prevents the loader from appearing when clicking login button
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4 overflow-hidden" style={{backgroundColor: '#0f172a'}}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4 overflow-hidden" style={{ backgroundColor: '#0f172a' }}>
       {/* 3D Cube */}
       <div className="absolute top-20 left-1/2 transform -translate-x-1/2 pointer-events-none">
         <div className="relative w-10 h-10" style={{ perspective: '1000px' }}>
@@ -175,19 +177,19 @@ export default function LoginPage() {
           }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Email
+                {t('login.email')}
               </label>
               <input
                 name="email"
                 type="email"
                 required
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                placeholder="admin@example.com"
+                placeholder={t('login.emailPlaceholder')}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Password
+                {t('login.password')}
               </label>
               <input
                 name="password"
@@ -208,19 +210,19 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Signing in...
+                  {t('login.signingIn')}
                 </span>
               ) : (
-                'Sign In'
+                t('login.signIn')
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-400">
-              Don't have an account?{' '}
+              {t('login.noAccount')}{' '}
               <a href="/register" className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                Sign up
+                {t('login.signUp')}
               </a>
             </p>
           </div>

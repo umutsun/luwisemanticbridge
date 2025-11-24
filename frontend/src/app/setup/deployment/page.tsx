@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/config/api.config';
+import { useTranslation } from 'react-i18next';
 
 export default function DeploymentSetupPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -75,13 +77,13 @@ export default function DeploymentSetupPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess('Environment variables updated successfully');
+        setSuccess(t('setup.errors.environmentVariablesUpdatedSuccessfully'));
         setTimeout(() => setCurrentStep(2), 1000);
       } else {
-        setError('Failed to update environment variables');
+        setError(data.error || t('setup.errors.failedToUpdateEnvironmentVariables'));
       }
     } catch (error) {
-      setError('Failed to update environment variables');
+      setError(t('setup.errors.failedToUpdateEnvironmentVariables'));
     }
 
     setLoading(false);
@@ -102,13 +104,13 @@ export default function DeploymentSetupPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess('Default settings initialized');
+        setSuccess(t('setup.errors.defaultSettingsInitialized'));
         setTimeout(() => setCurrentStep(3), 1000);
       } else {
-        setError('Failed to initialize default settings');
+        setError(t('setup.errors.failedToInitializeDefaultSettings'));
       }
     } catch (error) {
-      setError('Failed to initialize default settings');
+      setError(t('setup.errors.failedToInitializeDefaultSettings'));
     }
 
     setLoading(false);
@@ -116,7 +118,7 @@ export default function DeploymentSetupPage() {
 
   const createAdmin = async () => {
     if (admin.password !== admin.confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('setup.errors.passwordsDoNotMatch'));
       return;
     }
 
@@ -134,13 +136,13 @@ export default function DeploymentSetupPage() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess('Admin user created successfully');
+        setSuccess(t('setup.errors.adminUserCreatedSuccessfully'));
         setTimeout(() => setCurrentStep(4), 1000);
       } else {
-        setError(data.error || 'Failed to create admin user');
+        setError(data.error || t('setup.errors.failedToCreateAdminUser'));
       }
     } catch (error) {
-      setError('Failed to create admin user');
+      setError(t('setup.errors.failedToCreateAdminUser'));
     }
 
     setLoading(false);
@@ -148,82 +150,82 @@ export default function DeploymentSetupPage() {
 
   const renderEnvironmentStep = () => (
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Step 1: Configure Environment</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('setup.deployment.step1ConfigureEnvironment')}</h2>
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Database Host</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.databaseHost')}</label>
             <input
               type="text"
               value={envVars.POSTGRES_HOST}
-              onChange={(e) => setEnvVars({...envVars, POSTGRES_HOST: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, POSTGRES_HOST: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="localhost"
+              placeholder={t('setup.deployment.localhostPlaceholder')}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Database Port</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.databasePort')}</label>
             <input
               type="text"
               value={envVars.POSTGRES_PORT}
-              onChange={(e) => setEnvVars({...envVars, POSTGRES_PORT: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, POSTGRES_PORT: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="5432"
+              placeholder={t('setup.deployment.portPlaceholder')}
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Database Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.databaseName')}</label>
             <input
               type="text"
               value={envVars.POSTGRES_DB}
-              onChange={(e) => setEnvVars({...envVars, POSTGRES_DB: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, POSTGRES_DB: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="my_project_db"
+              placeholder={t('setup.deployment.dbPlaceholder')}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Database User</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.databaseUser')}</label>
             <input
               type="text"
               value={envVars.POSTGRES_USER}
-              onChange={(e) => setEnvVars({...envVars, POSTGRES_USER: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, POSTGRES_USER: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="postgres"
+              placeholder={t('setup.deployment.userPlaceholder')}
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Database Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.databasePassword')}</label>
           <input
             type="password"
             value={envVars.POSTGRES_PASSWORD}
-            onChange={(e) => setEnvVars({...envVars, POSTGRES_PASSWORD: e.target.value})}
+            onChange={(e) => setEnvVars({ ...envVars, POSTGRES_PASSWORD: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            placeholder="Your database password"
+            placeholder={t('setup.deployment.databasePasswordPlaceholder')}
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Site Title</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.siteTitle')}</label>
             <input
               type="text"
               value={envVars.SITE_TITLE}
-              onChange={(e) => setEnvVars({...envVars, SITE_TITLE: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, SITE_TITLE: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Site Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.siteDescription')}</label>
             <input
               type="text"
               value={envVars.SITE_DESCRIPTION}
-              onChange={(e) => setEnvVars({...envVars, SITE_DESCRIPTION: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, SITE_DESCRIPTION: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -231,23 +233,23 @@ export default function DeploymentSetupPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.openAIAPIKey')}</label>
             <input
               type="password"
               value={envVars.OPENAI_API_KEY}
-              onChange={(e) => setEnvVars({...envVars, OPENAI_API_KEY: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, OPENAI_API_KEY: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="sk-..."
+              placeholder={t('setup.deployment.openAIPlaceholder')}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Anthropic API Key</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.anthropicAPIKey')}</label>
             <input
               type="password"
               value={envVars.ANTHROPIC_API_KEY}
-              onChange={(e) => setEnvVars({...envVars, ANTHROPIC_API_KEY: e.target.value})}
+              onChange={(e) => setEnvVars({ ...envVars, ANTHROPIC_API_KEY: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="sk-ant-..."
+              placeholder={t('setup.deployment.anthropicPlaceholder')}
             />
           </div>
         </div>
@@ -262,7 +264,7 @@ export default function DeploymentSetupPage() {
           disabled={loading}
           className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? 'Updating...' : 'Update Environment'}
+          {loading ? t('setup.deployment.updating') : t('setup.deployment.updateEnvironment')}
         </button>
       </div>
     </div>
@@ -270,17 +272,17 @@ export default function DeploymentSetupPage() {
 
   const renderDefaultsStep = () => (
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Step 2: Initialize Default Settings</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('setup.deployment.step2InitializeDefaults')}</h2>
 
       <div className="bg-gray-50 p-6 rounded-lg mb-6">
         <p className="text-gray-700 mb-4">
-          The system will now initialize default settings based on your environment configuration.
+          {t('setup.deployment.systemWillInitialize')}
         </p>
         <ul className="list-disc list-inside space-y-2 text-sm text-gray-600">
-          <li>Application settings (name, description, etc.)</li>
-          <li>Database connection settings</li>
-          <li>AI provider configurations</li>
-          <li>Default LLM settings</li>
+          <li>{t('setup.deployment.applicationSettings')}</li>
+          <li>{t('setup.deployment.databaseConnectionSettings')}</li>
+          <li>{t('setup.deployment.aiProviderConfigurations')}</li>
+          <li>{t('setup.deployment.defaultLLMSettings')}</li>
         </ul>
       </div>
 
@@ -292,14 +294,14 @@ export default function DeploymentSetupPage() {
           onClick={() => setCurrentStep(1)}
           className="bg-gray-200 text-gray-800 py-2 px-6 rounded-lg hover:bg-gray-300"
         >
-          Back
+          {t('setup.deployment.back')}
         </button>
         <button
           onClick={initializeDefaults}
           disabled={loading}
           className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? 'Initializing...' : 'Initialize Settings'}
+          {loading ? t('setup.deployment.initializing') : t('setup.deployment.initializeSettings')}
         </button>
       </div>
     </div>
@@ -307,26 +309,26 @@ export default function DeploymentSetupPage() {
 
   const renderAdminStep = () => (
     <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Step 3: Create Admin User</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('setup.deployment.step3CreateAdminUser')}</h2>
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.firstName')}</label>
             <input
               type="text"
               value={admin.firstName}
-              onChange={(e) => setAdmin({...admin, firstName: e.target.value})}
+              onChange={(e) => setAdmin({ ...admin, firstName: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.lastName')}</label>
             <input
               type="text"
               value={admin.lastName}
-              onChange={(e) => setAdmin({...admin, lastName: e.target.value})}
+              onChange={(e) => setAdmin({ ...admin, lastName: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               required
             />
@@ -334,33 +336,33 @@ export default function DeploymentSetupPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.email')}</label>
           <input
             type="email"
             value={admin.email}
-            onChange={(e) => setAdmin({...admin, email: e.target.value})}
+            onChange={(e) => setAdmin({ ...admin, email: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.password')}</label>
           <input
             type="password"
             value={admin.password}
-            onChange={(e) => setAdmin({...admin, password: e.target.value})}
+            onChange={(e) => setAdmin({ ...admin, password: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t('setup.deployment.confirmPassword')}</label>
           <input
             type="password"
             value={admin.confirmPassword}
-            onChange={(e) => setAdmin({...admin, confirmPassword: e.target.value})}
+            onChange={(e) => setAdmin({ ...admin, confirmPassword: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             required
           />
@@ -375,14 +377,14 @@ export default function DeploymentSetupPage() {
           onClick={() => setCurrentStep(2)}
           className="bg-gray-200 text-gray-800 py-2 px-6 rounded-lg hover:bg-gray-300"
         >
-          Back
+          {t('setup.deployment.back')}
         </button>
         <button
           onClick={createAdmin}
           disabled={loading}
           className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? 'Creating...' : 'Create Admin User'}
+          {loading ? t('setup.deployment.creating') : t('setup.deployment.createAdminUser')}
         </button>
       </div>
     </div>
@@ -396,17 +398,17 @@ export default function DeploymentSetupPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Deployment Complete!</h2>
-        <p className="text-gray-600">Your project is ready to use.</p>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">{t('setup.deployment.deploymentComplete')}</h2>
+        <p className="text-gray-600">{t('setup.deployment.projectReady')}</p>
       </div>
 
       <div className="bg-gray-50 rounded-lg p-4 mb-8 text-left">
-        <h3 className="font-semibold mb-2">Next Steps:</h3>
+        <h3 className="font-semibold mb-2">{t('setup.deployment.nextSteps')}</h3>
         <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600">
-          <li>Login with your admin account</li>
-          <li>Access the dashboard to configure additional settings</li>
-          <li>Upload documents to build your knowledge base</li>
-          <li>Start chatting with your AI assistant</li>
+          <li>{t('setup.deployment.loginWithAdminAccount')}</li>
+          <li>{t('setup.deployment.accessDashboard')}</li>
+          <li>{t('setup.deployment.uploadDocuments')}</li>
+          <li>{t('setup.deployment.startChatting')}</li>
         </ol>
       </div>
 
@@ -414,7 +416,7 @@ export default function DeploymentSetupPage() {
         onClick={() => router.push('/login')}
         className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700"
       >
-        Go to Login
+        {t('setup.deployment.goToLogin')}
       </button>
     </div>
   );
@@ -427,14 +429,12 @@ export default function DeploymentSetupPage() {
           <div className="flex items-center justify-center space-x-4">
             {[1, 2, 3, 4].map((step) => (
               <div key={step} className="flex items-center">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  currentStep >= step ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
-                }`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${currentStep >= step ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
+                  }`}>
                   {step}
                 </div>
-                {step < 4 && <div className={`w-16 h-1 mx-2 ${
-                  currentStep > step ? 'bg-blue-600' : 'bg-gray-300'
-                }`}></div>}
+                {step < 4 && <div className={`w-16 h-1 mx-2 ${currentStep > step ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}></div>}
               </div>
             ))}
           </div>

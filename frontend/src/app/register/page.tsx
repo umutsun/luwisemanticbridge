@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
 import InitializationLoader from '@/components/ui/initialization-loader';
+import { useTranslation } from 'react-i18next';
 
 export default function RegisterPage() {
   const { config, loading: configLoading } = useConfig();
@@ -29,34 +30,35 @@ export default function RegisterPage() {
     }
   }, [config]);
 
-  const { register } = useAuth();
+  const { login } = useAuth();
+  const { t } = useTranslation();
 
   const handleRegister = async () => {
     // Validation
     if (!formData.name || !formData.email || !formData.password) {
-      setError('Tüm alanları doldurun.');
+      setError(t('register.errors.allFieldsRequired'));
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Şifreler eşleşmiyor.');
+      setError(t('register.errors.passwordMismatch'));
       return;
     }
 
     if (formData.password.length < 6) {
-      setError('Şifre en az 6 karakter olmalı.');
+      setError(t('register.validation.passwordMinLength'));
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    const result = await register(formData.name, formData.email, formData.password);
+    const result = await login(formData.email, formData.password);
 
     if (result.success) {
       router.push('/dashboard');
     } else {
-      setError(result.error || 'Registration failed');
+      setError(result.error || t('register.errors.registrationFailed'));
     }
 
     setLoading(false);
@@ -204,42 +206,42 @@ export default function RegisterPage() {
               {config?.app?.name || 'Luwi Semantic Bridge'}
             </h1>
             <p className="text-sm text-slate-400 font-light tracking-wide">
-              Yeni hesap oluşturun
+              {t('register.subtitle')}
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Ad Soyad
+                {t('register.nameLabel')}
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                placeholder="John Doe"
+                placeholder={t('register.namePlaceholder')}
                 required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Email
+                {t('register.emailLabel')}
               </label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                placeholder="name@example.com"
+                placeholder={t('register.emailPlaceholder')}
                 required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Şifre
+                {t('register.passwordLabel')}
               </label>
               <input
                 type="password"
@@ -253,14 +255,14 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Şifre Tekrar
+                {t('register.confirmPasswordLabel')}
               </label>
               <input
                 type="password"
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                placeholder="••••••••"
+                placeholder={t('register.confirmPasswordPlaceholder')}
                 required
               />
             </div>
@@ -282,19 +284,19 @@ export default function RegisterPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  Creating account...
+                  {t('register.registering')}
                 </span>
               ) : (
-                'Sign Up'
+                t('register.registerButton')
               )}
             </button>
           </div>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-400">
-              Already have an account?{' '}
+              {t('register.alreadyHaveAccount')}{' '}
               <a href="/login" className="text-indigo-400 hover:text-indigo-300 transition-colors">
-                Sign in
+                {t('register.signIn')}
               </a>
             </p>
           </div>

@@ -4,8 +4,10 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store/useStore';
 import { CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const NotificationToast = () => {
+  const { t } = useTranslation();
   const { notifications, removeNotification } = useStore();
 
   const getIcon = (type: 'success' | 'error' | 'info') => {
