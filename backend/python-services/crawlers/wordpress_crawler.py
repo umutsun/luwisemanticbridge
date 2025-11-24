@@ -15,11 +15,13 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 # --- Configuration ---
+# Crawler name will be set dynamically from command line argument
+CRAWLER_NAME = None  # Will be set in main()
 STATE_FILE = os.path.join(os.path.dirname(__file__), 'wordpress_crawler_state.json')
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_KEY_PREFIX = 'crawl4ai:wordpress_crawler:content'
+# REDIS_KEY_PREFIX will be dynamic: 'crawl4ai:{CRAWLER_NAME}:content'
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
@@ -81,9 +83,10 @@ def load_state():
     }
 
 class WordPressCrawler:
-    def __init__(self, base_url, target_category_id=None):
+    def __init__(self, base_url, crawler_name, target_category_id=None):
         self.base_url = base_url.rstrip('/')
         self.api_base = f"{self.base_url}/wp-json/wp/v2"
+        self.crawler_name = crawler_name
         self.target_category_id = target_category_id
         self.session = None
         self.state = load_state()
@@ -167,7 +170,7 @@ class WordPressCrawler:
 
         # Check Redis for duplicates
         slug = urlparse(post_url).path.strip('/').split('/')[-1] or str(post_id)
-        redis_key = f"{REDIS_KEY_PREFIX}:{slug}"
+        redis_key = f"crawl4ai:{self.crawler_name}:{slug}"
 
         if r.exists(redis_key):
             print(f"\n[SKIP] Already in Redis: {slug}")
@@ -311,14 +314,19 @@ class WordPressCrawler:
 
 async def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("Usage: python wordpress_crawler.py <url>")
+    if len(sys.argv) < 3:
+        print("Usage: python wordpress_crawler.py <url> <crawler_name>")
         print("\nExamples:")
-        print("  python wordpress_crawler.py https://example.com/")
-        print("  python wordpress_crawler.py https://example.com/category/news/")
+        print("  python wordpress_crawler.py https://example.com/ gmmevzuat")
+        print("  python wordpress_crawler.py https://example.com/category/news/ mysite")
         sys.exit(1)
 
     input_url = sys.argv[1]
+    crawler_name = sys.argv[2]
+
+    print(f"[INIT] Crawler Name: {crawler_name}")
+    print(f"[INIT] Target URL: {input_url}")
+
     parsed = urlparse(input_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -326,7 +334,7 @@ async def main():
     if '/category/' in parsed.path:
         print("[DETECT] Category URL detected")
 
-    async with WordPressCrawler(base_url, category_id) as crawler:
+    async with WordPressCrawler(base_url, crawler_name, category_id) as crawler:
         if '/category/' in parsed.path:
             category_id = await crawler.get_category_id_from_url(input_url)
             if category_id:
