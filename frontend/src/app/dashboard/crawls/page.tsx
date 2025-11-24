@@ -2439,25 +2439,7 @@ export default function CrawlerDataPage() {
 
                 {workflowStep === 'preview-data' && selectedDirectory && (
                   <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-baseline gap-4">
-                          <CardTitle>{selectedDirectory.displayName}</CardTitle>
-                          <CardDescription className="text-xs">
-                            {crawledItems.length} of {totalItemsCount} loaded
-                          </CardDescription>
-                        </div>
-                        <Button
-                          onClick={handleRefresh}
-                          disabled={isRefreshing || itemsLoading}
-                          variant="ghost"
-                          size="sm"
-                        >
-                          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
+                    <CardContent className="pt-6">
                       <div className="space-y-4">
                         {/* Unified Controls */}
                         <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900/30 rounded-lg border">
@@ -2491,6 +2473,16 @@ export default function CrawlerDataPage() {
                           </div>
 
                           <div className="flex gap-2 ml-auto">
+                            <Button
+                              onClick={handleRefresh}
+                              disabled={isRefreshing || itemsLoading}
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              title="Refresh"
+                            >
+                              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                            </Button>
                             {selectedForRecrawl.size > 0 && (
                               <Button
                                 size="sm"
