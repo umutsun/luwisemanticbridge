@@ -364,8 +364,9 @@ export class AuthService {
   }
 
   async createDefaultAdmin(): Promise<void> {
-    const email = "admin@asb.com";
-    const password = "admin123";
+    // Use environment variable for admin email, default to admin@asb.com
+    const email = process.env.ADMIN_EMAIL || "admin@asb.com";
+    const password = process.env.ADMIN_PASSWORD || "admin123";
 
     // Check if admin user already exists
     const existingAdmin = await this.pool.query(
@@ -374,7 +375,7 @@ export class AuthService {
     );
 
     if (existingAdmin.rows.length > 0) {
-      console.log("Admin user already exists");
+      console.log("✅ Admin user already exists:", email);
       return;
     }
 
@@ -387,8 +388,8 @@ export class AuthService {
       ["admin", email, passwordHash, "Administrator", "admin", "active", true]
     );
 
-    console.log("Default admin user created successfully");
-    console.log("Email: admin@asb.com");
-    console.log("Password: admin123");
+    console.log("✅ Default admin user created successfully");
+    console.log("📧 Email:", email);
+    console.log("🔑 Password:", password);
   }
 }
