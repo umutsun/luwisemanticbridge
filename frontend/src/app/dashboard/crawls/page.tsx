@@ -542,7 +542,7 @@ export default function CrawlerDataPage() {
       // Build URL with search parameter
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/data?limit=100&offset=${offset}${searchParam}`
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/data?offset=${offset}${searchParam}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch crawled items');

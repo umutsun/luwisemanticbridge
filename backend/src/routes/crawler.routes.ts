@@ -550,9 +550,9 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
         // Queue embedding generation for the table
         console.log(` Triggering embedding generation for table: ${tableName}`);
 
-        // Get sample data to generate embeddings
+        // Get all data to generate embeddings
         const sampleResult = await lsembPool.query(
-          `SELECT * FROM ${tableName} LIMIT 100`
+          `SELECT * FROM ${tableName}`
         );
 
         let embeddingsGenerated = 0;
