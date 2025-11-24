@@ -2377,15 +2377,28 @@ export default function CrawlerDataPage() {
                                                         <span className="opacity-70">Q:{queueCount}</span>
                                                         <span className="opacity-50">•</span>
                                                         <span className="opacity-70">{progress}%</span>
+                                                        <span className="opacity-50">•</span>
+                                                        <span className="truncate opacity-60 text-[7px]" title={scriptUrls.get(directory.name)}>
+                                                          {scriptUrls.get(directory.name)}
+                                                        </span>
                                                       </>
                                                     );
                                                   }
                                                   const url = scriptUrls.get(directory.name) || '';
-                                                  return url ? <span className="truncate block">{url}</span> : <span className="opacity-60">Ready</span>;
+                                                  return url ? <span className="truncate block" title={url}>{url}</span> : <span className="opacity-60">Ready</span>;
                                                 })()
                                               ) : (
-                                                // Show "Ready" when idle
-                                                <span className="opacity-60">Ready</span>
+                                                // Show script name when idle (editable)
+                                                <button
+                                                  className="text-left truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setShowCrawlerSelect(directory.name);
+                                                  }}
+                                                  title={`${pythonScripts.get(directory.name)?.name || 'Unknown'} - Click to change`}
+                                                >
+                                                  {pythonScripts.get(directory.name)?.name || 'Unknown Script'}
+                                                </button>
                                               )}
                                             </div>
 
