@@ -74,7 +74,9 @@ import {
   Radar,
   MoreHorizontal,
   Filter,
-  Copy
+  Copy,
+  Check,
+  Edit2
 } from 'lucide-react';
 import config from '@/config/api.config';
 import { fetchWithAuth } from '@/lib/auth-fetch';
@@ -217,6 +219,8 @@ export default function CrawlerDataPage() {
   const [scriptUrls, setScriptUrls] = useState<Map<string, string>>(new Map()); // directory -> URL
   const [crawlerStates, setCrawlerStates] = useState<Map<string, any>>(new Map()); // directory -> state.json
   const [recrawlingItems, setRecrawlingItems] = useState<Set<string>>(new Set()); // URL being recrawled
+  const [editingDirectoryId, setEditingDirectoryId] = useState<string | null>(null);
+  const [editingDirectoryName, setEditingDirectoryName] = useState<string>('');
   const [selectedForRecrawl, setSelectedForRecrawl] = useState<Set<string>>(new Set()); // Selected item IDs for bulk recrawl
   const [bulkRecrawling, setBulkRecrawling] = useState(false); // Bulk recrawl in progress
 
@@ -417,6 +421,19 @@ export default function CrawlerDataPage() {
     return () => clearInterval(pollInterval);
   }, [runningScripts]);
 
+  // Search effect - debounced backend search
+  useEffect(() => {
+    if (!selectedDirectory) return;
+
+    const debounceTimer = setTimeout(() => {
+      // Reset to first page and fetch with search
+      setItemsOffset(0);
+      fetchCrawledItems(selectedDirectory.name, 0, false, searchTerm);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchTerm]);
+
   const loadPythonScripts = async () => {
     const scriptsMap = new Map<string, File>();
 
@@ -500,14 +517,15 @@ export default function CrawlerDataPage() {
     }
   };
 
-  const fetchCrawledItems = async (crawlerName: string, offset: number = 0, append: boolean = false) => {
+  const fetchCrawledItems = async (crawlerName: string, offset: number = 0, append: boolean = false, search: string = '') => {
     try {
       if (!append) setItemsLoading(true);
       else setLoadingMore(true);
 
-      // Fetch items with pagination - 100 items at a time
+      // Build URL with search parameter
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/data?limit=100&offset=${offset}`
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/data?limit=100&offset=${offset}${searchParam}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch crawled items');
@@ -526,7 +544,7 @@ export default function CrawlerDataPage() {
       setHasMoreItems(data.hasMore || false);
       setItemsOffset(offset + (data.data?.length || 0));
 
-      console.log(`✅ Loaded ${data.data?.length || 0} items (Offset: ${offset}, Total: ${data.total || 0}, Has More: ${data.hasMore})`);
+      console.log(`✅ Loaded ${data.data?.length || 0} items (Offset: ${offset}, Total: ${data.total || 0}, Has More: ${data.hasMore}, Search: ${search || 'none'})`);
 
       // Show info toast only on initial load if there are many items
       if (!append && data.total > 1000) {
@@ -551,7 +569,7 @@ export default function CrawlerDataPage() {
 
   const loadMoreItems = async () => {
     if (!selectedDirectory || !hasMoreItems || loadingMore) return;
-    await fetchCrawledItems(selectedDirectory.name, itemsOffset, true);
+    await fetchCrawledItems(selectedDirectory.name, itemsOffset, true, searchTerm);
   };
 
   const handleDirectorySelect = (directory: CrawlerDirectory) => {
@@ -1088,6 +1106,78 @@ export default function CrawlerDataPage() {
       toast({
         title: 'Error',
         description: error.message || 'Failed to delete crawler directory',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleRenameDirectory = async (directory: CrawlerDirectory, newName: string) => {
+    try {
+      if (!newName.trim()) {
+        toast({
+          title: 'Error',
+          description: 'Directory name cannot be empty',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      console.log('🔄 [Rename Directory] Starting rename process...');
+      console.log('📁 Old Name:', directory.name);
+      console.log('📝 New Name:', newName.trim());
+
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${directory.name}/rename`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ newName: newName.trim() })
+        }
+      );
+
+      console.log('📥 Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Server error:', errorData);
+        throw new Error(errorData.error || 'Failed to rename crawler directory');
+      }
+
+      const result = await response.json();
+      console.log('✅ Rename successful:', result);
+
+      // Update local state
+      const updatedDirectories = directories.map(dir =>
+        dir.id === directory.id
+          ? { ...dir, name: newName.trim(), displayName: newName.trim() }
+          : dir
+      );
+      setDirectories(updatedDirectories);
+
+      // Update selected directory if it was renamed
+      if (selectedDirectory?.id === directory.id) {
+        setSelectedDirectory({
+          ...selectedDirectory,
+          name: newName.trim(),
+          displayName: newName.trim()
+        });
+      }
+
+      // Clear editing state
+      setEditingDirectoryId(null);
+      setEditingDirectoryName('');
+
+      toast({
+        title: 'Success',
+        description: `Renamed "${directory.displayName}" to "${newName.trim()}" (${result.renamedCount} items)`
+      });
+    } catch (error: any) {
+      console.error('❌ [Rename Directory] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to rename crawler directory',
         variant: 'destructive'
       });
     }
@@ -1659,17 +1749,13 @@ export default function CrawlerDataPage() {
     return steps.indexOf(step) + 1;
   };
 
-  const filteredItems = crawledItems.filter(item => {
-    // Search filter
-    const matchesSearch = item.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.key?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    // Status filter
-    const status = item.analyzeStatus || 'waiting';
-    const matchesStatus = statusFilter === 'all' || status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
+  // Backend now handles search, so we only need to filter by status on frontend
+  const filteredItems = statusFilter === 'all'
+    ? crawledItems
+    : crawledItems.filter(item => {
+        const status = item.analyzeStatus || 'waiting';
+        return status === statusFilter;
+      });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -1900,7 +1986,61 @@ export default function CrawlerDataPage() {
                                 onClick={() => handleDirectorySelect(directory)}
                               >
                                 <div className="flex items-center justify-between mb-1">
-                                  <h3 className="font-semibold text-sm">{directory.displayName}</h3>
+                                  {editingDirectoryId === directory.id ? (
+                                    // Inline edit mode
+                                    <div className="flex items-center gap-1 flex-1" onClick={(e) => e.stopPropagation()}>
+                                      <Input
+                                        value={editingDirectoryName}
+                                        onChange={(e) => setEditingDirectoryName(e.target.value)}
+                                        className="h-6 text-sm px-2 flex-1"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleRenameDirectory(directory, editingDirectoryName);
+                                          } else if (e.key === 'Escape') {
+                                            setEditingDirectoryId(null);
+                                            setEditingDirectoryName('');
+                                          }
+                                        }}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 p-0 hover:bg-green-100 dark:hover:bg-green-900/30"
+                                        onClick={() => handleRenameDirectory(directory, editingDirectoryName)}
+                                      >
+                                        <Check className="w-3 h-3 text-green-600" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-6 w-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                        onClick={() => {
+                                          setEditingDirectoryId(null);
+                                          setEditingDirectoryName('');
+                                        }}
+                                      >
+                                        <X className="w-3 h-3 text-red-600" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    // Normal display mode
+                                    <div className="flex items-center gap-1 flex-1 group/name">
+                                      <h3 className="font-semibold text-sm">{directory.displayName}</h3>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 w-5 p-0 opacity-0 group-hover/name:opacity-100 transition-opacity hover:bg-slate-200 dark:hover:bg-slate-700"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingDirectoryId(directory.id);
+                                          setEditingDirectoryName(directory.displayName);
+                                        }}
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  )}
                                   <Badge variant="secondary" className="text-xs">
                                     {directory.itemCount}
                                   </Badge>
@@ -2241,55 +2381,7 @@ export default function CrawlerDataPage() {
                             />
                           </div>
 
-                          {/* Status Filter */}
-                          <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[180px] h-8">
-                              <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Items</SelectItem>
-                              <SelectItem value="waiting">Waiting</SelectItem>
-                              <SelectItem value="analyzed">Analyzed</SelectItem>
-                              <SelectItem value="transformed">Transformed</SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          {/* Template Selector */}
-                          <Select value={selectedAnalyzeTemplate} onValueChange={setSelectedAnalyzeTemplate}>
-                            <SelectTrigger className="w-[180px] h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {analysisTemplates.map(template => (
-                                <SelectItem key={template.id} value={template.id}>
-                                  {template.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          <div className="flex gap-2">
-                            {selectedForAnalyze.size > 0 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={handleBatchAnalyze}
-                                disabled={batchAnalyzing}
-                                className="h-8 text-xs px-3"
-                              >
-                                {batchAnalyzing ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                    Analyzing...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Brain className="w-3 h-3 mr-1" />
-                                    Analyze ({selectedForAnalyze.size})
-                                  </>
-                                )}
-                              </Button>
-                            )}
+                          <div className="flex gap-2 ml-auto">
                             {selectedForRecrawl.size > 0 && (
                               <Button
                                 size="sm"
@@ -2533,13 +2625,14 @@ export default function CrawlerDataPage() {
                       <CardDescription>Choose existing table or create new one</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                      {/* Entity Analysis Summary */}
+                      {/* Data Transformation Summary */}
                       <div className="p-4 bg-slate-50 dark:bg-slate-900/20 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-2 mb-3">
-                          <BarChart3 className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                          <h4 className="font-semibold text-sm">Entity Analysis</h4>
-                        </div>
+                        <h4 className="font-semibold text-sm mb-3">Data Transformation</h4>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total Items</p>
+                            <p className="text-lg font-bold text-slate-600 dark:text-slate-300">{selectedItems.size > 0 ? selectedItems.size : crawledItems.length}</p>
+                          </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Total Fields</p>
                             <p className="text-lg font-bold text-slate-600 dark:text-slate-300">{entityAnalysis.totalFields}</p>
@@ -2550,11 +2643,7 @@ export default function CrawlerDataPage() {
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Optional</p>
-                            <p className="text-lg font-bold text-yellow-600">{entityAnalysis.optionalFields}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Sample Size</p>
-                            <p className="text-lg font-bold text-purple-600">{entityAnalysis.sampleSize}</p>
+                            <p className="text-lg font-bold text-blue-600">{entityAnalysis.optionalFields}</p>
                           </div>
                         </div>
                       </div>
@@ -2598,11 +2687,8 @@ export default function CrawlerDataPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <Brain className="w-4 h-4 text-purple-600" />
-                            <Label htmlFor="autoEmbeddings">Auto-generate embeddings</Label>
-                          </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/20 rounded-lg border border-slate-200 dark:border-slate-700">
+                          <Label htmlFor="autoEmbeddings" className="font-medium">Auto-generate embeddings</Label>
                           <Switch
                             id="autoEmbeddings"
                             checked={autoEmbeddings}

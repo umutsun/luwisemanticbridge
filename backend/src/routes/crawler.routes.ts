@@ -228,7 +228,7 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
 router.get('/crawler-directories/:crawlerName/data', async (req: Request, res: Response) => {
   try {
     const { crawlerName } = req.params;
-    const { limit, offset = 0 } = req.query;
+    const { limit, offset = 0, search } = req.query;
 
     if (!crawl4aiRedis) {
       return res.status(503).json({
@@ -241,14 +241,9 @@ router.get('/crawler-directories/:crawlerName/data', async (req: Request, res: R
     const pattern = `crawl4ai:${crawlerName}:*`;
     const keys = await crawl4aiRedis.keys(pattern);
 
-    // Paginate keys - if limit is not provided, return all keys
-    const paginatedKeys = limit
-      ? keys.slice(Number(offset), Number(offset) + Number(limit))
-      : keys.slice(Number(offset)); // No limit - return all from offset
-
-    // Fetch data for each key
-    const data = await Promise.all(
-      paginatedKeys.map(async (key) => {
+    // Fetch and parse all data first if search is provided
+    let allData = await Promise.all(
+      keys.map(async (key) => {
         try {
           const value = await crawl4aiRedis.get(key);
           const parts = key.split(':');
@@ -280,16 +275,36 @@ router.get('/crawler-directories/:crawlerName/data', async (req: Request, res: R
     );
 
     // Filter out null values
-    const validData = data.filter(d => d !== null);
+    allData = allData.filter(d => d !== null);
+
+    // Apply search filter if provided
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      allData = allData.filter(item => {
+        const titleMatch = item.title?.toLowerCase().includes(searchLower);
+        const keyMatch = item.key?.toLowerCase().includes(searchLower);
+        const urlMatch = item.url?.toLowerCase().includes(searchLower);
+        return titleMatch || keyMatch || urlMatch;
+      });
+    }
+
+    const totalAfterSearch = allData.length;
+
+    // Paginate after filtering
+    const paginatedData = limit
+      ? allData.slice(Number(offset), Number(offset) + Number(limit))
+      : allData.slice(Number(offset));
 
     res.json({
       success: true,
       crawlerName,
-      data: validData,
-      total: keys.length,
-      limit: limit ? Number(limit) : keys.length,
+      data: paginatedData,
+      total: totalAfterSearch,
+      totalBeforeSearch: keys.length,
+      limit: limit ? Number(limit) : totalAfterSearch,
       offset: Number(offset),
-      hasMore: limit ? Number(offset) + Number(limit) < keys.length : false
+      hasMore: limit ? Number(offset) + Number(limit) < totalAfterSearch : false,
+      searchApplied: !!search
     });
   } catch (error: any) {
     console.error('Failed to fetch crawler data:', error);
@@ -951,6 +966,86 @@ router.post('/crawler-directories/:crawlerName/update-item', async (req: Request
  * DELETE /crawler-directories/:crawlerName
  * Delete entire crawler directory (all items) from Redis
  */
+/**
+ * PATCH /crawler-directories/:crawlerName/rename
+ * Rename a crawler directory by updating all Redis keys
+ */
+router.patch('/crawler-directories/:crawlerName/rename', async (req: Request, res: Response) => {
+  try {
+    const { crawlerName } = req.params;
+    const { newName } = req.body;
+
+    console.log('🔄 [Rename Directory] Received request');
+    console.log('📁 Old Name:', crawlerName);
+    console.log('📝 New Name:', newName);
+
+    if (!crawlerName || !newName) {
+      console.error('❌ Missing crawlerName or newName');
+      return res.status(400).json({
+        success: false,
+        error: 'Both crawler name and new name are required'
+      });
+    }
+
+    if (!crawl4aiRedis) {
+      console.error('❌ Redis not available');
+      return res.status(503).json({
+        success: false,
+        error: 'Redis not available'
+      });
+    }
+
+    // Get all keys for the old crawler name
+    const pattern = `crawl4ai:${crawlerName}:*`;
+    console.log('🔍 Searching pattern:', pattern);
+
+    const keys = await crawl4aiRedis.keys(pattern);
+    console.log(`📦 Found ${keys.length} keys to rename`);
+
+    if (keys.length === 0) {
+      console.warn('⚠️ No keys found for crawler:', crawlerName);
+      return res.status(404).json({
+        success: false,
+        error: 'Crawler directory not found'
+      });
+    }
+
+    // Rename all keys
+    let renamedCount = 0;
+    for (const oldKey of keys) {
+      const suffix = oldKey.replace(`crawl4ai:${crawlerName}:`, '');
+      const newKey = `crawl4ai:${newName}:${suffix}`;
+
+      // Get the value
+      const value = await crawl4aiRedis.get(oldKey);
+
+      if (value) {
+        // Set new key
+        await crawl4aiRedis.set(newKey, value);
+        // Delete old key
+        await crawl4aiRedis.del(oldKey);
+        renamedCount++;
+      }
+    }
+
+    console.log(`✅ Renamed ${renamedCount} items from ${crawlerName} to ${newName}`);
+
+    res.json({
+      success: true,
+      message: `Crawler directory renamed successfully`,
+      oldName: crawlerName,
+      newName,
+      renamedCount
+    });
+  } catch (error: any) {
+    console.error('❌ Failed to rename crawler directory:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to rename crawler directory'
+    });
+  }
+});
+
 router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Response) => {
   try {
     const { crawlerName } = req.params;
