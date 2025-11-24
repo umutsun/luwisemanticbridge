@@ -128,6 +128,7 @@ class DrupalCrawler:
         """Try to fetch content via Drupal JSON:API"""
         all_items = []
 
+        # Try both article and page endpoints separately
         for endpoint in self.api_endpoints:
             url = f"{self.domain}{endpoint}"
             print(f"  [API] Trying: {url}")
@@ -135,6 +136,7 @@ class DrupalCrawler:
             data = await self.fetch_json(url)
 
             if data and 'data' in data:
+                endpoint_type = endpoint.split('/')[-1]  # Extract 'article' or 'page'
                 print(f"  [API] ✓ Found JSON:API endpoint: {endpoint}")
 
                 # JSON:API format
@@ -142,11 +144,12 @@ class DrupalCrawler:
                 if not isinstance(items, list):
                     items = [items]
 
+                endpoint_items = []
                 for item in items:
                     attrs = item.get('attributes', {})
-                    all_items.append({
+                    endpoint_items.append({
                         'id': item.get('id'),
-                        'type': item.get('type', '').split('--')[-1],
+                        'type': endpoint_type,  # Use endpoint type (article/page)
                         'title': attrs.get('title', ''),
                         'body': attrs.get('body', {}).get('value', ''),
                         'summary': attrs.get('body', {}).get('summary', ''),
@@ -162,15 +165,15 @@ class DrupalCrawler:
                 page_count = 1
                 while next_url:
                     page_count += 1
-                    print(f"  [API] Fetching page {page_count}...")
+                    print(f"  [API] Fetching page {page_count} for {endpoint_type}...")
                     next_data = await self.fetch_json(next_url)
 
                     if next_data and 'data' in next_data:
                         for item in next_data['data']:
                             attrs = item.get('attributes', {})
-                            all_items.append({
+                            endpoint_items.append({
                                 'id': item.get('id'),
-                                'type': item.get('type', '').split('--')[-1],
+                                'type': endpoint_type,
                                 'title': attrs.get('title', ''),
                                 'body': attrs.get('body', {}).get('value', ''),
                                 'summary': attrs.get('body', {}).get('summary', ''),
@@ -185,9 +188,12 @@ class DrupalCrawler:
                     else:
                         break
 
-                print(f"  [API] ✓ Fetched {len(all_items)} items from {page_count} pages")
-                break  # Found working endpoint
+                print(f"  [API] ✓ Fetched {len(endpoint_items)} {endpoint_type}s from {page_count} pages")
+                all_items.extend(endpoint_items)
+                # REMOVED: break statement - continue to try other endpoints
 
+        if all_items:
+            print(f"  [API] ✓ Total items collected: {len(all_items)}")
         return all_items
 
     async def crawl_sitemap(self) -> List[str]:

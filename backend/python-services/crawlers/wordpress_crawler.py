@@ -227,6 +227,11 @@ class WordPressCrawler:
         category_ids = post.get('categories', [])
         tag_ids = post.get('tags', [])
 
+        # For pages, add "page" to categories
+        categories = self.get_category_names(category_ids)
+        if content_type == 'page':
+            categories = ['page']
+
         data = {
             'title': BeautifulSoup(title, 'html.parser').get_text(),
             'content': clean_content,
@@ -240,7 +245,7 @@ class WordPressCrawler:
             'author_id': post.get('author'),
             'category_ids': category_ids,
             'tag_ids': tag_ids,
-            'categories': self.get_category_names(category_ids),
+            'categories': categories,
             'tags': self.get_tag_names(tag_ids),
             'crawled_at': current_timestamp,
             'scraped_at': current_timestamp,
@@ -329,8 +334,8 @@ class WordPressCrawler:
             await self.load_tags()
             await self.crawl_posts()
 
-            if not self.target_category_id:
-                await self.crawl_pages()
+            # Always crawl pages regardless of category filter
+            await self.crawl_pages()
 
             save_state(self.state)
 
