@@ -90,6 +90,9 @@ class WordPressCrawler:
         self.target_category_id = target_category_id
         self.session = None
         self.state = load_state()
+        # Cache for categories and tags (id -> name)
+        self.categories_cache = {}
+        self.tags_cache = {}
 
     async def __aenter__(self):
         timeout = aiohttp.ClientTimeout(total=30)
@@ -131,6 +134,36 @@ class WordPressCrawler:
                         if cat.get('slug') == category_slug:
                             return cat.get('id')
         return None
+
+    async def load_categories(self):
+        """Load all categories into cache"""
+        print("[CACHE] Loading categories...")
+        categories = await self.fetch_all_posts(f"{self.api_base}/categories")
+        if categories:
+            for cat in categories:
+                self.categories_cache[cat.get('id')] = cat.get('name', 'Unknown')
+            print(f"[CACHE] Loaded {len(self.categories_cache)} categories")
+
+    async def load_tags(self):
+        """Load all tags into cache"""
+        print("[CACHE] Loading tags...")
+        tags = await self.fetch_all_posts(f"{self.api_base}/tags")
+        if tags:
+            for tag in tags:
+                self.tags_cache[tag.get('id')] = tag.get('name', 'Unknown')
+            print(f"[CACHE] Loaded {len(self.tags_cache)} tags")
+
+    def get_category_names(self, category_ids):
+        """Convert category IDs to names"""
+        if not category_ids:
+            return []
+        return [self.categories_cache.get(cat_id, f"Category_{cat_id}") for cat_id in category_ids]
+
+    def get_tag_names(self, tag_ids):
+        """Convert tag IDs to names"""
+        if not tag_ids:
+            return []
+        return [self.tags_cache.get(tag_id, f"Tag_{tag_id}") for tag_id in tag_ids]
 
     async def fetch_all_posts(self, endpoint, params=None):
         """Fetch all posts with pagination"""
@@ -191,6 +224,9 @@ class WordPressCrawler:
 
         # Extract metadata
         current_timestamp = datetime.utcnow().isoformat()
+        category_ids = post.get('categories', [])
+        tag_ids = post.get('tags', [])
+
         data = {
             'title': BeautifulSoup(title, 'html.parser').get_text(),
             'content': clean_content,
@@ -202,8 +238,10 @@ class WordPressCrawler:
             'publish_date': post.get('date', ''),
             'modified_date': post.get('modified', ''),
             'author_id': post.get('author'),
-            'category_ids': post.get('categories', []),
-            'tag_ids': post.get('tags', []),
+            'category_ids': category_ids,
+            'tag_ids': tag_ids,
+            'categories': self.get_category_names(category_ids),
+            'tags': self.get_tag_names(tag_ids),
             'crawled_at': current_timestamp,
             'scraped_at': current_timestamp,
             'timestamp': current_timestamp,
@@ -286,6 +324,9 @@ class WordPressCrawler:
         start_time = datetime.now()
 
         try:
+            # Load categories and tags first
+            await self.load_categories()
+            await self.load_tags()
             await self.crawl_posts()
 
             if not self.target_category_id:
