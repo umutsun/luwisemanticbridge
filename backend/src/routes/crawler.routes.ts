@@ -1175,10 +1175,46 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
 router.post('/crawler-directories/:crawlerName/script', upload.single('script'), async (req: Request, res: Response) => {
   try {
     const { crawlerName } = req.params;
+    const { builtIn, crawlerName: builtInCrawlerName } = req.body;
 
     console.log(' [Upload Script] Received request');
     console.log(' Crawler Name:', crawlerName);
+    console.log(' Built-in:', builtIn, 'Built-in Crawler:', builtInCrawlerName);
 
+    // Handle built-in crawler linking
+    if (builtIn === 'true' && builtInCrawlerName) {
+      const builtInScriptPath = path.join(__dirname, '../../python-services/crawlers', `${builtInCrawlerName}.py`);
+
+      if (!fs.existsSync(builtInScriptPath)) {
+        return res.status(404).json({
+          success: false,
+          error: `Built-in crawler '${builtInCrawlerName}' not found`
+        });
+      }
+
+      // Create symlink to built-in crawler
+      const targetPath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}.py`);
+
+      // Remove existing symlink/file if exists
+      if (fs.existsSync(targetPath)) {
+        fs.unlinkSync(targetPath);
+      }
+
+      // Create symlink
+      fs.symlinkSync(builtInScriptPath, targetPath);
+
+      console.log(' Linked to built-in crawler:', builtInCrawlerName);
+
+      return res.json({
+        success: true,
+        message: `Linked to built-in crawler: ${builtInCrawlerName}`,
+        filename: `${builtInCrawlerName}.py`,
+        path: targetPath,
+        builtIn: true
+      });
+    }
+
+    // Handle custom script upload
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -1193,7 +1229,8 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
       message: 'Python script uploaded successfully',
       filename: req.file.filename,
       path: req.file.path,
-      size: req.file.size
+      size: req.file.size,
+      builtIn: false
     });
   } catch (error: any) {
     console.error(' Failed to upload script:', error);
