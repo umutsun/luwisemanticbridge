@@ -19,7 +19,8 @@ STATE_FILE = os.path.join(os.path.dirname(__file__), 'shopify_crawler_state.json
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_KEY_PREFIX = 'crawl4ai:shopify_crawler:products'
+CRAWLER_NAME = None  # Will be set in main()
+# REDIS_KEY_PREFIX will be dynamic: 'crawl4ai:{CRAWLER_NAME}:products'
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
@@ -47,10 +48,11 @@ def load_state():
     return {'visited': [], 'stats': {'products': 0, 'collections': 0}}
 
 class ShopifyCrawler:
-    def __init__(self, store_url):
+    def __init__(self, store_url, crawler_name):
         self.store_url = store_url.rstrip('/')
         parsed = urlparse(store_url)
         self.base_domain = f"{parsed.scheme}://{parsed.netloc}"
+        self.crawler_name = crawler_name
         self.session = None
         self.state = load_state()
 
@@ -124,7 +126,7 @@ class ShopifyCrawler:
             return
 
         # Check Redis for duplicates
-        redis_key = f"{REDIS_KEY_PREFIX}:{handle}"
+        redis_key = f"crawl4ai:{self.crawler_name}:products:{handle}"
 
         if r.exists(redis_key):
             print(f"\n[SKIP] Already in Redis: {handle}")
@@ -250,16 +252,20 @@ class ShopifyCrawler:
 
 async def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("Usage: python shopify_crawler.py <store_url>")
+    if len(sys.argv) < 3:
+        print("Usage: python shopify_crawler.py <store_url> <crawler_name>")
         print("\nExamples:")
-        print("  python shopify_crawler.py https://example.myshopify.com")
-        print("  python shopify_crawler.py https://shop.example.com")
+        print("  python shopify_crawler.py https://example.myshopify.com myshopify")
+        print("  python shopify_crawler.py https://shop.example.com shopname")
         sys.exit(1)
 
     store_url = sys.argv[1]
+    crawler_name = sys.argv[2]
 
-    async with ShopifyCrawler(store_url) as crawler:
+    print(f"[INIT] Crawler Name: {crawler_name}")
+    print(f"[INIT] Store URL: {store_url}")
+
+    async with ShopifyCrawler(store_url, crawler_name) as crawler:
         await crawler.run()
 
 if __name__ == "__main__":

@@ -19,7 +19,8 @@ STATE_FILE = os.path.join(os.path.dirname(__file__), 'woocommerce_crawler_state.
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_KEY_PREFIX = 'crawl4ai:woocommerce_crawler:products'
+CRAWLER_NAME = None  # Will be set in main()
+# REDIS_KEY_PREFIX will be dynamic: 'crawl4ai:{CRAWLER_NAME}:products'
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
@@ -61,9 +62,10 @@ def load_state():
     return {'visited': [], 'stats': {'products': 0, 'categories': 0}}
 
 class WooCommerceCrawler:
-    def __init__(self, base_url, consumer_key=None, consumer_secret=None):
+    def __init__(self, base_url, crawler_name, consumer_key=None, consumer_secret=None):
         self.base_url = base_url.rstrip('/')
         self.api_base = f"{self.base_url}/wp-json/wc/v3"
+        self.crawler_name = crawler_name
         self.consumer_key = consumer_key
         self.consumer_secret = consumer_secret
         self.session = None
@@ -134,7 +136,7 @@ class WooCommerceCrawler:
             return
 
         slug = product.get('slug', str(product_id))
-        redis_key = f"{REDIS_KEY_PREFIX}:{slug}"
+        redis_key = f"crawl4ai:{self.crawler_name}:products:{slug}"
 
         if r.exists(redis_key):
             print(f"\n[SKIP] Already in Redis: {slug}")
@@ -259,21 +261,25 @@ class WooCommerceCrawler:
 
 async def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("Usage: python woocommerce_crawler.py <url> [consumer_key] [consumer_secret]")
+    if len(sys.argv) < 3:
+        print("Usage: python woocommerce_crawler.py <url> <crawler_name> [consumer_key] [consumer_secret]")
         print("\nExamples:")
-        print("  python woocommerce_crawler.py https://shop.example.com/")
-        print("  python woocommerce_crawler.py https://shop.example.com/ ck_xxx cs_xxx")
+        print("  python woocommerce_crawler.py https://shop.example.com/ myshop")
+        print("  python woocommerce_crawler.py https://shop.example.com/ myshop ck_xxx cs_xxx")
         sys.exit(1)
 
     input_url = sys.argv[1]
-    consumer_key = sys.argv[2] if len(sys.argv) > 2 else None
-    consumer_secret = sys.argv[3] if len(sys.argv) > 3 else None
+    crawler_name = sys.argv[2]
+    consumer_key = sys.argv[3] if len(sys.argv) > 3 else None
+    consumer_secret = sys.argv[4] if len(sys.argv) > 4 else None
+
+    print(f"[INIT] Crawler Name: {crawler_name}")
+    print(f"[INIT] Target URL: {input_url}")
 
     parsed = urlparse(input_url)
     base_url = f"{parsed.scheme}://{parsed.netloc}"
 
-    async with WooCommerceCrawler(base_url, consumer_key, consumer_secret) as crawler:
+    async with WooCommerceCrawler(base_url, crawler_name, consumer_key, consumer_secret) as crawler:
         await crawler.run()
 
 if __name__ == "__main__":
