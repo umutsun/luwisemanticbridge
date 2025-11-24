@@ -19,7 +19,6 @@ import {
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
-import Console from "@/components/terminal/Console";
 
 interface SystemStatus {
   database: {
@@ -1405,10 +1404,6 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-
-
-        {/* Console Component */}
-        <Console />
 
         {/* Performance & System Resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
