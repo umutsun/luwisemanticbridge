@@ -31,50 +31,40 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 # Tenant Configuration
+# Production Instances (3 active)
 TENANTS = {
-    'lsemb': {
-        'name': 'LSEMB (Main)',
-        'path': '/var/www/lsemb',
-        'db': 'lsemb',
-        'redis_db': 2,
-        'backend_port': 8080,
-        'frontend_port': 3000,
+    'vergilex': {
+        'name': 'VERGILEX (Tax Laws)',
+        'path': '/var/www/vergilex',
+        'db': 'vergilex_lsemb',
+        'redis_db': 5,
+        'backend_port': 8087,
+        'frontend_port': 3005,
         'python_port': 8002,
-        'url': 'https://lsemb.luwi.dev',
-        'services': ['lsemb-backend', 'lsemb-frontend', 'lsemb-python']
+        'url': 'https://vergilex.luwi.dev',
+        'services': ['vergilex-backend', 'vergilex-frontend', 'vergilex-python']
     },
     'emlakai': {
-        'name': 'EmlakAI',
+        'name': 'EMLAKAI (Real Estate AI)',
         'path': '/var/www/emlakai',
         'db': 'emlakai_lsemb',
         'redis_db': 1,
-        'backend_port': 8081,
-        'frontend_port': 3001,
+        'backend_port': 8084,
+        'frontend_port': 3003,
         'python_port': 8001,
         'url': 'https://emlakai.luwi.dev',
         'services': ['emlakai-backend', 'emlakai-frontend', 'emlakai-python']
     },
     'bookie': {
-        'name': 'Bookie',
+        'name': 'BOOKIE (Education)',
         'path': '/var/www/bookie',
         'db': 'bookie_lsemb',
         'redis_db': 4,
-        'backend_port': 8082,
-        'frontend_port': 3002,
+        'backend_port': 8085,
+        'frontend_port': 3004,
         'python_port': 8003,
         'url': 'https://bookie.luwi.dev',
         'services': ['bookie-backend', 'bookie-frontend', 'bookie-python']
-    },
-    'scriptus': {
-        'name': 'Scriptus',
-        'path': '/var/www/scriptus',
-        'db': 'scriptus_lsemb',
-        'redis_db': 3,
-        'backend_port': 8086,
-        'frontend_port': 3006,
-        'python_port': 8004,
-        'url': 'https://scriptus.luwi.dev',
-        'services': ['scriptus-backend', 'scriptus-frontend', 'scriptus-python']
     },
     'luwi-dev': {
         'name': 'Luwi.dev Website',
@@ -82,7 +72,7 @@ TENANTS = {
         'db': None,
         'redis_db': None,
         'backend_port': None,
-        'frontend_port': 3010,
+        'frontend_port': 3000,
         'python_port': None,
         'url': 'https://luwi.dev',
         'services': ['luwi-dev']
