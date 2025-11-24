@@ -155,13 +155,16 @@ class DrupalCrawler:
                         'url': f"{self.domain}{attrs.get('path', {}).get('alias', '')}" if attrs.get('path') else None
                     })
 
-                # Check for pagination
+                # Check for pagination - fetch ALL pages
                 links = data.get('links', {})
                 next_url = links.get('next', {}).get('href') if isinstance(links.get('next'), dict) else links.get('next')
 
-                if next_url:
-                    print(f"  [API] Fetching next page...")
+                page_count = 1
+                while next_url:
+                    page_count += 1
+                    print(f"  [API] Fetching page {page_count}...")
                     next_data = await self.fetch_json(next_url)
+
                     if next_data and 'data' in next_data:
                         for item in next_data['data']:
                             attrs = item.get('attributes', {})
@@ -176,6 +179,13 @@ class DrupalCrawler:
                                 'url': f"{self.domain}{attrs.get('path', {}).get('alias', '')}" if attrs.get('path') else None
                             })
 
+                        # Get next page link
+                        next_links = next_data.get('links', {})
+                        next_url = next_links.get('next', {}).get('href') if isinstance(next_links.get('next'), dict) else next_links.get('next')
+                    else:
+                        break
+
+                print(f"  [API] ✓ Fetched {len(all_items)} items from {page_count} pages")
                 break  # Found working endpoint
 
         return all_items
