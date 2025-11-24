@@ -548,7 +548,7 @@ export default function CrawlerDataPage() {
       // Build URL with search parameter
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/data?offset=${offset}${searchParam}`
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${crawlerName}/data?limit=100&offset=${offset}${searchParam}`
       );
 
       if (!response.ok) throw new Error('Failed to fetch crawled items');
@@ -2120,7 +2120,6 @@ export default function CrawlerDataPage() {
                                     {directory.itemCount}
                                   </Badge>
                                 </div>
-                                <p className="text-xs text-muted-foreground truncate mb-2">{directory.displayName}</p>
 
                                 {/* Python script indicator/upload */}
                                 <div className="space-y-2">
@@ -2289,7 +2288,7 @@ export default function CrawlerDataPage() {
                                               <div className="absolute inset-0 bg-gradient-to-r from-green-500/30 via-green-400/20 to-transparent animate-pulse" style={{ animationDuration: '2s' }} />
                                             )}
 
-                                            <div className="text-[10px] font-medium text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2 flex-1 min-w-0">
+                                            <div className="text-[8px] font-medium text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2 flex-1 min-w-0">
                                               {runningScripts.has(directory.name) ? (
                                                 // Show queue/progress from Redis when running
                                                 (() => {
@@ -2606,7 +2605,7 @@ export default function CrawlerDataPage() {
                                               }}
                                             />
                                           </TableCell>
-                                          <TableCell className="font-medium max-w-[400px]" title={item.title}>
+                                          <TableCell className="font-medium max-w-[250px]" title={item.title}>
                                             <div className="truncate">
                                               {item.title}
                                             </div>
@@ -3020,20 +3019,37 @@ export default function CrawlerDataPage() {
                   <p className="text-xs text-muted-foreground mt-1">Extracting text from PDF</p>
                 </div>
               ) : (
-                <ScrollArea className="h-[360px]">
-                  <textarea
-                    id="contentEditor"
-                    value={editedData}
-                    onChange={(e) => setEditedData(e.target.value)}
-                    className="w-full min-h-[360px] p-4 font-mono text-sm bg-muted/30 rounded-lg text-foreground border-0 focus:outline-none resize-none"
-                    spellCheck={false}
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      wordWrap: 'break-word',
-                      lineHeight: '1.6'
+                <div className="relative">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="absolute top-2 right-2 z-10 h-7 w-7 p-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(editedData);
+                      toast({
+                        title: 'Copied',
+                        description: 'Content copied to clipboard'
+                      });
                     }}
-                  />
-                </ScrollArea>
+                    title="Copy to clipboard"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                  <ScrollArea className="h-[360px]">
+                    <textarea
+                      id="contentEditor"
+                      value={editedData}
+                      onChange={(e) => setEditedData(e.target.value)}
+                      className="w-full min-h-[360px] p-4 pr-12 font-mono text-sm bg-muted/30 rounded-lg text-foreground border-0 focus:outline-none resize-none"
+                      spellCheck={false}
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        wordWrap: 'break-word',
+                        lineHeight: '1.6'
+                      }}
+                    />
+                  </ScrollArea>
+                </div>
               )}
             </div>
           </div>
@@ -3052,25 +3068,25 @@ export default function CrawlerDataPage() {
                   {editingItem?.data?.url || editingItem?.key || ''}
                 </div>
                 {editingItem?.data && (
-                  <div className="flex items-center gap-2 flex-wrap text-[9px]">
+                  <div className="flex items-center gap-2 flex-wrap text-[10px]">
                     {editingItem.data.publish_date && (
                       <span className="text-slate-500 dark:text-slate-500">
-                        📅 {new Date(editingItem.data.publish_date).toLocaleDateString()}
+                        Published: {new Date(editingItem.data.publish_date).toLocaleDateString()}
                       </span>
                     )}
                     {editingItem.data.modified_date && (
                       <span className="text-slate-500 dark:text-slate-500">
-                        ✏️ {new Date(editingItem.data.modified_date).toLocaleDateString()}
+                        • Modified: {new Date(editingItem.data.modified_date).toLocaleDateString()}
                       </span>
                     )}
                     {editingItem.data.categories && editingItem.data.categories.length > 0 && (
                       <span className="text-blue-600 dark:text-blue-400">
-                        🏷️ {editingItem.data.categories.join(', ')}
+                        • Categories: {editingItem.data.categories.join(', ')}
                       </span>
                     )}
                     {editingItem.data.tags && editingItem.data.tags.length > 0 && (
                       <span className="text-green-600 dark:text-green-400">
-                        🔖 {editingItem.data.tags.slice(0, 3).join(', ')}{editingItem.data.tags.length > 3 ? '...' : ''}
+                        • Tags: {editingItem.data.tags.slice(0, 3).join(', ')}{editingItem.data.tags.length > 3 ? '...' : ''}
                       </span>
                     )}
                   </div>
@@ -3083,7 +3099,7 @@ export default function CrawlerDataPage() {
                   className="bg-slate-600 hover:bg-slate-700"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  OK
+                  Save
                 </Button>
               </div>
             </div>
