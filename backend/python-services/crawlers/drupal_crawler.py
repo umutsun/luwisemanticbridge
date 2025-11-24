@@ -218,6 +218,26 @@ class DrupalCrawler:
 
         return urls
 
+    def extract_categories_from_html(self, soup) -> List[str]:
+        """Extract categories/tags from Drupal HTML"""
+        categories = []
+
+        # Try common Drupal category/tag selectors
+        for selector in [
+            '.field--name-field-tags a',
+            '.field--name-field-category a',
+            '.field--type-entity-reference a',
+            '.tags a',
+            '.taxonomy a'
+        ]:
+            elements = soup.select(selector)
+            for el in elements:
+                text = el.get_text(strip=True)
+                if text and text not in categories:
+                    categories.append(text)
+
+        return categories
+
     async def process_item(self, item: Dict):
         """Process and save item to Redis"""
         item_id = item.get('id', '')
@@ -249,6 +269,15 @@ class DrupalCrawler:
             # Generate summary from content (first 300 chars)
             clean_summary = clean_content[:300] + '...' if len(clean_content) > 300 else clean_content
 
+        # Extract categories from HTML if available (or use provided categories from sitemap)
+        categories = item.get('categories', [])
+        if not categories and body_html:
+            try:
+                soup = BeautifulSoup(body_html, 'html.parser')
+                categories = self.extract_categories_from_html(soup)
+            except:
+                pass
+
         # Build data structure
         current_timestamp = datetime.utcnow().isoformat()
         data = {
@@ -259,6 +288,7 @@ class DrupalCrawler:
             'page_url': item_url,
             'item_id': item_id,
             'content_type': item.get('type', 'page'),
+            'categories': categories,
             'created_date': item.get('created', ''),
             'modified_date': item.get('changed', ''),
             'crawled_at': current_timestamp,
@@ -274,6 +304,8 @@ class DrupalCrawler:
             r.set(redis_key, json_data)
             print(f"  [REDIS] Saved: {redis_key}")
             print(f"  Content: {len(clean_content)} chars")
+            if categories:
+                print(f"  Categories: {', '.join(categories)}")
 
             self.state['visited'].append(item_url)
             self.state['stats']['articles'] += 1
@@ -314,10 +346,10 @@ class DrupalCrawler:
 
                 if urls:
                     print(f"\n[SUCCESS] Found {len(urls)} URLs in sitemap")
-                    print("[INFO] Limited to first 50 URLs for performance")
+                    print(f"[INFO] Processing all {len(urls)} URLs...")
 
-                    for i, url in enumerate(urls[:50], 1):
-                        print(f"\n--- URL {i}/50 ---")
+                    for i, url in enumerate(urls, 1):
+                        print(f"\n--- URL {i}/{len(urls)} ---")
                         print(f"[PAGE] {url}")
 
                         # Fetch and parse HTML
@@ -337,14 +369,22 @@ class DrupalCrawler:
                                     content = str(content_el)
                                     break
 
+                            # Extract categories from full page
+                            categories = self.extract_categories_from_html(soup)
+
                             if content:
                                 item = {
                                     'id': url.split('/')[-1],
                                     'title': title_text,
                                     'body': content,
-                                    'url': url
+                                    'url': url,
+                                    'categories': categories
                                 }
                                 await self.process_item(item)
+
+                        # Save state periodically
+                        if i % 10 == 0:
+                            save_state(self.state)
 
                         await asyncio.sleep(0.5)
                 else:

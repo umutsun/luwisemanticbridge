@@ -2602,7 +2602,7 @@ export default function CrawlerDataPage() {
                                               {item.title}
                                             </div>
                                           </TableCell>
-                                          <TableCell className="text-xs">
+                                          <TableCell className="text-xs w-48">
                                             {item.data?.categories && item.data.categories.length > 0 ? (
                                               <div className="flex flex-wrap gap-1">
                                                 {item.data.categories.slice(0, 2).map((cat, idx) => (
@@ -2620,7 +2620,7 @@ export default function CrawlerDataPage() {
                                               <span className="text-muted-foreground text-[10px]">-</span>
                                             )}
                                           </TableCell>
-                                          <TableCell>
+                                          <TableCell className="w-24">
                                             <TooltipProvider>
                                               <div className="flex items-center justify-start gap-1 pl-4">
                                                 <Tooltip>
