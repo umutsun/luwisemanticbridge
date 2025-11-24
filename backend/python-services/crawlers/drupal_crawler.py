@@ -45,9 +45,13 @@ def clean_html(html):
 
     return text.strip()
 
-def save_state(state, crawler_name=None):
+def save_state(state, crawler_name=None, script_name=None):
     """Save crawler state to JSON file AND Redis"""
     try:
+        # Add script name to state if provided
+        if script_name:
+            state['script'] = script_name
+
         # Save to file (backup)
         with open(STATE_FILE, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
@@ -56,7 +60,8 @@ def save_state(state, crawler_name=None):
         if crawler_name:
             redis_key = f"crawl4ai:{crawler_name}:_state"
             r.set(redis_key, json.dumps(state, ensure_ascii=False))
-            print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file + Redis)")
+            script_info = f" (script: {script_name})" if script_name else ""
+            print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file + Redis){script_info}")
         else:
             print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file only)")
     except Exception as e:
@@ -73,9 +78,10 @@ def load_state():
     return {'visited': [], 'stats': {'pages': 0, 'articles': 0}}
 
 class DrupalCrawler:
-    def __init__(self, base_url: str, crawler_name: str):
+    def __init__(self, base_url: str, crawler_name: str, script_name: str = None):
         self.base_url = base_url.rstrip('/')
         self.crawler_name = crawler_name
+        self.script_name = script_name or 'drupal_crawler.py'
         parsed = urlparse(base_url)
         self.domain = f"{parsed.scheme}://{parsed.netloc}"
         self.session = None
@@ -334,6 +340,7 @@ class DrupalCrawler:
         print(f"Drupal Site Crawler")
         print(f"{'='*60}")
         print(f"Base URL: {self.base_url}")
+        print(f"Script: {self.script_name}")
         print(f"{'='*60}\n")
 
         start_time = datetime.now()
@@ -351,7 +358,7 @@ class DrupalCrawler:
                     await self.process_item(item)
 
                     if i % 10 == 0:
-                        save_state(self.state, self.crawler_name)
+                        save_state(self.state, self.crawler_name, self.script_name)
 
                     await asyncio.sleep(0.2)
             else:
@@ -399,23 +406,23 @@ class DrupalCrawler:
 
                         # Save state periodically
                         if i % 10 == 0:
-                            save_state(self.state, self.crawler_name)
+                            save_state(self.state, self.crawler_name, self.script_name)
 
                         await asyncio.sleep(0.5)
                 else:
                     print("\n[ERROR] Could not find content via API or sitemap")
                     print("[INFO] Make sure the site is Drupal and has JSON:API or sitemap enabled")
 
-            save_state(self.state, self.crawler_name)
+            save_state(self.state, self.crawler_name, self.script_name)
 
         except KeyboardInterrupt:
             print("\n[INTERRUPT] Crawler interrupted")
-            save_state(self.state, self.crawler_name)
+            save_state(self.state, self.crawler_name, self.script_name)
         except Exception as e:
             print(f"\n[ERROR] Crawler failed: {e}")
             import traceback
             traceback.print_exc()
-            save_state(self.state, self.crawler_name)
+            save_state(self.state, self.crawler_name, self.script_name)
 
         duration = (datetime.now() - start_time).total_seconds()
         print(f"\n{'='*60}")
@@ -428,19 +435,21 @@ class DrupalCrawler:
 async def main():
     """Main entry point"""
     if len(sys.argv) < 3:
-        print("Usage: python drupal_crawler.py <url> <crawler_name>")
+        print("Usage: python drupal_crawler.py <url> <crawler_name> [script_name]")
         print("\nExamples:")
         print("  python drupal_crawler.py https://yeditepe.edu.tr/ mysite")
-        print("  python drupal_crawler.py https://example.com/ example")
+        print("  python drupal_crawler.py https://example.com/ example drupal_crawler.py")
         sys.exit(1)
 
     base_url = sys.argv[1]
     crawler_name = sys.argv[2]
+    script_name = sys.argv[3] if len(sys.argv) > 3 else os.path.basename(__file__)
 
     print(f"[INIT] Crawler Name: {crawler_name}")
     print(f"[INIT] Target URL: {base_url}")
+    print(f"[INIT] Script: {script_name}")
 
-    async with DrupalCrawler(base_url, crawler_name) as crawler:
+    async with DrupalCrawler(base_url, crawler_name, script_name) as crawler:
         await crawler.run()
 
 if __name__ == "__main__":
