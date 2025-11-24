@@ -19,7 +19,7 @@ import {
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
-import AdvancedConsole from "@/components/terminal/AdvancedConsole";
+import Console from "@/components/terminal/Console";
 
 interface SystemStatus {
   database: {
@@ -1407,18 +1407,8 @@ export default function DashboardPage() {
         </Card>
 
 
-        {/* Advanced Console Component */}
-        <AdvancedConsole
-          height={500}
-          maxHeight={700}
-          showHeader={true}
-          showControls={true}
-          showFilters={true}
-          showBookmarks={true}
-          showHistory={true}
-          autoScroll={true}
-          maxLogs={1000}
-        />
+        {/* Console Component */}
+        <Console />
 
         {/* Performance & System Resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

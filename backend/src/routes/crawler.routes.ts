@@ -1183,16 +1183,17 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
 
     // Handle built-in crawler linking
     if (builtIn === 'true' && builtInCrawlerName) {
-      const builtInScriptPath = path.join(__dirname, '../../python-services/crawlers', `${builtInCrawlerName}.py`);
+      // Map built-in crawler names to actual _crawler.py files
+      const builtInScriptPath = path.join(__dirname, '../../python-services/crawlers', `${builtInCrawlerName}_crawler.py`);
 
       if (!fs.existsSync(builtInScriptPath)) {
         return res.status(404).json({
           success: false,
-          error: `Built-in crawler '${builtInCrawlerName}' not found`
+          error: `Built-in crawler '${builtInCrawlerName}' not found at ${builtInScriptPath}`
         });
       }
 
-      // Copy built-in crawler to crawler directory
+      // Copy built-in crawler to crawler directory (without _crawler suffix in filename)
       const targetPath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}.py`);
 
       // Remove existing file if exists
@@ -1208,7 +1209,7 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
       return res.json({
         success: true,
         message: `Linked to built-in crawler: ${builtInCrawlerName}`,
-        filename: `${builtInCrawlerName}.py`,
+        filename: `${crawlerName}.py`,
         path: targetPath,
         builtIn: true
       });

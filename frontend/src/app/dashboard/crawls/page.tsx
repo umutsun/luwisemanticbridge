@@ -231,14 +231,14 @@ export default function CrawlerDataPage() {
   const [bulkRecrawling, setBulkRecrawling] = useState(false); // Bulk recrawl in progress
   const [showCrawlerSelect, setShowCrawlerSelect] = useState<string | null>(null); // Directory name for crawler selection
 
-  // Built-in crawlers
+  // Built-in crawlers (without _crawler suffix as per folder structure)
   const builtInCrawlers = [
-    { name: 'wordpress_crawler', label: 'WordPress' },
-    { name: 'drupal_crawler', label: 'Drupal' },
-    { name: 'woocommerce_crawler', label: 'WooCommerce' },
-    { name: 'shopify_crawler', label: 'Shopify' },
-    { name: 'wix_crawler', label: 'Wix' },
-    { name: 'cloudflare_crawler', label: 'Cloudflare' }
+    { name: 'wordpress', label: 'WordPress' },
+    { name: 'drupal', label: 'Drupal' },
+    { name: 'woocommerce', label: 'WooCommerce' },
+    { name: 'shopify', label: 'Shopify' },
+    { name: 'wix', label: 'Wix' },
+    { name: 'cloudflare', label: 'Cloudflare' }
   ];
 
   // Analyze functionality
@@ -2378,7 +2378,7 @@ export default function CrawlerDataPage() {
                                   // Initial button to show crawler selection
                                   <button
                                     onClick={() => setShowCrawlerSelect(directory.name)}
-                                    className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-[10px]"
+                                    className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-[8px]"
                                   >
                                     <Plus className="w-3 h-3" />
                                     <span>Attach script</span>
