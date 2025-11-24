@@ -39,6 +39,12 @@ import {
 import { ConfirmTooltip } from '@/components/ui/confirm-tooltip';
 import { InputTooltip } from '@/components/ui/input-tooltip';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -2547,8 +2553,7 @@ export default function CrawlerDataPage() {
                                     />
                                   </TableHead>
                                   <TableHead>Name</TableHead>
-                                  <TableHead className="w-32">Status</TableHead>
-                                  <TableHead className="w-24">Date</TableHead>
+                                  <TableHead className="w-24 text-right">Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
                             </Table>
@@ -2558,14 +2563,14 @@ export default function CrawlerDataPage() {
                               <TableBody>
                                 {itemsLoading ? (
                                   <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-12">
+                                    <TableCell colSpan={3} className="text-center py-12">
                                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
                                       <p className="text-sm text-muted-foreground mt-2">Loading items...</p>
                                     </TableCell>
                                   </TableRow>
                                 ) : filteredItems.length === 0 ? (
                                   <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-12">
+                                    <TableCell colSpan={3} className="text-center py-12">
                                       <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
                                       <p className="text-sm text-muted-foreground">No items found</p>
                                     </TableCell>
@@ -2605,59 +2610,38 @@ export default function CrawlerDataPage() {
                                               {item.title}
                                             </div>
                                           </TableCell>
-                                          <TableCell>
-                                            <DropdownMenu>
-                                              <DropdownMenuTrigger asChild>
-                                                <div className="flex items-center gap-1 cursor-pointer group">
-                                                  <Badge
-                                                    variant="outline"
-                                                    className={`text-xs font-medium border transition-all duration-150 ${
-                                                      status === 'waiting' ? 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400' :
-                                                      status === 'analyzed' ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400' :
-                                                      'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
-                                                    } hover:opacity-80`}
+                                          <TableCell className="text-right">
+                                            <TooltipProvider>
+                                              <div className="flex items-center justify-end gap-1">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Button
+                                                      variant="ghost"
+                                                      size="sm"
+                                                      className="h-8 w-8 p-0"
+                                                      onClick={async () => await handleEditItem(item)}
+                                                    >
+                                                      <Eye className="w-4 h-4" />
+                                                    </Button>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <p>Preview</p>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                                <ConfirmTooltip
+                                                  message="Delete this item?"
+                                                  onConfirm={() => handleDeleteItem(item.key)}
+                                                >
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
                                                   >
-                                                    {analyzingItems.has(item.id) ? (
-                                                      <>
-                                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                                        Analyzing
-                                                      </>
-                                                    ) : (
-                                                      status === 'waiting' ? 'Waiting' :
-                                                      status === 'analyzed' ? 'Analyzed' : 'Transformed'
-                                                    )}
-                                                  </Badge>
-                                                  <MoreHorizontal className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                              </DropdownMenuTrigger>
-                                              <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={async () => await handleEditItem(item)}>
-                                                  <Eye className="w-3 h-3 mr-2" />
-                                                  Preview
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                  onClick={() => handleRecrawl(item)}
-                                                  disabled={recrawlingItems.has(item.url || '') || !item.url}
-                                                >
-                                                  <Radar className="w-3 h-3 mr-2" />
-                                                  Recrawl
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                  onClick={() => handleDeleteItem(item.key)}
-                                                  className="text-red-600 focus:text-red-600"
-                                                >
-                                                  <Trash2 className="w-3 h-3 mr-2" />
-                                                  Delete
-                                                </DropdownMenuItem>
-                                              </DropdownMenuContent>
-                                            </DropdownMenu>
-                                          </TableCell>
-                                          <TableCell className="text-xs">
-                                            {item.scrapedAt ? new Date(item.scrapedAt).toLocaleDateString('en-US', {
-                                              month: '2-digit',
-                                              day: '2-digit',
-                                              year: 'numeric'
-                                            }) : '-'}
+                                                    <Trash2 className="w-4 h-4" />
+                                                  </Button>
+                                                </ConfirmTooltip>
+                                              </div>
+                                            </TooltipProvider>
                                           </TableCell>
                                         </TableRow>
                                       );
@@ -2666,7 +2650,7 @@ export default function CrawlerDataPage() {
                                     {/* Load More Row */}
                                     {hasMoreItems && !loadingMore && (
                                       <TableRow>
-                                        <TableCell colSpan={4} className="text-center py-4">
+                                        <TableCell colSpan={3} className="text-center py-4">
                                           <Button
                                             variant="outline"
                                             size="sm"
@@ -2682,7 +2666,7 @@ export default function CrawlerDataPage() {
                                     {/* Loading indicator */}
                                     {loadingMore && (
                                       <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-4">
+                                        <TableCell colSpan={3} className="text-center py-4">
                                           <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
                                           <p className="text-xs text-muted-foreground mt-2">Loading more items...</p>
                                         </TableCell>
@@ -2977,16 +2961,11 @@ export default function CrawlerDataPage() {
             <div className="absolute inset-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_8px_32px_0_rgba(0,0,0,0.4)] border-b border-slate-300/50 dark:border-slate-700/50" />
 
             <div className="relative z-10">
-              {/* Single line header: key (description) • [TYPE] • size */}
+              {/* Single line header: title • [TYPE] • size */}
               {editingItem && (
                 <DialogTitle className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                  <span>
-                    {editingItem.key}
-                    {editingItem.data.description && (
-                      <span className="text-muted-foreground text-[11px] ml-1">
-                        ({editingItem.data.description})
-                      </span>
-                    )}
+                  <span className="font-semibold">
+                    {editingItem.title || editingItem.data?.title || editingItem.key}
                   </span>
                   <span className="text-slate-300 dark:text-slate-700">•</span>
                   {editingItem.data.type && (
