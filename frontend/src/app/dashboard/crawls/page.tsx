@@ -2378,14 +2378,14 @@ export default function CrawlerDataPage() {
                                                         <span className="opacity-50">•</span>
                                                         <span className="opacity-70">{progress}%</span>
                                                         <span className="opacity-50">•</span>
-                                                        <span className="truncate opacity-60 text-[7px]" title={scriptUrls.get(directory.name)}>
+                                                        <span className="truncate opacity-60" title={scriptUrls.get(directory.name)}>
                                                           {scriptUrls.get(directory.name)}
                                                         </span>
                                                       </>
                                                     );
                                                   }
-                                                  const url = scriptUrls.get(directory.name) || '';
-                                                  return url ? <span className="truncate block" title={url}>{url}</span> : <span className="opacity-60">Ready</span>;
+                                                  // Running but state not loaded yet
+                                                  return <span className="opacity-70 animate-pulse">Crawling...</span>;
                                                 })()
                                               ) : (
                                                 // Show script name when idle (editable)
