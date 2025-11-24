@@ -223,6 +223,17 @@ export default function CrawlerDataPage() {
   const [editingDirectoryName, setEditingDirectoryName] = useState<string>('');
   const [selectedForRecrawl, setSelectedForRecrawl] = useState<Set<string>>(new Set()); // Selected item IDs for bulk recrawl
   const [bulkRecrawling, setBulkRecrawling] = useState(false); // Bulk recrawl in progress
+  const [showCrawlerSelect, setShowCrawlerSelect] = useState<string | null>(null); // Directory name for crawler selection
+
+  // Built-in crawlers
+  const builtInCrawlers = [
+    { name: 'wordpress_crawler', label: 'WordPress', description: 'Generic WordPress REST API' },
+    { name: 'drupal_crawler', label: 'Drupal', description: 'Drupal JSON:API + Sitemap' },
+    { name: 'woocommerce_crawler', label: 'WooCommerce', description: 'E-commerce products' },
+    { name: 'shopify_crawler', label: 'Shopify', description: 'Shopify store products' },
+    { name: 'wix_crawler', label: 'Wix', description: 'Wix sites (Playwright)' },
+    { name: 'cloudflare_crawler', label: 'Cloudflare', description: 'Bypass protection' }
+  ];
 
   // Analyze functionality
   const [selectedForAnalyze, setSelectedForAnalyze] = useState<Set<string>>(new Set()); // Selected item IDs for batch analyze
@@ -915,6 +926,58 @@ export default function CrawlerDataPage() {
       });
     } finally {
       setUploadingScript(null);
+    }
+  };
+
+  const handleSelectBuiltInCrawler = async (directory: CrawlerDirectory, crawlerName: string) => {
+    try {
+      console.log('📦 [Select Built-in Crawler]', crawlerName, 'for', directory.name);
+
+      // Create a virtual file object to upload
+      const scriptContent = `# Auto-linked to built-in crawler: ${crawlerName}.py
+# This directory uses: ${crawlerName}
+# Built-in crawlers are located in: backend/python-services/crawlers/
+`;
+
+      const blob = new Blob([scriptContent], { type: 'text/plain' });
+      const file = new File([blob], `${crawlerName}.py`, { type: 'text/plain' });
+
+      // Upload the reference file
+      const formData = new FormData();
+      formData.append('script', file);
+      formData.append('builtIn', 'true');
+      formData.append('crawlerName', crawlerName);
+
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/crawler/crawler-directories/${directory.name}/script`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to link built-in crawler');
+      }
+
+      console.log('✅ Built-in crawler linked successfully');
+
+      // Update local state
+      setPythonScripts(prev => new Map(prev).set(directory.name, file));
+      setShowCrawlerSelect(null);
+
+      toast({
+        title: 'Success',
+        description: `Linked to ${crawlerName}`,
+      });
+    } catch (error: any) {
+      console.error('❌ [Select Built-in Crawler] Error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to link built-in crawler',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -2261,28 +2324,64 @@ export default function CrawlerDataPage() {
                                           </div>
                                         )}
                                       </div>
-                                    ) : (
-                                      <label className="flex items-center gap-1 cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-                                        <Plus className="w-3 h-3" />
-                                        <span className="text-[10px]">Attach .py script</span>
-                                        <input
-                                          type="file"
-                                          accept=".py"
-                                          className="hidden"
-                                          onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
+                                    ) : showCrawlerSelect === directory.name ? (
+                                      // Crawler selection dropdown
+                                      <div className="flex flex-col gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                                        <div className="text-[10px] text-muted-foreground mb-1">Select Crawler:</div>
+                                        <div className="grid grid-cols-2 gap-1">
+                                          {builtInCrawlers.map(crawler => (
+                                            <button
+                                              key={crawler.name}
+                                              onClick={() => handleSelectBuiltInCrawler(directory, crawler.name)}
+                                              className="px-2 py-1 text-[10px] rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-left transition-colors"
+                                              title={crawler.description}
+                                            >
+                                              {crawler.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                        <div className="flex items-center gap-1 mt-1">
+                                          <label className="flex items-center gap-1 cursor-pointer text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex-1">
+                                            <Plus className="w-3 h-3" />
+                                            Custom .py
+                                            <input
+                                              type="file"
+                                              accept=".py"
+                                              className="hidden"
+                                              onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
                                               handlePythonScriptUpload(directory, file);
+                                              setShowCrawlerSelect(null);
                                             }
                                             e.target.value = ''; // Reset input
                                           }}
                                           disabled={uploadingScript === directory.id}
                                         />
                                       </label>
-                                    )}
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-5 w-5 p-0"
+                                        onClick={() => setShowCrawlerSelect(null)}
+                                      >
+                                        <X className="w-3 h-3 text-slate-500" />
+                                      </Button>
+                                    </div>
                                   </div>
+                                ) : (
+                                  // Initial button to show crawler selection
+                                  <button
+                                    onClick={() => setShowCrawlerSelect(directory.name)}
+                                    className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors text-[10px]"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                    <span>Attach script</span>
+                                  </button>
+                                )}
+                              </div>
 
-                                  {/* Floating widgets will be rendered outside the card */}
+                              {/* Floating widgets will be rendered outside the card */}
                                 </div>
                               </div>
                             </div>
