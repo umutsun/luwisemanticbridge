@@ -945,7 +945,8 @@
     "time": "Time",
     "createdAt": "Created At",
     "updatedAt": "Updated At",
-    "actions": "Actions"
+    "actions": "Actions",
+    "execute": "Execute"
   },
   "chatInput": {
     "defaultPlaceholder": "Search in legal documents or ask questions...",
@@ -1267,7 +1268,78 @@
       "grepDesc": "Search logs using regex pattern",
       "tailDesc": "Show last n log entries",
       "metricsDesc": "Show performance metrics",
-      "servicesDesc": "Show service status"
+      "servicesDesc": "Show service status",
+      "systemStatusReport": "SYSTEM STATUS REPORT",
+      "database": "Database",
+      "vectorizer": "Vectorizer",
+      "redis": "Redis",
+      "websocket": "WebSocket",
+      "lightrag": "LightRAG",
+      "semantic": "Semantic",
+      "scraper": "Scraper",
+      "refreshingData": "Refreshing data...",
+      "dataRefreshed": "Data refreshed successfully",
+      "serviceHealthCheck": "Service Health Check:",
+      "chatStatistics": "Chat Statistics:",
+      "totalConversations": "Total conversations",
+      "totalMessages": "Total messages",
+      "avgMessagesPerConversation": "Avg messages per conversation",
+      "activeUsers": "Active users",
+      "today": "Today",
+      "sessionInformation": "Session Information:",
+      "currentSession": "Current session",
+      "average": "Average",
+      "sessionDuration": "Session duration",
+      "embeddingStatistics": "Embedding Statistics:",
+      "migratedData": "Migrated data",
+      "documents": "Documents",
+      "scrapedContent": "Scraped content",
+      "messageHistory": "Message history",
+      "totalEmbeddings": "Total embeddings",
+      "noEmbeddingStats": "No embedding statistics available",
+      "model": "Model",
+      "filterSetTo": "Filter set to",
+      "recentLogs": "Recent logs",
+      "lastLogEntries": "Last {{count}} log entries",
+      "invalidNumber": "Invalid number",
+      "searchingLogs": "Searching logs",
+      "foundMatches": "Found {{count}} matches",
+      "andMore": "... and {{count}} more matches",
+      "noMatchesFound": "No matches found for: {{term}}",
+      "provideSearchTerm": "Please provide a search term",
+      "exportingData": "Exporting data...",
+      "dataExported": "Data exported successfully",
+      "testingApi": "Testing API connection...",
+      "apiConnectionSuccess": "API connection successful",
+      "responseTime": "Response time",
+      "apiError": "API error",
+      "apiConnectionFailed": "API connection failed",
+      "availableEndpoints": "Available endpoints:",
+      "apiUsage": "API usage: /api [test|endpoints]",
+      "processingTokens": "Processing {{count}} tokens...",
+      "tokenStep1": "Token validation started",
+      "tokenStep2": "Token processing in progress",
+      "tokenStep3": "Token embedding generation",
+      "tokenStep4": "Token processing completed",
+      "invalidTokenAmount": "Invalid token amount",
+      "themeSwitched": "Theme switched to {{theme}}",
+      "themeUsage": "Usage: /theme toggle",
+      "currentTime": "Current time",
+      "date": "Date",
+      "time": "Time",
+      "invalidExpression": "Invalid expression",
+      "provideExpression": "Please provide an expression",
+      "unknownCommand": "Unknown command: {{cmd}}",
+      "serverStarting": "Server starting on port 8083",
+      "databaseConnected": "Database connected",
+      "redisConnected": "Redis connected on localhost:6379",
+      "nextjsServerStarted": "Next.js development server started",
+      "readyOnLocalhost": "Ready on http://localhost:3000",
+      "rateLimitWarning": "Rate limit warning: 10 requests/min",
+      "embeddingModelLoaded": "Model loaded: text-embedding-3-large",
+      "compiledSuccessfully": "Compiled client and server successfully",
+      "connectionTimeout": "Error: Connection timeout to external API",
+      "hmrEnabled": "HMR (Hot Module Replacement) enabled"
     },
     "status": {
       "connected": "Connected to log stream server",
@@ -1322,7 +1394,10 @@
       "themeToggle": "Theme toggle functionality requires theme context integration",
       "themeUsage": "Usage: /theme toggle",
       "wsConnectionError": "WebSocket connection error",
-      "wsConnectionLost": "WebSocket connection lost"
+      "wsConnectionLost": "WebSocket connection lost",
+      "calc": {
+        "result": "Result: {{result}}"
+      }
     },
     "controls": {
       "play": "Play",
@@ -1703,6 +1778,98 @@
       "questions": "Questions",
       "answers": "Answers",
       "searchResults": "Search Results"
+    }
+  },
+  "query": {
+    "title": "Unified RAG Query",
+    "subtitle": "Query all RAG systems from one place",
+    "documents": "Documents",
+    "lightrag": "LightRAG",
+    "pgvector": "pgvector",
+    "askQuestion": "Ask Question",
+    "askQuestionDescription": "Ask questions to get information from your documents",
+    "queryMode": "Query Mode",
+    "yourQuestion": "Your Question",
+    "questionPlaceholder": "e.g., What are the tax deduction conditions?",
+    "characters": "characters",
+    "temperature": "Temperature",
+    "topK": "Top K",
+    "useCache": "Use Cache",
+    "querying": "Querying...",
+    "query": "Query",
+    "queryResult": "Query Result",
+    "confidence": "Confidence",
+    "sources": "Sources",
+    "systemStatus": "System Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "totalDocuments": "Total Documents",
+    "embeddings": "Embeddings",
+    "queryModeFeatures": "Query Mode Features",
+    "exampleQuestions": "Example Questions",
+    "modes": {
+      "hybrid": {
+        "title": "Hybrid RAG",
+        "description": "Semantic + Keyword"
+      },
+      "lightrag": {
+        "title": "LightRAG",
+        "description": "Graph-based RAG"
+      },
+      "semantic": {
+        "title": "Semantic",
+        "description": "Vector search"
+      },
+      "raganything": {
+        "title": "RAGAnything",
+        "description": "Universal RAG"
+      }
+    },
+    "features": {
+      "hybrid": {
+        "title": "Hybrid RAG",
+        "items": [
+          "Semantic + Keyword search",
+          "Best for results",
+          "Uses pgvector + FTS"
+        ]
+      },
+      "lightrag": {
+        "title": "LightRAG",
+        "items": [
+          "Graph-based RAG",
+          "For relational queries",
+          "Uses Langchain"
+        ]
+      },
+      "semantic": {
+        "title": "Semantic Search",
+        "items": [
+          "Vector similarity",
+          "Semantic search",
+          "OpenAI embeddings"
+        ]
+      },
+      "raganything": {
+        "title": "RAGAnything",
+        "items": [
+          "Universal RAG",
+          "Multi-modal support",
+          "Automatic indexing"
+        ]
+      }
+    },
+    "examples": [
+      "What are the VAT refund conditions?",
+      "Who is covered by e-invoice requirement?",
+      "How to get tax penalty forgiveness?"
+    ],
+    "alerts": {
+      "enterQuestion": "Please enter a question",
+      "queryCompleted": "Query completed successfully",
+      "queryFailed": "Query failed",
+      "connectionError": "Connection error",
+      "noResults": "No results found"
     }
   },
   "status": {

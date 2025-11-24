@@ -1,4 +1,4 @@
-pdfmodule.exports = {
+module.exports = {
   apps: [
     {
       name: 'lsemb-backend',
@@ -27,12 +27,12 @@ pdfmodule.exports = {
     {
       name: 'lsemb-frontend',
       script: 'node_modules/next/dist/bin/next',
-      args: 'dev -p 3000',
+      args: 'dev -p 3002',
       cwd: 'c:/xampp/htdocs/lsemb/frontend',
       interpreter: 'node',
       env: {
         NODE_ENV: 'development',
-        PORT: 3000
+        PORT: 3002
       },
       node_args: '--max-old-space-size=2048',
       error_file: './logs/frontend-error.log',

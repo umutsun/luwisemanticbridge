@@ -736,7 +736,7 @@
         "scraperSessionsLoading": "Kazıyıcı oturumları yükleniyor",
         "scraperSessionsLoaded": "kazıyıcı oturumları yüklendi",
         "helpTitle": "GELİŞMİŞ KONSOL KOMUTLARI",
-        "systemCommands": "SİSTEM KOMUTLARI",
+        "systemCommands": "SİSTEM KOMUTLARI:",
         "cmdStatus": "Tam sistem durumunu göster",
         "cmdRefresh": "Tüm dashboard verilerini yenile",
         "cmdHealth": "Servis sağlığını kontrol et",
@@ -981,7 +981,8 @@
     "time": "Saat",
     "createdAt": "Oluşturulma",
     "updatedAt": "Güncellenme",
-    "actions": "İşlemler"
+    "actions": "İşlemler",
+    "execute": "Çalıştır"
   },
   "chatInput": {
     "defaultPlaceholder": "Hukuki belgelerde arama yapın veya soru sorun...",
@@ -1303,7 +1304,78 @@
       "grepDesc": "Loglarda regex deseni ile ara",
       "tailDesc": "Son n log girdisini göster",
       "metricsDesc": "Performans metriklerini göster",
-      "servicesDesc": "Servis durumunu göster"
+      "servicesDesc": "Servis durumunu göster",
+      "systemStatusReport": "SİSTEM DURUM RAPORU",
+      "database": "Veritabanı",
+      "vectorizer": "Vektörleştirici",
+      "redis": "Redis",
+      "websocket": "WebSocket",
+      "lightrag": "LightRAG",
+      "semantic": "Anlamsal",
+      "scraper": "Kazıyıcı",
+      "refreshingData": "Veriler yenileniyor...",
+      "dataRefreshed": "Veriler başarıyla yenilendi",
+      "serviceHealthCheck": "Servis Sağlık Kontrolü:",
+      "chatStatistics": "Sohbet İstatistikleri:",
+      "totalConversations": "Toplam konuşmalar",
+      "totalMessages": "Toplam mesajlar",
+      "avgMessagesPerConversation": "Konuşma başına ortalama mesaj",
+      "activeUsers": "Aktif kullanıcılar",
+      "today": "Bugün",
+      "sessionInformation": "Oturum Bilgisi:",
+      "currentSession": "Mevcut oturum",
+      "average": "Ortalama",
+      "sessionDuration": "Oturum süresi",
+      "embeddingStatistics": "Vektör İstatistikleri:",
+      "migratedData": "Taşınan veri",
+      "documents": "Dokümanlar",
+      "scrapedContent": "Kazınan içerik",
+      "messageHistory": "Mesaj geçmişi",
+      "totalEmbeddings": "Toplam vektörler",
+      "noEmbeddingStats": "Vektör istatistiği yok",
+      "model": "Model",
+      "filterSetTo": "Filtre ayarlandı:",
+      "recentLogs": "Son loglar",
+      "lastLogEntries": "Son {{count}} log girdisi",
+      "invalidNumber": "Geçersiz sayı",
+      "searchingLogs": "Loglarda aranıyor",
+      "foundMatches": "{{count}} eşleşme bulundu",
+      "andMore": "... ve {{count}} daha fazla eşleşme",
+      "noMatchesFound": "Eşleşme bulunamadı: {{term}}",
+      "provideSearchTerm": "Lütfen arama terimi sağlayın",
+      "exportingData": "Veri dışa aktarılıyor...",
+      "dataExported": "Veri başarıyla dışa aktarıldı",
+      "testingApi": "API bağlantısı test ediliyor...",
+      "apiConnectionSuccess": "API bağlantısı başarılı",
+      "responseTime": "Yanıt süresi",
+      "apiError": "API hatası",
+      "apiConnectionFailed": "API bağlantısı başarısız",
+      "availableEndpoints": "Mevcut uç noktalar:",
+      "apiUsage": "API kullanımı: /api [test|endpoints]",
+      "processingTokens": "{{count}} token işleniyor...",
+      "tokenStep1": "Token doğrulaması başladı",
+      "tokenStep2": "Token işleme devam ediyor",
+      "tokenStep3": "Token vektör oluşturma",
+      "tokenStep4": "Token işlemi tamamlandı",
+      "invalidTokenAmount": "Geçersiz token miktarı",
+      "themeSwitched": "Tema {{theme}} olarak değiştirildi",
+      "themeUsage": "Kullanım: /theme toggle",
+      "currentTime": "Geçerli zaman",
+      "date": "Tarih",
+      "time": "Zaman",
+      "invalidExpression": "Geçersiz ifade",
+      "provideExpression": "Lütfen bir ifade sağlayın",
+      "unknownCommand": "Bilinmeyen komut: {{cmd}}",
+      "serverStarting": "Sunucu 8083 portunda başlatılıyor",
+      "databaseConnected": "Veritabanına bağlandı",
+      "redisConnected": "Redis localhost:6379 üzerinde bağlandı",
+      "nextjsServerStarted": "Next.js geliştirme sunucusu başlatıldı",
+      "readyOnLocalhost": "http://localhost:3000 üzerinde hazır",
+      "rateLimitWarning": "Hız limiti uyarısı: 10 istek/dakika",
+      "embeddingModelLoaded": "Model yüklendi: text-embedding-3-large",
+      "compiledSuccessfully": "İstemci ve sunucu başarıyla derlendi",
+      "connectionTimeout": "Hata: Harici API'ye bağlantı zaman aşımına uğradı",
+      "hmrEnabled": "HMR (Hot Module Replacement) etkinleştirildi"
     },
     "status": {
       "connected": "Log akış sunucusuna bağlandı",
@@ -1358,7 +1430,10 @@
       "themeToggle": "Tema değiştirme işlevi tema entegrasyonu gerektirir",
       "themeUsage": "kullanım: /theme toggle",
       "wsConnectionError": "WebSocket bağlantı hatası",
-      "wsConnectionLost": "WebSocket bağlantısı kayboldu"
+      "wsConnectionLost": "WebSocket bağlantısı kayboldu",
+      "calc": {
+        "result": "Sonuç: {{result}}"
+      }
     },
     "controls": {
       "play": "Oynat",
@@ -1739,6 +1814,98 @@
       "questions": "Sorular",
       "answers": "Cevaplar",
       "searchResults": "Arama Sonuçları"
+    }
+  },
+  "query": {
+    "title": "Unified RAG Sorgusu",
+    "subtitle": "Tüm RAG sistemlerini tek yerden sorgulayın",
+    "documents": "Doküman",
+    "lightrag": "LightRAG",
+    "pgvector": "pgvector",
+    "askQuestion": "Soru Sorun",
+    "askQuestionDescription": "Dokümanlarınızdan bilgi almak için soru sorun",
+    "queryMode": "Sorgu Modu",
+    "yourQuestion": "Sorunuz",
+    "questionPlaceholder": "Örn: Vergi indirimi koşulları nelerdir?",
+    "characters": "karakter",
+    "temperature": "Temperature",
+    "topK": "Top K",
+    "useCache": "Cache Kullan",
+    "querying": "Sorgulanıyor...",
+    "query": "Sorgula",
+    "queryResult": "Sorgu Sonucu",
+    "confidence": "Güven Skoru",
+    "sources": "Kaynaklar",
+    "systemStatus": "Sistem Durumu",
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "totalDocuments": "Toplam Doküman",
+    "embeddings": "Embeddings",
+    "queryModeFeatures": "Query Mod Özellikleri",
+    "exampleQuestions": "Örnek Sorular",
+    "modes": {
+      "hybrid": {
+        "title": "Hybrid RAG",
+        "description": "Semantic + Keyword"
+      },
+      "lightrag": {
+        "title": "LightRAG",
+        "description": "Graph-based RAG"
+      },
+      "semantic": {
+        "title": "Semantic",
+        "description": "Vector search"
+      },
+      "raganything": {
+        "title": "RAGAnything",
+        "description": "Universal RAG"
+      }
+    },
+    "features": {
+      "hybrid": {
+        "title": "Hybrid RAG",
+        "items": [
+          "Semantic + Keyword search",
+          "En iyi sonuçlar için",
+          "pgvector + FTS kullanır"
+        ]
+      },
+      "lightrag": {
+        "title": "LightRAG",
+        "items": [
+          "Graph-based RAG",
+          "İlişkisel sorgular için",
+          "Langchain kullanır"
+        ]
+      },
+      "semantic": {
+        "title": "Semantic Search",
+        "items": [
+          "Vektör benzerliği",
+          "Anlamsal arama",
+          "OpenAI embeddings"
+        ]
+      },
+      "raganything": {
+        "title": "RAGAnything",
+        "items": [
+          "Universal RAG",
+          "Multi-modal destekli",
+          "Otomatik indeksleme"
+        ]
+      }
+    },
+    "examples": [
+      "KDV indirimi şartları nelerdir?",
+      "E-fatura zorunluluğu kimleri kapsar?",
+      "Vergi cezası affı nasıl yapılır?"
+    ],
+    "alerts": {
+      "enterQuestion": "Lütfen bir soru girin",
+      "queryCompleted": "Sorgu başarıyla tamamlandı",
+      "queryFailed": "Sorgu başarısız oldu",
+      "connectionError": "Bağlantı hatası",
+      "noResults": "Sonuç bulunamadı"
     }
   },
   "status": {
