@@ -2306,12 +2306,12 @@ export default function CrawlerDataPage() {
                                                       </>
                                                     );
                                                   }
-                                                  const url = scriptUrls.get(directory.name) || pythonScripts.get(directory.name)?.name || '';
-                                                  return <span className="truncate block">{url}</span>;
+                                                  const url = scriptUrls.get(directory.name) || '';
+                                                  return url ? <span className="truncate block">{url}</span> : <span className="opacity-60">Ready</span>;
                                                 })()
                                               ) : (
-                                                // Show script name when idle
-                                                <span className="truncate block">{pythonScripts.get(directory.name)?.name}</span>
+                                                // Show "Ready" when idle
+                                                <span className="opacity-60">Ready</span>
                                               )}
                                             </div>
 
