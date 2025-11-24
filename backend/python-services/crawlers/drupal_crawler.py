@@ -16,11 +16,13 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 # --- Configuration ---
+# Crawler name will be set dynamically from command line argument
+CRAWLER_NAME = None  # Will be set in main()
 STATE_FILE = os.path.join(os.path.dirname(__file__), 'drupal_crawler_state.json')
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_KEY_PREFIX = 'crawl4ai:drupal_crawler'
+# REDIS_KEY_PREFIX will be dynamic: 'crawl4ai:{CRAWLER_NAME}'
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
@@ -62,8 +64,9 @@ def load_state():
     return {'visited': [], 'stats': {'pages': 0, 'articles': 0}}
 
 class DrupalCrawler:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, crawler_name: str):
         self.base_url = base_url.rstrip('/')
+        self.crawler_name = crawler_name
         parsed = urlparse(base_url)
         self.domain = f"{parsed.scheme}://{parsed.netloc}"
         self.session = None
@@ -215,7 +218,7 @@ class DrupalCrawler:
 
         # Check Redis for duplicates
         slug = urlparse(item_url).path.strip('/').replace('/', '_') or str(item_id)
-        redis_key = f"{REDIS_KEY_PREFIX}:{slug}"
+        redis_key = f"crawl4ai:{self.crawler_name}:{slug}"
 
         if r.exists(redis_key):
             print(f"\n[SKIP] Already in Redis: {slug}")
@@ -359,16 +362,20 @@ class DrupalCrawler:
 
 async def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("Usage: python drupal_crawler.py <url>")
+    if len(sys.argv) < 3:
+        print("Usage: python drupal_crawler.py <url> <crawler_name>")
         print("\nExamples:")
-        print("  python drupal_crawler.py https://yeditepe.edu.tr/")
-        print("  python drupal_crawler.py https://example.com/")
+        print("  python drupal_crawler.py https://yeditepe.edu.tr/ mysite")
+        print("  python drupal_crawler.py https://example.com/ example")
         sys.exit(1)
 
     base_url = sys.argv[1]
+    crawler_name = sys.argv[2]
 
-    async with DrupalCrawler(base_url) as crawler:
+    print(f"[INIT] Crawler Name: {crawler_name}")
+    print(f"[INIT] Target URL: {base_url}")
+
+    async with DrupalCrawler(base_url, crawler_name) as crawler:
         await crawler.run()
 
 if __name__ == "__main__":
