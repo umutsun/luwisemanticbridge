@@ -1192,18 +1192,18 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
         });
       }
 
-      // Create symlink to built-in crawler
+      // Copy built-in crawler to crawler directory
       const targetPath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}.py`);
 
-      // Remove existing symlink/file if exists
+      // Remove existing file if exists
       if (fs.existsSync(targetPath)) {
         fs.unlinkSync(targetPath);
       }
 
-      // Create symlink
-      fs.symlinkSync(builtInScriptPath, targetPath);
+      // Copy the built-in crawler file
+      fs.copyFileSync(builtInScriptPath, targetPath);
 
-      console.log(' Linked to built-in crawler:', builtInCrawlerName);
+      console.log(' Copied built-in crawler:', builtInCrawlerName, 'to', crawlerName);
 
       return res.json({
         success: true,
