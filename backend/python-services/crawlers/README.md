@@ -1,5 +1,70 @@
 # Crawler Scripts
 
+## Built-in Crawlers
+
+The following built-in crawlers are available in the system:
+
+### 1. WordPress Crawler (`wordpress_crawler.py`)
+- **Type**: REST API + Sitemap
+- **Use Cases**: Generic WordPress sites
+- **Features**:
+  - WordPress REST API support (/wp-json/wp/v2/posts, pages)
+  - Sitemap.xml fallback
+  - Category and tag extraction
+  - Featured images
+- **Example**: `python wordpress_crawler.py https://example.com/`
+
+### 2. Drupal Crawler (`drupal_crawler.py`)
+- **Type**: JSON:API + Sitemap
+- **Use Cases**: Drupal 8+ sites
+- **Features**:
+  - Drupal JSON:API support
+  - Multiple endpoint patterns
+  - Pagination support
+  - Sitemap.xml fallback
+- **Example**: `python drupal_crawler.py https://yeditepe.edu.tr/`
+
+### 3. WooCommerce Crawler (`woocommerce_crawler.py`)
+- **Type**: E-commerce Product API
+- **Use Cases**: WooCommerce stores
+- **Features**:
+  - Product variations
+  - Stock status
+  - Categories and tags
+  - Images and galleries
+- **Example**: `python woocommerce_crawler.py https://store.example.com/`
+
+### 4. Shopify Crawler (`shopify_crawler.py`)
+- **Type**: Storefront JSON API
+- **Use Cases**: Shopify stores
+- **Features**:
+  - Product variants
+  - Collections
+  - Pagination support
+  - Vendor and tags
+- **Example**: `python shopify_crawler.py https://shop.example.com/`
+
+### 5. Wix Crawler (`wix_crawler.py`)
+- **Type**: Playwright-based
+- **Use Cases**: Wix websites
+- **Features**:
+  - JavaScript rendering
+  - Dynamic content extraction
+  - Page navigation
+- **Example**: `python wix_crawler.py https://example.wixsite.com/`
+- **Note**: Requires Playwright installation
+
+### 6. Cloudflare Bypass Crawler (`cloudflare_crawler.py`)
+- **Type**: Stealth Playwright
+- **Use Cases**: Cloudflare-protected sites
+- **Features**:
+  - Cloudflare challenge bypass
+  - Stealth mode
+  - Automatic retry
+  - Rate limiting
+- **Example**: `python cloudflare_crawler.py https://protected-site.com/ 50`
+- **Note**: Requires Playwright installation
+
 ## Playwright Installation (Production Server)
 
 ### CentOS Server Setup
