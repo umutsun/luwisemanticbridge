@@ -26,7 +26,8 @@ STATE_FILE = os.path.join(os.path.dirname(__file__), 'wix_crawler_state.json')
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
-REDIS_KEY_PREFIX = 'crawl4ai:wix_crawler:pages'
+CRAWLER_NAME = None  # Will be set in main()
+# REDIS_KEY_PREFIX will be dynamic: 'crawl4ai:{CRAWLER_NAME}:pages'
 # --- End of Configuration ---
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
@@ -68,8 +69,9 @@ def load_state():
     return {'visited': [], 'queue': [], 'stats': {'pages': 0}}
 
 class WixCrawler:
-    def __init__(self, start_url):
+    def __init__(self, start_url, crawler_name):
         self.start_url = start_url
+        self.crawler_name = crawler_name
         parsed = urlparse(start_url)
         self.base_domain = f"{parsed.scheme}://{parsed.netloc}"
         self.state = load_state()
@@ -136,7 +138,7 @@ class WixCrawler:
 
         # Check Redis for duplicates
         slug = urlparse(url).path.strip('/').replace('/', '_') or 'home'
-        redis_key = f"{REDIS_KEY_PREFIX}:{slug}"
+        redis_key = f"crawl4ai:{self.crawler_name}:pages:{slug}"
 
         if r.exists(redis_key):
             print(f"\n[SKIP] Already in Redis: {slug}")
@@ -258,14 +260,19 @@ class WixCrawler:
 
 async def main():
     """Main entry point"""
-    if len(sys.argv) < 2:
-        print("Usage: python wix_crawler.py <url>")
+    if len(sys.argv) < 3:
+        print("Usage: python wix_crawler.py <url> <crawler_name>")
         print("\nExample:")
-        print("  python wix_crawler.py https://example.wixsite.com/mysite")
+        print("  python wix_crawler.py https://example.wixsite.com/mysite mywixsite")
         sys.exit(1)
 
     start_url = sys.argv[1]
-    crawler = WixCrawler(start_url)
+    crawler_name = sys.argv[2]
+
+    print(f"[INIT] Crawler Name: {crawler_name}")
+    print(f"[INIT] Start URL: {start_url}")
+
+    crawler = WixCrawler(start_url, crawler_name)
     await crawler.run()
 
 if __name__ == "__main__":
