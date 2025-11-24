@@ -2553,7 +2553,7 @@ export default function CrawlerDataPage() {
                                   </TableHead>
                                   <TableHead>Name</TableHead>
                                   <TableHead className="w-48">Category</TableHead>
-                                  <TableHead className="w-24 text-right">Actions</TableHead>
+                                  <TableHead className="w-24 text-left pl-4">Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
                             </Table>
@@ -2628,9 +2628,9 @@ export default function CrawlerDataPage() {
                                               <span className="text-muted-foreground text-[10px]">-</span>
                                             )}
                                           </TableCell>
-                                          <TableCell className="text-right">
+                                          <TableCell>
                                             <TooltipProvider>
-                                              <div className="flex items-center justify-end gap-1">
+                                              <div className="flex items-center justify-start gap-1 pl-4">
                                                 <Tooltip>
                                                   <TooltipTrigger asChild>
                                                     <Button
