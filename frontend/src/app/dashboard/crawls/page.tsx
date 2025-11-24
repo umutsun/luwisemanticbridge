@@ -75,6 +75,12 @@ import {
   MoreHorizontal,
   Filter,
   Copy,
+  Globe,
+  ShoppingCart,
+  ShoppingBag,
+  Package,
+  Shield,
+  Code2,
   Check,
   Edit2
 } from 'lucide-react';
@@ -227,12 +233,12 @@ export default function CrawlerDataPage() {
 
   // Built-in crawlers
   const builtInCrawlers = [
-    { name: 'wordpress_crawler', label: 'WordPress', description: 'Generic WordPress REST API' },
-    { name: 'drupal_crawler', label: 'Drupal', description: 'Drupal JSON:API + Sitemap' },
-    { name: 'woocommerce_crawler', label: 'WooCommerce', description: 'E-commerce products' },
-    { name: 'shopify_crawler', label: 'Shopify', description: 'Shopify store products' },
-    { name: 'wix_crawler', label: 'Wix', description: 'Wix sites (Playwright)' },
-    { name: 'cloudflare_crawler', label: 'Cloudflare', description: 'Bypass protection' }
+    { name: 'wordpress_crawler', label: 'WordPress', icon: Globe, description: 'CMS' },
+    { name: 'drupal_crawler', label: 'Drupal', icon: Code2, description: 'CMS' },
+    { name: 'woocommerce_crawler', label: 'WooCommerce', icon: ShoppingCart, description: 'E-commerce' },
+    { name: 'shopify_crawler', label: 'Shopify', icon: ShoppingBag, description: 'E-commerce' },
+    { name: 'wix_crawler', label: 'Wix', icon: Package, description: 'Website' },
+    { name: 'cloudflare_crawler', label: 'Cloudflare', icon: Shield, description: 'Protected' }
   ];
 
   // Analyze functionality
@@ -2329,16 +2335,20 @@ export default function CrawlerDataPage() {
                                       <div className="flex flex-col gap-1 w-full" onClick={(e) => e.stopPropagation()}>
                                         <div className="text-[10px] text-muted-foreground mb-1">Select Crawler:</div>
                                         <div className="grid grid-cols-2 gap-1">
-                                          {builtInCrawlers.map(crawler => (
-                                            <button
-                                              key={crawler.name}
-                                              onClick={() => handleSelectBuiltInCrawler(directory, crawler.name)}
-                                              className="px-2 py-1 text-[10px] rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-left transition-colors"
-                                              title={crawler.description}
-                                            >
-                                              {crawler.label}
-                                            </button>
-                                          ))}
+                                          {builtInCrawlers.map(crawler => {
+                                            const Icon = crawler.icon;
+                                            return (
+                                              <button
+                                                key={crawler.name}
+                                                onClick={() => handleSelectBuiltInCrawler(directory, crawler.name)}
+                                                className="flex items-center gap-1.5 px-2 py-1 text-[10px] rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                                title={crawler.description}
+                                              >
+                                                <Icon className="w-3 h-3 text-slate-500" />
+                                                <span>{crawler.label}</span>
+                                              </button>
+                                            );
+                                          })}
                                         </div>
                                         <div className="flex items-center gap-1 mt-1">
                                           <label className="flex items-center gap-1 cursor-pointer text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex-1">
