@@ -197,7 +197,7 @@ export default function CrawlerDataPage() {
   const [importProgress, setImportProgress] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [autoEmbeddings, setAutoEmbeddings] = useState(true);
+  const [autoEmbeddings, setAutoEmbeddings] = useState(false);
   const [editingItem, setEditingItem] = useState<CrawledItem | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editedData, setEditedData] = useState<string>('');
