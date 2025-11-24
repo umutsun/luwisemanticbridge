@@ -4,7 +4,7 @@
  */
 
 import { Pool } from 'pg';
-import { lsembPool } from '../../config/database.config';
+import { lsembPool, getDatabaseSettings } from '../../config/database.config';
 import { PDFMetadata } from './metadata-extractor.service';
 
 export type TableStructure = 'entity-based' | 'document-based';
@@ -38,19 +38,33 @@ export interface TransformResult {
 
 class PDFTransformService {
   /**
-   * Get source database connection
+   * Get source database connection from Settings table
    */
   private async getSourceDbConnection(sourceDbId: string): Promise<Pool> {
     try {
-      // For localhost development, use environment variables or source API connection
-      // In production, fetch from settings table
+      // Fetch database configuration from Settings table
+      const dbConfig = await getDatabaseSettings();
+
+      if (!dbConfig || !dbConfig.database) {
+        throw new Error('Database configuration not found in Settings');
+      }
+
+      const dbSettings = dbConfig.database;
+
+      console.log('[PDF Transform] Using database configuration from Settings:', {
+        host: dbSettings.host,
+        port: dbSettings.port,
+        database: dbSettings.name || dbSettings.database
+      });
+
+      // Create pool from Settings configuration
       const pool = new Pool({
-        host: process.env.POSTGRES_HOST || 'localhost',
-        port: parseInt(process.env.POSTGRES_PORT || '5432'),
-        database: sourceDbId || process.env.POSTGRES_DB || 'scriptus_lsemb',
-        user: process.env.POSTGRES_USER || 'postgres',
-        password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
-        ssl: false,
+        host: dbSettings.host,
+        port: dbSettings.port,
+        database: dbSettings.name || dbSettings.database, // Use database name from Settings
+        user: dbSettings.user,
+        password: dbSettings.password,
+        ssl: dbSettings.ssl || false,
         max: 10,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 10000
@@ -59,7 +73,7 @@ class PDFTransformService {
       // Test connection
       await pool.query('SELECT 1');
 
-      console.log(`[PDF Transform] Connected to source database: ${sourceDbId}`);
+      console.log(`[PDF Transform] Connected to source database: ${dbSettings.name || dbSettings.database}`);
 
       return pool;
     } catch (error) {
