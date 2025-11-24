@@ -2364,9 +2364,10 @@ export default function CrawlerDataPage() {
 
                                             <div className="text-[8px] font-medium text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2 flex-1 min-w-0">
                                               {runningScripts.has(directory.name) ? (
-                                                // Show queue/progress from Redis when running
+                                                // Show script name + queue/progress when running
                                                 (() => {
                                                   const state = crawlerStates.get(directory.name);
+                                                  const scriptName = pythonScripts.get(directory.name)?.name || 'Unknown';
                                                   if (state) {
                                                     const queueCount = state.queue?.length || 0;
                                                     const visitedCount = state.visited?.length || 0;
@@ -2374,6 +2375,10 @@ export default function CrawlerDataPage() {
                                                     const progress = total > 0 ? Math.round((visitedCount / total) * 100) : 0;
                                                     return (
                                                       <>
+                                                        <span className="opacity-90 font-semibold" title={scriptName}>
+                                                          {scriptName.replace('_crawler.py', '').replace('_', ' ')}
+                                                        </span>
+                                                        <span className="opacity-50">•</span>
                                                         <span className="opacity-70">Q:{queueCount}</span>
                                                         <span className="opacity-50">•</span>
                                                         <span className="opacity-70">{progress}%</span>
@@ -2384,8 +2389,16 @@ export default function CrawlerDataPage() {
                                                       </>
                                                     );
                                                   }
-                                                  // Running but state not loaded yet
-                                                  return <span className="opacity-70 animate-pulse">Crawling...</span>;
+                                                  // Running but state not loaded yet - show script name
+                                                  return (
+                                                    <>
+                                                      <span className="opacity-90 font-semibold" title={scriptName}>
+                                                        {scriptName.replace('_crawler.py', '').replace('_', ' ')}
+                                                      </span>
+                                                      <span className="opacity-50">•</span>
+                                                      <span className="opacity-70 animate-pulse">Crawling...</span>
+                                                    </>
+                                                  );
                                                 })()
                                               ) : (
                                                 // Show script name when idle (editable)
