@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -147,7 +148,7 @@ const getAnalyzeStatus = (item: CrawledItem): 'waiting' | 'analyzed' | 'transfor
 const getAnalyzeTemplate = (item: CrawledItem): string => {
   const template = item.metadata?.analysis?.template;
   const templateNames: Record<string, string> = {
-    web_page: 'Web Page',
+    web_page: 'Web Page',  // These will be translated dynamically
     legal: 'Legal',
     novel: 'Novel',
     research: 'Research',
@@ -159,6 +160,7 @@ const getAnalyzeTemplate = (item: CrawledItem): string => {
 };
 
 export default function CrawlerDataPage() {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   // Workflow state
@@ -1740,7 +1742,7 @@ export default function CrawlerDataPage() {
             <Card>
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
-                  {['Select Source', 'Preview Data', 'Select Target', 'Mapping', 'Import'].map((label, index) => {
+                  {[t('crawls.selectSource'), t('crawls.previewData'), t('crawls.selectTarget'), t('crawls.mapping'), t('crawls.import')].map((label, index) => {
                     const stepNum = index + 1;
                     const currentStep = getStepNumber(workflowStep);
                     const isActive = stepNum === currentStep;
@@ -1781,7 +1783,7 @@ export default function CrawlerDataPage() {
                 <Card className="h-[calc(100vh-200px)]">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">Crawler Sources</CardTitle>
+                      <CardTitle className="text-lg">{t('crawls.crawlerSources')}</CardTitle>
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1808,7 +1810,7 @@ export default function CrawlerDataPage() {
                               <div className="flex items-center gap-2 w-full">
                                 <div className="flex-1">
                                   <Input
-                                    placeholder="Source name"
+                                    placeholder={t('crawls.sourceName')}
                                     value={newSourceName}
                                     onChange={(e) => setNewSourceName(e.target.value)}
                                     onKeyDown={(e) => {

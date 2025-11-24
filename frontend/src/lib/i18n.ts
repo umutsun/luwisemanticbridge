@@ -23,50 +23,50 @@ i18n
     // we init with resources
     resources: {
       en: {
-        translations: enTranslations
+        translation: enTranslations
       },
       tr: {
-        translations: trTranslations
+        translation: trTranslations
       },
       fr: {
-        translations: frTranslations
+        translation: frTranslations
       },
       es: {
-        translations: esTranslations
+        translation: esTranslations
       },
       de: {
-        translations: deTranslations
+        translation: deTranslations
       },
       zh: {
-        translations: zhTranslations
+        translation: zhTranslations
       },
       el: {
-        translations: elTranslations
+        translation: elTranslations
       },
       th: {
-        translations: thTranslations
+        translation: thTranslations
       },
       ru: {
-        translations: ruTranslations
+        translation: ruTranslations
       },
       ar: {
-        translations: arTranslations
+        translation: arTranslations
       },
       ja: {
-        translations: jaTranslations
+        translation: jaTranslations
       },
       ko: {
-        translations: koTranslations
+        translation: koTranslations
       }
     },
     fallbackLng: 'en',
     debug: false,
 
     // have a common namespace used around the full app
-    ns: ['translations'],
-    defaultNS: 'translations',
+    ns: ['translation'],
+    defaultNS: 'translation',
 
-    keySeparator: false, // we use content as keys
+    keySeparator: '.', // use dot notation for nested keys
 
     interpolation: {
       escapeValue: false, // not needed for react!!

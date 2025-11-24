@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -107,10 +108,10 @@ interface ActivityLog {
 
 interface ConsoleLog {
   id: string;
-  type: 'info' | 'warn' | 'error' | 'log';
+  type: 'info' | 'warn' | 'error' | 'log' | 'success';
   message: string;
   timestamp: string;
-  source?: 'backend' | 'frontend' | 'system';
+  source?: 'backend' | 'frontend' | 'system' | 'user';
 }
 
 // ✅ TEMİZLENMİŞ StatusCard - Icon olmadan
@@ -152,6 +153,7 @@ const StatusCard = ({ title, value, status, description }: {
 };
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const { config } = useConfig();
   const [activeTab, setActiveTab] = useState("overview");
   const [data, setData] = useState<SystemStatus | null>(null);
@@ -181,12 +183,51 @@ export default function DashboardPage() {
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   // Chat statistics state
-  const [chatStats, setChatStats] = useState<any>(null);
+  const [chatStats, setChatStats] = useState<{
+    overview?: {
+      total_conversations: number;
+      total_messages: number;
+      total_users: number;
+    };
+    recentMessages?: number;
+    avgMessagesPerConversation?: number;
+    daily_activity?: Array<{
+      date: string;
+      active_users: number;
+      conversations: number;
+      messages: number;
+    }>;
+    lastUpdated?: string;
+  } | null>(null);
   const [chatStatsLoading, setChatStatsLoading] = useState(true);
 
   // Additional statistics
-  const [documentStats, setDocumentStats] = useState<any>(null);
-  const [embeddingStats, setEmbeddingStats] = useState<any>(null);
+  const [documentStats, setDocumentStats] = useState<{
+    total?: number;
+    processed?: number;
+    failed?: number;
+  } | null>(null);
+  const [embeddingStats, setEmbeddingStats] = useState<{
+    total_embeddings?: number;
+    by_category?: {
+      migrated?: {
+        rows?: number;
+        embeddings?: number;
+      };
+      documents?: {
+        documents?: number;
+        embeddings?: number;
+      };
+      scraped?: {
+        data?: number;
+        embeddings?: number;
+      };
+      messages?: {
+        messages?: number;
+        embeddings?: number;
+      };
+    };
+  } | null>(null);
 
   // Token usage statistics
   const [tokenStats, setTokenStats] = useState<{
@@ -198,8 +239,16 @@ export default function DashboardPage() {
   });
 
   // Settings data for real display
-  const [llmSettings, setLlmSettings] = useState<any>(null);
-  const [databaseSettings, setDatabaseSettings] = useState<any>(null);
+  const [llmSettings, setLlmSettings] = useState<{
+    activeChatModel?: string;
+    activeEmbeddingModel?: string;
+    embeddingModel?: string;
+  } | null>(null);
+  const [databaseSettings, setDatabaseSettings] = useState<{
+    name?: string;
+    host?: string;
+    port?: number;
+  } | null>(null);
 
   // Real-time resources data for animations
   const [realtimeResources, setRealtimeResources] = useState({
@@ -212,16 +261,16 @@ export default function DashboardPage() {
   // Component mount'da verileri çek
   useEffect(() => {
     // Initialize console with startup logs
-    addConsoleLog('[SYSTEM] Dashboard başlatılıyor...', 'info', 'system');
-    addConsoleLog('[BACKEND] PostgreSQL bağlantısı kuruldu', 'info', 'backend');
-    addConsoleLog('[BACKEND] Redis cache servisi aktif (Port: 6379)', 'info', 'backend');
-    addConsoleLog('[BACKEND] LLM Service initialized with multi-provider support', 'info', 'backend');
-    addConsoleLog('[BACKEND] RAG Chat Service başlatıldı', 'info', 'backend');
-    addConsoleLog('[BACKEND] OCR Router Service - Vision provider\'lar yüklendi', 'info', 'backend');
-    addConsoleLog('[BACKEND] Scraper Service hazır (Concurrency: 3)', 'info', 'backend');
-    addConsoleLog('[FRONTEND] React 18 component tree render tamamlandı', 'info', 'frontend');
-    addConsoleLog('[FRONTEND] Dashboard API bağlantısı kuruldu', 'info', 'frontend');
-    addConsoleLog('[SYSTEM] ✅ Tüm servisler hazır', 'info', 'system');
+    addConsoleLog('[SYSTEM] ' + t('dashboard.console.starting'), 'info', 'system');
+    addConsoleLog('[BACKEND] ' + t('dashboard.console.postgresqlConnected'), 'info', 'backend');
+    addConsoleLog('[BACKEND] ' + t('dashboard.console.redisActive'), 'info', 'backend');
+    addConsoleLog('[BACKEND] ' + t('dashboard.console.llmServiceInitialized'), 'info', 'backend');
+    addConsoleLog('[BACKEND] ' + t('dashboard.console.ragChatStarted'), 'info', 'backend');
+    addConsoleLog('[BACKEND] ' + t('dashboard.console.ocrRouterLoaded'), 'info', 'backend');
+    addConsoleLog('[BACKEND] ' + t('dashboard.console.scraperReady'), 'info', 'backend');
+    addConsoleLog('[FRONTEND] ' + t('dashboard.console.reactRendered'), 'info', 'frontend');
+    addConsoleLog('[FRONTEND] ' + t('dashboard.console.dashboardApiConnected'), 'info', 'frontend');
+    addConsoleLog('[SYSTEM] ' + t('dashboard.console.allServicesReady'), 'info', 'system');
 
     fetchSystemStatus();
     fetchDocuments();
@@ -500,7 +549,7 @@ export default function DashboardPage() {
 
   const fetchSystemStatus = async () => {
     try {
-      addConsoleLog('[API] System health check başlatıldı...', 'info', 'frontend');
+      addConsoleLog('[API] ' + t('dashboard.console.healthCheckStarted'), 'info', 'frontend');
       const [healthResponse, scraperStatusResponse] = await Promise.all([
         fetchWithAuth(apiConfig.getApiUrl('/api/v2/health/system')),
         fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/dashboard/status')),
@@ -510,7 +559,7 @@ export default function DashboardPage() {
       const scraperStatus = await safeJsonParse(scraperStatusResponse);
 
       if (healthData) {
-        addConsoleLog('[API] ✅ System health check tamamlandı', 'info', 'backend');
+        addConsoleLog('[API] ' + t('dashboard.console.healthCheckCompleted'), 'info', 'backend');
       }
 
       const databaseStatus = healthData?.services?.database?.status;
@@ -524,7 +573,7 @@ export default function DashboardPage() {
         },
         vectorizer: {
           status: scraperStatus?.vectorizer?.status === 'active' ? 'active' : 'inactive',
-          model: scraperStatus?.vectorizer?.model ?? 'Bilinmiyor',
+          model: scraperStatus?.vectorizer?.model ?? t('dashboard.status.unknown'),
           lastProcessed: scraperStatus?.vectorizer?.lastProcessed ?? '-',
         },
         scraper: {
@@ -546,7 +595,7 @@ export default function DashboardPage() {
           },
           semanticSearch: {
             status: scraperStatus?.services?.semanticSearch?.status === 'active' ? 'active' : 'inactive',
-            model: scraperStatus?.services?.semanticSearch?.model ?? 'Bilinmiyor',
+            model: scraperStatus?.services?.semanticSearch?.model ?? t('dashboard.status.unknown'),
             searches: scraperStatus?.services?.semanticSearch?.searches ?? 0,
           },
           scraper: {
@@ -568,7 +617,7 @@ export default function DashboardPage() {
 
   const fetchDocuments = async () => {
     try {
-      addConsoleLog('[API] Document history yükleniyor...', 'info', 'frontend');
+      addConsoleLog('[API] ' + t('dashboard.console.documentHistoryLoading'), 'info', 'frontend');
       const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/history/documents'));
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
@@ -580,7 +629,7 @@ export default function DashboardPage() {
         : [];
 
       if (docs.length > 0) {
-        addConsoleLog(`[API] ✅ ${docs.length} document yüklendi`, 'info', 'backend');
+        addConsoleLog(`[API] ✅ ${docs.length} ` + t('dashboard.console.documentsLoaded'), 'info', 'backend');
       }
 
       setDocuments(docs);
@@ -592,7 +641,7 @@ export default function DashboardPage() {
 
   const fetchSessions = async () => {
     try {
-      addConsoleLog('[API] Scraper sessions yükleniyor...', 'info', 'frontend');
+      addConsoleLog('[API] ' + t('dashboard.console.scraperSessionsLoading'), 'info', 'frontend');
       const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/history/scraper'));
       if (!response.ok) {
         throw new Error('Failed to fetch scraper sessions');
@@ -604,7 +653,7 @@ export default function DashboardPage() {
         : [];
 
       if (sessionList.length > 0) {
-        addConsoleLog(`[API] ✅ ${sessionList.length} scraper session yüklendi`, 'info', 'backend');
+        addConsoleLog(`[API] ✅ ${sessionList.length} ` + t('dashboard.console.scraperSessionsLoaded'), 'info', 'backend');
       }
 
       setSessions(sessionList);
@@ -614,7 +663,12 @@ export default function DashboardPage() {
     }
   };
 
-  const startScraping = async (url: string, config: any) => {
+  const startScraping = async (url: string, config: {
+    maxDepth?: number;
+    maxPages?: number;
+    domainsOnly?: boolean;
+    followExternal?: boolean;
+  }) => {
     try {
       setScrapingStatus("running");
       const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/scraper/start'), {
@@ -679,17 +733,17 @@ export default function DashboardPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-      'active': 'default',
-      'connected': 'default',
-      'online': 'default',
+    const variants: Record<string, "default" | "secondary" | "outline" | "success" | "error" | "warning" | "info"> = {
+      'active': 'success',
+      'connected': 'success',
+      'online': 'success',
       'inactive': 'secondary',
-      'disconnected': 'destructive',
-      'offline': 'destructive',
-      'processing': 'default',
-      'completed': 'default',
-      'failed': 'destructive',
-      'running': 'default',
+      'disconnected': 'error',
+      'offline': 'error',
+      'processing': 'warning',
+      'completed': 'success',
+      'failed': 'error',
+      'running': 'info',
       'paused': 'secondary'
     };
     return <Badge variant={variants[status] || "secondary"}>{status}</Badge>;
@@ -702,7 +756,7 @@ export default function DashboardPage() {
       type,
       title,
       message,
-      timestamp: new Date().toLocaleTimeString('tr-TR')
+      timestamp: new Date().toLocaleTimeString()
     };
     setNotifications(prev => [notification, ...prev]);
   };
@@ -713,7 +767,7 @@ export default function DashboardPage() {
       type,
       action,
       details,
-      timestamp: new Date().toLocaleTimeString('tr-TR')
+      timestamp: new Date().toLocaleTimeString()
     };
     setActivityLog(prev => [activity, ...prev]);
   };
@@ -723,7 +777,7 @@ export default function DashboardPage() {
       id: Date.now().toString(),
       type,
       message,
-      timestamp: new Date().toLocaleTimeString('tr-TR'),
+      timestamp: new Date().toLocaleTimeString(),
       source
     };
     setConsoleLog(prev => [log, ...prev]);
@@ -782,76 +836,76 @@ export default function DashboardPage() {
     switch (cmd) {
       case '/help':
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
-        addConsoleLog('📋 DASHBOARD CONSOLE COMMANDS', 'info', 'system');
+        addConsoleLog('📋 ' + t('dashboard.console.helpTitle'), 'info', 'system');
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
         addConsoleLog('', 'info', 'system');
-        addConsoleLog('🔧 SYSTEM COMMANDS:', 'info', 'system');
-        addConsoleLog('  /status         - Show complete system status', 'info', 'system');
-        addConsoleLog('  /refresh        - Refresh all dashboard data', 'info', 'system');
-        addConsoleLog('  /health         - Check service health', 'info', 'system');
-        addConsoleLog('  /uptime         - Show system uptime', 'info', 'system');
+        addConsoleLog('🔧 ' + t('dashboard.console.systemCommands'), ':', 'info', 'system');
+        addConsoleLog('  /status         - ' + t('dashboard.console.cmdStatus'), 'info', 'system');
+        addConsoleLog('  /refresh        - ' + t('dashboard.console.cmdRefresh'), 'info', 'system');
+        addConsoleLog('  /health         - ' + t('dashboard.console.cmdHealth'), 'info', 'system');
+        addConsoleLog('  /uptime         - ' + t('dashboard.console.cmdUptime'), 'info', 'system');
         addConsoleLog('', 'info', 'system');
-        addConsoleLog('📊 DATA COMMANDS:', 'info', 'system');
-        addConsoleLog('  /stats          - Show chat statistics', 'info', 'system');
-        addConsoleLog('  /session        - Show session information', 'info', 'system');
-        addConsoleLog('  /embeddings     - Show embedding statistics', 'info', 'system');
-        addConsoleLog('  /export         - Export system data as JSON', 'info', 'system');
+        addConsoleLog('📊 ' + t('dashboard.console.dataCommands'), ':', 'info', 'system');
+        addConsoleLog('  /stats          - ' + t('dashboard.console.cmdStats'), 'info', 'system');
+        addConsoleLog('  /session        - ' + t('dashboard.console.cmdSession'), 'info', 'system');
+        addConsoleLog('  /embeddings     - ' + t('dashboard.console.cmdEmbeddings'), 'info', 'system');
+        addConsoleLog('  /export         - ' + t('dashboard.console.cmdExport'), 'info', 'system');
         addConsoleLog('', 'info', 'system');
-        addConsoleLog('🔍 LOG COMMANDS:', 'info', 'system');
-        addConsoleLog('  /logs [filter]  - Show logs (error/warn/info)', 'info', 'system');
-        addConsoleLog('  /tail [n]       - Show last n log entries', 'info', 'system');
-        addConsoleLog('  /search <term>  - Search logs for term', 'info', 'system');
+        addConsoleLog('🔍 ' + t('dashboard.console.logCommands'), ':', 'info', 'system');
+        addConsoleLog('  /logs [filter]  - ' + t('dashboard.console.cmdLogs'), 'info', 'system');
+        addConsoleLog('  /tail [n]       - ' + t('dashboard.console.cmdTail'), 'info', 'system');
+        addConsoleLog('  /search <term>  - ' + t('dashboard.console.cmdSearch'), 'info', 'system');
         addConsoleLog('', 'info', 'system');
-        addConsoleLog('🌐 API COMMANDS:', 'info', 'system');
-        addConsoleLog('  /api test       - Test API connection', 'info', 'system');
-        addConsoleLog('  /api endpoints  - List available endpoints', 'info', 'system');
-        addConsoleLog('  /token [n]      - Simulate token usage', 'info', 'system');
+        addConsoleLog('🌐 ' + t('dashboard.console.apiCommands'), ':', 'info', 'system');
+        addConsoleLog('  /api test       - ' + t('dashboard.console.cmdApiTest'), 'info', 'system');
+        addConsoleLog('  /api endpoints  - ' + t('dashboard.console.cmdApiEndpoints'), 'info', 'system');
+        addConsoleLog('  /token [n]      - ' + t('dashboard.console.cmdToken'), 'info', 'system');
         addConsoleLog('', 'info', 'system');
-        addConsoleLog('🎮 CONSOLE COMMANDS:', 'info', 'system');
-        addConsoleLog('  /clear          - Clear console', 'info', 'system');
-        addConsoleLog('  /theme toggle   - Toggle dark/light mode', 'info', 'system');
-        addConsoleLog('  /time           - Show current time', 'info', 'system');
-        addConsoleLog('  /calc <expr>    - Simple calculator', 'info', 'system');
+        addConsoleLog('🎮 ' + t('dashboard.console.consoleCommands'), ':', 'info', 'system');
+        addConsoleLog('  /clear          - ' + t('dashboard.console.cmdClear'), 'info', 'system');
+        addConsoleLog('  /theme toggle   - ' + t('dashboard.console.cmdTheme'), 'info', 'system');
+        addConsoleLog('  /time           - ' + t('dashboard.console.cmdTime'), 'info', 'system');
+        addConsoleLog('  /calc <expr>    - ' + t('dashboard.console.cmdCalc'), 'info', 'system');
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
         break;
 
       case '/clear':
         setConsoleLog([]);
-        addConsoleLog('✨ Console cleared', 'success', 'system');
+        addConsoleLog('✨ ' + t('dashboard.console.consoleCleared'), 'success', 'system');
         break;
 
       case '/status':
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
-        addConsoleLog('📊 SYSTEM STATUS REPORT', 'info', 'system');
+        addConsoleLog('📊 ' + t('dashboard.console.systemStatusReport'), 'info', 'system');
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
         const dbName = databaseSettings?.name || 'unknown';
-        addConsoleLog(`🗄️  Database:     ${data?.database?.status || 'unknown'} (${dbName})`, 'info', 'system');
-        addConsoleLog(`⚡ Vectorizer:   ${data?.vectorizer?.status || 'unknown'} (${data?.vectorizer?.model || 'N/A'})`, 'info', 'system');
-        addConsoleLog(`🔴 Redis:        ${data?.redis?.status || 'unknown'} (${data?.redis?.uptime || 'N/A'})`, 'info', 'system');
-        addConsoleLog(`🌐 WebSocket:    ${wsConnected ? '🟢 connected' : '🔴 disconnected'}`, 'info', 'system');
-        addConsoleLog(`🚀 LightRAG:     ${data?.services?.lightRAG?.status || 'unknown'} (${data?.services?.lightRAG?.queries || 0} queries)`, 'info', 'system');
-        addConsoleLog(`🔍 Semantic:     ${data?.services?.semanticSearch?.status || 'unknown'} (${data?.services?.semanticSearch?.searches || 0} searches)`, 'info', 'system');
-        addConsoleLog(`🕷️  Scraper:      ${data?.services?.scraper?.status || 'unknown'} (${data?.services?.scraper?.urls || 0} URLs)`, 'info', 'system');
+        addConsoleLog(`🗄️  ${t('dashboard.console.database')}:     ${data?.database?.status || 'unknown'} (${dbName})`, 'info', 'system');
+        addConsoleLog(`⚡ ${t('dashboard.console.vectorizer')}:   ${data?.vectorizer?.status || 'unknown'} (${data?.vectorizer?.model || 'N/A'})`, 'info', 'system');
+        addConsoleLog(`🔴 ${t('dashboard.console.redis')}:        ${data?.redis?.status || 'unknown'} (${data?.redis?.uptime || 'N/A'})`, 'info', 'system');
+        addConsoleLog(`🌐 ${t('dashboard.console.websocket')}:    ${wsConnected ? '🟢 connected' : '🔴 disconnected'}`, 'info', 'system');
+        addConsoleLog(`🚀 ${t('dashboard.console.lightrag')}:     ${data?.services?.lightRAG?.status || 'unknown'} (${data?.services?.lightRAG?.queries || 0} queries)`, 'info', 'system');
+        addConsoleLog(`🔍 ${t('dashboard.console.semantic')}:     ${data?.services?.semanticSearch?.status || 'unknown'} (${data?.services?.semanticSearch?.searches || 0} searches)`, 'info', 'system');
+        addConsoleLog(`🕷️  ${t('dashboard.console.scraper')}:      ${data?.services?.scraper?.status || 'unknown'} (${data?.services?.scraper?.urls || 0} URLs)`, 'info', 'system');
         addConsoleLog('═══════════════════════════════════════════════════════════════════════════════', 'info', 'system');
         break;
 
       case '/refresh':
-        addConsoleLog('🔄 Refreshing dashboard data...', 'info', 'system');
+        addConsoleLog('🔄 ' + t('dashboard.console.refreshingData'), 'info', 'system');
         await fetchSystemStatus();
         await fetchDocuments();
         await fetchSessions();
-        addConsoleLog('✅ Dashboard data refreshed successfully', 'success', 'system');
+        addConsoleLog('✅ ' + t('dashboard.console.dataRefreshed'), 'success', 'system');
         break;
 
       case '/health':
-        addConsoleLog('🏥 Service Health Check:', 'info', 'system');
+        addConsoleLog('🏥 ' + t('dashboard.console.serviceHealthCheck'), ':', 'info', 'system');
         const services = [
-          { name: 'Database', status: data?.database?.status },
-          { name: 'Redis', status: data?.redis?.status },
-          { name: 'Vectorizer', status: data?.vectorizer?.status },
-          { name: 'LightRAG', status: data?.services?.lightRAG?.status },
-          { name: 'Semantic Search', status: data?.services?.semanticSearch?.status },
-          { name: 'Scraper', status: data?.services?.scraper?.status }
+          { name: t('dashboard.console.serviceDatabase'), status: data?.database?.status },
+          { name: t('dashboard.console.serviceRedis'), status: data?.redis?.status },
+          { name: t('dashboard.console.serviceVectorizer'), status: data?.vectorizer?.status },
+          { name: t('dashboard.console.serviceLightRAG'), status: data?.services?.lightRAG?.status },
+          { name: t('dashboard.console.serviceSemanticSearch'), status: data?.services?.semanticSearch?.status },
+          { name: t('dashboard.console.serviceScraper'), status: data?.services?.scraper?.status }
         ];
         services.forEach(service => {
           const status = service.status === 'connected' || service.status === 'active' ? '🟢' : '🔴';
@@ -864,50 +918,50 @@ export default function DashboardPage() {
         const days = Math.floor(uptime / 86400);
         const hours = Math.floor((uptime % 86400) / 3600);
         const minutes = Math.floor((uptime % 3600) / 60);
-        addConsoleLog(`⏰ System Uptime: ${days}d ${hours}h ${minutes}m`, 'info', 'system');
+        addConsoleLog(`⏰ ${t('dashboard.console.systemUptime')}: ${days}d ${hours}h ${minutes}m`, 'info', 'system');
         break;
 
       case '/stats':
-        addConsoleLog('📈 Chat Statistics:', 'info', 'system');
-        addConsoleLog(`  💬 Total Conversations: ${chatStats?.overview?.total_conversations || 0}`, 'info', 'system');
-        addConsoleLog(`  📨 Total Messages: ${chatStats?.overview?.total_messages?.toLocaleString() || 0}`, 'info', 'system');
-        addConsoleLog(`  📊 Avg Messages/Conversation: ${chatStats?.avgMessagesPerConversation || 0}`, 'info', 'system');
-        addConsoleLog(`  👥 Active Users: ${chatStats?.overview?.total_users || 0}`, 'info', 'system');
-        addConsoleLog(`  📅 Today: ${chatStats?.daily_activity?.[0]?.conversations || 0} conversations, ${chatStats?.recentMessages || 0} messages`, 'info', 'system');
+        addConsoleLog('📈 ' + t('dashboard.console.chatStatistics'), ':', 'info', 'system');
+        addConsoleLog(`  💬 ${t('dashboard.console.totalConversations')}: ${chatStats?.overview?.total_conversations || 0}`, 'info', 'system');
+        addConsoleLog(`  📨 ${t('dashboard.console.totalMessages')}: ${chatStats?.overview?.total_messages?.toLocaleString() || 0}`, 'info', 'system');
+        addConsoleLog(`  📊 ${t('dashboard.console.avgMessagesPerConversation')}: ${chatStats?.avgMessagesPerConversation || 0}`, 'info', 'system');
+        addConsoleLog(`  👥 ${t('dashboard.console.activeUsers')}: ${chatStats?.overview?.total_users || 0}`, 'info', 'system');
+        addConsoleLog(`  📅 ${t('dashboard.console.today')}: ${chatStats?.daily_activity?.[0]?.conversations || 0} conversations, ${chatStats?.recentMessages || 0} messages`, 'info', 'system');
         break;
 
       case '/session':
-        addConsoleLog('🔐 Session Information:', 'info', 'system');
-        addConsoleLog(`  🆔 Current Session: Active`, 'info', 'system');
-        addConsoleLog(`  💬 Total Conversations: ${chatStats?.overview?.total_conversations || 0}`, 'info', 'system');
-        addConsoleLog(`  📨 Total Messages: ${chatStats?.overview?.total_messages || 0}`, 'info', 'system');
-        addConsoleLog(`  📊 Average: ${chatStats?.avgMessagesPerConversation || 0} messages/conversation`, 'info', 'system');
-        addConsoleLog(`  ⏱️  Session Duration: ${Math.floor(Math.random() * 120) + 1} minutes`, 'info', 'system');
+        addConsoleLog('🔐 ' + t('dashboard.console.sessionInformation'), ':', 'info', 'system');
+        addConsoleLog(`  🆔 ${t('dashboard.console.currentSession')}: Active`, 'info', 'system');
+        addConsoleLog(`  💬 ${t('dashboard.console.totalConversations')}: ${chatStats?.overview?.total_conversations || 0}`, 'info', 'system');
+        addConsoleLog(`  📨 ${t('dashboard.console.totalMessages')}: ${chatStats?.overview?.total_messages || 0}`, 'info', 'system');
+        addConsoleLog(`  📊 ${t('dashboard.console.average')}: ${chatStats?.avgMessagesPerConversation || 0} messages/conversation`, 'info', 'system');
+        addConsoleLog(`  ⏱️  ${t('dashboard.console.sessionDuration')}: ${Math.floor(Math.random() * 120) + 1} minutes`, 'info', 'system');
         break;
 
       case '/embeddings':
-        addConsoleLog('🧠 Embedding Statistics:', 'info', 'system');
+        addConsoleLog('🧠 ' + t('dashboard.console.embeddingStatistics'), ':', 'info', 'system');
         if (embeddingStats?.by_category) {
           const { migrated, documents, scraped, messages } = embeddingStats.by_category;
-          addConsoleLog(`  📊 Migrated Data: ${migrated?.rows?.toLocaleString() || 0} rows, ${migrated?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
-          addConsoleLog(`  📄 Documents: ${documents?.documents?.toLocaleString() || 0} documents, ${documents?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
-          addConsoleLog(`  🕷️  Scraped Content: ${scraped?.data?.toLocaleString() || 0} pages, ${scraped?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
-          addConsoleLog(`  💬 Message History: ${messages?.messages?.toLocaleString() || 0} messages, ${messages?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
-          addConsoleLog(`  📦 Total Embeddings: ${embeddingStats?.total_embeddings?.toLocaleString() || 0} vectors`, 'info', 'system');
+          addConsoleLog(`  📊 ${t('dashboard.console.migratedData')}: ${migrated?.rows?.toLocaleString() || 0} rows, ${migrated?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  📄 ${t('dashboard.console.documents')}: ${documents?.documents?.toLocaleString() || 0} documents, ${documents?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  🕷️  ${t('dashboard.console.scrapedContent')}: ${scraped?.data?.toLocaleString() || 0} pages, ${scraped?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  💬 ${t('dashboard.console.messageHistory')}: ${messages?.messages?.toLocaleString() || 0} messages, ${messages?.embeddings?.toLocaleString() || 0} embeddings`, 'info', 'system');
+          addConsoleLog(`  📦 ${t('dashboard.console.totalEmbeddings')}: ${embeddingStats?.total_embeddings?.toLocaleString() || 0} vectors`, 'info', 'system');
         } else {
-          addConsoleLog('  ⚠️  No embedding statistics available', 'warn', 'system');
+          addConsoleLog('  ⚠️  ' + t('dashboard.console.noEmbeddingStats'), 'warn', 'system');
         }
         const activeEmbeddingModel = llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || 'text-embedding-004';
-        addConsoleLog(`  🎯 Model: ${activeEmbeddingModel}`, 'info', 'system');
+        addConsoleLog(`  🎯 ${t('dashboard.console.model')}: ${activeEmbeddingModel}`, 'info', 'system');
         break;
 
       case '/logs':
         const filter = args[0];
         if (filter && ['error', 'warn', 'info'].includes(filter)) {
-          setConsoleFilter(filter as any);
-          addConsoleLog(`🔍 Filter set to: ${filter}`, 'success', 'system');
+          setConsoleFilter(filter as 'error' | 'warn' | 'info');
+          addConsoleLog(`🔍 ${t('dashboard.console.filterSetTo')}: ${filter}`, 'success', 'system');
         } else {
-          addConsoleLog(`📋 Recent logs (${filteredConsoleLogs.length} total):`, 'info', 'system');
+          addConsoleLog(`📋 ${t('dashboard.console.recentLogs')} (${filteredConsoleLogs.length} total):`, 'info', 'system');
           filteredConsoleLogs.slice(-5).forEach(log => {
             addConsoleLog(`  [${log.timestamp}] ${log.message}`, log.type, log.source);
           });
@@ -917,42 +971,42 @@ export default function DashboardPage() {
       case '/tail':
         const n = args[0] ? parseInt(args[0]) : 10;
         if (!isNaN(n) && n > 0) {
-          addConsoleLog(`📋 Last ${Math.min(n, 50)} log entries:`, 'info', 'system');
+          addConsoleLog(`📋 ${t('dashboard.console.lastLogEntries', { count: Math.min(n, 50) })}`, 'info', 'system');
           filteredConsoleLogs.slice(-Math.min(n, 50)).forEach(log => {
-            addConsoleLog(`  [${log.timestamp}] [${log.source?.toUpperCase() || 'SYSTEM'}] ${log.message}`, log.type, log.source);
+            addConsoleLog(`  [${log.timestamp}][${log.source?.toUpperCase() || 'SYSTEM'}] ${log.message}`, log.type, log.source);
           });
         } else {
-          addConsoleLog('❌ Invalid number. Usage: /tail [n]', 'error', 'system');
+          addConsoleLog('❌ ' + t('dashboard.console.invalidNumber'), 'error', 'system');
         }
         break;
 
       case '/search':
         if (args[0]) {
           const term = args.join(' ').toLowerCase();
-          addConsoleLog(`🔍 Searching logs for: "${term}"`, 'info', 'system');
+          addConsoleLog(`🔍 ${t('dashboard.console.searchingLogs')}: "${term}"`, 'info', 'system');
           const matches = consoleLog.filter(log =>
             log.message.toLowerCase().includes(term) ||
             log.source?.toLowerCase().includes(term) ||
             log.type.toLowerCase().includes(term)
           );
           if (matches.length > 0) {
-            addConsoleLog(`📋 Found ${matches.length} matches:`, 'success', 'system');
+            addConsoleLog(`📋 ${t('dashboard.console.foundMatches', { count: matches.length })}`, 'success', 'system');
             matches.slice(0, 10).forEach(log => {
-              addConsoleLog(`  [${log.timestamp}] ${log.message}`, log.type, log.source);
+              addConsoleLog(`  [${log.timestamp}]${log.message}`, log.type, log.source);
             });
             if (matches.length > 10) {
-              addConsoleLog(`  ... and ${matches.length - 10} more`, 'info', 'system');
+              addConsoleLog(`  ...${t('dashboard.console.andMore', { count: matches.length - 10 })}`, 'info', 'system');
             }
           } else {
-            addConsoleLog(`❌ No matches found for "${term}"`, 'warn', 'system');
+            addConsoleLog(`❌ ${t('dashboard.console.noMatchesFound', { term })}`, 'warn', 'system');
           }
         } else {
-          addConsoleLog('❌ Please provide a search term. Usage: /search <term>', 'error', 'system');
+          addConsoleLog(`❌ ${t('dashboard.console.provideSearchTerm')}`, 'error', 'system');
         }
         break;
 
       case '/export':
-        addConsoleLog('📤 Exporting system data...', 'info', 'system');
+        addConsoleLog('📤 ' + t('dashboard.console.exportingData'), 'info', 'system');
         const exportData = {
           systemStatus: data,
           documents: documents.length,
@@ -967,27 +1021,27 @@ export default function DashboardPage() {
         a.download = `dashboard-export-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        addConsoleLog('✅ Dashboard data exported successfully', 'success', 'system');
+        addConsoleLog('✅ ' + t('dashboard.console.dataExported'), 'success', 'system');
         break;
 
       case '/api':
         if (args[0] === 'test') {
-          addConsoleLog('🌐 Testing API connection...', 'info', 'system');
+          addConsoleLog('🌐 ' + t('dashboard.console.testingApi'), 'info', 'system');
           try {
             const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/health/system'));
             if (response.ok) {
-              addConsoleLog('✅ API connection successful', 'success', 'system');
+              addConsoleLog('✅ ' + t('dashboard.console.apiConnectionSuccess'), 'success', 'system');
               const data = await safeJsonParse(response); if (!data) return;
-              addConsoleLog(`  📊 Response time: ${Math.random() * 100 + 10}ms`, 'info', 'system');
-              addConsoleLog(`  🏥 Status: ${data.status || 'OK'}`, 'info', 'system');
+              addConsoleLog(`  📊 ${t('dashboard.console.responseTime')}: ${Math.random() * 100 + 10} ms`, 'info', 'system');
+              addConsoleLog(`  🏥 ${t('dashboard.console.status')}: ${data.status || 'OK'}`, 'info', 'system');
             } else {
-              addConsoleLog(`❌ API error: ${response.status}`, 'error', 'system');
+              addConsoleLog(`❌ ${t('dashboard.console.apiError')}: ${response.status}`, 'error', 'system');
             }
           } catch (error) {
-            addConsoleLog(`❌ API connection failed: ${error}`, 'error', 'system');
+            addConsoleLog(`❌ ${t('dashboard.console.apiConnectionFailed')}: ${error}`, 'error', 'system');
           }
         } else if (args[0] === 'endpoints') {
-          addConsoleLog('📋 Available API Endpoints:', 'info', 'system');
+          addConsoleLog('📋 ' + t('dashboard.console.availableEndpoints'), ':', 'info', 'system');
           addConsoleLog('  GET  /api/v2/health/system', 'info', 'system');
           addConsoleLog('  GET  /api/v2/chat/stats', 'info', 'system');
           addConsoleLog('  GET  /api/v2/chat/dashboard-stats', 'info', 'system');
@@ -998,23 +1052,28 @@ export default function DashboardPage() {
           addConsoleLog('  POST /api/v2/scraper/pause', 'info', 'system');
           addConsoleLog('  DELETE /api/v2/documents/:id', 'info', 'system');
         } else {
-          addConsoleLog('❌ Usage: /api test OR /api endpoints', 'error', 'system');
+          addConsoleLog('❌ ' + t('dashboard.console.apiUsage'), 'error', 'system');
         }
         break;
 
       case '/token':
         const amount = args[0] ? parseInt(args[0]) : 100;
         if (!isNaN(amount)) {
-          addConsoleLog(`🔑 Processing ${amount} tokens...`, 'info', 'system');
+          addConsoleLog(`🔑 ${t('dashboard.console.processingTokens', { count: amount })}...`, 'info', 'system');
           // Simulate token processing with progress
-          const steps = ['🔑 Initializing...', '📊 Analyzing input...', '🧠 Processing embeddings...', '✅ Complete!'];
+          const steps = [
+            '🔑 ' + t('dashboard.console.tokenStep1'),
+            '📊 ' + t('dashboard.console.tokenStep2'),
+            '🧠 ' + t('dashboard.console.tokenStep3'),
+            '✅ ' + t('dashboard.console.tokenStep4')
+          ];
           for (let i = 0; i < steps.length; i++) {
             setTimeout(() => {
               addConsoleLog(steps[i], i === steps.length - 1 ? 'success' : 'info', 'system');
             }, (i + 1) * 300);
           }
         } else {
-          addConsoleLog('❌ Invalid token amount. Usage: /token [number]', 'error', 'system');
+          addConsoleLog('❌ ' + t('dashboard.console.invalidTokenAmount'), 'error', 'system');
         }
         break;
 
@@ -1027,17 +1086,17 @@ export default function DashboardPage() {
           } else {
             document.documentElement.classList.remove('dark');
           }
-          addConsoleLog(`🎨 Theme switched to ${newTheme} mode`, 'success', 'system');
+          addConsoleLog(`🎨 ${t('dashboard.console.themeSwitched', { theme: newTheme })}`, 'success', 'system');
         } else {
-          addConsoleLog('❌ Usage: /theme toggle', 'error', 'system');
+          addConsoleLog('❌ ' + t('dashboard.console.themeUsage'), 'error', 'system');
         }
         break;
 
       case '/time':
         const now = new Date();
-        addConsoleLog(`🕐 Current time: ${now.toLocaleString()}`, 'info', 'system');
-        addConsoleLog(`📅 Date: ${now.toLocaleDateString()}`, 'info', 'system');
-        addConsoleLog(`⏰ Time: ${now.toLocaleTimeString()}`, 'info', 'system');
+        addConsoleLog(`🕐 ${t('dashboard.console.currentTime')}: ${now.toLocaleString()}`, 'info', 'system');
+        addConsoleLog(`📅 ${t('dashboard.console.date')}: ${now.toLocaleDateString()}`, 'info', 'system');
+        addConsoleLog(`⏰ ${t('dashboard.console.time')}: ${now.toLocaleTimeString()}`, 'info', 'system');
         break;
 
       case '/calc':
@@ -1050,15 +1109,15 @@ export default function DashboardPage() {
             const result = Function('"use strict"; return (' + safeExpression + ')')();
             addConsoleLog(`🧮 ${safeExpression} = ${result}`, 'success', 'system');
           } catch (error) {
-            addConsoleLog('❌ Invalid expression. Usage: /calc <expression>', 'error', 'system');
+            addConsoleLog('❌ ' + t('dashboard.console.invalidExpression'), 'error', 'system');
           }
         } else {
-          addConsoleLog('❌ Please provide an expression. Usage: /calc <expression>', 'error', 'system');
+          addConsoleLog('❌ ' + t('dashboard.console.provideExpression'), 'error', 'system');
         }
         break;
 
       default:
-        addConsoleLog(`❌ Unknown command: ${cmd}. Type /help for available commands.`, 'error', 'system');
+        addConsoleLog(`❌ ${t('dashboard.console.unknownCommand', { cmd })}`, 'error', 'system');
     }
   };
 
@@ -1069,22 +1128,22 @@ export default function DashboardPage() {
       {
         id: '1',
         type: 'success',
-        title: 'Sistem Başlatıldı',
-        message: 'Tüm servisler başarıyla başlatıldı',
+        title: t('dashboard.notifications.systemStarted'),
+        message: t('dashboard.notifications.allServicesStarted'),
         timestamp: '09:15:30'
       },
       {
         id: '2',
         type: 'info',
-        title: 'Yeni Doküman Eklendi',
-        message: 'Vergi Usul Kanunu güncellemesi eklendi',
+        title: t('dashboard.notifications.newDocumentAdded'),
+        message: t('dashboard.notifications.taxProcedureUpdate'),
         timestamp: '09:12:45'
       },
       {
         id: '3',
         type: 'warning',
-        title: 'Depolama Alanı',
-        message: 'Depolama alanı %80 dolu',
+        title: t('dashboard.notifications.storageSpace'),
+        message: t('dashboard.notifications.storage80Full'),
         timestamp: '09:08:22'
       }
     ];
@@ -1094,22 +1153,22 @@ export default function DashboardPage() {
       {
         id: '1',
         type: 'user',
-        action: 'Doküman Yükleme',
-        details: '3 yeni doküman yüklendi',
+        action: t('dashboard.activity.documentUpload'),
+        details: t('dashboard.activity.threeDocumentsUploaded'),
         timestamp: '09:15:45'
       },
       {
         id: '2',
         type: 'system',
-        action: 'Veritabanı Yedekleme',
-        details: 'Otomatik yedekleme tamamlandı',
+        action: t('dashboard.activity.databaseBackup'),
+        details: t('dashboard.activity.automaticBackupComplete'),
         timestamp: '09:10:30'
       },
       {
         id: '3',
         type: 'user',
-        action: 'Arama Sorgusu',
-        details: 'KDV iade koşulları arandı',
+        action: t('dashboard.activity.searchQuery'),
+        details: t('dashboard.activity.vatRefundConditionsSearched'),
         timestamp: '09:05:12'
       }
     ];
@@ -1119,70 +1178,70 @@ export default function DashboardPage() {
       {
         id: '1',
         type: 'info',
-        message: '[BACKEND] Server starting on port 8083',
+        message: t('dashboard.console.serverStarting'),
         timestamp: '09:00:01',
         source: 'backend'
       },
       {
         id: '2',
         type: 'info',
-        message: `[BACKEND] Database connected`,
+        message: t('dashboard.console.databaseConnected'),
         timestamp: '09:00:02',
         source: 'backend'
       },
       {
         id: '3',
         type: 'info',
-        message: '[BACKEND] Redis connected on localhost:6379',
+        message: t('dashboard.console.redisConnected'),
         timestamp: '09:00:03',
         source: 'backend'
       },
       {
         id: '4',
         type: 'info',
-        message: '[FRONTEND] Next.js development server started',
+        message: t('dashboard.console.nextjsServerStarted'),
         timestamp: '09:00:04',
         source: 'frontend'
       },
       {
         id: '5',
         type: 'info',
-        message: '[FRONTEND] Ready on http://localhost:3000',
+        message: t('dashboard.console.readyOnLocalhost'),
         timestamp: '09:00:05',
         source: 'frontend'
       },
       {
         id: '6',
         type: 'warn',
-        message: '[BACKEND] Rate limit warning: 10 requests/min',
+        message: t('dashboard.console.rateLimitWarning'),
         timestamp: '09:00:08',
         source: 'backend'
       },
       {
         id: '7',
         type: 'info',
-        message: '[EMBEDDINGS] Model loaded: text-embedding-3-large',
+        message: t('dashboard.console.embeddingModelLoaded'),
         timestamp: '09:00:15',
         source: 'backend'
       },
       {
         id: '8',
         type: 'info',
-        message: '[FRONTEND] Compiled client and server successfully',
+        message: t('dashboard.console.compiledSuccessfully'),
         timestamp: '09:00:16',
         source: 'frontend'
       },
       {
         id: '9',
         type: 'error',
-        message: '[BACKEND] Error: Connection timeout to external API',
+        message: t('dashboard.console.connectionTimeout'),
         timestamp: '09:00:22',
         source: 'backend'
       },
       {
         id: '10',
         type: 'info',
-        message: '[FRONTEND] HMR (Hot Module Replacement) enabled',
+        message: t('dashboard.console.hmrEnabled'),
         timestamp: '09:00:25',
         source: 'frontend'
       }
@@ -1198,7 +1257,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p>Dashboard yükleniyor...</p>
+          <p>{t('dashboard.loading')}</p>
         </div>
       </div>
     );
@@ -1216,12 +1275,12 @@ export default function DashboardPage() {
           <Card className="border-0 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">Aktif Session</span>
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.activeSession')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {chatStats?.overview?.total_conversations || 0}
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Şu an aktif</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.currentlyActive')}</div>
             </CardContent>
           </Card>
 
@@ -1229,12 +1288,12 @@ export default function DashboardPage() {
           <Card className="border-0 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">Toplam Session</span>
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.totalSession')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {chatStats?.overview?.total_conversations || 0}
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Bugün: {chatStats?.daily_activity?.[0]?.conversations || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.today')}: {chatStats?.daily_activity?.[0]?.conversations || 0}</div>
             </CardContent>
           </Card>
 
@@ -1242,13 +1301,13 @@ export default function DashboardPage() {
           <Card className="border-0 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">Token Kullanımı</span>
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.tokenUsage')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {tokenStats.totalTokensUsed > 0 ? tokenStats.totalTokensUsed.toLocaleString() : '0'}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Maliyet: ${tokenStats.totalCost.toFixed(4)}
+                {t('dashboard.stats.cost')}: ${tokenStats.totalCost.toFixed(4)}
               </div>
             </CardContent>
           </Card>
@@ -1257,12 +1316,12 @@ export default function DashboardPage() {
           <Card className="border-0 shadow-sm">
             <CardContent className="p-6">
               <div className="mb-2">
-                <span className="text-base font-medium text-gray-600 dark:text-gray-400">Ort. Mesaj/Session</span>
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.avgMessagesPerSession')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {chatStats?.avgMessagesPerConversation || 0}
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">Performans metriği</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.performanceMetric')}</div>
             </CardContent>
           </Card>
         </div>
@@ -1271,7 +1330,7 @@ export default function DashboardPage() {
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <div>
-              <h3 className="text-base font-semibold tracking-tight">Embeddings Kaynakları</h3>
+              <h3 className="text-base font-semibold tracking-tight">{t('dashboard.embeddings.resources')}</h3>
             </div>
           </CardHeader>
           <CardContent>
@@ -1279,15 +1338,15 @@ export default function DashboardPage() {
               {/* Migrated Data */}
               <div className="p-5 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
                 <div className="mb-3">
-                  <h4 className="text-base font-medium">Migrated Data</h4>
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.migratedData')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Rows:</span>
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.rows')}:</span>
                     <span className="font-semibold">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.embeddings')}:</span>
                     <span className="font-semibold">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
@@ -1296,11 +1355,11 @@ export default function DashboardPage() {
               {/* Documents Embeddings */}
               <div className="p-5 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
                 <div className="mb-3">
-                  <h4 className="text-base font-medium">Documents</h4>
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.documents')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Documents:</span>
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.documents')}:</span>
                     <span className="font-semibold">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -1313,11 +1372,11 @@ export default function DashboardPage() {
               {/* Scraped Embeddings */}
               <div className="p-5 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
                 <div className="mb-3">
-                  <h4 className="text-base font-medium">Scraped</h4>
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.scraped')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Data:</span>
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.data')}:</span>
                     <span className="font-semibold">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -1330,11 +1389,11 @@ export default function DashboardPage() {
               {/* Message History Embeddings */}
               <div className="p-5 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
                 <div className="mb-3">
-                  <h4 className="text-base font-medium">Message History</h4>
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.messageHistory')}</h4>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Messages:</span>
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.messages')}:</span>
                     <span className="font-semibold">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -1368,16 +1427,16 @@ export default function DashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                <h3 className="text-sm font-semibold tracking-tight">System Information</h3>
+                <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.system.information')}</h3>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-4">
                 {/* Database Information */}
                 <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">Database</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">{t('dashboard.system.database')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
-                    {databaseSettings?.name || 'Not configured'}
+                    {databaseSettings?.name || t('dashboard.status.notConfigured')}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     {databaseSettings?.host}:{databaseSettings?.port}
@@ -1386,23 +1445,23 @@ export default function DashboardPage() {
 
                 {/* LLM Model */}
                 <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">LLM Model</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">{t('dashboard.system.llmModel')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
-                    {llmSettings?.activeChatModel || <span className="text-orange-500">Not Configured</span>}
+                    {llmSettings?.activeChatModel || <span className="text-orange-500">{t('dashboard.status.notConfigured')}</span>}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    Active Provider
+                    {t('dashboard.system.activeProvider')}
                   </div>
                 </div>
 
                 {/* Embedding Model */}
                 <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded min-w-0">
-                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">Embedding Model</div>
+                  <div className="text-gray-500 dark:text-gray-400 text-xs mb-2">{t('dashboard.system.embeddingModel')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-xs break-words overflow-wrap-anywhere leading-relaxed">
-                    {llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || <span className="text-orange-500">Not Configured</span>}
+                    {llmSettings?.activeEmbeddingModel || llmSettings?.embeddingModel || <span className="text-orange-500">{t('dashboard.status.notConfigured')}</span>}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                    Vector Generation
+                    {t('dashboard.system.vectorGeneration')}
                   </div>
                 </div>
               </div>
@@ -1414,25 +1473,25 @@ export default function DashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-purple-500 rounded-full" />
-                <h3 className="text-sm font-semibold tracking-tight">Performance</h3>
+                <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.performance.title')}</h3>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400">Response Time</div>
+                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.responseTime')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">1.2s</div>
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400">Daily Queries</div>
+                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.dailyQueries')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">247</div>
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400">Documents</div>
+                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.documents')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">1,428</div>
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
-                  <div className="text-gray-500 dark:text-gray-400">Cache Hit</div>
+                  <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.cacheHit')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">87%</div>
                 </div>
               </div>
@@ -1444,29 +1503,29 @@ export default function DashboardPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-orange-500 rounded-full" />
-                <h3 className="text-sm font-semibold tracking-tight">Resources</h3>
+                <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-3">
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">CPU</span>
-                    <span className={`font-medium ${realtimeResources.cpu > 80 ? 'text-red-600 dark:text-red-400' :
+                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.cpu')}</span>
+                    <span className={`font - medium ${realtimeResources.cpu > 80 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.cpu > 60 ? 'text-yellow-600 dark:text-yellow-400' :
                         'text-blue-600 dark:text-blue-400'
-                      }`}>
+                      } `}>
                       {Math.round(realtimeResources.cpu)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.cpu > 80 ? 'bg-red-500' :
+                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.cpu > 80 ? 'bg-red-500' :
                         realtimeResources.cpu > 60 ? 'bg-yellow-500' :
                           'bg-blue-500'
-                        }`}
+                        } `}
                       style={{
-                        width: `${realtimeResources.cpu}%`,
+                        width: `${realtimeResources.cpu}% `,
                         boxShadow: realtimeResources.cpu > 80 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
                           realtimeResources.cpu > 60 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
                             '0 0 8px rgba(59, 130, 246, 0.4)'
@@ -1476,22 +1535,22 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">Memory</span>
-                    <span className={`font-medium ${realtimeResources.memory > 85 ? 'text-red-600 dark:text-red-400' :
+                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.memory')}</span>
+                    <span className={`font - medium ${realtimeResources.memory > 85 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.memory > 70 ? 'text-yellow-600 dark:text-yellow-400' :
                         'text-green-600 dark:text-green-400'
-                      }`}>
+                      } `}>
                       {Math.round(realtimeResources.memory)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.memory > 85 ? 'bg-red-500' :
+                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.memory > 85 ? 'bg-red-500' :
                         realtimeResources.memory > 70 ? 'bg-yellow-500' :
                           'bg-green-500'
-                        }`}
+                        } `}
                       style={{
-                        width: `${realtimeResources.memory}%`,
+                        width: `${realtimeResources.memory}% `,
                         boxShadow: realtimeResources.memory > 85 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
                           realtimeResources.memory > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
                             '0 0 8px rgba(34, 197, 94, 0.4)'
@@ -1501,22 +1560,22 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">Disk</span>
-                    <span className={`font-medium ${realtimeResources.disk > 90 ? 'text-red-600 dark:text-red-400' :
+                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.disk')}</span>
+                    <span className={`font - medium ${realtimeResources.disk > 90 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.disk > 75 ? 'text-yellow-600 dark:text-yellow-400' :
                         'text-green-600 dark:text-green-400'
-                      }`}>
+                      } `}>
                       {Math.round(realtimeResources.disk)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.disk > 90 ? 'bg-red-500' :
+                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.disk > 90 ? 'bg-red-500' :
                         realtimeResources.disk > 75 ? 'bg-yellow-500' :
                           'bg-green-500'
-                        }`}
+                        } `}
                       style={{
-                        width: `${realtimeResources.disk}%`,
+                        width: `${realtimeResources.disk}% `,
                         boxShadow: realtimeResources.disk > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
                           realtimeResources.disk > 75 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
                             '0 0 8px rgba(34, 197, 94, 0.4)'
@@ -1526,24 +1585,24 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">GPU</span>
-                    <span className={`font-medium ${realtimeResources.gpu > 90 ? 'text-red-600 dark:text-red-400' :
+                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.gpu')}</span>
+                    <span className={`font - medium ${realtimeResources.gpu > 90 ? 'text-red-600 dark:text-red-400' :
                       realtimeResources.gpu > 70 ? 'text-yellow-600 dark:text-yellow-400' :
                         realtimeResources.gpu > 30 ? 'text-purple-600 dark:text-purple-400' :
                           'text-gray-600 dark:text-gray-400'
-                      }`}>
+                      } `}>
                       {Math.round(realtimeResources.gpu)}%
                     </span>
                   </div>
                   <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ease-out ${realtimeResources.gpu > 90 ? 'bg-red-500' :
+                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.gpu > 90 ? 'bg-red-500' :
                         realtimeResources.gpu > 70 ? 'bg-yellow-500' :
                           realtimeResources.gpu > 30 ? 'bg-purple-500' :
                             'bg-gray-500'
-                        }`}
+                        } `}
                       style={{
-                        width: `${realtimeResources.gpu}%`,
+                        width: `${realtimeResources.gpu}% `,
                         boxShadow: realtimeResources.gpu > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
                           realtimeResources.gpu > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
                             realtimeResources.gpu > 30 ? '0 0 8px rgba(168, 85, 247, 0.4)' :

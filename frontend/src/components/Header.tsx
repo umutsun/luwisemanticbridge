@@ -108,7 +108,7 @@ export default function Header() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [connectionProgress, setConnectionProgress] = useState(0);
   const [currentUser, setCurrentUser] = useState<any>(null);
-    
+
   useEffect(() => {
     // Get user from localStorage
     const storedUser = localStorage.getItem('user');
@@ -125,7 +125,7 @@ export default function Header() {
     }
   }, [token]);
 
-  
+
   const fetchSystemStatus = async () => {
     if (!token) {
       console.warn('No token available, skipping system status fetch');
@@ -328,9 +328,9 @@ export default function Header() {
             },
             redis: {
               connected: redisService?.status === 'connected' ||
-                        redisService?.status === 'healthy' ||
-                        healthData.serverStatus?.redis === 'connected' ||
-                        (redisService && !redisService.status),
+                redisService?.status === 'healthy' ||
+                healthData.serverStatus?.redis === 'connected' ||
+                (redisService && !redisService.status),
               used_memory: redisData?.redis?.usedMemory || redisData?.used_memory || undefined,
               responseTime: redisService?.responseTime || 0,
               keyCount: healthData.services?.redis?.keys || redisData?.keyCount || undefined
@@ -361,15 +361,15 @@ export default function Header() {
   const menuItems = [
     // Admin only - dashboard access (chat removed from menu)
     ...(currentUser?.role === 'admin' ? [
-      { href: '/dashboard', label: 'Yönetim Paneli', icon: Home },
-      { href: '/dashboard/users', label: 'Kullanıcı Yönetimi', icon: Users },
-      { href: '/dashboard/migrations', label: 'Migration', icon: Database },
-      { href: '/dashboard/documents', label: 'Döküman Yönetimi', icon: FileText },
-      { href: '/dashboard/crawls', label: 'Crawler Data', icon: Database },
-      { href: '/dashboard/messages', label: 'Sohbet Geçmişi', icon: MessageSquare },
-      { href: '/dashboard/translations', label: 'Translations', icon: Languages },
-      { href: '/dashboard/data-translations', label: 'Veri Çevirileri', icon: Languages },
-      { href: '/dashboard/settings', label: 'Sistem Ayarları', icon: Settings2 }
+      { href: '/dashboard', label: t('header.menu.dashboard'), icon: Home },
+      { href: '/dashboard/users', label: t('header.menu.users'), icon: Users },
+      { href: '/dashboard/migrations', label: t('header.menu.migrations'), icon: Database },
+      { href: '/dashboard/documents', label: t('header.menu.documents'), icon: FileText },
+      { href: '/dashboard/crawls', label: t('header.menu.crawls'), icon: Database },
+      { href: '/dashboard/messages', label: t('header.menu.messages'), icon: MessageSquare },
+      { href: '/dashboard/translations', label: t('header.menu.translations'), icon: Languages },
+      { href: '/dashboard/data-translations', label: t('header.menu.dataTranslations'), icon: Languages },
+      { href: '/dashboard/settings', label: t('header.menu.systemSettings'), icon: Settings2 }
     ] : [])
   ];
 
@@ -385,9 +385,9 @@ export default function Header() {
   };
 
   const allServicesActive = systemStatus?.database.connected &&
-                           systemStatus?.redis.connected &&
-                           systemStatus?.llmModel.active &&
-                           systemStatus?.embedder.active;
+    systemStatus?.redis.connected &&
+    systemStatus?.llmModel.active &&
+    systemStatus?.embedder.active;
 
   // Determine overall system status
   const getOverallStatus = () => {
@@ -431,11 +431,10 @@ export default function Header() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                        pathname === item.href 
-                          ? 'bg-primary/10 text-primary' 
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${pathname === item.href
+                          ? 'bg-primary/10 text-primary'
                           : 'hover:bg-muted'
-                      }`}
+                        }`}
                     >
                       <Icon className="h-4 w-4" />
                       <span className="text-sm font-medium">{item.label}</span>
@@ -443,15 +442,14 @@ export default function Header() {
                   );
                 })}
               </nav>
-              
+
               {/* Minimal System Status in Mobile Menu */}
               <div className="mt-6 pt-6 border-t">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">System Status</span>
-                  <div className={`h-2 w-2 rounded-full ${
-                    getOverallStatus() === 'healthy' ? 'bg-green-500' :
-                    getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
-                  } animate-pulse`} />
+                  <span className="text-sm font-medium">{t('header.systemStatus')}</span>
+                  <div className={`h-2 w-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-green-500' :
+                      getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                    } animate-pulse`} />
                 </div>
 
                 {/* Service status text */}
@@ -521,7 +519,7 @@ export default function Header() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-2">
                   <Home className="h-4 w-4" />
-                  <span className="hidden xl:inline">Dashboard</span>
+                  <span className="hidden xl:inline">{t('header.menu.dashboard')}</span>
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
@@ -530,8 +528,8 @@ export default function Header() {
                   const Icon = item.icon;
                   return (
                     <DropdownMenuItem key={item.href} asChild>
-                      <Link 
-                        href={item.href} 
+                      <Link
+                        href={item.href}
                         className={`cursor-pointer flex items-center gap-2 ${pathname === item.href ? 'bg-accent' : ''}`}
                       >
                         <Icon className="h-4 w-4" />
@@ -552,7 +550,7 @@ export default function Header() {
             {/* Notification Center */}
             <NotificationCenter />
 
-            
+
             {/* Quick Navigation Icons */}
             <div className="hidden sm:flex items-center gap-1">
               {/* Chat Icon - Always visible */}
@@ -577,7 +575,7 @@ export default function Header() {
                 >
                   <Link href="/dashboard" className="flex items-center gap-2">
                     <Home className="h-5 w-5" />
-                    <span className="hidden lg:inline">Dashboard</span>
+                    <span className="hidden lg:inline">{t('header.menu.dashboard')}</span>
                   </Link>
                 </Button>
               )}
@@ -596,7 +594,7 @@ export default function Header() {
                         <Monitor className="h-5 w-5 text-yellow-500" />
                       )}
 
-                      </div>
+                    </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-72 p-0">
@@ -604,42 +602,37 @@ export default function Header() {
                   <div className="p-4 space-y-3">
                     {/* Title with overall status */}
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">System Status</span>
-                      <div className={`h-2 w-2 rounded-full ${
-                        getOverallStatus() === 'healthy' ? 'bg-green-500' :
-                        getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
-                      } animate-pulse`} />
+                      <span className="text-sm font-medium">{t('header.systemStatus')}</span>
+                      <div className={`h-2 w-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-green-500' :
+                          getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                        } animate-pulse`} />
                     </div>
 
                     {/* Services - comfortable 2x3 grid */}
                     <div className="grid grid-cols-2 gap-3">
                       {/* First Row - Database & Redis */}
-                      <div className={`p-3 rounded-lg border transition-all ${
-                        systemStatus?.database.connected
+                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.database.connected
                           ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
                           : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
-                      }`}>
+                        }`}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                          <p className="text-sm font-medium">Database</p>
+                          <div className={`w-2 h-2 rounded-full ${systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
+                            }`} />
+                          <p className="text-sm font-medium">{t('dashboard.systemInfo.database')}</p>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {systemStatus?.database.databaseName || '—'}
                         </p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border transition-all ${
-                        systemStatus?.redis.connected
+                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.redis.connected
                           ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
                           : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
-                      }`}>
+                        }`}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                          <p className="text-sm font-medium">Redis</p>
+                          <div className={`w-2 h-2 rounded-full ${systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
+                            }`} />
+                          <p className="text-sm font-medium">{t('dashboard.systemInfo.redis')}</p>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {systemStatus?.redis.keyCount !== undefined ? `${systemStatus.redis.keyCount} keys` : '—'}
@@ -647,32 +640,28 @@ export default function Header() {
                       </div>
 
                       {/* Second Row - LLM & Embeddings */}
-                      <div className={`p-3 rounded-lg border transition-all ${
-                        systemStatus?.llmModel.active
+                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.llmModel.active
                           ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
                           : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
-                      }`}>
+                        }`}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                          <p className="text-sm font-medium">LLM</p>
+                          <div className={`w-2 h-2 rounded-full ${systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
+                            }`} />
+                          <p className="text-sm font-medium">{t('dashboard.systemInfo.llmModel')}</p>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
                           {systemStatus?.llmModel.displayName || systemStatus?.llmModel.model?.split('/')?.[1]?.substring(0, 12) + '...' || 'Unknown'}
                         </p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border transition-all ${
-                        systemStatus?.embedder.active
+                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.embedder.active
                           ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
                           : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
-                      }`}>
+                        }`}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
-                          }`} />
-                          <p className="text-sm font-medium">Embeddings</p>
+                          <div className={`w-2 h-2 rounded-full ${systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
+                            }`} />
+                          <p className="text-sm font-medium">{t('dashboard.embeddings.title')}</p>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
                           {systemStatus?.embedder.active ? (systemStatus?.embedder.model?.substring(0, 10) + '...' || 'Ready') : 'Offline'}
@@ -680,35 +669,31 @@ export default function Header() {
                       </div>
 
                       {/* Third Row - Translation & System */}
-                      <div className={`p-3 rounded-lg border transition-all ${
-                        systemStatus?.translationModel?.active
+                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.translationModel?.active
                           ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800/60 shadow-sm'
                           : 'bg-gray-50/80 border-gray-200 dark:bg-gray-950/50 dark:border-gray-800/60'
-                      }`}>
+                        }`}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            systemStatus?.translationModel?.active ? 'bg-blue-500' : 'bg-gray-400'
-                          }`} />
-                          <p className="text-sm font-medium">Translation</p>
+                          <div className={`w-2 h-2 rounded-full ${systemStatus?.translationModel?.active ? 'bg-blue-500' : 'bg-gray-400'
+                            }`} />
+                          <p className="text-sm font-medium">{t('dashboard.translations.title')}</p>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
                           {systemStatus?.translationModel?.model || 'N/A'}
                         </p>
                       </div>
 
-                      <div className={`p-3 rounded-lg border transition-all ${
-                        getOverallStatus() === 'healthy'
+                      <div className={`p-3 rounded-lg border transition-all ${getOverallStatus() === 'healthy'
                           ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800/60 shadow-sm'
                           : getOverallStatus() === 'degraded'
-                          ? 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800/60 shadow-sm'
-                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
-                      }`}>
+                            ? 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800/60 shadow-sm'
+                            : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                        }`}>
                         <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${
-                            getOverallStatus() === 'healthy' ? 'bg-emerald-500' :
-                            getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
-                          } animate-pulse`} />
-                          <p className="text-sm font-medium">System</p>
+                          <div className={`w-2 h-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-emerald-500' :
+                              getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
+                            } animate-pulse`} />
+                          <p className="text-sm font-medium">{t('dashboard.systemInfo.title')}</p>
                         </div>
                         <p className="text-sm text-muted-foreground capitalize">
                           {getOverallStatus()}
@@ -794,7 +779,7 @@ export default function Header() {
                   <DropdownMenuItem asChild>
                     <Link href="/profile" className="cursor-pointer flex items-center gap-2">
                       <User className="h-4 w-4 mr-2" />
-                      Profilim
+                      {t('header.profile')}
                     </Link>
                   </DropdownMenuItem>
 

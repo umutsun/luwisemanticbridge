@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getApiUrl, API_CONFIG } from '@/lib/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +47,7 @@ interface Backup {
 }
 
 export default function DatabaseConfigPage() {
+  const { t } = useTranslation();
 
   const [config, setConfig] = useState<DatabaseConfig>({
     host: 'localhost',
@@ -154,7 +156,7 @@ export default function DatabaseConfigPage() {
       ...prev,
       [field]: value
     }));
-    
+
     // Auto-generate connection string
     if (field !== 'connectionString') {
       const newConfig = { ...config, [field]: value };
@@ -180,16 +182,16 @@ export default function DatabaseConfigPage() {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
-        setMessage({ type: 'success', text: `Bağlantı başarılı! Veritabanı: ${result.database}, Versiyon: ${result.version}` });
+        setMessage({ type: 'success', text: t('databaseConfig.notifications.connectionSuccess', { database: result.database, version: result.version }) });
         setConnectionStatus('connected');
       } else {
-        setMessage({ type: 'error', text: result.error || 'Bağlantı başarısız' });
+        setMessage({ type: 'error', text: result.error || t('databaseConfig.notifications.connectionFailed') });
         setConnectionStatus('disconnected');
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Bağlantı testi başarısız' });
+      setMessage({ type: 'error', text: t('databaseConfig.notifications.connectionTestFailed') });
       setConnectionStatus('disconnected');
     } finally {
       setIsTesting(false);
@@ -210,7 +212,7 @@ export default function DatabaseConfigPage() {
       const result = await response.json();
 
       if (result.success) {
-        setMessage({ type: 'success', text: 'Veritabanı ayarları kaydedildi' });
+        setMessage({ type: 'success', text: t('databaseConfig.notifications.settingsSaved') });
 
         // Restart backend connection
         await fetch('http://localhost:3001/api/v2/config/database/restart', { method: 'POST' });
@@ -219,10 +221,10 @@ export default function DatabaseConfigPage() {
           loadConfig();
         }, 2000);
       } else {
-        setMessage({ type: 'error', text: result.error || 'Kaydetme başarısız' });
+        setMessage({ type: 'error', text: result.error || t('databaseConfig.notifications.settingsSaveFailed') });
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Ayarlar kaydedilemedi' });
+      setMessage({ type: 'error', text: t('databaseConfig.notifications.settingsSaveFailed') });
     } finally {
       setIsLoading(false);
     }
@@ -247,12 +249,12 @@ export default function DatabaseConfigPage() {
           : m
       ));
 
-      setMessage({ type: 'success', text: `Migration ${migrationId} başarıyla çalıştırıldı` });
+      setMessage({ type: 'success', text: t('databaseConfig.migrations.migrationSuccess', { id: migrationId }) });
     } catch (error) {
       setMigrations(prev => prev.map(m =>
         m.id === migrationId ? { ...m, status: 'failed' } : m
       ));
-      setMessage({ type: 'error', text: 'Migration çalıştırma başarısız' });
+      setMessage({ type: 'error', text: t('databaseConfig.migrations.migrationFailed') });
     } finally {
       setIsMigrating(false);
     }
@@ -271,9 +273,9 @@ export default function DatabaseConfigPage() {
       };
 
       setBackups(prev => [newBackup, ...prev]);
-      setMessage({ type: 'success', text: `${type === 'full' ? 'Full' : 'Incremental'} backup oluşturuluyor...` });
+      setMessage({ type: 'success', text: t('databaseConfig.backups.actions.creating', { type: t(`databaseConfig.backups.types.${type}`) }) });
     } catch (error) {
-      setMessage({ type: 'error', text: 'Backup oluşturulamadı' });
+      setMessage({ type: 'error', text: t('databaseConfig.backups.backupFailed') });
     } finally {
       setIsBackingUp(false);
     }
@@ -292,12 +294,12 @@ export default function DatabaseConfigPage() {
         b.id === backupId ? { ...b, status: 'completed' } : b
       ));
 
-      setMessage({ type: 'success', text: 'Backup başarıyla geri yüklendi' });
+      setMessage({ type: 'success', text: t('databaseConfig.backups.restoreSuccess') });
     } catch (error) {
       setBackups(prev => prev.map(b =>
         b.id === backupId ? { ...b, status: 'failed' } : b
       ));
-      setMessage({ type: 'error', text: 'Backup geri yüklenemedi' });
+      setMessage({ type: 'error', text: t('databaseConfig.backups.restoreFailed') });
     }
   };
 
@@ -306,473 +308,472 @@ export default function DatabaseConfigPage() {
       <div className="mb-8">
         <h1 className="text-xl font-semibold flex items-center gap-2">
           <Database className="h-8 w-8" />
-          Veritabanı Yönetimi
+          {t('databaseConfig.title')}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Veritabanı yapılandırması, migration ve backup yönetimi
+          {t('databaseConfig.description')}
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="config">Yapılandırma</TabsTrigger>
-          <TabsTrigger value="migrations">Migrations</TabsTrigger>
-          <TabsTrigger value="backups">Backups</TabsTrigger>
-          <TabsTrigger value="tools">Tools</TabsTrigger>
+          <TabsTrigger value="config">{t('databaseConfig.tabs.config')}</TabsTrigger>
+          <TabsTrigger value="migrations">{t('databaseConfig.tabs.migrations')}</TabsTrigger>
+          <TabsTrigger value="backups">{t('databaseConfig.tabs.backups')}</TabsTrigger>
+          <TabsTrigger value="tools">{t('databaseConfig.tabs.tools')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="space-y-6">
 
-      {message && (
-        <Alert className={`mb-6 ${message.type === 'error' ? 'border-red-500' : message.type === 'success' ? 'border-green-500' : 'border-blue-500'}`}>
-          <AlertDescription>{message.text}</AlertDescription>
-        </Alert>
-      )}
+          {message && (
+            <Alert className={`mb-6 ${message.type === 'error' ? 'border-red-500' : message.type === 'success' ? 'border-green-500' : 'border-blue-500'}`}>
+              <AlertDescription>{message.text}</AlertDescription>
+            </Alert>
+          )}
 
-      <div className="grid gap-6">
-        {/* Connection Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Bağlantı Durumu</span>
-              <div className="flex items-center gap-2">
-                <div className={`h-3 w-3 rounded-full ${
-                  connectionStatus === 'connected' ? 'bg-green-500' : 
-                  connectionStatus === 'testing' ? 'bg-yellow-500 animate-pulse' : 
-                  'bg-red-500'
-                }`} />
-                <span className="text-sm text-muted-foreground">
-                  {connectionStatus === 'connected' ? 'Bağlı' : 
-                   connectionStatus === 'testing' ? 'Test ediliyor...' : 
-                   'Bağlı değil'}
-                </span>
-              </div>
-            </CardTitle>
-          </CardHeader>
-        </Card>
+          <div className="grid gap-6">
+            {/* Connection Status */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>{t('databaseConfig.connectionStatus.title')}</span>
+                  <div className="flex items-center gap-2">
+                    <div className={`h-3 w-3 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' :
+                      connectionStatus === 'testing' ? 'bg-yellow-500 animate-pulse' :
+                        'bg-red-500'
+                      }`} />
+                    <span className="text-sm text-muted-foreground">
+                      {connectionStatus === 'connected' ? t('databaseConfig.connectionStatus.connected') :
+                        connectionStatus === 'testing' ? t('databaseConfig.connectionStatus.testing') :
+                          t('databaseConfig.connectionStatus.disconnected')}
+                    </span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+            </Card>
 
-        {/* PostgreSQL Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Server className="h-5 w-5" />
-              PostgreSQL Ayarları
-            </CardTitle>
-            <CardDescription>
-              Veritabanı sunucu bağlantı bilgileri
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="host">Host / IP Adresi</Label>
-                <Input
-                  id="host"
-                  value={config.host}
-                  onChange={(e) => handleInputChange('host', e.target.value)}
-                  placeholder="localhost veya IP adresi"
-                />
-              </div>
-              <div>
-                <Label htmlFor="port">Port</Label>
-                <Input
-                  id="port"
-                  type="number"
-                  value={config.port}
-                  onChange={(e) => handleInputChange('port', parseInt(e.target.value))}
-                  placeholder="5432"
-                />
-              </div>
-            </div>
+            {/* PostgreSQL Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Server className="h-5 w-5" />
+                  {t('databaseConfig.settings.title')}
+                </CardTitle>
+                <CardDescription>
+                  {t('databaseConfig.settings.description')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="host">{t('databaseConfig.settings.host')}</Label>
+                    <Input
+                      id="host"
+                      value={config.host}
+                      onChange={(e) => handleInputChange('host', e.target.value)}
+                      placeholder={t('databaseConfig.settings.hostPlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="port">{t('databaseConfig.settings.port')}</Label>
+                    <Input
+                      id="port"
+                      type="number"
+                      value={config.port}
+                      onChange={(e) => handleInputChange('port', parseInt(e.target.value))}
+                      placeholder={t('databaseConfig.settings.portPlaceholder')}
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <Label htmlFor="database">Veritabanı Adı</Label>
-              <Input
-                id="database"
-                value={config.database}
-                onChange={(e) => handleInputChange('database', e.target.value)}
-                placeholder="lsemb veya müşteri veritabanı adı"
-              />
-            </div>
+                <div>
+                  <Label htmlFor="database">{t('databaseConfig.settings.database')}</Label>
+                  <Input
+                    id="database"
+                    value={config.database}
+                    onChange={(e) => handleInputChange('database', e.target.value)}
+                    placeholder={t('databaseConfig.settings.databasePlaceholder')}
+                  />
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="username">Kullanıcı Adı</Label>
-                <Input
-                  id="username"
-                  value={config.username}
-                  onChange={(e) => handleInputChange('username', e.target.value)}
-                  placeholder="postgres"
-                />
-              </div>
-              <div>
-                <Label htmlFor="password">Şifre</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={config.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  placeholder="••••••••"
-                />
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="username">{t('databaseConfig.settings.username')}</Label>
+                    <Input
+                      id="username"
+                      value={config.username}
+                      onChange={(e) => handleInputChange('username', e.target.value)}
+                      placeholder={t('databaseConfig.settings.usernamePlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">{t('databaseConfig.settings.password')}</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={config.password}
+                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <Label htmlFor="schema">Schema (RAG Data)</Label>
-              <Input
-                id="schema"
-                value={config.schema}
-                onChange={(e) => handleInputChange('schema', e.target.value)}
-                placeholder="rag_data"
-              />
-            </div>
-          </CardContent>
-        </Card>
+                <div>
+                  <Label htmlFor="schema">{t('databaseConfig.settings.schema')}</Label>
+                  <Input
+                    id="schema"
+                    value={config.schema}
+                    onChange={(e) => handleInputChange('schema', e.target.value)}
+                    placeholder={t('databaseConfig.settings.schemaPlaceholder')}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Advanced Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Gelişmiş Ayarlar
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="sslMode">SSL Modu</Label>
-                <Select value={config.sslMode} onValueChange={(value) => handleInputChange('sslMode', value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="disable">Devre Dışı</SelectItem>
-                    <SelectItem value="require">Zorunlu</SelectItem>
-                    <SelectItem value="verify-ca">CA Doğrula</SelectItem>
-                    <SelectItem value="verify-full">Tam Doğrula</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="poolSize">Bağlantı Havuzu Boyutu</Label>
-                <Input
-                  id="poolSize"
-                  type="number"
-                  value={config.poolSize}
-                  onChange={(e) => handleInputChange('poolSize', parseInt(e.target.value))}
-                  placeholder="20"
-                />
-              </div>
-            </div>
+            {/* Advanced Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  {t('databaseConfig.settings.advanced.title')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="sslMode">{t('databaseConfig.settings.advanced.sslMode')}</Label>
+                    <Select value={config.sslMode} onValueChange={(value) => handleInputChange('sslMode', value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="disable">{t('databaseConfig.settings.advanced.sslDisable')}</SelectItem>
+                        <SelectItem value="require">{t('databaseConfig.settings.advanced.sslRequire')}</SelectItem>
+                        <SelectItem value="verify-ca">{t('databaseConfig.settings.advanced.sslVerifyCa')}</SelectItem>
+                        <SelectItem value="verify-full">{t('databaseConfig.settings.advanced.sslVerifyFull')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="poolSize">{t('databaseConfig.settings.advanced.poolSize')}</Label>
+                    <Input
+                      id="poolSize"
+                      type="number"
+                      value={config.poolSize}
+                      onChange={(e) => handleInputChange('poolSize', parseInt(e.target.value))}
+                      placeholder={t('databaseConfig.settings.advanced.poolSizePlaceholder')}
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <Label htmlFor="connectionString">Bağlantı Dizesi (Otomatik)</Label>
-              <Input
-                id="connectionString"
-                value={config.connectionString || ''}
-                readOnly
-                className="bg-muted font-mono text-sm"
-              />
-            </div>
-          </CardContent>
-        </Card>
+                <div>
+                  <Label htmlFor="connectionString">{t('databaseConfig.settings.advanced.connectionString')}</Label>
+                  <Input
+                    id="connectionString"
+                    value={config.connectionString || ''}
+                    readOnly
+                    className="bg-muted font-mono text-sm"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Actions */}
-        <div className="flex gap-4 justify-end">
-          <Button
-            variant="outline"
-            onClick={testConnection}
-            disabled={isTesting}
-          >
-            {isTesting ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Test Ediliyor...
-              </>
-            ) : (
-              <>
-                <TestTube className="h-4 w-4 mr-2" />
-                Bağlantıyı Test Et
-              </>
-            )}
-          </Button>
-          <Button
-            onClick={saveConfig}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Kaydediliyor...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Ayarları Kaydet
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-      </TabsContent>
-
-      <TabsContent value="migrations" className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Database Migrations</span>
-              <Button>
-                <Upload className="h-4 w-4 mr-2" />
-                Migration Yükle
+            {/* Actions */}
+            <div className="flex gap-4 justify-end">
+              <Button
+                variant="outline"
+                onClick={testConnection}
+                disabled={isTesting}
+              >
+                {isTesting ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    {t('databaseConfig.settings.actions.testing')}
+                  </>
+                ) : (
+                  <>
+                    <TestTube className="h-4 w-4 mr-2" />
+                    {t('databaseConfig.settings.actions.testConnection')}
+                  </>
+                )}
               </Button>
-            </CardTitle>
-            <CardDescription>
-              Veritabanı schema değişikliklerini yönetin
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {migrations.map((migration) => (
-                <Card key={migration.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h4 className="font-medium">{migration.name}</h4>
-                          <Badge variant={
-                            migration.status === 'completed' ? 'default' :
-                            migration.status === 'running' ? 'secondary' :
-                            migration.status === 'failed' ? 'destructive' : 'outline'
-                          }>
-                            {migration.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{migration.description}</p>
-                        {migration.executedAt && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Çalıştırma: {migration.executedAt.toLocaleString('tr-TR')}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        {migration.status === 'pending' && (
-                          <Button
-                            size="sm"
-                            onClick={() => runMigration(migration.id, 'up')}
-                            disabled={isMigrating}
-                          >
-                            Çalıştır
-                          </Button>
-                        )}
-                        {migration.status === 'completed' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => runMigration(migration.id, 'down')}
-                            disabled={isMigrating}
-                          >
-                            Geri Al
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              <Button
+                onClick={saveConfig}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    {t('databaseConfig.settings.actions.saving')}
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    {t('databaseConfig.settings.actions.saveSettings')}
+                  </>
+                )}
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Özel Migration</CardTitle>
-            <CardDescription>
-              SQL script çalıştırın
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea
-              placeholder="SQL migration scriptini buraya yapıştırın..."
-              value={migrationScript}
-              onChange={(e) => setMigrationScript(e.target.value)}
-              rows={10}
-              className="font-mono text-sm"
-            />
-            <Button>
-              <FileText className="h-4 w-4 mr-2" />
-              Scripti Çalıştır
-            </Button>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="backups" className="space-y-6">
-        <div className="flex items-center justify-between">
+        <TabsContent value="migrations" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Backup İstatistikleri</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>{t('databaseConfig.migrations.title')}</span>
+                <Button>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.migrations.uploadMigration')}
+                </Button>
+              </CardTitle>
+              <CardDescription>
+                {t('databaseConfig.migrations.description')}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold">{backups.length}</p>
-                  <p className="text-sm text-muted-foreground">Toplam Backup</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {backups.filter(b => b.type === 'full').length}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Full Backup</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {backups.filter(b => b.type === 'incremental').length}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Incremental</p>
-                </div>
+              <div className="space-y-4">
+                {migrations.map((migration) => (
+                  <Card key={migration.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-medium">{migration.name}</h4>
+                            <Badge variant={
+                              migration.status === 'completed' ? 'default' :
+                                migration.status === 'running' ? 'secondary' :
+                                  migration.status === 'failed' ? 'destructive' : 'outline'
+                            }>
+                              {t(`databaseConfig.migrations.status.${migration.status}`)}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{migration.description}</p>
+                          {migration.executedAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {t('databaseConfig.migrations.executedAt', { date: migration.executedAt.toLocaleString() })}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {migration.status === 'pending' && (
+                            <Button
+                              size="sm"
+                              onClick={() => runMigration(migration.id, 'up')}
+                              disabled={isMigrating}
+                            >
+                              {t('databaseConfig.migrations.actions.run')}
+                            </Button>
+                          )}
+                          {migration.status === 'completed' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => runMigration(migration.id, 'down')}
+                              disabled={isMigrating}
+                            >
+                              {t('databaseConfig.migrations.actions.rollback')}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </CardContent>
           </Card>
 
-          <div className="flex gap-2">
-            <Button onClick={() => createBackup('full')} disabled={isBackingUp}>
-              <Download className="h-4 w-4 mr-2" />
-              Full Backup
-            </Button>
-            <Button onClick={() => createBackup('incremental')} disabled={isBackingUp} variant="outline">
-              <Download className="h-4 w-4 mr-2" />
-              Incremental Backup
-            </Button>
-          </div>
-        </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('databaseConfig.migrations.customMigration')}</CardTitle>
+              <CardDescription>
+                {t('databaseConfig.migrations.description')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                placeholder={t('databaseConfig.migrations.scriptPlaceholder')}
+                value={migrationScript}
+                onChange={(e) => setMigrationScript(e.target.value)}
+                rows={10}
+                className="font-mono text-sm"
+              />
+              <Button>
+                <FileText className="h-4 w-4 mr-2" />
+                {t('databaseConfig.migrations.runScript')}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Backup Geçmişi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {backups.map((backup) => (
-                <Card key={backup.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium">{backup.filename}</h4>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-                          <span>{backup.size}</span>
-                          <span>•</span>
-                          <span>{backup.type}</span>
-                          <span>•</span>
-                          <span>{backup.createdAt.toLocaleString('tr-TR')}</span>
+        <TabsContent value="backups" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('databaseConfig.backups.title')}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{backups.length}</p>
+                    <p className="text-sm text-muted-foreground">{t('databaseConfig.backups.totalBackups')}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {backups.filter(b => b.type === 'full').length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{t('databaseConfig.backups.fullBackups')}</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {backups.filter(b => b.type === 'incremental').length}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{t('databaseConfig.backups.incrementalBackups')}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex gap-2">
+              <Button onClick={() => createBackup('full')} disabled={isBackingUp}>
+                <Download className="h-4 w-4 mr-2" />
+                {t('databaseConfig.backups.actions.createFull')}
+              </Button>
+              <Button onClick={() => createBackup('incremental')} disabled={isBackingUp} variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                {t('databaseConfig.backups.actions.createIncremental')}
+              </Button>
+            </div>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('databaseConfig.backups.history.title')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {backups.map((backup) => (
+                  <Card key={backup.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">{backup.filename}</h4>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                            <span>{backup.size}</span>
+                            <span>•</span>
+                            <span>{backup.type}</span>
+                            <span>•</span>
+                            <span>{backup.createdAt.toLocaleString('tr-TR')}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={
+                            backup.status === 'completed' ? 'default' :
+                              backup.status === 'restoring' ? 'secondary' : 'destructive'
+                          }>
+                            {backup.status}
+                          </Badge>
+                          {backup.status === 'completed' && (
+                            <>
+                              <ConfirmTooltip
+                                onConfirm={() => restoreBackup(backup.id)}
+                                message={t('databaseConfig.backups.history.restoreConfirm')}
+                                side="top"
+                              >
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  {t('databaseConfig.backups.actions.restore')}
+                                </Button>
+                              </ConfirmTooltip>
+                              <Button size="sm" variant="outline">
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={
-                          backup.status === 'completed' ? 'default' :
-                          backup.status === 'restoring' ? 'secondary' : 'destructive'
-                        }>
-                          {backup.status}
-                        </Badge>
-                        {backup.status === 'completed' && (
-                          <>
-                            <ConfirmTooltip
-                              onConfirm={() => restoreBackup(backup.id)}
-                              message="Backup geri yüklensin mi?"
-                              side="top"
-                            >
-                              <Button
-                                size="sm"
-                                variant="outline"
-                              >
-                                Geri Yükle
-                              </Button>
-                            </ConfirmTooltip>
-                            <Button size="sm" variant="outline">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="tools" className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Database Tools
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button className="w-full justify-start">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Vacuum & Analyze
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <FileText className="h-4 w-4 mr-2" />
-                Generate Schema Report
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Database className="h-4 w-4 mr-2" />
-                View Query Stats
-              </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="tools" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  {t('databaseConfig.tools.databaseTools.title')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button className="w-full justify-start">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.tools.databaseTools.vacuumAnalyze')}
+                </Button>
+                <Button className="w-full justify-start" variant="outline">
+                  <FileText className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.tools.databaseTools.generateSchemaReport')}
+                </Button>
+                <Button className="w-full justify-start" variant="outline">
+                  <Database className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.tools.databaseTools.viewQueryStats')}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  {t('databaseConfig.tools.securityTools.title')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button className="w-full justify-start">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.tools.securityTools.validatePermissions')}
+                </Button>
+                <Button className="w-full justify-start" variant="outline">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.tools.securityTools.checkVulnerabilities')}
+                </Button>
+                <Button className="w-full justify-start" variant="outline">
+                  <Clock className="h-4 w-4 mr-2" />
+                  {t('databaseConfig.tools.securityTools.auditTrailReport')}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                Security Tools
-              </CardTitle>
+              <CardTitle>{t('databaseConfig.tools.queryEditor.title')}</CardTitle>
+              <CardDescription>
+                {t('databaseConfig.tools.queryEditor.description')}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Button className="w-full justify-start">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Validate Permissions
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <XCircle className="h-4 w-4 mr-2" />
-                Check for Vulnerabilities
-              </Button>
-              <Button className="w-full justify-start" variant="outline">
-                <Clock className="h-4 w-4 mr-2" />
-                Audit Trail Report
-              </Button>
+            <CardContent className="space-y-4">
+              <Textarea
+                placeholder={t('databaseConfig.tools.queryEditor.placeholder')}
+                rows={5}
+                className="font-mono text-sm"
+              />
+              <div className="flex gap-2">
+                <Button>{t('databaseConfig.tools.queryEditor.run')}</Button>
+                <Button variant="outline">{t('databaseConfig.tools.queryEditor.save')}</Button>
+                <Button variant="outline">{t('databaseConfig.tools.queryEditor.close')}</Button>
+              </div>
             </CardContent>
           </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Query Editor</CardTitle>
-            <CardDescription>
-              Doğrudan SQL sorguları çalıştırın
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea
-              placeholder="SELECT * FROM table_name LIMIT 10;"
-              rows={5}
-              className="font-mono text-sm"
-            />
-            <div className="flex gap-2">
-              <Button>Çalıştır</Button>
-              <Button variant="outline">Kaydet</Button>
-              <Button variant="outline">Açıkla</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-      </Tabs>
-    </div>
+        </TabsContent>
+      </Tabs >
+    </div >
   );
 }

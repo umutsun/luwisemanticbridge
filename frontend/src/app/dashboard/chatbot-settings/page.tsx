@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +43,7 @@ interface Suggestion {
 }
 
 export default function ChatbotSettingsPage() {
+  const { t } = useTranslation();
 
   const [settings, setSettings] = useState<ChatbotSettings>({
     title: '',
@@ -50,7 +52,7 @@ export default function ChatbotSettingsPage() {
     primaryColor: '#3B82F6',
     suggestions: '[]'
   });
-  
+
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,7 +67,7 @@ export default function ChatbotSettingsPage() {
     try {
       const response = await fetch('http://localhost:8084/api/v2/chatbot/settings');
       const data = await response.json();
-      
+
       setSettings({
         title: data.title || '',
         welcomeMessage: data.welcomeMessage || '',
@@ -73,7 +75,7 @@ export default function ChatbotSettingsPage() {
         primaryColor: data.primaryColor || '#3B82F6',
         suggestions: data.suggestions || '[]'
       });
-      
+
       try {
         const parsedSuggestions = JSON.parse(data.suggestions || '[]');
         setSuggestions(Array.isArray(parsedSuggestions) ? parsedSuggestions : []);
@@ -82,7 +84,7 @@ export default function ChatbotSettingsPage() {
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
-      setMessage({ type: 'error', text: 'Ayarlar yüklenemedi' });
+      setMessage({ type: 'error', text: t('toasts.settingsSavedError') });
     } finally {
       setLoading(false);
     }
@@ -91,7 +93,7 @@ export default function ChatbotSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
-    
+
     try {
       const response = await fetch('http://localhost:8084/api/v2/chatbot/settings', {
         method: 'POST',
@@ -101,9 +103,9 @@ export default function ChatbotSettingsPage() {
           suggestions: JSON.stringify(suggestions)
         })
       });
-      
+
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Ayarlar başarıyla kaydedildi' });
+        setMessage({ type: 'success', text: t('toasts.settingsSavedSuccess') });
         // Refresh the page after 1.5 seconds
         setTimeout(() => {
           window.location.reload();
@@ -113,29 +115,29 @@ export default function ChatbotSettingsPage() {
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
-      setMessage({ type: 'error', text: 'Ayarlar kaydedilemedi' });
+      setMessage({ type: 'error', text: t('toasts.settingsSavedError') });
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = async () => {
-    if (!confirm('Tüm ayarlar varsayılan değerlere dönecek. Emin misiniz?')) {
+    if (!confirm(t('prompts.confirmReset'))) {
       return;
     }
-    
+
     try {
       const response = await fetch('http://localhost:8084/api/v2/chatbot/settings', {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
-        setMessage({ type: 'success', text: 'Ayarlar sıfırlandı' });
+        setMessage({ type: 'success', text: t('prompts.settingsReset') });
         fetchSettings();
       }
     } catch (error) {
       console.error('Failed to reset settings:', error);
-      setMessage({ type: 'error', text: 'Ayarlar sıfırlanamadı' });
+      setMessage({ type: 'error', text: t('prompts.settingsResetFailed') });
     }
   };
 
@@ -162,10 +164,10 @@ export default function ChatbotSettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Chatbot Ayarları
+            {t('prompts.title')}
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Chatbot başlık, karşılama mesajı ve görünümünü özelleştirin
+            {t('prompts.generalSettings.description')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -175,14 +177,14 @@ export default function ChatbotSettingsPage() {
             disabled={loading || saving}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Varsayılana Dön
+            {t('prompts.buttons.resetToDefault')}
           </Button>
           <Button
             onClick={handleSave}
             disabled={loading || saving}
           >
             <Save className="h-4 w-4 mr-2" />
-            {saving ? 'Kaydediliyor...' : 'Kaydet'}
+            {saving ? t('prompts.buttons.saving') : t('prompts.buttons.save')}
           </Button>
         </div>
       </div>
@@ -207,24 +209,24 @@ export default function ChatbotSettingsPage() {
         <CardContent>
           <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6">
             <div className="text-center max-w-lg mx-auto">
-              <div 
+              <div
                 className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg"
                 style={{ backgroundColor: settings.primaryColor }}
               >
                 <Bot className="w-10 h-10 text-white" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                {settings.title || 'Chatbot Başlığı'}
+                {settings.title || t('prompts.labels.chatbotTitle')}
               </h2>
               <p className="text-gray-600 dark:text-gray-400 mb-8">
-                {settings.welcomeMessage || 'Karşılama mesajınız buraya gelecek'}
+                {settings.welcomeMessage || t('prompts.placeholders.welcomeMessage')}
               </p>
               {suggestions.length > 0 && (
                 <div className="grid grid-cols-1 gap-3 text-left">
                   {suggestions.slice(0, 3).map((suggestion, index) => (
                     <div key={index} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border">
                       <p className="text-sm font-medium">
-                        {suggestion.icon} {suggestion.title || 'Öneri Başlığı'}
+                        {suggestion.icon} {suggestion.title || t('prompts.suggestions.suggestion')}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {suggestion.description || 'Öneri açıklaması'}
@@ -243,7 +245,7 @@ export default function ChatbotSettingsPage() {
         <TabsList>
           <TabsTrigger value="general">
             <Settings className="h-4 w-4 mr-2" />
-            Genel Ayarlar
+            {t('prompts.generalSettings.title')}
           </TabsTrigger>
           <TabsTrigger value="appearance">
             <Palette className="h-4 w-4 mr-2" />
@@ -277,7 +279,7 @@ export default function ChatbotSettingsPage() {
                   Chat penceresinde görünecek başlık
                 </p>
               </div>
-              
+
               <div>
                 <Label htmlFor="welcomeMessage">Karşılama Mesajı</Label>
                 <Textarea
@@ -289,10 +291,10 @@ export default function ChatbotSettingsPage() {
                   rows={3}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Kullanıcı chat'i açtığında görecek ilk mesaj
+                  {t('prompts.placeholders.welcomeMessage')}
                 </p>
               </div>
-              
+
               <div>
                 <Label htmlFor="placeholder">Input Placeholder</Label>
                 <Input
@@ -303,7 +305,7 @@ export default function ChatbotSettingsPage() {
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Mesaj yazma alanında görünecek yardımcı metin
+                  {t('prompts.placeholders.inputPlaceholder')}
                 </p>
               </div>
             </CardContent>
@@ -337,10 +339,10 @@ export default function ChatbotSettingsPage() {
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  İkon ve vurgu renkleri için kullanılacak
+                  {t('prompts.general.appearance.theme.primaryColor')}
                 </p>
               </div>
-              
+
               <div className="grid grid-cols-4 gap-2">
                 <Button
                   variant="outline"
@@ -350,7 +352,7 @@ export default function ChatbotSettingsPage() {
                 >
                   <div className="space-y-1 text-center">
                     <div className="w-8 h-8 bg-blue-500 rounded mx-auto" />
-                    <span className="text-xs">Mavi</span>
+                    <span className="text-xs">{t('prompts.palettes.blue')}</span>
                   </div>
                 </Button>
                 <Button
@@ -361,7 +363,7 @@ export default function ChatbotSettingsPage() {
                 >
                   <div className="space-y-1 text-center">
                     <div className="w-8 h-8 bg-green-500 rounded mx-auto" />
-                    <span className="text-xs">Yeşil</span>
+                    <span className="text-xs">{t('prompts.palettes.green')}</span>
                   </div>
                 </Button>
                 <Button
@@ -372,7 +374,7 @@ export default function ChatbotSettingsPage() {
                 >
                   <div className="space-y-1 text-center">
                     <div className="w-8 h-8 bg-purple-500 rounded mx-auto" />
-                    <span className="text-xs">Mor</span>
+                    <span className="text-xs">{t('prompts.palettes.purple')}</span>
                   </div>
                 </Button>
                 <Button
@@ -383,7 +385,7 @@ export default function ChatbotSettingsPage() {
                 >
                   <div className="space-y-1 text-center">
                     <div className="w-8 h-8 bg-amber-500 rounded mx-auto" />
-                    <span className="text-xs">Turuncu</span>
+                    <span className="text-xs">{t('prompts.palettes.orange')}</span>
                   </div>
                 </Button>
               </div>
@@ -396,7 +398,7 @@ export default function ChatbotSettingsPage() {
             <CardHeader>
               <CardTitle>Öneri Kartları</CardTitle>
               <CardDescription>
-                Kullanıcılara gösterilecek öneri kartlarını düzenleyin
+                {t('prompts.suggestions.description')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -425,27 +427,27 @@ export default function ChatbotSettingsPage() {
                       <Input
                         value={suggestion.title}
                         onChange={(e) => updateSuggestion(index, 'title', e.target.value)}
-                        placeholder="Başlık"
+                        placeholder={t('prompts.suggestions.suggestion')}
                       />
                     </div>
                     <div className="col-span-6">
                       <Input
                         value={suggestion.description}
                         onChange={(e) => updateSuggestion(index, 'description', e.target.value)}
-                        placeholder="Açıklama"
+                        placeholder={t('documents.table.name')}
                       />
                     </div>
                   </div>
                 </div>
               ))}
-              
+
               <Button
                 variant="outline"
                 onClick={addSuggestion}
                 className="w-full"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Yeni Öneri Ekle
+                {t('prompts.buttons.addNewSuggestion')}
               </Button>
             </CardContent>
           </Card>

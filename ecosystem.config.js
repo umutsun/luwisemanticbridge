@@ -8,9 +8,9 @@ pdfmodule.exports = {
       interpreter_args: '-r dotenv/config -r ts-node/register',
       env: {
         NODE_ENV: 'development',
-        PORT: 8083,
+        PORT: 8080,
         ENABLE_WEBSOCKET: 'true',
-        WEBSOCKET_PORT: '8083',
+        WEBSOCKET_PORT: '8080',
         WEBSOCKET_PATH: '/socket.io',
         dotenv_config_path: '../.env.lsemb'
       },
@@ -27,12 +27,12 @@ pdfmodule.exports = {
     {
       name: 'lsemb-frontend',
       script: 'node_modules/next/dist/bin/next',
-      args: 'dev -p 3002',
+      args: 'dev -p 3000',
       cwd: 'c:/xampp/htdocs/lsemb/frontend',
       interpreter: 'node',
       env: {
         NODE_ENV: 'development',
-        PORT: 3002
+        PORT: 3000
       },
       node_args: '--max-old-space-size=2048',
       error_file: './logs/frontend-error.log',

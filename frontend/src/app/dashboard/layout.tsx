@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import Header from '@/components/Header';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { ConfigProvider, useConfig } from '@/contexts/ConfigContext';
@@ -20,6 +21,7 @@ interface User {
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { backendDown, error, refreshConfig } = useConfig();
   const router = useRouter();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (backendDown) {
@@ -39,10 +41,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           </div>
           <div className="space-y-2">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Backend Bağlantısı Kurulamadı
+              {t('header.menu.dashboard')}
             </h2>
             <p className="text-gray-600 dark:text-gray-400">
-              {error || 'Veritabanı veya backend servisi şu anda çalışmıyor.'}
+              {error || t('header.status.backendDown')}
             </p>
           </div>
           <div className="space-y-3">
@@ -54,17 +56,17 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
             >
               <RefreshCw className="h-5 w-5" />
-              Yeniden Dene
+              {t('common.retry')}
             </button>
             <button
               onClick={() => router.push('/setup')}
               className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 font-medium rounded-lg transition-colors"
             >
-              Kurulum Sayfasına Git
+              {t('dashboard.setup.goToSetup')}
             </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-500">
-            Setup sayfasına otomatik olarak yönlendiriliyorsunuz...
+            {t('dashboard.setup.autoRedirect')}
           </p>
         </div>
       </div>
@@ -82,6 +84,7 @@ export default function DashboardLayout({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { t } = useTranslation();
 
   useEffect(() => {
     checkAuth();
@@ -155,9 +158,9 @@ export default function DashboardLayout({
           </div>
           <div>
             <p className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              Yükleniyor
+              {t('common.loading')}
             </p>
-            </div>
+          </div>
         </div>
       </div>
     );

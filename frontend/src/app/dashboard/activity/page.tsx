@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getApiUrl } from '../../../lib/config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -127,6 +128,7 @@ interface DashboardStats {
 }
 
 export default function ActivityPage() {
+  const { t } = useTranslation();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [statistics, setStatistics] = useState<ActivityStats[]>([]);
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
@@ -225,7 +227,7 @@ export default function ActivityPage() {
       setDashboardData(dashboardData);
     } catch (err) {
       console.error('Error fetching activities:', err);
-      setError('Aktivite geçmişi yüklenemedi');
+      setError(t('dashboard.activity.loadError'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -306,8 +308,8 @@ export default function ActivityPage() {
     name: stat.operation_type.charAt(0).toUpperCase() + stat.operation_type.slice(1),
     value: parseInt(stat.count),
     color: stat.operation_type === 'scrape' ? '#3b82f6' :
-           stat.operation_type === 'embedding' ? '#10b981' :
-           stat.operation_type === 'delete' ? '#ef4444' : '#8b5cf6'
+      stat.operation_type === 'embedding' ? '#10b981' :
+        stat.operation_type === 'delete' ? '#ef4444' : '#8b5cf6'
   }));
 
   const dailyActivityData = [
@@ -341,7 +343,7 @@ export default function ActivityPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Activity className="h-6 w-6 text-[#3b82f6]" />
-            Aktivite Geçmişi
+            {t('dashboard.activity.title')}
           </h1>
           <p className="text-muted-foreground mt-1">Tüm sistem aktivitelerini ve metrikleri takip edin</p>
         </div>
@@ -355,7 +357,7 @@ export default function ActivityPage() {
         </Button>
       </div>
 
-          {/* Summary Cards */}
+      {/* Summary Cards */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="border-2 border-[#3b82f6]/20">
@@ -366,7 +368,7 @@ export default function ActivityPage() {
             <CardContent>
               <div className="text-2xl font-bold">{formatNumber(summary.total_activities)}</div>
               <p className="text-xs text-muted-foreground">
-                Son 30 günde
+                {t('dashboard.activity.last30Days')}
               </p>
             </CardContent>
           </Card>
@@ -416,7 +418,7 @@ export default function ActivityPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PieChart className="h-5 w-5" />
-              Aktivite Dağılımı
+              {t('dashboard.activity.activityDistribution')}
             </CardTitle>
             <CardDescription>İşlem tiplerine göre dağılım</CardDescription>
           </CardHeader>
@@ -428,7 +430,7 @@ export default function ActivityPage() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({name, percent}) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -447,7 +449,7 @@ export default function ActivityPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Haftalık Aktivite
+              {t('dashboard.activity.weeklyActivity')}
             </CardTitle>
             <CardDescription>Son 7 günlük aktivite trendi</CardDescription>
           </CardHeader>
@@ -530,7 +532,7 @@ export default function ActivityPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
-            Filtreler
+            {t('dashboard.activity.filters')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -567,14 +569,14 @@ export default function ActivityPage() {
         </CardContent>
       </Card>
 
-          {/* Activity List */}
+      {/* Activity List */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Database className="h-5 w-5" />
-                Aktivite Kayıtları
+                {t('dashboard.activity.activityRecords')}
               </CardTitle>
               <CardDescription>Tüm işlemlerin detaylı logları</CardDescription>
             </div>

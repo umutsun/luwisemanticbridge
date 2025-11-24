@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { LoginData } from '@/types/auth';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginForm() {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState<LoginData>({
     email: '',
     password: '',
@@ -37,7 +39,7 @@ export default function LoginForm() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
+            {t('common.email')}
           </label>
           <input
             id="email"
@@ -47,13 +49,13 @@ export default function LoginForm() {
             value={formData.email}
             onChange={handleChange}
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder="ornek@email.com"
+            placeholder={t('login.emailPlaceholder', 'example@email.com')}
           />
         </div>
 
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Şifre
+            {t('common.password')}
           </label>
           <div className="mt-1 relative">
             <input
@@ -103,7 +105,7 @@ export default function LoginForm() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
             ) : (
-              'Giriş Yap'
+              t('common.login')
             )}
           </button>
         </div>

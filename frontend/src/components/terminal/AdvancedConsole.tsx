@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -130,6 +131,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
     autoScroll = true,
     maxLogs = 1000
 }) => {
+    const { t } = useTranslation();
     const [logs, setLogs] = useState<ConsoleLog[]>([]);
     const [commands, setCommands] = useState<ConsoleCommand[]>([]);
     const [bookmarks, setBookmarks] = useState<ConsoleBookmark[]>([]);
@@ -192,6 +194,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 wsRef.current.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     addLog('error', 'WebSocket connection error', 'system');
+                    addLog('error', `WebSocket error: ${error.message || 'Unknown error'}`, 'system');
                 };
             } catch (error) {
                 console.error('Failed to connect to WebSocket:', error);
@@ -319,7 +322,10 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                 break;
             case '/clear':
                 setLogs([]);
-                addLog('success', 'Console cleared', 'system');
+                // Force re-render by creating a new array reference
+                setTimeout(() => {
+                    addLog('success', 'Console cleared', 'system');
+                }, 10);
                 break;
             case '/export':
                 exportLogs();
@@ -705,10 +711,10 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                             <Terminal className="h-4 w-4" />
                             <CardTitle className="text-sm font-semibold">Advanced Console</CardTitle>
                             <Badge variant={isConnected ? 'default' : 'error'} className="text-xs">
-                                {isConnected ? 'LIVE' : 'OFFLINE'}
+                                {isConnected ? t('terminal.connected') : t('terminal.offline')}
                             </Badge>
                             <Badge variant={isPaused ? 'secondary' : 'default'} className="text-xs">
-                                {isPaused ? 'PAUSED' : 'STREAMING'}
+                                {isPaused ? t('terminal.paused') : t('terminal.streaming')}
                             </Badge>
                             <span className="text-xs text-gray-500">
                                 ({filteredLogs.length} / {logs.length} logs)
@@ -761,7 +767,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                                 <Search className="h-3 w-3 text-gray-500" />
                                 <Input
                                     type="text"
-                                    placeholder="Search logs..."
+                                    placeholder={t('terminal.placeholders.searchLogs')}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="h-6 text-xs w-40"
@@ -773,11 +779,11 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                                 onChange={(e) => setFilterLevel(e.target.value)}
                                 className="h-6 text-xs px-2 border rounded"
                             >
-                                <option value="all">All Levels</option>
-                                <option value="error">Error</option>
-                                <option value="warn">Warning</option>
-                                <option value="info">Info</option>
-                                <option value="debug">Debug</option>
+                                <option value="all">{t('terminal.placeholders.allLevels')}</option>
+                                <option value="error">{t('terminal.status.errorLevel')}</option>
+                                <option value="warn">{t('terminal.status.warningLevel')}</option>
+                                <option value="info">{t('terminal.status.infoLevel')}</option>
+                                <option value="debug">{t('terminal.status.debugLevel')}</option>
                             </select>
 
                             <select
@@ -785,11 +791,11 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                                 onChange={(e) => setFilterSource(e.target.value)}
                                 className="h-6 text-xs px-2 border rounded"
                             >
-                                <option value="all">All Sources</option>
-                                <option value="backend">Backend</option>
-                                <option value="frontend">Frontend</option>
-                                <option value="system">System</option>
-                                <option value="user">User</option>
+                                <option value="all">{t('terminal.placeholders.allSources')}</option>
+                                <option value="backend">{t('terminal.status.backendSource')}</option>
+                                <option value="frontend">{t('terminal.status.frontendSource')}</option>
+                                <option value="system">{t('terminal.status.systemSource')}</option>
+                                <option value="user">{t('terminal.status.userSource')}</option>
                             </select>
 
                             <Button
@@ -883,7 +889,7 @@ export const AdvancedConsole: React.FC<AdvancedConsoleProps> = ({
                                         handleAutoComplete();
                                     }
                                 }}
-                                placeholder="Type /help for available commands..."
+                                placeholder={t('terminal.status.commandPlaceholder')}
                                 className="w-full px-3 py-2 pr-10 text-sm font-mono rounded-lg outline-none transition-all duration-300
                            bg-white/30 dark:bg-black/30
                            border border-white/40 dark:border-white/20

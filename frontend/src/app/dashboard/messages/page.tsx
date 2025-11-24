@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,7 @@ interface SessionMessage {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
 export default function MessagesPage() {
-
+  const { t } = useTranslation();
   const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
@@ -253,7 +254,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert('Session flushed to embeddings successfully!');
+        alert(t('messages.alerts.sessionFlushed'));
         loadSessions();
       }
     } catch (error) {
@@ -272,7 +273,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert('Message embeddings generation started!');
+        alert(t('messages.alerts.embeddingsGenerationStarted'));
         loadAnalytics();
         if (selectedSession) {
           loadSessionDetails(selectedSession.session_id);
@@ -294,7 +295,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert('Response embedded successfully!');
+        alert(t('messages.alerts.responseEmbedded'));
         if (selectedSession) {
           loadSessionDetails(selectedSession.session_id);
         }
@@ -308,16 +309,16 @@ export default function MessagesPage() {
     if (!selectedSession || sessionMessages.length === 0) return;
 
     try {
-        const response = await fetchWithAuth(`/api/v2/messages/embeddings/batch/session/${selectedSession.session_id}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+      const response = await fetchWithAuth(`/api/v2/messages/embeddings/batch/session/${selectedSession.session_id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
       if (response.ok) {
-        alert('Toplu embedding işlemi başlatıldı!');
+        alert(t('messages.alerts.batchEmbeddingStarted'));
         loadSessionDetails(selectedSession.session_id);
       }
     } catch (error) {
@@ -329,19 +330,19 @@ export default function MessagesPage() {
     if (selectedMessages.length === 0) return;
 
     try {
-        const response = await fetchWithAuth('/api/v2/messages/embeddings/batch', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messageIds: selectedMessages
-          })
-        });
+      const response = await fetchWithAuth('/api/v2/messages/embeddings/batch', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messageIds: selectedMessages
+        })
+      });
 
       if (response.ok) {
-        alert('Seçilen mesajlar için embedding işlemi başlatıldı!');
+        alert(t('messages.alerts.selectedEmbeddingStarted'));
         setSelectedMessages([]);
         setShowBatchActions(false);
         if (selectedSession) {
@@ -363,7 +364,7 @@ export default function MessagesPage() {
       });
 
       if (response.ok) {
-        alert('Oturum başarıyla silindi!');
+        alert(t('messages.alerts.sessionDeleted'));
         loadSessions();
         if (selectedSession?.session_id === sessionId) {
           setSelectedSession(null);
@@ -379,19 +380,19 @@ export default function MessagesPage() {
     if (selectedSessions.length === 0) return;
 
     try {
-        const response = await fetchWithAuth('/api/v2/messages/sessions/batch', {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            sessionIds: selectedSessions
-          })
-        });
+      const response = await fetchWithAuth('/api/v2/messages/sessions/batch', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionIds: selectedSessions
+        })
+      });
 
       if (response.ok) {
-        alert('Seçilen oturumlar başarıyla silindi!');
+        alert(t('messages.alerts.selectedSessionsDeleted'));
         setSelectedSessions([]);
         loadSessions();
       }
@@ -514,11 +515,11 @@ export default function MessagesPage() {
       avgQuestionLength: Math.round(avgQuestionLength),
       avgResponseTime: Math.round(avgResponseTime / 1000), // Convert to seconds
       mostFrequentTopics: Object.entries(topicFrequency)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
         .map(([topic, freq]) => ({ topic, freq })),
       sessionDuration: new Date(sessionMessages[sessionMessages.length - 1].timestamp).getTime() -
-                     new Date(sessionMessages[0].timestamp).getTime()
+        new Date(sessionMessages[0].timestamp).getTime()
     };
   };
 
@@ -532,12 +533,12 @@ export default function MessagesPage() {
   })) || [];
 
   const messageTypesData = stats.messageTypes?.map((m: any) => ({
-    name: m.message_type === 'question' ? 'Sorular' :
-          m.message_type === 'answer' ? 'Cevaplar' :
-          m.message_type === 'search_result' ? 'Arama Sonuçları' : m.message_type,
+    name: m.message_type === 'question' ? t('messages.messageTypes.questions') :
+      m.message_type === 'answer' ? t('messages.messageTypes.answers') :
+        m.message_type === 'search_result' ? t('messages.messageTypes.searchResults') : m.message_type,
     value: parseInt(m.count),
     color: m.message_type === 'question' ? '#3B82F6' :
-           m.message_type === 'answer' ? '#10B981' : '#F59E0B'
+      m.message_type === 'answer' ? '#10B981' : '#F59E0B'
   })) || [];
 
   const topicsData = topics.slice(0, 10).map((t) => ({
@@ -550,9 +551,9 @@ export default function MessagesPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Mesaj Analizleri</h1>
+          <h1 className="text-xl font-semibold">{t('messages.title')}</h1>
           <p className="text-muted-foreground mt-1">
-            Kullanıcı mesajlaşmaları, arama sonuçları ve öğrenme verileri
+            {t('messages.subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -561,16 +562,16 @@ export default function MessagesPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="7">Son 7 gün</SelectItem>
-              <SelectItem value="30">Son 30 gün</SelectItem>
-              <SelectItem value="90">Son 90 gün</SelectItem>
+              <SelectItem value="7">{t('messages.timeRange.last7Days')}</SelectItem>
+              <SelectItem value="30">{t('messages.timeRange.last30Days')}</SelectItem>
+              <SelectItem value="90">{t('messages.timeRange.last90Days')}</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => handleExport('json')}>
-            İndir (JSON)
+            {t('common.download')} (JSON)
           </Button>
           <Button variant="outline" onClick={() => handleExport('csv')}>
-            İndir (CSV)
+            {t('common.download')} (CSV)
           </Button>
         </div>
       </div>
@@ -578,19 +579,19 @@ export default function MessagesPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">
-            Genel Bakış
+            {t('messages.tabs.overview')}
           </TabsTrigger>
           <TabsTrigger value="sessions">
-            Oturumlar
+            {t('messages.tabs.sessions')}
           </TabsTrigger>
           <TabsTrigger value="topics">
-            Konular
+            {t('messages.tabs.topics')}
           </TabsTrigger>
           <TabsTrigger value="search">
-            Araştırma
+            {t('messages.tabs.research')}
           </TabsTrigger>
           <TabsTrigger value="analytics">
-            Analitik
+            {t('messages.tabs.analytics')}
           </TabsTrigger>
         </TabsList>
 
@@ -600,7 +601,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">Toplam Mesaj</p>
+                  <p className="text-sm text-muted-foreground">{t('messages.stats.totalMessages')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -615,7 +616,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">Oturum Sayısı</p>
+                  <p className="text-sm text-muted-foreground">{t('messages.stats.sessionCount')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -630,7 +631,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">Ortalama/Oturum</p>
+                  <p className="text-sm text-muted-foreground">{t('messages.stats.averagePerSession')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -645,7 +646,7 @@ export default function MessagesPage() {
             <Card>
               <CardContent className="p-6">
                 <div>
-                  <p className="text-sm text-muted-foreground">Embeddings</p>
+                  <p className="text-sm text-muted-foreground">{t('messages.stats.embeddings')}</p>
                   <p className="text-2xl font-bold">
                     {loading ? (
                       <Skeleton className="h-8 w-16" />
@@ -663,14 +664,14 @@ export default function MessagesPage() {
           {/* Top Queries */}
           <Card>
             <CardHeader>
-              <CardTitle>Popüler Sorular</CardTitle>
+              <CardTitle>{t('messages.popularQueries.title')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {stats.topQueries?.slice(0, 10).map((query: any, idx: number) => (
                   <div key={idx} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-muted-foreground">#{idx + 1}</span>
+                      <span className="text-sm font-medium text-muted-foreground">{t('messages.popularQueries.rank')}{idx + 1}</span>
                       <p className="text-sm">{query.content}</p>
                     </div>
                     <Badge variant="secondary">{query.frequency}</Badge>
@@ -687,9 +688,9 @@ export default function MessagesPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Oturum Geçmişi</CardTitle>
+                  <CardTitle>{t('messages.sessions.title')}</CardTitle>
                   <CardDescription>
-                    Kullanıcı oturumları ve mesaj detayları
+                    {t('messages.sessions.subtitle')}
                   </CardDescription>
                 </div>
                 {selectedSessions.length > 0 && (
@@ -699,7 +700,7 @@ export default function MessagesPage() {
                       size="sm"
                       onClick={handleDeleteSelectedSessions}
                     >
-                      Seçilenleri Sil ({selectedSessions.length})
+                      {t('messages.sessions.batchActions.deleteSelected', { count: selectedSessions.length })}
                     </Button>
                     <Button
                       variant="outline"
@@ -709,7 +710,7 @@ export default function MessagesPage() {
                         setSelectAllChecked(false);
                       }}
                     >
-                      Temizle
+                      {t('messages.sessions.batchActions.clear')}
                     </Button>
                   </div>
                 )}
@@ -721,7 +722,7 @@ export default function MessagesPage() {
                 <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      {selectedSessions.length} oturum seçildi
+                      {t('messages.sessions.batchActions.sessionsSelected', { count: selectedSessions.length })}
                     </span>
                     <div className="flex gap-2">
                       <Button size="sm" onClick={handleSelectAll}>
@@ -736,13 +737,12 @@ export default function MessagesPage() {
                 {sessions.map((session) => (
                   <div
                     key={session.session_id}
-                    className={`p-4 border rounded-lg transition-colors ${
-                      selectedSession?.session_id === session.session_id
-                        ? 'border-primary bg-primary/5'
-                        : selectedSessions.includes(session.session_id)
+                    className={`p-4 border rounded-lg transition-colors ${selectedSession?.session_id === session.session_id
+                      ? 'border-primary bg-primary/5'
+                      : selectedSessions.includes(session.session_id)
                         ? 'border-blue-300 bg-blue-50 dark:bg-blue-900/20'
                         : 'hover:bg-muted/50'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1">
@@ -763,16 +763,16 @@ export default function MessagesPage() {
                         >
                           <div className="flex items-center gap-3">
                             <h3 className="font-medium">{session.session_id}</h3>
-                            <Badge variant="outline">{session.message_count} mesaj</Badge>
-                            <Badge variant="secondary">{session.message_types} tür</Badge>
+                            <Badge variant="outline">{session.message_count} {t('messages.sessions.messages')}</Badge>
+                            <Badge variant="secondary">{session.message_types} {t('messages.sessions.types')}</Badge>
                           </div>
                           <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <span>Başlangıç: {new Date(session.started_at).toLocaleString('tr-TR')}</span>
-                            <span>Son aktivite: {new Date(session.last_activity).toLocaleString('tr-TR')}</span>
+                            <span>{t('messages.sessions.start')}: {new Date(session.started_at).toLocaleString('tr-TR')}</span>
+                            <span>{t('messages.sessions.lastActivity')}: {new Date(session.last_activity).toLocaleString('tr-TR')}</span>
                           </div>
                           {session.questions?.length > 0 && (
                             <div className="mt-2">
-                              <p className="text-sm text-muted-foreground">Son soru:</p>
+                              <p className="text-sm text-muted-foreground">{t('messages.sessions.lastQuestion')}:</p>
                               <p className="text-sm">{session.questions[0].content}</p>
                             </div>
                           )}
@@ -787,7 +787,7 @@ export default function MessagesPage() {
                             handleFlushSession(session.session_id);
                           }}
                         >
-                          Gönder
+                          {t('messages.sessions.send')}
                         </Button>
                         <Button
                           variant="outline"
@@ -797,12 +797,11 @@ export default function MessagesPage() {
                             handleDeleteSession(session.session_id);
                           }}
                         >
-                          Sil
+                          {t('messages.sessions.delete')}
                         </Button>
                         <span
-                          className={`text-muted-foreground cursor-pointer hover:text-primary ${
-                            selectedSession?.session_id === session.session_id ? 'text-primary' : ''
-                          }`}
+                          className={`text-muted-foreground cursor-pointer hover:text-primary ${selectedSession?.session_id === session.session_id ? 'text-primary' : ''
+                            }`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedSession(session);
@@ -826,22 +825,22 @@ export default function MessagesPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Oturum Özeti</CardTitle>
+                      <CardTitle>{t('messages.sessionOverview.title')}</CardTitle>
                       <CardDescription>
-                        {selectedSession.session_id} - {sessionMessages.length} etkileşim
+                        {selectedSession.session_id} - {sessionMessages.length} {t('messages.sessionOverview.interactions')}
                       </CardDescription>
                     </div>
                     {selectedMessages.length > 0 && (
                       <div className="flex gap-2">
                         <Button onClick={handleBatchEmbedSelected} size="sm">
-                          Seçilenleri Embed Et ({selectedMessages.length})
+                          {t('messages.sessionOverview.batchActions.embedSelected', { count: selectedMessages.length })}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedMessages([])}
                         >
-                          Temizle
+                          {t('messages.sessionOverview.batchActions.clear')}
                         </Button>
                       </div>
                     )}
@@ -850,39 +849,39 @@ export default function MessagesPage() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">Token Kullanımı</h4>
+                      <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('messages.sessionOverview.tokenUsage.title')}</h4>
                       <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                         {tokenUsage.totalTokens.toLocaleString()}
                       </p>
                       <p className="text-xs text-blue-600 dark:text-blue-400">
-                        Ortalama: {tokenUsage.avgTokensPerMessage} mesaj başına
+                        {t('messages.sessionOverview.tokenUsage.average', { tokens: tokenUsage.avgTokensPerMessage })}
                       </p>
                     </div>
                     <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-green-700 dark:text-green-300">Embeddings</h4>
+                      <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('messages.sessionOverview.embeddings.title')}</h4>
                       <p className="text-2xl font-bold text-green-900 dark:text-blue-100">
                         {embeddingStats.processed}/{sessionMessages.length}
                       </p>
                       <p className="text-xs text-green-600 dark:text-green-400">
-                        İşlendi
+                        {t('messages.sessionOverview.embeddings.processed')}
                       </p>
                     </div>
                     <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">Bekleyen</h4>
+                      <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('messages.sessionOverview.pending.title')}</h4>
                       <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                         {embeddingStats.pending}
                       </p>
                       <p className="text-xs text-orange-600 dark:text-orange-400">
-                        Embedding işlemi bekliyor
+                        {t('messages.sessionOverview.pending.description')}
                       </p>
                     </div>
                     <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                      <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">Seçili</h4>
+                      <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('messages.sessionOverview.selected.title')}</h4>
                       <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
                         {selectedMessages.length}
                       </p>
                       <p className="text-xs text-purple-600 dark:text-purple-400">
-                        Mesaj
+                        {t('messages.sessionOverview.selected.messages')}
                       </p>
                     </div>
                   </div>
@@ -890,28 +889,28 @@ export default function MessagesPage() {
                   {/* Filters and Sort Controls */}
                   <div className="flex flex-wrap gap-2 mb-4 p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Filtre:</span>
+                      <span className="text-sm text-muted-foreground">{t('messages.sessionOverview.filters.filter')}:</span>
                       <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
                         <SelectTrigger className="w-[140px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Tümü</SelectItem>
-                          <SelectItem value="embedded">Embed Edilen</SelectItem>
-                          <SelectItem value="not-embedded">Embed Edilmeyen</SelectItem>
+                          <SelectItem value="all">{t('messages.sessionOverview.filters.all')}</SelectItem>
+                          <SelectItem value="embedded">{t('messages.sessionOverview.filters.embedded')}</SelectItem>
+                          <SelectItem value="not-embedded">{t('messages.sessionOverview.filters.notEmbedded')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Sırala:</span>
+                      <span className="text-sm text-muted-foreground">{t('messages.sessionOverview.filters.sort')}:</span>
                       <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
                         <SelectTrigger className="w-[120px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="date">Tarih</SelectItem>
-                          <SelectItem value="tokens">Token</SelectItem>
-                          <SelectItem value="quality">Kalite</SelectItem>
+                          <SelectItem value="date">{t('messages.sessionOverview.filters.date')}</SelectItem>
+                          <SelectItem value="tokens">{t('messages.sessionOverview.filters.token')}</SelectItem>
+                          <SelectItem value="quality">{t('messages.sessionOverview.filters.quality')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -929,10 +928,10 @@ export default function MessagesPage() {
 
                   <div className="flex gap-2 mb-4">
                     <Button onClick={handleBatchEmbedResponses} size="sm">
-                      Tümünü Embed Et
+                      {t('messages.sessionOverview.batchActions.embedAll')}
                     </Button>
                     <Button variant="outline" onClick={handleGenerateEmbeddings} size="sm">
-                      Sistem Embeddings
+                      {t('messages.sessionOverview.batchActions.systemEmbeddings')}
                     </Button>
                   </div>
                 </CardContent>
@@ -941,9 +940,9 @@ export default function MessagesPage() {
               {/* Session Messages */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Oturum Yazışmaları</CardTitle>
+                  <CardTitle>{t('messages.conversation.title')}</CardTitle>
                   <CardDescription>
-                    Kullanıcı soruları ve LLM yanıtları
+                    {t('messages.conversation.subtitle')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -969,14 +968,14 @@ export default function MessagesPage() {
                                   <span className="text-xs font-bold text-blue-600 dark:text-blue-400">K</span>
                                 </div>
                                 <div>
-                                  <h4 className="font-medium text-sm">Kullanıcı</h4>
+                                  <h4 className="font-medium text-sm">{t('messages.conversation.user')}</h4>
                                   <p className="text-xs text-muted-foreground">
                                     {new Date(interaction.timestamp).toLocaleString('tr-TR')}
                                   </p>
                                 </div>
                                 {interaction.user_message.tokens_used && (
                                   <Badge variant="outline" className="text-xs">
-                                    {interaction.user_message.tokens_used} token
+                                    {interaction.user_message.tokens_used} {t('messages.conversation.token')}
                                   </Badge>
                                 )}
                               </div>
@@ -994,29 +993,29 @@ export default function MessagesPage() {
                                   <span className="text-xs font-bold text-green-600 dark:text-green-400">AI</span>
                                 </div>
                                 <div>
-                                  <h4 className="font-medium text-sm">Alice (LLM)</h4>
+                                  <h4 className="font-medium text-sm">{t('messages.conversation.alice')}</h4>
                                   <p className="text-xs text-muted-foreground">
                                     {new Date(interaction.timestamp).toLocaleString('tr-TR')}
                                   </p>
                                 </div>
                                 {interaction.ai_response.tokens_used && (
                                   <Badge variant="outline" className="text-xs">
-                                    {interaction.ai_response.tokens_used} token
+                                    {interaction.ai_response.tokens_used} {t('messages.conversation.token')}
                                   </Badge>
                                 )}
                                 {interaction.ai_response.response_quality && (
                                   <Badge
                                     variant={interaction.ai_response.response_quality === 'high' ? 'default' :
-                                           interaction.ai_response.response_quality === 'medium' ? 'secondary' : 'destructive'}
+                                      interaction.ai_response.response_quality === 'medium' ? 'secondary' : 'destructive'}
                                     className="text-xs"
                                   >
-                                    {interaction.ai_response.response_quality === 'high' ? 'Yüksek Kalite' :
-                                     interaction.ai_response.response_quality === 'medium' ? 'Orta Kalite' : 'Düşük Kalite'}
+                                    {interaction.ai_response.response_quality === 'high' ? t('messages.conversation.quality.high') :
+                                      interaction.ai_response.response_quality === 'medium' ? t('messages.conversation.quality.medium') : t('messages.conversation.quality.low')}
                                   </Badge>
                                 )}
                                 {interaction.ai_response.embedding_processed && (
                                   <Badge variant="secondary" className="text-xs">
-                                    ✓ Embed Edildi
+                                    {t('messages.conversation.embedded')}
                                   </Badge>
                                 )}
                               </div>
@@ -1026,7 +1025,7 @@ export default function MessagesPage() {
                                   size="sm"
                                   onClick={() => handleEmbedSpecificResponse(interaction.id)}
                                 >
-                                  Embed Et
+                                  {t('messages.conversation.embed')}
                                 </Button>
                               </div>
                             </div>
@@ -1039,18 +1038,18 @@ export default function MessagesPage() {
                               {interaction.ai_response.sources && interaction.ai_response.sources.length > 0 && (
                                 <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                                   <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 mb-2">
-                                    RAG Kaynakları:
+                                    {t('messages.conversation.ragSources')}
                                   </p>
                                   <div className="flex flex-wrap gap-1">
                                     {interaction.ai_response.sources.slice(0, 3).map((source: any, idx: number) => (
                                       <Badge key={idx} variant="outline" className="text-xs">
-                                        {source.sourceType || 'Kaynak'}
+                                        {source.sourceType || t('messages.conversation.source')}
                                       </Badge>
                                     ))}
                                   </div>
                                   {interaction.ai_response.sources.length > 3 && (
                                     <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                                      +{interaction.ai_response.sources.length - 3} kaynak daha
+                                      +{interaction.ai_response.sources.length - 3} {t('messages.conversation.moreSources', { count: interaction.ai_response.sources.length - 3 })}
                                     </p>
                                   )}
                                 </div>
@@ -1068,46 +1067,46 @@ export default function MessagesPage() {
               {userBehaviorAnalysis && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Kullanıcı Davranış Analizi</CardTitle>
+                    <CardTitle>{t('messages.userBehavior.title')}</CardTitle>
                     <CardDescription>
-                      Oturum kullanıcı davranışları ve istatistiksel analiz
+                      {t('messages.userBehavior.subtitle')}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                       <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">Toplam Soru</h4>
+                        <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">{t('messages.userBehavior.totalQuestions')}</h4>
                         <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                           {userBehaviorAnalysis.totalQuestions}
                         </p>
                       </div>
                       <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-green-700 dark:text-green-300">Ort. Soru Uzunluğu</h4>
+                        <h4 className="text-sm font-medium text-green-700 dark:text-green-300">{t('messages.userBehavior.avgQuestionLength')}</h4>
                         <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                          {userBehaviorAnalysis.avgQuestionLength} karakter
+                          {userBehaviorAnalysis.avgQuestionLength} {t('messages.userBehavior.characters')}
                         </p>
                       </div>
                       <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">Ort. Yanıt Süresi</h4>
+                        <h4 className="text-sm font-medium text-orange-700 dark:text-orange-300">{t('messages.userBehavior.avgResponseTime')}</h4>
                         <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                           {userBehaviorAnalysis.avgResponseTime}s
                         </p>
                       </div>
                       <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                        <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">Oturum Süresi</h4>
+                        <h4 className="text-sm font-medium text-purple-700 dark:text-purple-300">{t('messages.userBehavior.sessionDuration')}</h4>
                         <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                          {Math.round(userBehaviorAnalysis.sessionDuration / 1000 / 60)} dk
+                          {Math.round(userBehaviorAnalysis.sessionDuration / 1000 / 60)} {t('messages.userBehavior.minutes')}
                         </p>
                       </div>
                     </div>
 
                     <div>
-                      <h4 className="text-lg font-medium mb-3">Popüler Konular</h4>
+                      <h4 className="text-lg font-medium mb-3">{t('messages.userBehavior.popularTopics')}</h4>
                       <div className="space-y-2">
                         {userBehaviorAnalysis.mostFrequentTopics.map((topic, idx) => (
                           <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded">
                             <span className="font-medium">{topic.topic}</span>
-                            <Badge variant="secondary">{topic.freq} kez</Badge>
+                            <Badge variant="secondary">{topic.freq} {t('messages.userBehavior.times')}</Badge>
                           </div>
                         ))}
                       </div>

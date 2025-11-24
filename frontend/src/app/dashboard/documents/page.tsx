@@ -2428,12 +2428,18 @@ export default function DocumentManagerPage() {
           fetchBatchSchemas();
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col">
-          {/* Header - Like Preview Modal */}
-          <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-b border-border/50 px-6 py-4">
-            <div className="flex items-center justify-between">
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col !z-[10000]">
+          {/* 3D Glassmorphic Header */}
+          <div className="flex-shrink-0 px-6 py-4 relative">
+            {/* Glass effect layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-50 to-white dark:from-slate-800 dark:via-slate-850 dark:to-slate-900" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05),0_8px_32px_0_rgba(0,0,0,0.4)] border-b border-slate-300/50 dark:border-slate-700/50" />
+
+            <div className="relative z-10 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <DialogTitle className="text-base font-bold">{t('documents.modal.batchProcessDocuments')}</DialogTitle>
+                <DialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">{t('documents.modal.batchProcessDocuments')}</DialogTitle>
                 <Badge variant="secondary" className="text-[10px] font-semibold px-2 py-0.5">
                   {selectedRows.size} {t('documents.modal.files')}
                 </Badge>
@@ -2597,9 +2603,15 @@ export default function DocumentManagerPage() {
             )}
           </div>
 
-          {/* Footer - Like Preview Modal */}
-          <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/50 px-6 py-4">
-            <div className="flex items-center justify-between gap-4">
+          {/* 3D Glassmorphic Footer */}
+          <div className="flex-shrink-0 px-6 py-4 relative">
+            {/* Glass effect layers */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-900 dark:via-slate-850 dark:to-slate-800" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent" />
+            <div className="absolute inset-0 backdrop-blur-xl" />
+            <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
+
+            <div className="relative z-10 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <span className="font-medium">{selectedRows.size} documents</span>
                 {batchSelectedSchema && (
