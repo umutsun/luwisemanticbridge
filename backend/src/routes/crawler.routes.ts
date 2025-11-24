@@ -1169,6 +1169,86 @@ router.delete('/crawler-directories/:crawlerName/items/:itemKey', async (req: Re
 });
 
 /**
+ * GET /built-in
+ * Get list of built-in crawlers
+ */
+router.get('/built-in', async (req: Request, res: Response) => {
+  try {
+    const crawlersDir = path.join(__dirname, '../../python-services/crawlers');
+
+    // Built-in crawler definitions
+    const builtInCrawlers = [
+      {
+        id: 'wordpress',
+        name: 'WordPress',
+        description: 'Generic WordPress sites via REST API',
+        features: ['REST API support', 'Sitemap fallback', 'Categories & tags', 'Featured images'],
+        type: 'REST API',
+        filename: 'wordpress_crawler.py'
+      },
+      {
+        id: 'drupal',
+        name: 'Drupal',
+        description: 'Drupal 8+ sites via JSON:API',
+        features: ['JSON:API support', 'Multiple endpoints', 'Pagination', 'Sitemap fallback'],
+        type: 'JSON:API',
+        filename: 'drupal_crawler.py'
+      },
+      {
+        id: 'woocommerce',
+        name: 'WooCommerce',
+        description: 'WooCommerce product stores',
+        features: ['Product variations', 'Stock status', 'Categories & tags', 'Image galleries'],
+        type: 'E-commerce API',
+        filename: 'woocommerce_crawler.py'
+      },
+      {
+        id: 'shopify',
+        name: 'Shopify',
+        description: 'Shopify online stores',
+        features: ['Product variants', 'Collections', 'Pagination', 'Vendor & tags'],
+        type: 'Storefront API',
+        filename: 'shopify_crawler.py'
+      },
+      {
+        id: 'wix',
+        name: 'Wix',
+        description: 'Wix websites (requires Playwright)',
+        features: ['JS rendering', 'Dynamic content', 'Page navigation', 'Stealth mode'],
+        type: 'Playwright',
+        filename: 'wix_crawler.py'
+      },
+      {
+        id: 'cloudflare',
+        name: 'Cloudflare Bypass',
+        description: 'Cloudflare-protected sites (requires Playwright)',
+        features: ['Challenge bypass', 'Stealth mode', 'Auto retry', 'Rate limiting'],
+        type: 'Stealth Playwright',
+        filename: 'cloudflare_crawler.py'
+      }
+    ];
+
+    // Check which crawlers actually exist
+    const availableCrawlers = builtInCrawlers.filter(crawler => {
+      const scriptPath = path.join(crawlersDir, crawler.filename);
+      return fs.existsSync(scriptPath);
+    });
+
+    res.json({
+      success: true,
+      crawlers: availableCrawlers,
+      total: availableCrawlers.length
+    });
+  } catch (error: any) {
+    console.error('Failed to get built-in crawlers:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get built-in crawlers'
+    });
+  }
+});
+
+/**
  * POST /crawler-directories/:crawlerName/script
  * Upload Python script for a crawler
  */
