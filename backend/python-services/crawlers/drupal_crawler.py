@@ -45,11 +45,20 @@ def clean_html(html):
 
     return text.strip()
 
-def save_state(state):
-    """Save crawler state to JSON file"""
+def save_state(state, crawler_name=None):
+    """Save crawler state to JSON file AND Redis"""
     try:
+        # Save to file (backup)
         with open(STATE_FILE, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
+
+        # Save to Redis (realtime)
+        if crawler_name:
+            redis_key = f"crawl4ai:{crawler_name}:_state"
+            r.set(redis_key, json.dumps(state, ensure_ascii=False))
+            print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file + Redis)")
+        else:
+            print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file only)")
     except Exception as e:
         print(f"[ERROR] Failed to save state: {e}")
 
@@ -342,7 +351,7 @@ class DrupalCrawler:
                     await self.process_item(item)
 
                     if i % 10 == 0:
-                        save_state(self.state)
+                        save_state(self.state, self.crawler_name)
 
                     await asyncio.sleep(0.2)
             else:
@@ -390,23 +399,23 @@ class DrupalCrawler:
 
                         # Save state periodically
                         if i % 10 == 0:
-                            save_state(self.state)
+                            save_state(self.state, self.crawler_name)
 
                         await asyncio.sleep(0.5)
                 else:
                     print("\n[ERROR] Could not find content via API or sitemap")
                     print("[INFO] Make sure the site is Drupal and has JSON:API or sitemap enabled")
 
-            save_state(self.state)
+            save_state(self.state, self.crawler_name)
 
         except KeyboardInterrupt:
             print("\n[INTERRUPT] Crawler interrupted")
-            save_state(self.state)
+            save_state(self.state, self.crawler_name)
         except Exception as e:
             print(f"\n[ERROR] Crawler failed: {e}")
             import traceback
             traceback.print_exc()
-            save_state(self.state)
+            save_state(self.state, self.crawler_name)
 
         duration = (datetime.now() - start_time).total_seconds()
         print(f"\n{'='*60}")

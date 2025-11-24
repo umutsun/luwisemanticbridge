@@ -57,12 +57,20 @@ def clean_html_content(html_content):
         print(f"  [WARN] HTML cleaning failed: {str(e)[:50]}")
         return html_content
 
-def save_state(state):
-    """Save crawler state to JSON file"""
+def save_state(state, crawler_name=None):
+    """Save crawler state to JSON file AND Redis"""
     try:
+        # Save to file (backup)
         with open(STATE_FILE, 'w', encoding='utf-8') as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
-        print(f"[STATE] Saved: {len(state.get('visited', []))} visited")
+
+        # Save to Redis (realtime)
+        if crawler_name:
+            redis_key = f"crawl4ai:{crawler_name}:_state"
+            r.set(redis_key, json.dumps(state, ensure_ascii=False))
+            print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file + Redis)")
+        else:
+            print(f"[STATE] Saved: {len(state.get('visited', []))} visited (file only)")
     except Exception as e:
         print(f"[ERROR] Failed to save state: {e}")
 
@@ -289,7 +297,7 @@ class WordPressCrawler:
             await self.process_post(post, 'post')
 
             if i % 10 == 0:
-                save_state(self.state)
+                save_state(self.state, self.crawler_name)
 
             await asyncio.sleep(0.3)
 
@@ -309,7 +317,7 @@ class WordPressCrawler:
             await self.process_post(page, 'page')
 
             if i % 10 == 0:
-                save_state(self.state)
+                save_state(self.state, self.crawler_name)
 
             await asyncio.sleep(0.3)
 
@@ -337,16 +345,16 @@ class WordPressCrawler:
             # Always crawl pages regardless of category filter
             await self.crawl_pages()
 
-            save_state(self.state)
+            save_state(self.state, self.crawler_name)
 
         except KeyboardInterrupt:
             print("\n[INTERRUPT] Crawler interrupted by user")
-            save_state(self.state)
+            save_state(self.state, self.crawler_name)
         except Exception as e:
             print(f"\n[ERROR] Crawler failed: {e}")
             import traceback
             traceback.print_exc()
-            save_state(self.state)
+            save_state(self.state, self.crawler_name)
 
         duration = (datetime.now() - start_time).total_seconds()
         print(f"\n{'='*60}")

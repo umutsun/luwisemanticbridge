@@ -209,12 +209,28 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
       })
     ).then(results => results.filter(Boolean));
 
+    // Get crawler states from Redis
+    const crawlerStates: Record<string, any> = {};
+    for (const dir of directories) {
+      try {
+        const stateKey = `crawl4ai:${dir.name}:_state`;
+        const stateData = await crawl4aiRedis.get(stateKey);
+        if (stateData) {
+          crawlerStates[dir.name] = JSON.parse(stateData);
+          console.log(`[State] Loaded state for ${dir.name} from Redis`);
+        }
+      } catch (error) {
+        console.log(`[State] No state for ${dir.name}:`, error.message);
+      }
+    }
+
     res.json({
       success: true,
       directories,
       totalDirectories: directories.length,
       totalItems: keys.length,
-      runningCrawlers
+      runningCrawlers,
+      crawlerStates
     });
   } catch (error: any) {
     console.error('Failed to fetch crawler directories:', error);

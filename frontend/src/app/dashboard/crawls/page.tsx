@@ -557,6 +557,13 @@ export default function CrawlerDataPage() {
         setRunningScripts(running);
         console.log(`[Init] Found ${running.size} running crawlers:`, Array.from(running));
       }
+
+      // Set crawler states from Redis
+      if (data.crawlerStates && typeof data.crawlerStates === 'object') {
+        const statesMap = new Map(Object.entries(data.crawlerStates));
+        setCrawlerStates(statesMap);
+        console.log(`[Init] Loaded ${statesMap.size} crawler states from Redis`);
+      }
     } catch (error: any) {
       console.error('Failed to fetch directories:', error);
       toast({
