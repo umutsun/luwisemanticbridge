@@ -444,6 +444,58 @@ export default function CrawlerDataPage() {
     return () => clearInterval(pollInterval);
   }, [runningScripts]);
 
+  // Poll directory counts when scripts are running (real-time updates)
+  useEffect(() => {
+    if (runningScripts.size === 0) return;
+
+    const baseUrl = config.api.baseUrl;
+    const pollInterval = setInterval(async () => {
+      try {
+        // Fetch updated directory counts
+        const response = await fetchWithAuth(`${baseUrl}/api/v2/crawler/crawler-directories`);
+        if (response.ok) {
+          const data = await response.json();
+
+          // Update directories state with new counts
+          setDirectories(prev => {
+            const updated = prev.map(dir => {
+              const newDir = data.directories.find((d: any) => d.id === dir.id);
+              return newDir ? { ...dir, itemCount: newDir.itemCount } : dir;
+            });
+            return updated;
+          });
+
+          // Update selected directory if it's one being crawled
+          if (selectedDirectory && runningScripts.has(selectedDirectory.name)) {
+            const newDir = data.directories.find((d: any) => d.id === selectedDirectory.id);
+            if (newDir) {
+              setSelectedDirectory(prev => prev ? { ...prev, itemCount: newDir.itemCount } : null);
+
+              // Also refresh crawled items if selected directory is being updated
+              const itemsResponse = await fetchWithAuth(
+                `${baseUrl}/api/v2/crawler/crawler-directories/${selectedDirectory.name}/data?limit=100&offset=0`
+              );
+              if (itemsResponse.ok) {
+                const itemsData = await itemsResponse.json();
+                const newItems = itemsData.items || [];
+
+                // Only update if count changed
+                if (newItems.length !== crawledItems.length) {
+                  setCrawledItems(newItems);
+                  setTotalItemsCount(itemsData.total || newItems.length);
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Count Poll] Failed to poll directory counts:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [runningScripts, selectedDirectory, crawledItems.length]);
+
   // Search effect - debounced backend search
   useEffect(() => {
     if (!selectedDirectory) return;
@@ -1422,6 +1474,9 @@ export default function CrawlerDataPage() {
         totalItems: prev.totalItems - 1
       }));
 
+      // Update totalItemsCount
+      setTotalItemsCount(prev => Math.max(0, prev - 1));
+
       toast({
         title: 'Success',
         description: 'Item deleted successfully'
@@ -1470,11 +1525,30 @@ export default function CrawlerDataPage() {
       setSelectedForRecrawl(new Set());
       setSelectedForAnalyze(new Set());
 
+      // Update directory itemCount
+      if (selectedDirectory) {
+        setSelectedDirectory({
+          ...selectedDirectory,
+          itemCount: selectedDirectory.itemCount - selectedIds.length
+        });
+
+        setDirectories(prev =>
+          prev.map(dir =>
+            dir.id === selectedDirectory.id
+              ? { ...dir, itemCount: dir.itemCount - selectedIds.length }
+              : dir
+          )
+        );
+      }
+
       // Update stats
       setStats(prev => ({
         ...prev,
         totalItems: prev.totalItems - selectedIds.length
       }));
+
+      // Update totalItemsCount
+      setTotalItemsCount(prev => Math.max(0, prev - selectedIds.length));
 
       toast({
         title: 'Success',
