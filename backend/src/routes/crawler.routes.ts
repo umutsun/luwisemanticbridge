@@ -154,7 +154,7 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
       });
     }
 
-    // Get all crawl4ai keys from DB 0
+    // Get all crawl4ai keys from the configured DB
     const keys = await crawl4aiRedis.keys('crawl4ai:*');
 
     // Extract unique crawler directory names (e.g., yky_crawler, can_crawler)
@@ -175,7 +175,11 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
             lastCrawled: null
           };
         }
-        crawlerStats[crawlerName].count++;
+
+        // Only count actual data keys, skip internal keys like _init
+        if (parts.length > 2 && parts[2] !== '_init') {
+          crawlerStats[crawlerName].count++;
+        }
       }
     }
 
