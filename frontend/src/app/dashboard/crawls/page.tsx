@@ -2553,6 +2553,7 @@ export default function CrawlerDataPage() {
                                     />
                                   </TableHead>
                                   <TableHead>Name</TableHead>
+                                  <TableHead className="w-48">Category</TableHead>
                                   <TableHead className="w-24 text-right">Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -2563,14 +2564,14 @@ export default function CrawlerDataPage() {
                               <TableBody>
                                 {itemsLoading ? (
                                   <TableRow>
-                                    <TableCell colSpan={3} className="text-center py-12">
+                                    <TableCell colSpan={4} className="text-center py-12">
                                       <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
                                       <p className="text-sm text-muted-foreground mt-2">Loading items...</p>
                                     </TableCell>
                                   </TableRow>
                                 ) : filteredItems.length === 0 ? (
                                   <TableRow>
-                                    <TableCell colSpan={3} className="text-center py-12">
+                                    <TableCell colSpan={4} className="text-center py-12">
                                       <FileText className="w-12 h-12 mx-auto mb-3 opacity-40" />
                                       <p className="text-sm text-muted-foreground">No items found</p>
                                     </TableCell>
@@ -2609,6 +2610,24 @@ export default function CrawlerDataPage() {
                                             <div className="truncate">
                                               {item.title}
                                             </div>
+                                          </TableCell>
+                                          <TableCell className="text-xs">
+                                            {item.data?.categories && item.data.categories.length > 0 ? (
+                                              <div className="flex flex-wrap gap-1">
+                                                {item.data.categories.slice(0, 2).map((cat, idx) => (
+                                                  <Badge key={idx} variant="outline" className="text-[10px] px-1.5 py-0">
+                                                    {cat}
+                                                  </Badge>
+                                                ))}
+                                                {item.data.categories.length > 2 && (
+                                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                                    +{item.data.categories.length - 2}
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span className="text-muted-foreground text-[10px]">-</span>
+                                            )}
                                           </TableCell>
                                           <TableCell className="text-right">
                                             <TooltipProvider>
@@ -2650,7 +2669,7 @@ export default function CrawlerDataPage() {
                                     {/* Load More Row */}
                                     {hasMoreItems && !loadingMore && (
                                       <TableRow>
-                                        <TableCell colSpan={3} className="text-center py-4">
+                                        <TableCell colSpan={4} className="text-center py-4">
                                           <Button
                                             variant="outline"
                                             size="sm"
@@ -2666,7 +2685,7 @@ export default function CrawlerDataPage() {
                                     {/* Loading indicator */}
                                     {loadingMore && (
                                       <TableRow>
-                                        <TableCell colSpan={3} className="text-center py-4">
+                                        <TableCell colSpan={4} className="text-center py-4">
                                           <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
                                           <p className="text-xs text-muted-foreground mt-2">Loading more items...</p>
                                         </TableCell>
@@ -3028,27 +3047,43 @@ export default function CrawlerDataPage() {
             <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
 
             <div className="flex items-center justify-between relative z-10">
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 truncate max-w-[60%]" title={editingItem?.data?.url}>
-                {editingItem?.data?.url || editingItem?.key || ''}
+              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 truncate" title={editingItem?.data?.url}>
+                  {editingItem?.data?.url || editingItem?.key || ''}
+                </div>
+                {editingItem?.data && (
+                  <div className="flex items-center gap-2 flex-wrap text-[9px]">
+                    {editingItem.data.publish_date && (
+                      <span className="text-slate-500 dark:text-slate-500">
+                        📅 {new Date(editingItem.data.publish_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    {editingItem.data.modified_date && (
+                      <span className="text-slate-500 dark:text-slate-500">
+                        ✏️ {new Date(editingItem.data.modified_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    {editingItem.data.categories && editingItem.data.categories.length > 0 && (
+                      <span className="text-blue-600 dark:text-blue-400">
+                        🏷️ {editingItem.data.categories.join(', ')}
+                      </span>
+                    )}
+                    {editingItem.data.tags && editingItem.data.tags.length > 0 && (
+                      <span className="text-green-600 dark:text-green-400">
+                        🔖 {editingItem.data.tags.slice(0, 3).join(', ')}{editingItem.data.tags.length > 3 ? '...' : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowEditDialog(false);
-                    setEditingItem(null);
-                  }}
-                >
-                  Cancel
-                </Button>
+              <div className="flex gap-2 ml-4">
                 <Button
                   size="sm"
                   onClick={handleSaveEdit}
                   className="bg-slate-600 hover:bg-slate-700"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Save Changes
+                  OK
                 </Button>
               </div>
             </div>
@@ -3150,7 +3185,7 @@ export default function CrawlerDataPage() {
                       {urlDialogDirectory?.name}.py
                     </span>
                     {scriptStartTime && (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                      <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
                         <Clock className="w-3 h-3" />
                         <span>{scriptStartTime.toLocaleTimeString()}</span>
                       </div>
