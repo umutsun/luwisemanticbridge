@@ -20,24 +20,55 @@ async function initializeSourcePool() {
       sourcePool = null;
     }
 
-    // Get source database settings from app.database in settings
-    let sourceDatabaseName = process.env.POSTGRES_DB || 'scriptus_lsemb';
+    // Get source database settings from database.* keys in settings
+    // NO FALLBACKS - Source DB must be configured by user in settings
+    let sourceDatabaseName: string | null = null;
+    let sourceHost: string | null = null;
+    let sourcePort: number | null = null;
+    let sourceUser: string | null = null;
+    let sourcePassword: string | null = null;
+
     try {
-      const appSettings = await settingsService.getSettings('app');
-      if (appSettings?.database?.name) {
-        sourceDatabaseName = appSettings.database.name;
-        console.log(`[Source DB] Using database from settings: ${sourceDatabaseName}`);
+      // Read individual database.* settings keys (not nested under app)
+      const dbNameSetting = await settingsService.getSetting('database.name');
+      const dbHostSetting = await settingsService.getSetting('database.host');
+      const dbPortSetting = await settingsService.getSetting('database.port');
+      const dbUserSetting = await settingsService.getSetting('database.user');
+      const dbPasswordSetting = await settingsService.getSetting('database.password');
+
+      if (dbNameSetting) {
+        sourceDatabaseName = typeof dbNameSetting === 'string' ? dbNameSetting : JSON.parse(dbNameSetting);
       }
-    } catch (settingsError) {
-      console.warn('[Source DB] Could not fetch database from settings, using env:', sourceDatabaseName);
+      if (dbHostSetting) {
+        sourceHost = typeof dbHostSetting === 'string' ? dbHostSetting : JSON.parse(dbHostSetting);
+      }
+      if (dbPortSetting) {
+        sourcePort = parseInt(typeof dbPortSetting === 'string' ? dbPortSetting : JSON.parse(dbPortSetting));
+      }
+      if (dbUserSetting) {
+        sourceUser = typeof dbUserSetting === 'string' ? dbUserSetting : JSON.parse(dbUserSetting);
+      }
+      if (dbPasswordSetting) {
+        sourcePassword = typeof dbPasswordSetting === 'string' ? dbPasswordSetting : JSON.parse(dbPasswordSetting);
+      }
+
+      // Validate required settings
+      if (!sourceDatabaseName || !sourceHost || !sourceUser || !sourcePassword) {
+        throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
+      }
+
+      console.log(`[Source DB] Using database from settings: ${sourceDatabaseName} on ${sourceHost}`);
+    } catch (settingsError: any) {
+      console.error('[Source DB] Failed to get database settings:', settingsError.message);
+      throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
     }
 
     const config = {
-      host: process.env.POSTGRES_HOST || '91.99.229.96',
-      port: parseInt(process.env.POSTGRES_PORT || '5432'),
-      database: sourceDatabaseName, // Dynamic from settings
-      user: process.env.POSTGRES_USER || 'postgres',
-      password: process.env.POSTGRES_PASSWORD || 'Semsiye!22',
+      host: sourceHost!,
+      port: sourcePort || 5432,
+      database: sourceDatabaseName!, // Source DB from user settings
+      user: sourceUser!,
+      password: sourcePassword!,
       ssl: false,
       max: 10
     };
@@ -207,17 +238,27 @@ router.post('/tables/create', async (req: Request, res: Response) => {
       )
     `;
 
+    console.log(`[Source DB] Creating table ${tableName} in database...`);
+    console.log(`[Source DB] Query:`, createQuery);
+
+    const dbInfo = await sourcePool.query('SELECT current_database()');
+    console.log(`[Source DB] Connected to database: ${dbInfo.rows[0].current_database}`);
+
     await sourcePool.query(createQuery);
+
+    console.log(`[Source DB] ✓ Table ${tableName} created successfully`);
 
     res.json({
       success: true,
-      message: `Table ${tableName} created successfully`
+      message: `Table ${tableName} created successfully in database: ${dbInfo.rows[0].current_database}`
     });
   } catch (error: any) {
-    console.error('Failed to create table:', error);
+    console.error('[Source DB] ✗ Failed to create table:', error.message);
+    console.error('[Source DB] Error details:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to create table'
+      error: error.message || 'Failed to create table',
+      details: error.detail || error.hint || ''
     });
   }
 });
@@ -242,6 +283,10 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
         error: 'Data array is required'
       });
     }
+
+    // Log database connection info
+    const dbInfo = await sourcePool.query('SELECT current_database()');
+    console.log(`[Source DB] Inserting into table ${tableName} in database: ${dbInfo.rows[0].current_database}`);
 
     const client = await sourcePool.connect();
 
