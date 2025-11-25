@@ -390,7 +390,7 @@ export default function CrawlerDataPage() {
 
       // If this directory is selected, add item to the items list (with animation)
       if (selectedDirectory?.name === directoryName) {
-        setItems(prev => {
+        setCrawledItems(prev => {
           // Add new item at the beginning (newest first)
           const newItems = [item, ...prev];
           // Limit to reasonable size to prevent memory issues
@@ -400,11 +400,11 @@ export default function CrawlerDataPage() {
         // Update total count
         setTotalItemsCount(totalItems);
 
-        // Show toast notification
+        // Show toast notification (reduced duration for better UX)
         toast({
-          title: 'New Item Added',
-          description: `${item.title || 'Untitled'} - ${directoryName}`,
-          duration: 2000,
+          title: 'New Item Crawled',
+          description: `${item.title || 'Untitled'}`,
+          duration: 1500,
         });
       }
     };
@@ -2363,15 +2363,15 @@ export default function CrawlerDataPage() {
                                             </Button>
                                           </div>
                                         ) : (
-                                          <div className="relative flex items-center justify-between flex-1 min-w-0 px-2 py-1 rounded-md bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+                                          <div className="relative flex flex-col gap-1.5 flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
                                             {/* Animated background when running */}
                                             {runningScripts.has(directory.name) && (
-                                              <div className="absolute inset-0 bg-gradient-to-r from-green-500/30 via-green-400/20 to-transparent animate-pulse" style={{ animationDuration: '2s' }} />
+                                              <div className="absolute inset-0 bg-gradient-to-r from-green-500/20 via-green-400/10 to-transparent animate-pulse" style={{ animationDuration: '3s' }} />
                                             )}
 
-                                            <div className="text-[8px] font-medium text-slate-700 dark:text-slate-300 relative z-10 flex items-center gap-2 flex-1 min-w-0">
+                                            <div className="relative z-10 flex flex-col gap-1.5">
                                               {runningScripts.has(directory.name) ? (
-                                                // Show script name + queue/progress when running
+                                                // Show modern progress card when running
                                                 (() => {
                                                   const state = crawlerStates.get(directory.name);
                                                   const scriptName = pythonScripts.get(directory.name)?.name || 'Unknown';
@@ -2380,65 +2380,95 @@ export default function CrawlerDataPage() {
                                                     const visitedCount = state.visited?.length || 0;
                                                     const total = queueCount + visitedCount;
                                                     const progress = total > 0 ? Math.round((visitedCount / total) * 100) : 0;
+                                                    const currentUrl = scriptUrls.get(directory.name);
+
                                                     return (
                                                       <>
-                                                        <span className="opacity-90 font-semibold" title={scriptName}>
-                                                          {scriptName.replace('_crawler.py', '').replace('_', ' ')}
-                                                        </span>
-                                                        <span className="opacity-50">•</span>
-                                                        <span className="opacity-70">Q:{queueCount}</span>
-                                                        <span className="opacity-50">•</span>
-                                                        <span className="opacity-70">{progress}%</span>
-                                                        <span className="opacity-50">•</span>
-                                                        <span className="truncate opacity-60" title={scriptUrls.get(directory.name)}>
-                                                          {scriptUrls.get(directory.name)}
-                                                        </span>
+                                                        {/* Crawler name */}
+                                                        <div className="flex items-center justify-between">
+                                                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200" title={scriptName}>
+                                                            {scriptName.replace('_crawler.py', '').replace(/_/g, ' ').toUpperCase()}
+                                                          </span>
+                                                          <span className="text-[10px] font-medium text-green-600 dark:text-green-400">
+                                                            {progress}%
+                                                          </span>
+                                                        </div>
+
+                                                        {/* Progress bar */}
+                                                        <div className="w-full h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                          <div
+                                                            className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500 ease-out"
+                                                            style={{ width: `${progress}%` }}
+                                                          />
+                                                        </div>
+
+                                                        {/* Stats */}
+                                                        <div className="flex items-center gap-2 text-[10px] text-slate-600 dark:text-slate-400">
+                                                          <span className="flex items-center gap-1">
+                                                            <Clock className="w-2.5 h-2.5" />
+                                                            Queue: {queueCount}
+                                                          </span>
+                                                          <span className="opacity-40">|</span>
+                                                          <span className="flex items-center gap-1">
+                                                            <CheckCircle className="w-2.5 h-2.5" />
+                                                            Visited: {visitedCount}
+                                                          </span>
+                                                        </div>
+
+                                                        {/* Current URL */}
+                                                        {currentUrl && (
+                                                          <div className="text-[9px] text-slate-500 dark:text-slate-500 truncate" title={currentUrl}>
+                                                            <Globe className="w-2.5 h-2.5 inline mr-1" />
+                                                            {currentUrl}
+                                                          </div>
+                                                        )}
                                                       </>
                                                     );
                                                   }
-                                                  // Running but state not loaded yet - show script name
+                                                  // Running but state not loaded yet
                                                   return (
-                                                    <>
-                                                      <span className="opacity-90 font-semibold" title={scriptName}>
-                                                        {scriptName.replace('_crawler.py', '').replace('_', ' ')}
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200" title={scriptName}>
+                                                        {scriptName.replace('_crawler.py', '').replace(/_/g, ' ').toUpperCase()}
                                                       </span>
-                                                      <span className="opacity-50">•</span>
-                                                      <span className="opacity-70 animate-pulse">Crawling...</span>
-                                                    </>
+                                                      <span className="text-[10px] text-green-600 dark:text-green-400 animate-pulse">
+                                                        Initializing...
+                                                      </span>
+                                                    </div>
                                                   );
                                                 })()
                                               ) : (
                                                 // Show script name when idle (editable)
-                                                <button
-                                                  className="text-left truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setShowCrawlerSelect(directory.name);
-                                                  }}
-                                                  title={`${pythonScripts.get(directory.name)?.name || 'Unknown'} - Click to change`}
-                                                >
-                                                  {pythonScripts.get(directory.name)?.name || 'Unknown Script'}
-                                                </button>
+                                                <div className="flex items-center justify-between">
+                                                  <button
+                                                    className="text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setShowCrawlerSelect(directory.name);
+                                                    }}
+                                                    title={`${pythonScripts.get(directory.name)?.name || 'Unknown'} - Click to change`}
+                                                  >
+                                                    {pythonScripts.get(directory.name)?.name || 'Unknown Script'}
+                                                  </button>
+
+                                                  {/* Delete button (only when idle) */}
+                                                  <ConfirmTooltip
+                                                    onConfirm={() => handleDeletePythonScript(directory)}
+                                                    message="Delete this Python script?"
+                                                    side="top"
+                                                  >
+                                                    <Button
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      className="h-5 w-5 p-0 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-50 hover:opacity-100 transition-opacity"
+                                                      onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                      <X className="w-3 h-3 text-red-500" />
+                                                    </Button>
+                                                  </ConfirmTooltip>
+                                                </div>
                                               )}
                                             </div>
-
-                                            {/* Delete button (only when idle) */}
-                                            {!runningScripts.has(directory.name) && (
-                                              <ConfirmTooltip
-                                                onConfirm={() => handleDeletePythonScript(directory)}
-                                                message="Delete this Python script?"
-                                                side="top"
-                                              >
-                                                <Button
-                                                  size="sm"
-                                                  variant="ghost"
-                                                  className="h-4 w-4 p-0 flex-shrink-0 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-60 hover:opacity-100 transition-opacity"
-                                                  onClick={(e) => e.stopPropagation()}
-                                                >
-                                                  <X className="w-2.5 h-2.5 text-red-500" />
-                                                </Button>
-                                              </ConfirmTooltip>
-                                            )}
                                           </div>
                                         )}
                                       </div>
