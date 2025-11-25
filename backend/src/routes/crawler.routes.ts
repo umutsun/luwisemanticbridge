@@ -464,6 +464,18 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
         }
         row[dbColumn] = value;
       }
+
+      // Always preserve important metadata fields if they exist in source
+      if (item.crawled_at && !row.crawled_at) {
+        row.crawled_at = item.crawled_at;
+      }
+      if (item.scraped_at && !row.scraped_at) {
+        row.scraped_at = item.scraped_at;
+      }
+      if (item.crawler_script && !row.crawler_script) {
+        row.crawler_script = item.crawler_script;
+      }
+
       return row;
     });
     console.log(' Transformed data rows:', transformedData.length);
@@ -560,46 +572,30 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
       }
     }
 
-    // If autoEmbeddings is enabled, trigger embedding generation
+    // If autoEmbeddings is enabled, trigger embedding generation via pgai worker
     let embeddingMessage = '';
     if (autoEmbeddings) {
       try {
-        // Import embedding processor service
-        const embeddingProcessor = require('../services/embedding-processor.service').default;
+        console.log(` Auto-embeddings enabled - Triggering generation for table: ${tableName}`);
 
-        // Queue embedding generation for the table
-        console.log(` Triggering embedding generation for table: ${tableName}`);
-
-        // Get all data to generate embeddings
-        const sampleResult = await lsembPool.query(
-          `SELECT * FROM ${tableName}`
+        // Publish embedding request to Redis for pgai worker to process
+        await crawl4aiRedis.publish(
+          'pgai:embedding_request',
+          JSON.stringify({
+            tableName,
+            sourceTable: tableName,
+            totalRows: transformedData.length,
+            timestamp: new Date().toISOString(),
+            jobId,
+            crawlerName,
+          })
         );
 
-        let embeddingsGenerated = 0;
-        for (const row of sampleResult.rows) {
-          // Combine all text fields for embedding
-          const textContent = Object.values(row)
-            .filter(val => typeof val === 'string')
-            .join(' ');
-
-          if (textContent.trim().length > 0) {
-            try {
-              await embeddingProcessor.processEmbeddings(textContent, {
-                model: 'text-embedding-3-small',
-                chunkSize: 1000
-              });
-              embeddingsGenerated++;
-            } catch (embErr) {
-              console.error(` Failed to generate embedding for row:`, embErr);
-            }
-          }
-        }
-
-        embeddingMessage = ` (${embeddingsGenerated} embeddings generated)`;
-        console.log(` Generated ${embeddingsGenerated} embeddings for ${tableName}`);
+        embeddingMessage = ` (embedding generation queued for ${transformedData.length} rows)`;
+        console.log(` Embedding generation queued - pgai worker will process ${transformedData.length} rows`);
       } catch (embErr) {
-        console.error(' Failed to generate embeddings:', embErr);
-        embeddingMessage = ' (Embedding generation failed)';
+        console.error(' Failed to queue embeddings:', embErr);
+        embeddingMessage = ' (Embedding queueing failed)';
       }
     }
 
@@ -1714,17 +1710,48 @@ router.post('/crawler-directories/:crawlerName/notify-item-added', async (req: R
 
 /**
  * GET /crawler-directories/:crawlerName/state
- * Get crawler state.json content for resume/progress monitoring
+ * Get crawler state from Redis (real-time) with file fallback
  */
 router.get('/crawler-directories/:crawlerName/state', async (req: Request, res: Response) => {
   try {
     const { crawlerName } = req.params;
+    console.log(`[State] Fetching state for ${crawlerName}`);
+
+    // PRIORITY 1: Try Redis first (real-time state)
+    const redisStateKey = `crawl4ai:${crawlerName}:_state`;
+    const redisState = await crawl4aiRedis.get(redisStateKey);
+
+    if (redisState) {
+      try {
+        const stateData = JSON.parse(redisState);
+        console.log(`[State] Found in Redis: ${Object.keys(stateData).length} keys`);
+
+        // Get running crawler info
+        const runningKey = `crawler_running:${crawlerName}`;
+        const runningData = await crawl4aiRedis.get(runningKey);
+        const isRunning = !!runningData;
+
+        return res.json({
+          success: true,
+          hasState: true,
+          source: 'redis',
+          state: stateData,
+          isRunning,
+          runningInfo: runningData ? JSON.parse(runningData) : null,
+          lastModified: new Date()
+        });
+      } catch (parseError) {
+        console.error(`[State] Failed to parse Redis state:`, parseError);
+      }
+    }
+
+    // PRIORITY 2: Fallback to file
     const stateFilePath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}_state.json`);
 
     if (!fs.existsSync(stateFilePath)) {
       return res.status(404).json({
         success: false,
-        error: 'State file not found',
+        error: 'State not found in Redis or file system',
         hasState: false
       });
     }
@@ -1733,17 +1760,21 @@ router.get('/crawler-directories/:crawlerName/state', async (req: Request, res: 
     const stateContent = fs.readFileSync(stateFilePath, 'utf-8');
     const stateData = JSON.parse(stateContent);
 
+    console.log(`[State] Found in file: ${Object.keys(stateData).length} keys`);
+
     res.json({
       success: true,
       hasState: true,
+      source: 'file',
       state: stateData,
+      isRunning: false,
       lastModified: fs.statSync(stateFilePath).mtime
     });
   } catch (error: any) {
-    console.error(' Failed to get state file:', error);
+    console.error(' Failed to get state:', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to get state file',
+      error: error.message || 'Failed to get state',
       hasState: false
     });
   }

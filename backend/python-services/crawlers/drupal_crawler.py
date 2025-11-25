@@ -299,7 +299,7 @@ class DrupalCrawler:
             except:
                 pass
 
-        # Build data structure
+        # Build data structure with explicit date tracking
         current_timestamp = datetime.utcnow().isoformat()
         data = {
             'title': item.get('title', ''),
@@ -312,11 +312,12 @@ class DrupalCrawler:
             'categories': categories,
             'created_date': item.get('created', ''),
             'modified_date': item.get('changed', ''),
-            'crawled_at': current_timestamp,
-            'scraped_at': current_timestamp,
-            'timestamp': current_timestamp,
+            'crawled_at': current_timestamp,  # When we crawled it (for duplicate prevention)
+            'scraped_at': current_timestamp,  # Same as crawled_at for consistency
+            'timestamp': current_timestamp,   # Generic timestamp field
             'source': 'drupal_api',
-            'cms': 'drupal'
+            'cms': 'drupal',
+            'crawler_script': self.script_name  # Track which script crawled this
         }
 
         # Save to Redis
