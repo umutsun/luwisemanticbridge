@@ -469,22 +469,12 @@ export default function CrawlerDataPage() {
           if (selectedDirectory && runningScripts.has(selectedDirectory.name)) {
             const newDir = data.directories.find((d: any) => d.id === selectedDirectory.id);
             if (newDir) {
+              // Only update counts, NOT the items (WebSocket handles items in real-time)
               setSelectedDirectory(prev => prev ? { ...prev, itemCount: newDir.itemCount } : null);
+              setTotalItemsCount(newDir.itemCount);
 
-              // Also refresh crawled items if selected directory is being updated
-              const itemsResponse = await fetchWithAuth(
-                `${baseUrl}/api/v2/crawler/crawler-directories/${selectedDirectory.name}/data?limit=100&offset=0`
-              );
-              if (itemsResponse.ok) {
-                const itemsData = await itemsResponse.json();
-                const newItems = itemsData.items || [];
-
-                // Only update if count changed
-                if (newItems.length !== crawledItems.length) {
-                  setCrawledItems(newItems);
-                  setTotalItemsCount(itemsData.total || newItems.length);
-                }
-              }
+              // Don't replace crawledItems array - let WebSocket handle real-time updates
+              // This prevents table from being cleared during polling
             }
           }
         }
@@ -2585,11 +2575,12 @@ export default function CrawlerDataPage() {
                                 }
                               }}
                             />
-                            <Label htmlFor="select-all" className="text-sm cursor-pointer">
-                              {Math.max(selectedForRecrawl.size, selectedForAnalyze.size) > 0
-                                ? `${Math.max(selectedForRecrawl.size, selectedForAnalyze.size)} selected`
-                                : 'Select all'}
-                            </Label>
+                            {/* Only show selection count when items are selected */}
+                            {Math.max(selectedForRecrawl.size, selectedForAnalyze.size) > 0 && (
+                              <Label htmlFor="select-all" className="text-sm cursor-pointer text-muted-foreground">
+                                {Math.max(selectedForRecrawl.size, selectedForAnalyze.size)} selected
+                              </Label>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2 flex-1">
