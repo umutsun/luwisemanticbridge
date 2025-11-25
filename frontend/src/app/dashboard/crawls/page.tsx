@@ -2363,10 +2363,13 @@ export default function CrawlerDataPage() {
                                             </Button>
                                           </div>
                                         ) : (
-                                          <div className="relative flex flex-col gap-1 flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
-                                            {/* Subtle animated background when running */}
+                                          <div className="relative flex flex-col gap-1 flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60">
+                                            {/* Subtle animated shimmer when running */}
                                             {runningScripts.has(directory.name) && (
-                                              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/8 via-green-400/4 to-transparent animate-pulse" style={{ animationDuration: '4s' }} />
+                                              <>
+                                                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-green-400/3 to-transparent animate-pulse" style={{ animationDuration: '3s' }} />
+                                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent animate-shimmer" />
+                                              </>
                                             )}
 
                                             <div className="relative z-10 flex flex-col gap-1">
@@ -2378,45 +2381,39 @@ export default function CrawlerDataPage() {
                                                   if (state) {
                                                     const queueCount = state.queue?.length || 0;
                                                     const visitedCount = state.visited?.length || 0;
-                                                    const total = queueCount + visitedCount;
-                                                    const progress = total > 0 ? Math.round((visitedCount / total) * 100) : 0;
                                                     const currentUrl = scriptUrls.get(directory.name);
                                                     const domain = currentUrl?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] || '';
 
                                                     return (
                                                       <>
-                                                        {/* Elegant progress bar with percentage inside */}
-                                                        <div className="relative w-full h-1.5 bg-slate-200/70 dark:bg-slate-700/70 rounded-full overflow-hidden shadow-sm">
-                                                          <div
-                                                            className="h-full bg-gradient-to-r from-emerald-500 via-green-500 to-green-400 transition-all duration-700 ease-out"
-                                                            style={{ width: `${progress}%` }}
-                                                          />
-                                                          <div className="absolute inset-0 flex items-center justify-center">
-                                                            <span className="text-[7px] font-bold text-slate-700 dark:text-slate-300 drop-shadow-sm tracking-tight">
-                                                              {progress}%
+                                                        {/* Crawling indicator with pulse */}
+                                                        <div className="flex items-center gap-2">
+                                                          <div className="flex items-center gap-1">
+                                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-sm" />
+                                                            <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                                              Crawling
                                                             </span>
                                                           </div>
+                                                          {domain && (
+                                                            <span className="flex-1 truncate text-[8px] text-slate-500 dark:text-slate-500" title={currentUrl}>
+                                                              {domain}
+                                                            </span>
+                                                          )}
                                                         </div>
 
-                                                        {/* Compact minimal stats */}
-                                                        <div className="flex items-center gap-1.5 text-[9px] text-slate-600 dark:text-slate-400">
+                                                        {/* Stats row */}
+                                                        <div className="flex items-center gap-2 text-[9px] text-slate-600 dark:text-slate-400">
                                                           <span className="flex items-center gap-0.5 font-medium">
                                                             <Clock className="w-2 h-2 opacity-50" />
-                                                            {queueCount}
+                                                            <span className="text-[10px]">{queueCount}</span>
+                                                            <span className="text-[8px] opacity-60">queue</span>
                                                           </span>
-                                                          <span className="opacity-20">•</span>
+                                                          <span className="opacity-30">•</span>
                                                           <span className="flex items-center gap-0.5 font-medium">
                                                             <CheckCircle className="w-2 h-2 opacity-50" />
-                                                            {visitedCount}
+                                                            <span className="text-[10px]">{visitedCount}</span>
+                                                            <span className="text-[8px] opacity-60">visited</span>
                                                           </span>
-                                                          {domain && (
-                                                            <>
-                                                              <span className="opacity-20">•</span>
-                                                              <span className="flex-1 truncate opacity-50 text-[8px]" title={currentUrl}>
-                                                                {domain}
-                                                              </span>
-                                                            </>
-                                                          )}
                                                         </div>
                                                       </>
                                                     );
@@ -2589,13 +2586,15 @@ export default function CrawlerDataPage() {
                               }}
                             />
                             <Label htmlFor="select-all" className="text-sm cursor-pointer">
-                              {Math.max(selectedForRecrawl.size, selectedForAnalyze.size)}/{filteredItems.length}
+                              {Math.max(selectedForRecrawl.size, selectedForAnalyze.size) > 0
+                                ? `${Math.max(selectedForRecrawl.size, selectedForAnalyze.size)} selected`
+                                : 'Select all'}
                             </Label>
                           </div>
 
                           <div className="flex items-center gap-2 flex-1">
-                            {/* Pagination count */}
-                            {totalItemsCount > 0 && (
+                            {/* Pagination count - hide when selection active */}
+                            {totalItemsCount > 0 && Math.max(selectedForRecrawl.size, selectedForAnalyze.size) === 0 && (
                               <div className="text-sm text-muted-foreground font-medium px-2">
                                 {crawledItems.length}/{totalItemsCount}
                               </div>
