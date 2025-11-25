@@ -594,6 +594,24 @@ export async function getDatabaseSettings() {
 
       console.log('DEBUG: Found frontend database settings:', dbConfig);
 
+      // Validate required fields and add .env fallbacks if missing
+      if (!dbConfig.host) {
+        dbConfig.host = process.env.POSTGRES_HOST || '91.99.229.96';
+        console.log('DEBUG: Using POSTGRES_HOST from env:', dbConfig.host);
+      }
+      if (!dbConfig.port) {
+        dbConfig.port = parseInt(process.env.POSTGRES_PORT || '5432');
+        console.log('DEBUG: Using POSTGRES_PORT from env:', dbConfig.port);
+      }
+      if (!dbConfig.user) {
+        dbConfig.user = process.env.POSTGRES_USER || 'postgres';
+        console.log('DEBUG: Using POSTGRES_USER from env:', dbConfig.user);
+      }
+      if (!dbConfig.password) {
+        dbConfig.password = process.env.POSTGRES_PASSWORD || '';
+        console.log('DEBUG: Using POSTGRES_PASSWORD from env: ***');
+      }
+
       // Return in the expected format
       return {
         database: dbConfig
