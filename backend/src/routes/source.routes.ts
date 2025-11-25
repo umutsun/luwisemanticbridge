@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
-import { SettingsService } from '../services/settings.service';
+import { getDatabaseSettings } from '../config/database.config';
 
 dotenv.config();
 
 const router = Router();
-const settingsService = new SettingsService();
 
 // Source Database Pool - will be initialized from settings
 let sourcePool: Pool;
@@ -20,57 +19,44 @@ async function initializeSourcePool() {
       sourcePool = null;
     }
 
-    // Get source database settings from 'database' category
-    // Settings are stored as nested object: { database: { name, host, user, password, ... } }
-    let sourceDatabaseName: string | null = null;
-    let sourceHost: string | null = null;
-    let sourcePort: number | null = null;
-    let sourceUser: string | null = null;
-    let sourcePassword: string | null = null;
-    let sourceSsl: boolean = false;
+    // Get source database settings using getDatabaseSettings()
+    // This function reads database.* keys and combines them into config object
+    const dbConfig = await getDatabaseSettings();
 
-    try {
-      // Read 'database' key which contains nested object stored as JSON string
-      const dbSettingValue = await settingsService.getSetting('database');
+    console.log('[Source DB] Database config:', dbConfig ? 'Found' : 'Not found');
 
-      console.log('[Source DB] Raw database setting:', dbSettingValue ? 'Found' : 'Not found');
-
-      if (dbSettingValue) {
-        // Parse JSON value - settings are stored as JSON strings
-        const config = JSON.parse(dbSettingValue);
-
-        console.log('[Source DB] Parsed config:', {
-          hasName: !!config.name,
-          hasUser: !!config.user,
-          hasPassword: !!config.password,
-          hasHost: !!config.host
-        });
-
-        sourceDatabaseName = config.name;
-        sourceHost = config.host || process.env.POSTGRES_HOST || '91.99.229.96';
-        sourcePort = config.port || parseInt(process.env.POSTGRES_PORT || '5432');
-        sourceUser = config.user;
-        sourcePassword = config.password;
-        sourceSsl = config.ssl || false;
-      }
-
-      // Validate required settings
-      if (!sourceDatabaseName || !sourceUser || !sourcePassword) {
-        throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
-      }
-
-      console.log(`[Source DB] ✓ Using database from settings: ${sourceDatabaseName} on ${sourceHost}:${sourcePort}`);
-    } catch (settingsError: any) {
-      console.error('[Source DB] ✗ Failed to get database settings:', settingsError.message);
+    if (!dbConfig) {
       throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
     }
 
+    console.log('[Source DB] Config details:', {
+      hasName: !!dbConfig.database,
+      hasHost: !!dbConfig.host,
+      hasUser: !!dbConfig.user,
+      hasPassword: !!dbConfig.password
+    });
+
+    // Validate required settings
+    if (!dbConfig.database || !dbConfig.user || !dbConfig.password) {
+      throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
+    }
+
+    console.log(`[Source DB] ✓ Using database: ${dbConfig.database} on ${dbConfig.host}:${dbConfig.port}`);
+
+    // Use config values directly
+    const sourceDatabaseName = dbConfig.database;
+    const sourceHost = dbConfig.host || '91.99.229.96';
+    const sourcePort = dbConfig.port || 5432;
+    const sourceUser = dbConfig.user;
+    const sourcePassword = dbConfig.password;
+    const sourceSsl = dbConfig.ssl || false;
+
     const config = {
-      host: sourceHost!,
-      port: sourcePort || 5432,
-      database: sourceDatabaseName!, // Source DB from user settings
-      user: sourceUser!,
-      password: sourcePassword!,
+      host: sourceHost,
+      port: sourcePort,
+      database: sourceDatabaseName, // Source DB from user settings
+      user: sourceUser,
+      password: sourcePassword,
       ssl: sourceSsl,
       max: 10
     };
@@ -86,8 +72,8 @@ async function initializeSourcePool() {
     });
 
     return sourcePool;
-  } catch (error) {
-    console.error('Failed to initialize source pool:', error);
+  } catch (error: any) {
+    console.error('[Source DB] ✗ Failed to initialize source pool:', error.message);
     throw error;
   }
 }
