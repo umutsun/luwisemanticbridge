@@ -20,44 +20,41 @@ async function initializeSourcePool() {
       sourcePool = null;
     }
 
-    // Get source database settings from database.* keys in settings
-    // NO FALLBACKS - Source DB must be configured by user in settings
+    // Get source database settings from 'database' category
+    // Settings are stored as nested object: { database: { name, host, user, password, ... } }
     let sourceDatabaseName: string | null = null;
     let sourceHost: string | null = null;
     let sourcePort: number | null = null;
     let sourceUser: string | null = null;
     let sourcePassword: string | null = null;
+    let sourceSsl: boolean = false;
 
     try {
-      // Read individual database.* settings keys (not nested under app)
-      const dbNameSetting = await settingsService.getSetting('database.name');
-      const dbHostSetting = await settingsService.getSetting('database.host');
-      const dbPortSetting = await settingsService.getSetting('database.port');
-      const dbUserSetting = await settingsService.getSetting('database.user');
-      const dbPasswordSetting = await settingsService.getSetting('database.password');
+      // Read database settings as category (returns nested object)
+      const dbSettings = await settingsService.getSettings('database');
 
-      if (dbNameSetting) {
-        sourceDatabaseName = typeof dbNameSetting === 'string' ? dbNameSetting : JSON.parse(dbNameSetting);
-      }
-      if (dbHostSetting) {
-        sourceHost = typeof dbHostSetting === 'string' ? dbHostSetting : JSON.parse(dbHostSetting);
-      }
-      if (dbPortSetting) {
-        sourcePort = parseInt(typeof dbPortSetting === 'string' ? dbPortSetting : JSON.parse(dbPortSetting));
-      }
-      if (dbUserSetting) {
-        sourceUser = typeof dbUserSetting === 'string' ? dbUserSetting : JSON.parse(dbUserSetting);
-      }
-      if (dbPasswordSetting) {
-        sourcePassword = typeof dbPasswordSetting === 'string' ? dbPasswordSetting : JSON.parse(dbPasswordSetting);
+      console.log('[Source DB] Database settings:', {
+        hasSettings: !!dbSettings,
+        keys: dbSettings ? Object.keys(dbSettings) : []
+      });
+
+      if (dbSettings && dbSettings.database) {
+        // Settings are nested under 'database' key
+        const config = dbSettings.database;
+        sourceDatabaseName = config.name;
+        sourceHost = config.host || process.env.POSTGRES_HOST || '91.99.229.96';
+        sourcePort = config.port || parseInt(process.env.POSTGRES_PORT || '5432');
+        sourceUser = config.user;
+        sourcePassword = config.password;
+        sourceSsl = config.ssl || false;
       }
 
       // Validate required settings
-      if (!sourceDatabaseName || !sourceHost || !sourceUser || !sourcePassword) {
+      if (!sourceDatabaseName || !sourceUser || !sourcePassword) {
         throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
       }
 
-      console.log(`[Source DB] Using database from settings: ${sourceDatabaseName} on ${sourceHost}`);
+      console.log(`[Source DB] Using database from settings: ${sourceDatabaseName} on ${sourceHost}:${sourcePort}`);
     } catch (settingsError: any) {
       console.error('[Source DB] Failed to get database settings:', settingsError.message);
       throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
@@ -69,7 +66,7 @@ async function initializeSourcePool() {
       database: sourceDatabaseName!, // Source DB from user settings
       user: sourceUser!,
       password: sourcePassword!,
-      ssl: false,
+      ssl: sourceSsl,
       max: 10
     };
 
