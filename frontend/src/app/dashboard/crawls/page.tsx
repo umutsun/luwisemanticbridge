@@ -2363,15 +2363,15 @@ export default function CrawlerDataPage() {
                                             </Button>
                                           </div>
                                         ) : (
-                                          <div className="relative flex flex-col gap-1.5 flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
-                                            {/* Animated background when running */}
+                                          <div className="relative flex flex-col gap-1 flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/60 dark:border-slate-700/60 overflow-hidden">
+                                            {/* Subtle animated background when running */}
                                             {runningScripts.has(directory.name) && (
-                                              <div className="absolute inset-0 bg-gradient-to-r from-green-500/20 via-green-400/10 to-transparent animate-pulse" style={{ animationDuration: '3s' }} />
+                                              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/8 via-green-400/4 to-transparent animate-pulse" style={{ animationDuration: '4s' }} />
                                             )}
 
-                                            <div className="relative z-10 flex flex-col gap-1.5">
+                                            <div className="relative z-10 flex flex-col gap-1">
                                               {runningScripts.has(directory.name) ? (
-                                                // Show modern progress card when running
+                                                // Show minimal elegant progress when running
                                                 (() => {
                                                   const state = crawlerStates.get(directory.name);
                                                   const scriptName = pythonScripts.get(directory.name)?.name || 'Unknown';
@@ -2381,67 +2381,61 @@ export default function CrawlerDataPage() {
                                                     const total = queueCount + visitedCount;
                                                     const progress = total > 0 ? Math.round((visitedCount / total) * 100) : 0;
                                                     const currentUrl = scriptUrls.get(directory.name);
+                                                    const domain = currentUrl?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] || '';
 
                                                     return (
                                                       <>
-                                                        {/* Crawler name */}
-                                                        <div className="flex items-center justify-between">
-                                                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200" title={scriptName}>
-                                                            {scriptName.replace('_crawler.py', '').replace(/_/g, ' ').toUpperCase()}
-                                                          </span>
-                                                          <span className="text-[10px] font-medium text-green-600 dark:text-green-400">
-                                                            {progress}%
-                                                          </span>
-                                                        </div>
-
-                                                        {/* Progress bar */}
-                                                        <div className="w-full h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                        {/* Elegant progress bar with percentage inside */}
+                                                        <div className="relative w-full h-1.5 bg-slate-200/70 dark:bg-slate-700/70 rounded-full overflow-hidden shadow-sm">
                                                           <div
-                                                            className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500 ease-out"
+                                                            className="h-full bg-gradient-to-r from-emerald-500 via-green-500 to-green-400 transition-all duration-700 ease-out"
                                                             style={{ width: `${progress}%` }}
                                                           />
-                                                        </div>
-
-                                                        {/* Stats */}
-                                                        <div className="flex items-center gap-2 text-[10px] text-slate-600 dark:text-slate-400">
-                                                          <span className="flex items-center gap-1">
-                                                            <Clock className="w-2.5 h-2.5" />
-                                                            Queue: {queueCount}
-                                                          </span>
-                                                          <span className="opacity-40">|</span>
-                                                          <span className="flex items-center gap-1">
-                                                            <CheckCircle className="w-2.5 h-2.5" />
-                                                            Visited: {visitedCount}
-                                                          </span>
-                                                        </div>
-
-                                                        {/* Current URL */}
-                                                        {currentUrl && (
-                                                          <div className="text-[9px] text-slate-500 dark:text-slate-500 truncate" title={currentUrl}>
-                                                            <Globe className="w-2.5 h-2.5 inline mr-1" />
-                                                            {currentUrl}
+                                                          <div className="absolute inset-0 flex items-center justify-center">
+                                                            <span className="text-[7px] font-bold text-slate-700 dark:text-slate-300 drop-shadow-sm tracking-tight">
+                                                              {progress}%
+                                                            </span>
                                                           </div>
-                                                        )}
+                                                        </div>
+
+                                                        {/* Compact minimal stats */}
+                                                        <div className="flex items-center gap-1.5 text-[9px] text-slate-600 dark:text-slate-400">
+                                                          <span className="flex items-center gap-0.5 font-medium">
+                                                            <Clock className="w-2 h-2 opacity-50" />
+                                                            {queueCount}
+                                                          </span>
+                                                          <span className="opacity-20">•</span>
+                                                          <span className="flex items-center gap-0.5 font-medium">
+                                                            <CheckCircle className="w-2 h-2 opacity-50" />
+                                                            {visitedCount}
+                                                          </span>
+                                                          {domain && (
+                                                            <>
+                                                              <span className="opacity-20">•</span>
+                                                              <span className="flex-1 truncate opacity-50 text-[8px]" title={currentUrl}>
+                                                                {domain}
+                                                              </span>
+                                                            </>
+                                                          )}
+                                                        </div>
                                                       </>
                                                     );
                                                   }
                                                   // Running but state not loaded yet
                                                   return (
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200" title={scriptName}>
-                                                        {scriptName.replace('_crawler.py', '').replace(/_/g, ' ').toUpperCase()}
-                                                      </span>
-                                                      <span className="text-[10px] text-green-600 dark:text-green-400 animate-pulse">
-                                                        Initializing...
+                                                    <div className="flex items-center gap-1.5 py-0.5">
+                                                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-sm" />
+                                                      <span className="text-[9px] text-slate-600 dark:text-slate-400 font-medium">
+                                                        Initializing crawler...
                                                       </span>
                                                     </div>
                                                   );
                                                 })()
                                               ) : (
                                                 // Show script name when idle (editable)
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between py-0.5">
                                                   <button
-                                                    className="text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left"
+                                                    className="text-[10px] font-medium text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-left truncate"
                                                     onClick={(e) => {
                                                       e.stopPropagation();
                                                       setShowCrawlerSelect(directory.name);
@@ -2460,10 +2454,10 @@ export default function CrawlerDataPage() {
                                                     <Button
                                                       size="sm"
                                                       variant="ghost"
-                                                      className="h-5 w-5 p-0 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-50 hover:opacity-100 transition-opacity"
+                                                      className="h-4 w-4 p-0 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-40 hover:opacity-100 transition-opacity"
                                                       onClick={(e) => e.stopPropagation()}
                                                     >
-                                                      <X className="w-3 h-3 text-red-500" />
+                                                      <X className="w-2.5 h-2.5 text-red-500" />
                                                     </Button>
                                                   </ConfirmTooltip>
                                                 </div>
