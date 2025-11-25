@@ -30,17 +30,22 @@ async function initializeSourcePool() {
     let sourceSsl: boolean = false;
 
     try {
-      // Read database settings as category (returns nested object)
-      const dbSettings = await settingsService.getSettings('database');
+      // Read 'database' key which contains nested object stored as JSON string
+      const dbSettingValue = await settingsService.getSetting('database');
 
-      console.log('[Source DB] Database settings:', {
-        hasSettings: !!dbSettings,
-        keys: dbSettings ? Object.keys(dbSettings) : []
-      });
+      console.log('[Source DB] Raw database setting:', dbSettingValue ? 'Found' : 'Not found');
 
-      if (dbSettings && dbSettings.database) {
-        // Settings are nested under 'database' key
-        const config = dbSettings.database;
+      if (dbSettingValue) {
+        // Parse JSON value - settings are stored as JSON strings
+        const config = JSON.parse(dbSettingValue);
+
+        console.log('[Source DB] Parsed config:', {
+          hasName: !!config.name,
+          hasUser: !!config.user,
+          hasPassword: !!config.password,
+          hasHost: !!config.host
+        });
+
         sourceDatabaseName = config.name;
         sourceHost = config.host || process.env.POSTGRES_HOST || '91.99.229.96';
         sourcePort = config.port || parseInt(process.env.POSTGRES_PORT || '5432');
@@ -54,9 +59,9 @@ async function initializeSourcePool() {
         throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
       }
 
-      console.log(`[Source DB] Using database from settings: ${sourceDatabaseName} on ${sourceHost}:${sourcePort}`);
+      console.log(`[Source DB] ✓ Using database from settings: ${sourceDatabaseName} on ${sourceHost}:${sourcePort}`);
     } catch (settingsError: any) {
-      console.error('[Source DB] Failed to get database settings:', settingsError.message);
+      console.error('[Source DB] ✗ Failed to get database settings:', settingsError.message);
       throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
     }
 
