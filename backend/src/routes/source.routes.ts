@@ -90,8 +90,9 @@ async function initializeSourcePool() {
   }
 }
 
-// Initialize pool immediately
-initializeSourcePool();
+// Don't initialize pool on startup - lazy initialization when endpoints are called
+// This allows app to start even if source DB is not configured yet
+// initializeSourcePool();
 
 /**
  * GET /tables
