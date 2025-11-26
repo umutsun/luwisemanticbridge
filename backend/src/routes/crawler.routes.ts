@@ -486,7 +486,9 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
         console.log('️  Creating table:', tableName);
         // Import source routes dynamically to use table creation
         const axios = require('axios');
-        const createResponse = await axios.post('http://localhost:8083/api/v2/source/tables/create', {
+        const backendPort = process.env.PORT || process.env.BACKEND_PORT || 8083;
+        console.log(`[Export] Using backend port: ${backendPort}`);
+        const createResponse = await axios.post(`http://localhost:${backendPort}/api/v2/source/tables/create`, {
           tableName,
           columns: tableSchema
         });
@@ -518,6 +520,7 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
         console.log(` Job ID: ${jobId}, Total batches: ${totalBatches}`);
 
         const axios = require('axios');
+        const backendPort = process.env.PORT || process.env.BACKEND_PORT || 8083;
 
         for (let i = 0; i < totalBatches; i++) {
           const start = i * batchSize;
@@ -526,7 +529,7 @@ router.post('/crawler-directories/:crawlerName/export-to-db', async (req: Reques
 
           console.log(` Processing batch ${i + 1}/${totalBatches} (${batch.length} records)`);
 
-          const insertResponse = await axios.post(`http://localhost:8083/api/v2/source/tables/${tableName}/insert`, {
+          const insertResponse = await axios.post(`http://localhost:${backendPort}/api/v2/source/tables/${tableName}/insert`, {
             data: batch,
             columnMappings
           });
