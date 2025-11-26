@@ -11,7 +11,7 @@ describe('Button Component', () => {
   it('handles click events', () => {
     const handleClick = jest.fn();
     render(<Button onClick={handleClick}>Click me</Button>);
-    
+
     fireEvent.click(screen.getByRole('button'));
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
@@ -19,10 +19,10 @@ describe('Button Component', () => {
   it('applies variant styles correctly', () => {
     const { rerender } = render(<Button variant="default">Default</Button>);
     expect(screen.getByRole('button')).toHaveClass('bg-primary');
-    
+
     rerender(<Button variant="destructive">Destructive</Button>);
     expect(screen.getByRole('button')).toHaveClass('bg-destructive');
-    
+
     rerender(<Button variant="outline">Outline</Button>);
     expect(screen.getByRole('button')).toHaveClass('border');
   });
@@ -30,7 +30,7 @@ describe('Button Component', () => {
   it('applies size styles correctly', () => {
     const { rerender } = render(<Button size="sm">Small</Button>);
     expect(screen.getByRole('button')).toHaveClass('h-8');
-    
+
     rerender(<Button size="lg">Large</Button>);
     expect(screen.getByRole('button')).toHaveClass('h-10');
   });
@@ -46,7 +46,7 @@ describe('Button Component', () => {
         <a href="/test">Link Button</a>
       </Button>
     );
-    
+
     expect(screen.getByRole('link', { name: /link button/i })).toBeInTheDocument();
   });
 });

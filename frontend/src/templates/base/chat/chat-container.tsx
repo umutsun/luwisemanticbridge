@@ -6,8 +6,11 @@ import { ChatInput } from './chat-input';
 import { useChatStore } from '@/lib/store/chat-store';
 import { useChat } from '@/lib/hooks/use-chat';
 import { useChatStream } from '@/lib/hooks/use-chat-stream';
+import { useTranslation } from 'react-i18next';
 
 export function ChatContainer() {
+  const { t } = useTranslation();
+
   const {
     getCurrentMessages,
     isLoading,
@@ -27,10 +30,10 @@ export function ChatContainer() {
   useEffect(() => {
     // Create a new conversation if none exists
     if (!currentConversationId) {
-      createNewConversation('Legal Assistant Chat');
+      createNewConversation(t('chatInterface.legalAssistantChat', 'Legal Assistant Chat'));
     }
   }, [currentConversationId, createNewConversation]);
-  
+
   return (
     <div className="flex flex-col h-full w-full bg-gray-50/50 dark:bg-gray-900">
       <div className="flex-1 overflow-y-auto">

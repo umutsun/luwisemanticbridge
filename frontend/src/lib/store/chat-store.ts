@@ -1,7 +1,13 @@
 import { create } from 'zustand';
-import { Message, Conversation, ChatState } from '../types/chat';
+import { Message, Conversation, ChatState } from '@/types/chat';
 
 interface ChatStore extends ChatState {
+  // State properties (inherited from ChatState)
+  conversations: Conversation[];
+  currentConversationId: string | null;
+  isLoading: boolean;
+  error: string | null;
+
   // Actions
   addMessage: (message: Message) => void;
   updateMessage: (messageId: string, updates: Partial<Message>) => void;
@@ -10,7 +16,7 @@ interface ChatStore extends ChatState {
   clearError: () => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
-  
+
   // Getters
   getCurrentConversation: () => Conversation | null;
   getCurrentMessages: () => Message[];
@@ -18,7 +24,7 @@ interface ChatStore extends ChatState {
 
 // Generate UUID v4
 const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -42,10 +48,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         conversations: state.conversations.map((conv) =>
           conv.id === conversationId
             ? {
-                ...conv,
-                messages: [...conv.messages, message],
-                updatedAt: new Date(),
-              }
+              ...conv,
+              messages: [...conv.messages, message],
+              updatedAt: new Date(),
+            }
             : conv
         ),
       };
@@ -61,12 +67,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         conversations: state.conversations.map((conv) =>
           conv.id === conversationId
             ? {
-                ...conv,
-                messages: conv.messages.map((msg) =>
-                  msg.id === messageId ? { ...msg, ...updates } : msg
-                ),
-                updatedAt: new Date(),
-              }
+              ...conv,
+              messages: conv.messages.map((msg: Message) =>
+                msg.id === messageId ? { ...msg, ...updates } : msg
+              ),
+              updatedAt: new Date(),
+            }
             : conv
         ),
       };

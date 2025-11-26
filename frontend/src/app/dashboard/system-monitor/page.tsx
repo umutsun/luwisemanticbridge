@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -95,6 +96,7 @@ interface ServiceStatus {
 }
 
 export default function SystemMonitor() {
+  const { t } = useTranslation();
 
   const [metrics, setMetrics] = useState<SystemMetrics[]>([]);
   const [performance, setPerformance] = useState<PerformanceData | null>(null);
@@ -195,7 +197,7 @@ export default function SystemMonitor() {
       setLoading(false);
     } catch (err) {
       console.error('Error fetching system data:', err);
-      setError('Sistem verileri yüklenemedi');
+      setError(t('dashboard.system.error'));
       setLoading(false);
     }
   };
@@ -240,19 +242,19 @@ export default function SystemMonitor() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Sistem Monitörü</h1>
-          <p className="text-muted-foreground">Gerçek zamanlı sistem performansı ve metrikler</p>
+          <h1 className="text-xl font-semibold">{t('systemMonitor.title')}</h1>
+          <p className="text-muted-foreground">{t('systemMonitor.description')}</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className={`w-3 h-3 rounded-full ${getHealthColor(getHealthStatus())}`} />
             <span className="text-sm font-medium">
-              {getHealthStatus() === 'healthy' ? 'Sağlıklı' :
-               getHealthStatus() === 'warning' ? 'Uyarı' :
-               getHealthStatus() === 'critical' ? 'Kritik' : 'Bilinmiyor'}
+              {getHealthStatus() === 'healthy' ? t('systemMonitor.systemStatus.healthy') :
+                getHealthStatus() === 'warning' ? t('systemMonitor.systemStatus.warning') :
+                  getHealthStatus() === 'critical' ? t('systemMonitor.systemStatus.critical') : t('systemMonitor.systemStatus.unknown')}
             </span>
           </div>
-          <Tabs value={timeRange} onValueChange={(value) => setTimeRange(value as any)}>
+          <Tabs value={timeRange} onValueChange={(value) => setTimeRange(value as '1h' | '6h' | '24h' | '7d')}>
             <TabsList>
               <TabsTrigger value="1h">1S</TabsTrigger>
               <TabsTrigger value="6h">6S</TabsTrigger>
@@ -272,12 +274,12 @@ export default function SystemMonitor() {
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Genel Bakış</TabsTrigger>
-          <TabsTrigger value="performance">Performans</TabsTrigger>
-          <TabsTrigger value="services">Servisler</TabsTrigger>
-          <TabsTrigger value="network">Ağ</TabsTrigger>
-          <TabsTrigger value="logs">Loglar</TabsTrigger>
-          <TabsTrigger value="alerts">Uyarılar</TabsTrigger>
+          <TabsTrigger value="overview">{t('systemMonitor.title')}</TabsTrigger>
+          <TabsTrigger value="performance">{t('systemMonitor.title')}</TabsTrigger>
+          <TabsTrigger value="services">{t('systemMonitor.services.title')}</TabsTrigger>
+          <TabsTrigger value="network">{t('systemMonitor.resources.network.title')}</TabsTrigger>
+          <TabsTrigger value="logs">{t('systemMonitor.logs.title')}</TabsTrigger>
+          <TabsTrigger value="alerts">{t('systemMonitor.alerts.title')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -287,7 +289,7 @@ export default function SystemMonitor() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">CPU Kullanımı</p>
+                    <p className="text-sm font-medium text-muted-foreground">{t('systemMonitor.resources.cpu.title')}</p>
                     <p className="text-2xl font-bold">{metrics[metrics.length - 1]?.cpu.toFixed(1)}%</p>
                   </div>
                   <Cpu className="h-8 w-8 text-blue-500" />
@@ -300,7 +302,7 @@ export default function SystemMonitor() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Memory</p>
+                    <p className="text-sm font-medium text-muted-foreground">{t('systemMonitor.resources.memory.title')}</p>
                     <p className="text-2xl font-bold">{metrics[metrics.length - 1]?.memory.toFixed(1)}%</p>
                   </div>
                   <MemoryStick className="h-8 w-8 text-green-500" />
@@ -313,7 +315,7 @@ export default function SystemMonitor() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Disk Kullanımı</p>
+                    <p className="text-sm font-medium text-muted-foreground">{t('systemMonitor.resources.disk.title')}</p>
                     <p className="text-2xl font-bold">{metrics[metrics.length - 1]?.disk.toFixed(1)}%</p>
                   </div>
                   <HardDrive className="h-8 w-8 text-orange-500" />
@@ -326,7 +328,7 @@ export default function SystemMonitor() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">Aktif Bağlantılar</p>
+                    <p className="text-sm font-medium text-muted-foreground">{t('systemMonitor.resources.network.connections')}</p>
                     <p className="text-2xl font-bold">{performance?.activeConnections}</p>
                   </div>
                   <Wifi className="h-8 w-8 text-purple-500" />
@@ -344,7 +346,7 @@ export default function SystemMonitor() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Kaynak Kullanımı (Son 1 Saat)</CardTitle>
+                <CardTitle>{t('systemMonitor.resources.title')} (1{t('systemMonitor.seconds')})</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -368,7 +370,7 @@ export default function SystemMonitor() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Load Average & İşlem Sayısı</CardTitle>
+                <CardTitle>{t('systemMonitor.processes.title')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -397,7 +399,7 @@ export default function SystemMonitor() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Timer className="h-5 w-5" />
-                  Yanıt Süresi
+                  {t('systemMonitor.charts.responseTime')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -413,14 +415,14 @@ export default function SystemMonitor() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
-                  Throughput
+                  {t('systemMonitor.charts.requestRate')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{performance?.throughput.toFixed(0)}/s</div>
                 <div className="flex items-center gap-2 mt-4">
                   <TrendingUp className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-green-500">+12% önceki saate göre</span>
+                  <span className="text-sm text-green-500">+12% {t('systemMonitor.lastUpdated')}</span>
                 </div>
               </CardContent>
             </Card>
@@ -429,7 +431,7 @@ export default function SystemMonitor() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Database className="h-5 w-5" />
-                  Cache Hit Rate
+                  {t('systemMonitor.charts.cacheHitRate')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -441,16 +443,16 @@ export default function SystemMonitor() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Performans Metrikleri</CardTitle>
+              <CardTitle>{t('systemMonitor.title')}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <RadarChart data={[
-                  { subject: 'Response Time', A: performance?.responseTime / 5, fullMark: 100 },
-                  { subject: 'Throughput', A: performance?.throughput / 10, fullMark: 100 },
-                  { subject: 'Cache Hit', A: performance?.cacheHitRate, fullMark: 100 },
-                  { subject: 'Error Rate', A: 100 - (performance?.errorRate * 20), fullMark: 100 },
-                  { subject: 'Availability', A: 99.9, fullMark: 100 }
+                  { subject: t('systemMonitor.charts.responseTime'), A: performance?.responseTime / 5, fullMark: 100 },
+                  { subject: t('systemMonitor.charts.requestRate'), A: performance?.throughput / 10, fullMark: 100 },
+                  { subject: t('systemMonitor.charts.cacheHitRate'), A: performance?.cacheHitRate, fullMark: 100 },
+                  { subject: t('systemMonitor.charts.errorRate'), A: 100 - (performance?.errorRate * 20), fullMark: 100 },
+                  { subject: t('systemMonitor.charts.responseTime'), A: 99.9, fullMark: 100 }
                 ]}>
                   <PolarGrid />
                   <PolarAngleAxis dataKey="subject" />
@@ -470,11 +472,10 @@ export default function SystemMonitor() {
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className={`w-3 h-3 rounded-full ${
-                        service.status === 'running' ? 'bg-green-500' :
+                      <div className={`w-3 h-3 rounded-full ${service.status === 'running' ? 'bg-green-500' :
                         service.status === 'warning' ? 'bg-yellow-500' :
-                        service.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
-                      }`} />
+                          service.status === 'error' ? 'bg-red-500' : 'bg-gray-500'
+                        }`} />
                       <div>
                         <h3 className="font-semibold">{service.name}</h3>
                         <p className="text-sm text-muted-foreground">
@@ -494,13 +495,13 @@ export default function SystemMonitor() {
                       <Badge
                         variant={
                           service.status === 'running' ? 'default' :
-                          service.status === 'warning' ? 'secondary' :
-                          service.status === 'error' ? 'destructive' : 'outline'
+                            service.status === 'warning' ? 'secondary' :
+                              service.status === 'error' ? 'error' : 'outline'
                         }
                       >
                         {service.status === 'running' ? 'Çalışıyor' :
-                         service.status === 'warning' ? 'Uyarı' :
-                         service.status === 'error' ? 'Hata' : 'Bilinmiyor'}
+                          service.status === 'warning' ? 'Uyarı' :
+                            service.status === 'error' ? 'Hata' : 'Bilinmiyor'}
                       </Badge>
                     </div>
                   </div>
@@ -514,7 +515,7 @@ export default function SystemMonitor() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>Ağ Trafiği</CardTitle>
+                <CardTitle>{t('systemMonitor.resources.network.title')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -535,7 +536,7 @@ export default function SystemMonitor() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Bağlantı Dağılımı</CardTitle>
+                <CardTitle>{t('systemMonitor.resources.network.connections')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
@@ -544,10 +545,10 @@ export default function SystemMonitor() {
                     <Funnel
                       dataKey="value"
                       data={[
-                        { name: 'Total Requests', value: 4567 },
-                        { name: 'Successful', value: 4234 },
-                        { name: 'Cached', value: 3456 },
-                        { name: 'Active', value: 2345 }
+                        { name: t('common.total'), value: 4567 },
+                        { name: t('common.success'), value: 4234 },
+                        { name: t('common.cache'), value: 3456 },
+                        { name: t('systemMonitor.services.status.running'), value: 2345 }
                       ]}
                     />
                   </FunnelChart>
@@ -567,7 +568,7 @@ export default function SystemMonitor() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5" />
-                  Aktif Uyarılar
+                  {t('systemMonitor.alerts.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -575,19 +576,19 @@ export default function SystemMonitor() {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      CPU kullanımı %85'in üzerine çıktı. Performans etkilenebilir.
+                      {t('systemMonitor.alerts.severities.high')}
                     </AlertDescription>
                   </Alert>
                   <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
-                      Redis cache hit rate düştü. Optimizasyon önerilir.
+                      {t('systemMonitor.alerts.title')}
                     </AlertDescription>
                   </Alert>
                   <Alert>
                     <CheckCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Sistem backup başarıyla tamamlandı.
+                      {t('systemMonitor.alerts.severities.low')}
                     </AlertDescription>
                   </Alert>
                 </div>

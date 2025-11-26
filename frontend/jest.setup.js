@@ -1,73 +1,31 @@
-// Optional: configure or set up a testing framework before each test.
-// If you delete this file, remove `setupFilesAfterEnv` from `jest.config.js`
+import '@testing-library/jest-dom'
 
-// Used for __tests__/testing-library.js
-// Learn more: https://github.com/testing-library/jest-dom
-import '@testing-library/jest-dom';
-import { configure } from '@testing-library/react';
-import { server } from './src/mocks/server';
-
-// Configure React Testing Library
-configure({ testIdAttribute: 'data-testid' });
-
-// Mock Next.js router
-jest.mock('next/navigation', () => ({
-  useRouter() {
+const localStorageMock = (function () {
+    let store = {};
     return {
-      push: jest.fn(),
-      replace: jest.fn(),
-      prefetch: jest.fn(),
-      back: jest.fn(),
-      forward: jest.fn(),
-      refresh: jest.fn(),
+        getItem: jest.fn((key) => store[key] || null),
+        setItem: jest.fn((key, value) => {
+            store[key] = value.toString();
+        }),
+        removeItem: jest.fn((key) => {
+            delete store[key];
+        }),
+        clear: jest.fn(() => {
+            store = {};
+        }),
     };
-  },
-  useSearchParams() {
-    return new URLSearchParams();
-  },
-  usePathname() {
-    return '/';
-  },
-}));
+})();
 
-// Mock Next.js image
-jest.mock('next/image', () => ({
-  __esModule: true,
-  default: (props) => <img {...props} />,
-}));
-
-// Mock fetch
-global.fetch = jest.fn();
-
-// Mock localStorage
-const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-};
-global.localStorage = localStorageMock;
-
-// Mock window.matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(),
-    removeListener: jest.fn(),
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
+Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock,
 });
 
-// Start MSW server before all tests
-beforeAll(() => server.listen());
-
-// Reset request handlers after each test
-afterEach(() => server.resetHandlers());
-
-// Close server after all tests
-afterAll(() => server.close());
+// Mock fetch globally
+global.fetch = jest.fn(() =>
+    Promise.resolve({
+        json: () => Promise.resolve({}),
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+    })
+);

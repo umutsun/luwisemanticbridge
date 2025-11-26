@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Source } from '@/types/chat';
 import { ExternalLink, FileText, Scale, BookOpen, MessageSquare, Database, ChevronDown, ChevronUp, Plus, Tag } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface SourceCitationProps {
   sources: Source[];
@@ -13,10 +14,12 @@ interface SourceCitationProps {
 }
 
 export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadMore = false, onExcerptClick }: SourceCitationProps) {
-  if (!sources || sources.length === 0) return null;
+  const { t } = useTranslation();
 
   // State for showing/hiding sources (progressive loading)
   const [showAllSources, setShowAllSources] = useState(false);
+
+  if (!sources || sources.length === 0) return null;
 
   // Determine initial sources to show (minResults concept)
   const initialSourcesToShow = 7;
@@ -24,7 +27,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
   // Helper function to get source table display name
   const getSourceTableName = (sourceTable?: string) => {
-    if (!sourceTable) return 'Kaynak';
+    if (!sourceTable) return t('chatInterface.source', 'Source');
 
     // Convert to title case for better readability
     return sourceTable
@@ -76,7 +79,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
 
   const confidence = calculateConfidence();
   const confidenceColor = confidence >= 85 ? 'text-green-600' : confidence >= 70 ? 'text-yellow-600' : 'text-orange-600';
-  const confidenceText = confidence >= 85 ? 'Yüksek' : confidence >= 70 ? 'Orta' : 'Düşük';
+  const confidenceText = confidence >= 85 ? t('chatInterface.confidence.high', 'High') : confidence >= 70 ? t('chatInterface.confidence.medium', 'Medium') : t('chatInterface.confidence.low', 'Low');
 
   // Extract meaningful keywords/tags from source
   const extractTags = (source: Source): string[] => {
@@ -175,18 +178,21 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
     return 'Bu konu hakkında daha fazla bilgi';
   };
 
-  
-  
+
+
   return (
     <div className="mt-4 pt-3 border-t border-gray-100/60 dark:border-gray-600/30">
       <div className="space-y-2">
         {sourcesToDisplay.map((source, index) => {
           // Calculate individual metrics
           const hasMetadata = source.metadata && Object.keys(source.metadata).length > 0;
-          const metricScore = source.score || source.relevance || source.relevanceScore || (hasMetadata ? 75 : 50);
+          const metricScore = (source as Source & { score?: number; relevance?: number; relevanceScore?: number }).score ||
+            (source as Source & { score?: number; relevance?: number; relevanceScore?: number }).relevance ||
+            (source as Source & { score?: number; relevance?: number; relevanceScore?: number }).relevanceScore ||
+            (hasMetadata ? 75 : 50);
           const scoreColor = metricScore >= 80 ? 'text-green-600' : metricScore >= 60 ? 'text-yellow-600' : 'text-gray-500';
           const scoreDisplay = Math.round(metricScore);
-          
+
           return (
             <div key={source.id} className="group">
               <div className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors duration-200">
@@ -254,7 +260,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                     )}
                   </div>
 
-  
+
                   {/* Tags */}
                   {(() => {
                     const tags = extractTags(source);
@@ -289,7 +295,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                           onExcerptClick(question);
                         }
                       }}
-                      title="Bu kaynak hakkında soru sor"
+                      title={t('chatInterface.askAboutSource', 'Ask about this source')}
                     >
                       {source.excerpt}
                     </p>
@@ -317,7 +323,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
               className="flex items-center gap-2 mx-auto text-xs px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-full transition-colors"
             >
               <ChevronDown className="w-3 h-3" />
-              {sources.length - initialSourcesToShow} Kaynak Daha Göster
+              {sources.length - initialSourcesToShow} {t('chatInterface.showMoreSources', 'Show More Sources')}
             </button>
           ) : (
             <button
@@ -325,7 +331,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
               className="flex items-center gap-2 mx-auto text-xs px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-full transition-colors"
             >
               <ChevronUp className="w-3 h-3" />
-              Daha Az Göster
+              {t('chatInterface.showLessSources', 'Show Less Sources')}
             </button>
           )}
         </div>
@@ -339,7 +345,7 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
             className="flex items-center gap-2 mx-auto text-xs px-4 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-full transition-colors"
           >
             <Plus className="w-3 h-3" />
-            Daha Fazla Kaynak Yükle
+            {t('chatInterface.loadMoreSources', 'Load More Sources')}
           </button>
         </div>
       )}

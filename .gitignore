@@ -300,12 +300,6 @@ playwright/.cache/
 # TypeScript
 *.tsbuildinfo
 
-# Jest
-jest.config.js
-jest.config.ts
-jest.config.json
-jest.config.mjs
-jest.config.cjs
 
 # Windows reserved filenames accidentally created
 /nul

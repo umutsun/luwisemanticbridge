@@ -196,15 +196,25 @@ router.get('/tables/:tableName/structure', async (req: Request, res: Response) =
  * Create a new table in source database
  */
 router.post('/tables/create', async (req: Request, res: Response) => {
+  console.log('[Source DB] === CREATE TABLE REQUEST RECEIVED ===');
+  console.log('[Source DB] Request body:', JSON.stringify(req.body, null, 2));
+
   try {
     // Ensure pool is initialized
+    console.log('[Source DB] Checking pool...');
     if (!sourcePool) {
+      console.log('[Source DB] Pool not initialized, initializing...');
       await initializeSourcePool();
     }
+    console.log('[Source DB] Pool ready');
 
     const { tableName, columns } = req.body;
 
+    console.log('[Source DB] tableName:', tableName);
+    console.log('[Source DB] columns:', JSON.stringify(columns, null, 2));
+
     if (!tableName || !columns || !Array.isArray(columns)) {
+      console.log('[Source DB] VALIDATION FAILED - tableName:', !!tableName, 'columns:', !!columns, 'isArray:', Array.isArray(columns));
       return res.status(400).json({
         success: false,
         error: 'Table name and columns are required'
@@ -212,7 +222,9 @@ router.post('/tables/create', async (req: Request, res: Response) => {
     }
 
     // Build CREATE TABLE statement
-    const columnDefs = columns.map((col: any) => {
+    console.log('[Source DB] Building column definitions...');
+    const columnDefs = columns.map((col: any, idx: number) => {
+      console.log(`[Source DB] Column ${idx}:`, col);
       let def = `"${col.columnName}" ${col.sqlType}`;
       // Don't add NOT NULL for crawler data - data may have null values
       // if (!col.nullable) def += ' NOT NULL';
@@ -221,8 +233,11 @@ router.post('/tables/create', async (req: Request, res: Response) => {
       if (col.columnName.toLowerCase() === 'url' || col.originalField?.toLowerCase() === 'url') {
         def += ' UNIQUE';
       }
+      console.log(`[Source DB] Column ${idx} def:`, def);
       return def;
     }).join(', ');
+
+    console.log('[Source DB] All column defs:', columnDefs);
 
     const createQuery = `
       CREATE TABLE IF NOT EXISTS "${tableName}" (
@@ -248,11 +263,17 @@ router.post('/tables/create', async (req: Request, res: Response) => {
       message: `Table ${tableName} created successfully in database: ${dbInfo.rows[0].current_database}`
     });
   } catch (error: any) {
-    console.error('[Source DB] ✗ Failed to create table:', error.message);
-    console.error('[Source DB] Error details:', error);
+    console.error('[Source DB] ✗ Failed to create table');
+    console.error('[Source DB] Error message:', error.message);
+    console.error('[Source DB] Error code:', error.code);
+    console.error('[Source DB] Error detail:', error.detail);
+    console.error('[Source DB] Error hint:', error.hint);
+    console.error('[Source DB] Error stack:', error.stack);
+    console.error('[Source DB] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create table',
+      code: error.code || '',
       details: error.detail || error.hint || ''
     });
   }

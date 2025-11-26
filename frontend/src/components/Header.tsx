@@ -432,8 +432,8 @@ export default function Header() {
                       href={item.href}
                       onClick={() => setMobileMenuOpen(false)}
                       className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${pathname === item.href
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-muted'
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-muted'
                         }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -448,7 +448,7 @@ export default function Header() {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">{t('header.systemStatus')}</span>
                   <div className={`h-2 w-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-green-500' :
-                      getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                    getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
                     } animate-pulse`} />
                 </div>
 
@@ -604,7 +604,7 @@ export default function Header() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">{t('header.systemStatus')}</span>
                       <div className={`h-2 w-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-green-500' :
-                          getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
+                        getOverallStatus() === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'
                         } animate-pulse`} />
                     </div>
 
@@ -612,8 +612,8 @@ export default function Header() {
                     <div className="grid grid-cols-2 gap-3">
                       {/* First Row - Database & Redis */}
                       <div className={`p-3 rounded-lg border transition-all ${systemStatus?.database.connected
-                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                         }`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className={`w-2 h-2 rounded-full ${systemStatus?.database.connected ? 'bg-green-500' : 'bg-red-500'
@@ -626,8 +626,8 @@ export default function Header() {
                       </div>
 
                       <div className={`p-3 rounded-lg border transition-all ${systemStatus?.redis.connected
-                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                         }`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className={`w-2 h-2 rounded-full ${systemStatus?.redis.connected ? 'bg-green-500' : 'bg-red-500'
@@ -641,8 +641,8 @@ export default function Header() {
 
                       {/* Second Row - LLM & Embeddings */}
                       <div className={`p-3 rounded-lg border transition-all ${systemStatus?.llmModel.active
-                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                         }`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className={`w-2 h-2 rounded-full ${systemStatus?.llmModel.active ? 'bg-green-500' : 'bg-red-500'
@@ -655,8 +655,8 @@ export default function Header() {
                       </div>
 
                       <div className={`p-3 rounded-lg border transition-all ${systemStatus?.embedder.active
-                          ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
-                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                        ? 'bg-green-50/80 border-green-200 dark:bg-green-950/50 dark:border-green-800/60 shadow-sm'
+                        : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                         }`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className={`w-2 h-2 rounded-full ${systemStatus?.embedder.active ? 'bg-green-500' : 'bg-red-500'
@@ -670,8 +670,8 @@ export default function Header() {
 
                       {/* Third Row - Translation & System */}
                       <div className={`p-3 rounded-lg border transition-all ${systemStatus?.translationModel?.active
-                          ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800/60 shadow-sm'
-                          : 'bg-gray-50/80 border-gray-200 dark:bg-gray-950/50 dark:border-gray-800/60'
+                        ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800/60 shadow-sm'
+                        : 'bg-gray-50/80 border-gray-200 dark:bg-gray-950/50 dark:border-gray-800/60'
                         }`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className={`w-2 h-2 rounded-full ${systemStatus?.translationModel?.active ? 'bg-blue-500' : 'bg-gray-400'
@@ -684,14 +684,14 @@ export default function Header() {
                       </div>
 
                       <div className={`p-3 rounded-lg border transition-all ${getOverallStatus() === 'healthy'
-                          ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800/60 shadow-sm'
-                          : getOverallStatus() === 'degraded'
-                            ? 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800/60 shadow-sm'
-                            : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
+                        ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800/60 shadow-sm'
+                        : getOverallStatus() === 'degraded'
+                          ? 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800/60 shadow-sm'
+                          : 'bg-red-50/80 border-red-200 dark:bg-red-950/50 dark:border-red-800/60'
                         }`}>
                         <div className="flex items-center gap-2 mb-1.5">
                           <div className={`w-2 h-2 rounded-full ${getOverallStatus() === 'healthy' ? 'bg-emerald-500' :
-                              getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
+                            getOverallStatus() === 'degraded' ? 'bg-amber-500' : 'bg-red-500'
                             } animate-pulse`} />
                           <p className="text-sm font-medium">{t('dashboard.systemInfo.title')}</p>
                         </div>

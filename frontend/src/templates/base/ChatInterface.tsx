@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useTranslation } from 'react-i18next';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
 import { MessageSkeleton } from '@/components/chat/message-skeleton';
 import {
@@ -45,8 +46,21 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  sources?: any[];
-  relatedTopics?: any[];
+  sources?: Array<{
+    title?: string;
+    content?: string;
+    excerpt?: string;
+    sourceTable?: string;
+    sourceType?: string;
+    score?: number;
+    summary?: string;
+    keywords?: string[];
+    category?: string;
+  }>;
+  relatedTopics?: Array<{
+    title: string;
+    description: string;
+  }>;
   context?: string[];
   isTyping?: boolean;
   isFromSource?: boolean;
@@ -61,16 +75,20 @@ interface Message {
   };
 }
 
-const getSourceTableName = (sourceTable?: string) => {
+const getSourceTableName = (sourceTable?: string, t?: (key: string) => string) => {
   // Format source table name dynamically (same logic as backend)
-  if (!sourceTable) return 'Kaynak';
+  if (!sourceTable) return t('chat.source.default');
 
-  return sourceTable
+  const tableName = sourceTable
     .replace(/_/g, ' ')
     .replace(/([A-Z])/g, ' $1')
     .toLowerCase()
     .replace(/\b\w/g, l => l.toUpperCase())
     .trim();
+
+  // Try to translate the table name
+  const translationKey = `chat.source.table.${sourceTable.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+  return t?.(translationKey, tableName) || tableName;
 };
 
 const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
@@ -93,16 +111,27 @@ const getKeywordColor = (keyword: string, isBoosted: boolean = false): string =>
 
 export default function ChatInterface() {
   const { token, user, logout } = useAuth();
+  const { t } = useTranslation();
 
   // Chatbot settings state - NO hardcoded defaults, will load from database
-  const [chatbotSettings, setChatbotSettings] = useState({
+  const [chatbotSettings, setChatbotSettings] = useState<{
+    title: string;
+    subtitle: string;
+    logoUrl: string;
+    placeholder: string;
+    primaryColor: string;
+    activeChatModel: string;
+    enableSuggestions: boolean;
+    welcomeMessage?: string;
+  }>({
     title: '',
     subtitle: '',
     logoUrl: '',
     placeholder: '',
     primaryColor: '',
     activeChatModel: '',
-    enableSuggestions: true // Default to true, will be overridden by DB
+    enableSuggestions: true, // Default to true, will be overridden by DB
+    welcomeMessage: ''
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -159,7 +188,7 @@ export default function ChatInterface() {
   const [isClient, setIsClient] = useState(false);
   const [visibleSourcesCount, setVisibleSourcesCount] = useState<{ [key: string]: number }>({});
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [availableModels, setAvailableModels] = useState<Array<{provider: string, model: string, displayName: string, description: string}>>([]);
+  const [availableModels, setAvailableModels] = useState<Array<{ provider: string, model: string, displayName: string, description: string }>>([]);
   const [currentModel, setCurrentModel] = useState<string>('Claude');
   const [lastUserQuery, setLastUserQuery] = useState<string>(''); // For keyword boost highlighting
 
@@ -271,15 +300,20 @@ export default function ChatInterface() {
 
         // Find active prompt from prompts.list array (NEW FORMAT)
         const promptsList = settingsData.prompts?.list || [];
-        const activePromptObj = promptsList.find((p: any) => p.isActive === true);
+        const activePromptObj = promptsList.find((p: { isActive?: boolean; systemPrompt?: string; temperature?: string; maxTokens?: string; conversationTone?: string; name?: string }) => p.isActive === true);
 
-        let activePromptData = {};
+        let activePromptData: { content: string; temperature: number; maxTokens: number; tone: string } = {
+          content: '',
+          temperature: 0.7,
+          maxTokens: 2048,
+          tone: 'professional'
+        };
         if (activePromptObj) {
           activePromptData = {
             content: activePromptObj.systemPrompt || '',
             temperature: parseFloat(activePromptObj.temperature || '0.7'),
             maxTokens: parseInt(activePromptObj.maxTokens || '2048'),
-            conversationTone: activePromptObj.conversationTone || 'professional'
+            tone: activePromptObj.conversationTone || 'professional'
           };
           console.log('✅ [ChatInterface] Active prompt loaded:', {
             name: activePromptObj.name,
@@ -319,7 +353,7 @@ export default function ChatInterface() {
           content: activePromptData.content || '',
           temperature: activePromptData.temperature || llm.temperature,
           maxTokens: activePromptData.maxTokens || llm.maxTokens,
-          tone: activePromptData.conversationTone || 'professional'
+          tone: (activePromptObj as { conversationTone?: string }).conversationTone || 'professional'
         } : {
           content: '',
           temperature: llm.temperature,
@@ -439,11 +473,11 @@ export default function ChatInterface() {
           const activeModel = models.find(m => m.model === chatbotSettings.activeChatModel);
           if (activeModel) {
             setCurrentModel(activeModel.displayName);
-              console.log(`Set active model: ${activeModel.displayName} (${activeModel.model})`);
+            console.log(`Set active model: ${activeModel.displayName} (${activeModel.model})`);
           } else {
             // Fallback to first available model
             setCurrentModel(models[0].displayName);
-              console.log(`Set fallback model: ${models[0].displayName}`);
+            console.log(`Set fallback model: ${models[0].displayName}`);
           }
         }
       }
@@ -712,17 +746,17 @@ export default function ChatInterface() {
         // Handle subscription limit error specifically
         if (response.status === 429 && errorData.code === 'QUERY_LIMIT_EXCEEDED') {
           const subscriptionMessage = user?.role === 'admin'
-            ? 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır. Ancak teknik bir sorun oluştuğunu görüyoruz.'
-            : 'Üzgünüm, aylık soru limitinizi doldurdunuz. devam etmek için lütfen abonelik paketinizi yükseltin veya bir yönetici ile iletişime geçin.';
+            ? t('chat.errors.adminLimit', 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır. Ancak teknik bir sorun oluştuğunu görüyoruz.')
+            : t('chat.errors.queryLimit', 'Üzgünüm, aylık soru limitinizi doldurdunuz. devam etmek için lütfen abonelik paketinizi yükseltin veya bir yönetici ile iletişime geçin.');
 
           setMessages(prev => prev.map(msg =>
             msg.id === messageId
               ? {
-                  ...msg,
-                  content: subscriptionMessage,
-                  isStreaming: false,
-                  isError: true
-                }
+                ...msg,
+                content: subscriptionMessage,
+                isStreaming: false,
+                isError: true
+              }
               : msg
           ));
           return;
@@ -764,7 +798,14 @@ export default function ChatInterface() {
         }
 
         // Get final sources and metadata
-        let finalData: any = {};
+        let finalData: {
+          sources?: Message['sources'];
+          relatedTopics?: Message['relatedTopics'];
+          context?: Message['context'];
+          response?: string;
+          tokens?: Message['tokens'];
+          usage?: Message['tokens'];
+        } = {};
         try {
           const finalResponse = await fetch(getEndpoint('chat', 'send'), {
             method: 'POST',
@@ -789,7 +830,17 @@ export default function ChatInterface() {
             console.log('📦 Final data received:', {
               hasSources: !!finalData.sources,
               sourcesCount: finalData.sources?.length || 0,
-              sources: finalData.sources?.map((s: any) => ({
+              sources: finalData.sources?.map((s: {
+                title?: string;
+                content?: string;
+                excerpt?: string;
+                sourceTable?: string;
+                sourceType?: string;
+                score?: number;
+                summary?: string;
+                keywords?: string[];
+                category?: string;
+              }) => ({
                 title: s.title?.substring(0, 30),
                 contentLength: s.content?.length || 0,
                 excerptLength: s.excerpt?.length || 0
@@ -807,15 +858,15 @@ export default function ChatInterface() {
         setMessages(prev => prev.map(msg =>
           msg.id === messageId
             ? {
-                ...msg,
-                content: accumulatedContent || finalData.response || msg.content, // Keep accumulated content
-                isStreaming: false,
-                sources: finalData.sources,
-                relatedTopics: finalData.relatedTopics,
-                context: finalData.context,
-                responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
-                tokens: finalData.tokens || finalData.usage
-              }
+              ...msg,
+              content: accumulatedContent || finalData.response || msg.content, // Keep accumulated content
+              isStreaming: false,
+              sources: finalData.sources,
+              relatedTopics: finalData.relatedTopics,
+              context: finalData.context,
+              responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
+              tokens: finalData.tokens || finalData.usage
+            }
             : msg
         ));
       } else {
@@ -830,15 +881,15 @@ export default function ChatInterface() {
         setMessages(prev => prev.map(msg =>
           msg.id === messageId
             ? {
-                ...msg,
-                content: data.message?.content || data.response || data.message || 'Üzgünüm, bir hata oluştu.',
-                isStreaming: false,
-                sources: data.sources,
-                relatedTopics: data.relatedTopics,
-                context: data.context,
-                responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
-                tokens: data.tokens || data.usage
-              }
+              ...msg,
+              content: data.message?.content || data.response || data.message || t('chat.errors.general', 'Üzgünüm, bir hata oluştu.'),
+              isStreaming: false,
+              sources: data.sources,
+              relatedTopics: data.relatedTopics,
+              context: data.context,
+              responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
+              tokens: data.tokens || data.usage
+            }
             : msg
         ));
       }
@@ -863,12 +914,12 @@ export default function ChatInterface() {
       setMessages(prev => prev.map(msg =>
         msg.id === messageId
           ? {
-              ...msg,
-              content: userFriendlyMessage,
-              isStreaming: false,
-              isError: true,
-              responseTime: msg.startTime ? Date.now() - msg.startTime : undefined
-            }
+            ...msg,
+            content: userFriendlyMessage,
+            isStreaming: false,
+            isError: true,
+            responseTime: msg.startTime ? Date.now() - msg.startTime : undefined
+          }
           : msg
       ));
     } finally {
@@ -964,13 +1015,13 @@ export default function ChatInterface() {
                 size="sm"
                 onClick={clearChat}
                 className="gap-2 px-2"
-                title="Yeni Sohbet"
+                title={t('chat.newChat', 'Yeni Sohbet')}
               >
                 <Plus className="w-4 h-4" />
               </Button>
 
               {/* Admin/Manager View */}
-              {user && (user.role === 'admin' || user.role === 'manager') ? (
+              {user && ['admin', 'manager'].includes(user.role) ? (
                 <>
                   {/* Admin-only Controls */}
                   <div className="flex items-center gap-1">
@@ -981,7 +1032,7 @@ export default function ChatInterface() {
                           variant="ghost"
                           size="sm"
                           className="gap-2 px-2"
-                          title="Ayarlar"
+                          title={t('common.settings', 'Ayarlar')}
                         >
                           <Settings className="w-4 h-4" />
                         </Button>
@@ -995,7 +1046,7 @@ export default function ChatInterface() {
                           variant="ghost"
                           size="sm"
                           className="gap-2 px-2"
-                          title="Dashboard"
+                          title={t('common.dashboard', 'Dashboard')}
                         >
                           <LayoutDashboard className="w-4 h-4" />
                         </Button>
@@ -1012,27 +1063,27 @@ export default function ChatInterface() {
                       className="flex items-center gap-2"
                     >
                       <UserCircle className="w-4 h-4" />
-                        <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`w-3 h-3 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                     </Button>
 
                     {isUserDropdownOpen && (
                       <div className="absolute right-0 top-full mt-1 w-48 bg-popover border rounded-md shadow-lg z-50">
                         <div className="p-2">
                           <div className="px-2 py-1.5 text-sm font-medium border-b">
-                            <div>{user?.name || 'Kullanıcı'}</div>
+                            <div>{user?.name || t('common.user', 'Kullanıcı')}</div>
                             <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
                           </div>
                           <Link href="/profile">
                             <Button variant="ghost" className="w-full justify-start text-sm h-8 px-2">
                               <UserCircle className="w-4 h-4 mr-2" />
-                              Profil
+                              {t('common.profile', 'Profil')}
                             </Button>
                           </Link>
                           {(user?.role === 'admin' || user?.role === 'manager') && (
                             <Link href="/dashboard/messages">
                               <Button variant="ghost" className="w-full justify-start text-sm h-8 px-2">
                                 <MessageSquare className="w-4 h-4 mr-2" />
-                                Mesaj Analizleri
+                                {t('dashboard.messages.title', 'Mesaj Analizleri')}
                               </Button>
                             </Link>
                           )}
@@ -1045,7 +1096,7 @@ export default function ChatInterface() {
                             }}
                           >
                             <LogOut className="w-4 h-4 mr-2" />
-                            Çıkış Yap
+                            {t('common.logout', 'Çıkış Yap')}
                           </Button>
                         </div>
                       </div>
@@ -1061,7 +1112,7 @@ export default function ChatInterface() {
                       variant="ghost"
                       size="sm"
                       className="p-2"
-                      title={user?.name || 'Kullanıcı'}
+                      title={user?.name || t('common.user', 'Kullanıcı')}
                     >
                       <UserCircle className="w-5 h-5" />
                     </Button>
@@ -1096,7 +1147,7 @@ export default function ChatInterface() {
                   <div className="flex-1">
                     <div className="rounded-lg p-4 bg-card border">
                       <div className="prose prose-sm max-w-none dark:prose-invert">
-                        {chatbotSettings.welcomeMessage || 'Merhaba! Size nasıl yardımcı olabilirim?'}
+                        {chatbotSettings.welcomeMessage || t('chatInterface.welcomeMessage')}
                       </div>
                     </div>
                   </div>
@@ -1159,9 +1210,8 @@ export default function ChatInterface() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className={`flex gap-3 ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
+                    className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'
+                      }`}
                   >
                     {message.role === 'assistant' && (
                       <Avatar className="w-8 h-8">
@@ -1171,18 +1221,16 @@ export default function ChatInterface() {
                       </Avatar>
                     )}
 
-                    <div className={`w-full ${
-                      message.role === 'user' ? 'order-1' : 'order-2'
-                    }`}>
-                      <Card className={`${
-                        message.role === 'user'
-                          ? message.isFromSource
-                            ? 'bg-yellow-100 text-black border-yellow-400 dark:bg-yellow-900 dark:text-yellow-100 dark:border-yellow-600'
-                            : 'bg-black text-white dark:bg-gray-900 dark:text-gray-100'
-                          : message.isError
-                            ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
-                            : 'bg-card'
+                    <div className={`w-full ${message.role === 'user' ? 'order-1' : 'order-2'
                       }`}>
+                      <Card className={`${message.role === 'user'
+                        ? message.isFromSource
+                          ? 'bg-yellow-100 text-black border-yellow-400 dark:bg-yellow-900 dark:text-yellow-100 dark:border-yellow-600'
+                          : 'bg-black text-white dark:bg-gray-900 dark:text-gray-100'
+                        : message.isError
+                          ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
+                          : 'bg-card'
+                        }`}>
                         <CardContent className="p-3">
                           {message.isTyping ? (
                             <MessageSkeleton />
@@ -1230,7 +1278,7 @@ export default function ChatInterface() {
                                                 e.stopPropagation();
                                                 handleSourceClick(source);
                                               }}
-                                              title="Bu konuyla ilgili detaylı araştırma yap"
+                                              title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
                                             >
                                               <div className="flex items-start gap-3">
                                                 <div className="flex-shrink-0">
@@ -1248,7 +1296,18 @@ export default function ChatInterface() {
                                                       </span>
                                                       {source.score && (
                                                         <span className="text-xs text-muted-foreground">
-                                                          %{Math.min(100, Math.round(source.score))}
+                                                          {(() => {
+                                                            const score = Math.min(100, Math.round(source.score));
+                                                            let confidenceLevel = '';
+                                                            if (score >= 80) {
+                                                              confidenceLevel = t('chatInterface.confidence.high', 'Yüksek');
+                                                            } else if (score >= 50) {
+                                                              confidenceLevel = t('chatInterface.confidence.medium', 'Orta');
+                                                            } else {
+                                                              confidenceLevel = t('chatInterface.confidence.low', 'Düşük');
+                                                            }
+                                                            return `${confidenceLevel}: ${score}%`;
+                                                          })()}
                                                         </span>
                                                       )}
                                                     </div>
@@ -1274,13 +1333,13 @@ export default function ChatInterface() {
 
                                                         if (!/[.!?]$/.test(excerpt)) {
                                                           if (excerpt.includes('şart') || excerpt.includes('gerekir')) {
-                                                            excerpt += ' ve bu durumda ilgili mevzuat hükümleri uygulanır.';
+                                                            excerpt += ' ' + t('chat.source.legalConditions', 've bu durumda ilgili mevzuat hükümleri uygulanır.');
                                                           } else if (excerpt.includes('yıl') || excerpt.includes('süre')) {
-                                                            excerpt += ' Bu süre hesaplanırken belirli şartlar göz önünde bulundurulur.';
+                                                            excerpt += ' ' + t('chat.source.timeConditions', 'Bu süre hesaplanırken belirli şartlar göz önünde bulundurulur.');
                                                           } else if (excerpt.includes('vergi') || excerpt.includes('ödeme')) {
-                                                            excerpt += ' Bu konuda ilgili kanun hükümleri referans alınır.';
+                                                            excerpt += ' ' + t('chat.source.taxConditions', 'Bu konuda ilgili kanun hükümleri referans alınır.');
                                                           } else {
-                                                            excerpt += ' Konuyla ilgili detaylı bilgilere kaynaklardan ulaşılabilir.';
+                                                            excerpt += ' ' + t('chat.source.generalConditions', 'Konuyla ilgili detaylı bilgilere kaynaklardan ulaşılabilir.');
                                                           }
                                                         }
 
@@ -1313,7 +1372,7 @@ export default function ChatInterface() {
                                                         <span
                                                           key={idx}
                                                           className={`text-xs px-2 py-1 rounded-none font-medium ${getKeywordColor(keyword, isBoosted)}`}
-                                                          title={isBoosted ? `🔍 Arama sorgunuzdan: "${keyword}"` : `Anahtar kelime`}
+                                                          title={isBoosted ? t('chat.keyword.fromQuery', `🔍 Arama sorgunuzdan: "${keyword}"`) : t('chat.keyword.keyword', `Anahtar kelime`)}
                                                         >
                                                           {keyword}
                                                         </span>
@@ -1350,7 +1409,7 @@ export default function ChatInterface() {
                                               }}
                                             >
                                               <ChevronDown className="w-4 h-4 mr-2" />
-                                              Daha fazla göster ({sortedSources.length - visibleCount} konu daha)
+                                              {t('chat.source.showMore', `Daha fazla göster (${sortedSources.length - visibleCount} konu daha)`)}
                                             </Button>
                                           )}
                                         </div>
@@ -1439,10 +1498,10 @@ export default function ChatInterface() {
 
             <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-muted-foreground">
-                Enter ile gönder, Shift+Enter ile yeni satır
+                {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
               </p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{messages.length - 1} mesaj</span>
+                <span>{t('chat.messageCount', `${messages.length - 1} mesaj`)}</span>
               </div>
             </div>
           </div>

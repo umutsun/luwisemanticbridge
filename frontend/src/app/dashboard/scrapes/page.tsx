@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Search, Plus, Globe, Settings, Loader2, Play, RefreshCw, Trash2, CheckCircle, AlertCircle,
-  Database, BarChart3, Eye, Pause, Activity, Clock, X, Languages, Filter, Site, Web, Zap,
+  Database, BarChart3, Eye, Pause, Activity, Clock, X, Languages, Filter, Zap,
   Target, Layers, Shield, CheckSquare, Square, SlidersHorizontal, RotateCcw, Wrench
 } from 'lucide-react';
 import config from '@/config/api.config';
@@ -87,8 +88,8 @@ interface Site {
   type: string;
   category: string;
   status?: 'configured' | 'not_configured' | 'analyzing' | 'analyzed';
-  structure?: any;
-  scrapingConfig?: any;
+  structure?: Record<string, unknown>;
+  scrapingConfig?: Record<string, unknown>;
   createdAt: string;
   lastScraped?: string;
   totalScraped?: number;
@@ -102,13 +103,13 @@ interface ScrapeJob {
   siteName?: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'paused';
   progress: number;
-  result?: any;
+  result?: Record<string, unknown>;
   error?: string;
   type?: 'concept' | 'category' | 'entity' | 'multi_concept' | 'quick' | 'site';
   concept?: string;
   category?: string;
   entityType?: string;
-  scrapedData?: any[];
+  scrapedData?: Record<string, unknown>[];
   createdAt: string;
   completedAt?: string;
   itemsFound?: number;
@@ -123,9 +124,38 @@ interface ScrapedData {
   type: 'concept' | 'category' | 'entity' | 'product' | 'article';
   concept?: string;
   category?: string;
-  entities?: any[];
+  entities?: Record<string, unknown>[];
   scrapedAt: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
+}
+
+interface ScrapingSession {
+  id: string;
+  type: string;
+  createdAt: string;
+  status: string;
+  config: Record<string, unknown>;
+}
+
+interface ScrapingProgress {
+  currentUrl: string;
+  progress: number;
+  completedUrls: number;
+  totalUrls: number;
+  foundUrls: number;
+}
+
+interface WorkflowConfig {
+  sites?: string[];
+  query?: string;
+  maxDepth?: number;
+  maxPages?: number;
+  maxPagesPerSite?: number;
+  useAI?: boolean;
+  concept?: string;
+  category?: string;
+  siteId?: string;
+  siteName?: string;
 }
 
 interface Stats {
@@ -146,7 +176,7 @@ interface FilterOptions {
 }
 
 export default function ScrapesPage() {
-
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [sites, setSites] = useState<Site[]>([]);
@@ -179,9 +209,9 @@ export default function ScrapesPage() {
   });
 
   // Scraper workflow state
-  const [scrapingSessions, setScrapingSessions] = useState<any[]>([]);
-  const [activeSession, setActiveSession] = useState<any>(null);
-  const [scrapingProgress, setScrapingProgress] = useState<any>(null);
+  const [scrapingSessions, setScrapingSessions] = useState<ScrapingSession[]>([]);
+  const [activeSession, setActiveSession] = useState<ScrapingSession | null>(null);
+  const [scrapingProgress, setScrapingProgress] = useState<ScrapingProgress | null>(null);
   const [siteForm, setSiteForm] = useState({ name: '', url: '', type: 'website', category: '' });
   const [dataForm, setDataForm] = useState({ search: '', type: 'all', category: '' });
 
@@ -299,9 +329,9 @@ export default function ScrapesPage() {
   };
 
   // Start scraping workflow
-  const handleStartScraping = async (workflowType: string, config: any) => {
+  const handleStartScraping = async (workflowType: string, config: WorkflowConfig) => {
     try {
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/scraper/start-workflow`, {
+      const response = await fetchWithAuth(`${(config as { api: { baseUrl: string } }).api.baseUrl}/api/v2/scraper/start-workflow`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -323,23 +353,23 @@ export default function ScrapesPage() {
         const result = await response.json();
         setActiveSession(result.session);
         toast({
-          title: 'Scraping Started',
-          description: `Started ${workflowType} scraping workflow`,
+          title: t('scrapes.notifications.scrapingStarted'),
+          description: t('scrapes.notifications.startedWorkflow', { workflowType }),
         });
         fetchScrapingSessions();
       } else {
         const error = await response.json();
         toast({
-          title: 'Error',
-          description: error.error || 'Failed to start scraping',
+          title: t('common.error'),
+          description: error.error || t('scrapes.notifications.failedToStartScraping'),
           variant: 'destructive'
         });
       }
     } catch (error) {
       console.error('Failed to start scraping:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to start scraping',
+        title: t('common.error'),
+        description: t('scrapes.notifications.failedToStartScraping'),
         variant: 'destructive'
       });
     }
@@ -358,8 +388,8 @@ export default function ScrapesPage() {
 
       if (response.ok) {
         toast({
-          title: 'Scraping Stopped',
-          description: 'Scraping workflow stopped successfully',
+          title: t('scrapes.notifications.scrapingStopped'),
+          description: t('scrapes.notifications.scrapingStoppedSuccessfully'),
         });
         setActiveSession(null);
         fetchScrapingSessions();
@@ -390,8 +420,8 @@ export default function ScrapesPage() {
   const handleCreateSite = async () => {
     if (!newSite.name || !newSite.url) {
       toast({
-        title: 'Error',
-        description: 'Please fill in all required fields',
+        title: t('common.error'),
+        description: t('common.requiredFields'),
         variant: 'destructive'
       });
       return;
@@ -416,8 +446,8 @@ export default function ScrapesPage() {
 
       if (response.ok) {
         toast({
-          title: 'Success',
-          description: 'Site created successfully',
+          title: t('common.success'),
+          description: t('scrapes.notifications.siteCreatedSuccessfully'),
         });
         setShowNewSiteDialog(false);
         setNewSite({ name: '', url: '', type: 'website', category: '' });
@@ -443,8 +473,8 @@ export default function ScrapesPage() {
       } else {
         const error = await response.json();
         toast({
-          title: 'Error',
-          description: error.error || 'Failed to create site',
+          title: t('common.error'),
+          description: error.error || t('scrapes.notifications.failedToCreateSite'),
           variant: 'destructive'
         });
         setSitesLoading(false);
@@ -452,8 +482,8 @@ export default function ScrapesPage() {
     } catch (error) {
       console.error('Failed to create site:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to create site',
+        title: t('common.error'),
+        description: t('scrapes.notifications.failedToCreateSite'),
         variant: 'destructive'
       });
       setSitesLoading(false);
@@ -463,8 +493,8 @@ export default function ScrapesPage() {
   const handleCreateJob = async () => {
     if (jobForm.type === 'quick' && !jobForm.siteId) {
       toast({
-        title: 'Error',
-        description: 'Please select a site',
+        title: t('common.error'),
+        description: t('scrapes.notifications.pleaseSelectSite'),
         variant: 'destructive'
       });
       return;
@@ -472,8 +502,8 @@ export default function ScrapesPage() {
 
     if ((jobForm.type === 'concept' || jobForm.type === 'category') && !jobForm.concept && !jobForm.category) {
       toast({
-        title: 'Error',
-        description: 'Please enter concept or category',
+        title: t('common.error'),
+        description: t('scrapes.notifications.pleaseEnterConceptOrCategory'),
         variant: 'destructive'
       });
       return;
@@ -481,7 +511,7 @@ export default function ScrapesPage() {
 
     try {
       let workflowType = '';
-      let config: any = {};
+      let config: WorkflowConfig = {};
 
       switch (jobForm.type) {
         case 'concept':
@@ -524,8 +554,8 @@ export default function ScrapesPage() {
     } catch (error) {
       console.error('Failed to create job:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to create job',
+        title: t('common.error'),
+        description: t('scrapes.notifications.failedToCreateJob'),
         variant: 'destructive'
       });
     }
@@ -539,23 +569,23 @@ export default function ScrapesPage() {
 
       if (response.ok) {
         toast({
-          title: 'Success',
-          description: 'Site analysis started',
+          title: t('common.success'),
+          description: t('scrapes.notifications.siteAnalysisStarted'),
         });
         fetchSites();
       } else {
         const error = await response.json();
         toast({
-          title: 'Error',
-          description: error.error || 'Failed to analyze site',
+          title: t('common.error'),
+          description: error.error || t('scrapes.notifications.failedToAnalyzeSite'),
           variant: 'destructive'
         });
       }
     } catch (error) {
       console.error('Failed to analyze site:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to analyze site',
+        title: t('common.error'),
+        description: t('scrapes.notifications.failedToAnalyzeSite'),
         variant: 'destructive'
       });
     }
@@ -573,24 +603,24 @@ export default function ScrapesPage() {
 
       if (response.ok) {
         toast({
-          title: 'Success',
-          description: 'Site configuration saved',
+          title: t('common.success'),
+          description: t('scrapes.notifications.siteConfigurationSaved'),
         });
         setShowSiteConfigureDialog(false);
         fetchSites();
       } else {
         const error = await response.json();
         toast({
-          title: 'Error',
-          description: error.error || 'Failed to configure site',
+          title: t('common.error'),
+          description: error.error || t('scrapes.notifications.failedToConfigureSite'),
           variant: 'destructive'
         });
       }
     } catch (error) {
       console.error('Failed to configure site:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to configure site',
+        title: t('common.error'),
+        description: t('scrapes.notifications.failedToConfigureSite'),
         variant: 'destructive'
       });
     }
@@ -604,8 +634,8 @@ export default function ScrapesPage() {
 
       if (response.ok) {
         toast({
-          title: 'Success',
-          description: 'Job deleted successfully',
+          title: t('common.success'),
+          description: t('scrapes.notifications.jobDeletedSuccessfully'),
         });
         fetchJobs();
       }
@@ -653,7 +683,7 @@ export default function ScrapesPage() {
   // Apply filters to jobs
   const filteredJobs = scrapeJobs.filter(job => {
     const matchesSearch = job.url.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.siteName?.toLowerCase().includes(searchTerm.toLowerCase());
+      job.siteName?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterOptions.status.length === 0 || filterOptions.status.includes(job.status);
     const matchesType = filterOptions.type.length === 0 || filterOptions.type.includes(job.type || 'quick');
     const matchesProgress = job.progress >= filterOptions.progressRange[0] && job.progress <= filterOptions.progressRange[1];
@@ -665,15 +695,15 @@ export default function ScrapesPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'running':
-        return <Badge className="bg-slate-100 text-slate-700 border-slate-200"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Running</Badge>;
+        return <Badge className="bg-slate-100 text-slate-700 border-slate-200"><Loader2 className="w-3 h-3 mr-1 animate-spin" />{t('scrapes.status.running')}</Badge>;
       case 'completed':
-        return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200"><CheckCircle className="w-3 h-3 mr-1" />Completed</Badge>;
+        return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200"><CheckCircle className="w-3 h-3 mr-1" />{t('scrapes.status.completed')}</Badge>;
       case 'failed':
-        return <Badge className="bg-rose-50 text-rose-700 border-rose-200"><X className="w-3 h-3 mr-1" />Failed</Badge>;
+        return <Badge className="bg-rose-50 text-rose-700 border-rose-200"><X className="w-3 h-3 mr-1" />{t('scrapes.status.failed')}</Badge>;
       case 'paused':
-        return <Badge className="bg-amber-50 text-amber-700 border-amber-200"><Pause className="w-3 h-3 mr-1" />Paused</Badge>;
+        return <Badge className="bg-amber-50 text-amber-700 border-amber-200"><Pause className="w-3 h-3 mr-1" />{t('scrapes.status.paused')}</Badge>;
       default:
-        return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+        return <Badge variant="outline"><Clock className="w-3 h-3 mr-1" />{t('scrapes.status.pending')}</Badge>;
     }
   };
 
@@ -691,7 +721,7 @@ export default function ScrapesPage() {
     return (
       <div className="w-[90%] mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Scraping Management</h1>
+          <h1 className="text-xl font-semibold">{t('scrapes.title')}</h1>
         </div>
         <FormSkeleton />
       </div>
@@ -703,18 +733,18 @@ export default function ScrapesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Scraping Management</h1>
-          <p className="text-muted-foreground">Manage web scraping operations and data extraction</p>
+          <h1 className="text-xl font-semibold">{t('scrapes.title')}</h1>
+          <p className="text-muted-foreground">{t('scrapes.description')}</p>
         </div>
       </div>
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4 h-14">
-          <TabsTrigger value="overview" className="h-12">Overview</TabsTrigger>
-          <TabsTrigger value="jobs" className="h-12">Jobs</TabsTrigger>
-          <TabsTrigger value="data" className="h-12">Scraped Data</TabsTrigger>
-          <TabsTrigger value="sites" className="h-12">Sites</TabsTrigger>
+          <TabsTrigger value="overview" className="h-12">{t('scrapes.tabs.overview')}</TabsTrigger>
+          <TabsTrigger value="jobs" className="h-12">{t('scrapes.tabs.jobs')}</TabsTrigger>
+          <TabsTrigger value="data" className="h-12">{t('scrapes.tabs.scrapedData')}</TabsTrigger>
+          <TabsTrigger value="sites" className="h-12">{t('scrapes.tabs.sites')}</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -723,49 +753,49 @@ export default function ScrapesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Sites</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('scrapes.stats.totalSites')}</CardTitle>
                 <Globe className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.totalSites}</div>
                 <p className="text-xs text-muted-foreground">
-                  {sites.filter(s => s.status === 'configured').length} configured
+                  {sites.filter(s => s.status === 'configured').length} {t('scrapes.stats.configured')}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('scrapes.stats.activeJobs')}</CardTitle>
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.activeJobs}</div>
                 <p className="text-xs text-muted-foreground">
-                  {scrapeJobs.filter(j => j.status === 'running').length} running
+                  {scrapeJobs.filter(j => j.status === 'running').length} {t('scrapes.stats.running')}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Scraped Items</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('scrapes.stats.scrapedItems')}</CardTitle>
                 <Database className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.totalScraped}</div>
                 <p className="text-xs text-muted-foreground">
-                  {stats.todayScraped} today
+                  {stats.todayScraped} {t('scrapes.stats.today')}
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('scrapes.stats.successRate')}</CardTitle>
                 <BarChart3 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{stats.successRate}%</div>
                 <p className="text-xs text-muted-foreground">
-                  Avg: {stats.avgProcessingTime}s
+                  {t('scrapes.stats.avg')}: {stats.avgProcessingTime}s
                 </p>
               </CardContent>
             </Card>
@@ -777,7 +807,7 @@ export default function ScrapesPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5" />
-                  Recent Jobs
+                  {t('scrapes.recentJobs.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -802,7 +832,7 @@ export default function ScrapesPage() {
                   ))}
                   {scrapeJobs.length === 0 && (
                     <p className="text-center text-muted-foreground py-4">
-                      No jobs yet. Start scraping to see activity.
+                      {t('scrapes.recentJobs.noJobs')}
                     </p>
                   )}
                 </div>
@@ -814,7 +844,7 @@ export default function ScrapesPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Globe className="h-5 w-5" />
-                  Top Sites
+                  {t('scrapes.topSites.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -827,13 +857,13 @@ export default function ScrapesPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium">{site.totalScraped || 0}</p>
-                        <p className="text-xs text-muted-foreground">items</p>
+                        <p className="text-xs text-muted-foreground">{t('scrapes.topSites.items')}</p>
                       </div>
                     </div>
                   ))}
                   {sites.length === 0 && (
                     <p className="text-center text-muted-foreground py-4">
-                      No sites configured yet.
+                      {t('scrapes.topSites.noSites')}
                     </p>
                   )}
                 </div>
@@ -850,7 +880,7 @@ export default function ScrapesPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-blue-800">
                   <Activity className="h-5 w-5" />
-                  Active Scraping Workflow
+                  {t('scrapes.activeWorkflow.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -858,10 +888,10 @@ export default function ScrapesPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-blue-900">
-                        {activeSession.type || 'General'} Scraping
+                        {t('scrapes.activeWorkflow.generalScraping', { type: activeSession.type || t('scrapes.activeWorkflow.general') })}
                       </p>
                       <p className="text-sm text-blue-600">
-                        Started: {new Date(activeSession.createdAt).toLocaleString()}
+                        {t('scrapes.activeWorkflow.started')}: {new Date(activeSession.createdAt).toLocaleString()}
                       </p>
                     </div>
                     <Button
@@ -870,7 +900,7 @@ export default function ScrapesPage() {
                       onClick={() => handleStopScraping(activeSession.id)}
                     >
                       <X className="h-4 w-4 mr-2" />
-                      Stop
+                      {t('common.stop')}
                     </Button>
                   </div>
 
@@ -887,8 +917,8 @@ export default function ScrapesPage() {
                         />
                       </div>
                       <div className="flex justify-between text-xs text-blue-600">
-                        <span>URL {scrapingProgress.completedUrls} / {scrapingProgress.totalUrls}</span>
-                        <span>{scrapingProgress.foundUrls} URLs found</span>
+                        <span>{t('scrapes.activeWorkflow.url')} {scrapingProgress.completedUrls} / {scrapingProgress.totalUrls}</span>
+                        <span>{scrapingProgress.foundUrls} {t('scrapes.activeWorkflow.urlsFound')}</span>
                       </div>
                     </div>
                   )}
@@ -903,15 +933,15 @@ export default function ScrapesPage() {
               {/* Create New Job Form */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Create New Job</CardTitle>
-                  <CardDescription>Start a new scraping job</CardDescription>
+                  <CardTitle className="text-lg">{t('scrapes.createJob.title')}</CardTitle>
+                  <CardDescription>{t('scrapes.createJob.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="job-site">Site</Label>
+                    <Label htmlFor="job-site">{t('scrapes.createJob.site')}</Label>
                     <Select value={jobForm.siteId} onValueChange={(value) => setJobForm({ ...jobForm, siteId: value })}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a site" />
+                        <SelectValue placeholder={t('scrapes.createJob.selectSite')} />
                       </SelectTrigger>
                       <SelectContent>
                         {sites.map(site => (
@@ -923,25 +953,25 @@ export default function ScrapesPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="job-type">Type</Label>
+                    <Label htmlFor="job-type">{t('scrapes.createJob.type')}</Label>
                     <Select value={jobForm.type} onValueChange={(value) => setJobForm({ ...jobForm, type: value })}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="quick">Quick Scrape</SelectItem>
-                        <SelectItem value="concept">Concept Search</SelectItem>
-                        <SelectItem value="category">Category Search</SelectItem>
-                        <SelectItem value="entity">Entity Extraction</SelectItem>
+                        <SelectItem value="quick">{t('scrapes.jobTypes.quickScrape')}</SelectItem>
+                        <SelectItem value="concept">{t('scrapes.jobTypes.conceptSearch')}</SelectItem>
+                        <SelectItem value="category">{t('scrapes.jobTypes.categorySearch')}</SelectItem>
+                        <SelectItem value="entity">{t('scrapes.jobTypes.entityExtraction')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   {jobForm.type === 'concept' && (
                     <div>
-                      <Label htmlFor="job-concept">Concept</Label>
+                      <Label htmlFor="job-concept">{t('scrapes.createJob.concept')}</Label>
                       <Input
                         id="job-concept"
-                        placeholder="Enter concept to search for"
+                        placeholder={t('scrapes.createJob.conceptPlaceholder')}
                         value={jobForm.concept}
                         onChange={(e) => setJobForm({ ...jobForm, concept: e.target.value })}
                       />
@@ -949,10 +979,10 @@ export default function ScrapesPage() {
                   )}
                   {jobForm.type === 'category' && (
                     <div>
-                      <Label htmlFor="job-category">Category</Label>
+                      <Label htmlFor="job-category">{t('scrapes.createJob.category')}</Label>
                       <Input
                         id="job-category"
-                        placeholder="Enter category to scrape"
+                        placeholder={t('scrapes.createJob.categoryPlaceholder')}
                         value={jobForm.category}
                         onChange={(e) => setJobForm({ ...jobForm, category: e.target.value })}
                       />
@@ -960,7 +990,7 @@ export default function ScrapesPage() {
                   )}
                   <Button onClick={handleCreateJob} className="w-full">
                     <Plus className="h-4 w-4 mr-2" />
-                    Start Job
+                    {t('scrapes.createJob.startJob')}
                   </Button>
                 </CardContent>
               </Card>
@@ -968,67 +998,67 @@ export default function ScrapesPage() {
               {/* Scraping Workflows */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Scraping Workflows</CardTitle>
-                  <CardDescription>Start comprehensive scraping workflows</CardDescription>
+                  <CardTitle className="text-lg">{t('scrapes.workflows.title')}</CardTitle>
+                  <CardDescription>{t('scrapes.workflows.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Quick Site Scraping */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Quick Site Scraping</Label>
-                    <p className="text-xs text-muted-foreground">Scrape selected site with AI analysis</p>
+                    <Label className="text-sm font-medium">{t('scrapes.workflows.quickSiteScraping')}</Label>
+                    <p className="text-xs text-muted-foreground">{t('scrapes.workflows.quickSiteScrapingDescription')}</p>
                     <Button
                       className="w-full"
                       variant="outline"
-                      disabled={!jobForm.siteId || activeSession}
+                      disabled={!jobForm.siteId || !!activeSession}
                       onClick={() => handleCreateJob()}
                     >
                       <Target className="h-4 w-4 mr-2" />
-                      Start Site Scraping
+                      {t('scrapes.workflows.startSiteScraping')}
                     </Button>
                   </div>
 
                   {/* Multi-Site Concept Search */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Multi-Site Concept Search</Label>
-                    <p className="text-xs text-muted-foreground">Search concept across all configured sites</p>
+                    <Label className="text-sm font-medium">{t('scrapes.workflows.multiSiteConceptSearch')}</Label>
+                    <p className="text-xs text-muted-foreground">{t('scrapes.workflows.multiSiteConceptSearchDescription')}</p>
                     <div className="space-y-2">
                       <Input
-                        placeholder="Enter concept to search..."
+                        placeholder={t('scrapes.workflows.conceptPlaceholder')}
                         value={jobForm.concept}
                         onChange={(e) => setJobForm({ ...jobForm, concept: e.target.value })}
-                        disabled={activeSession}
+                        disabled={!!activeSession}
                       />
                       <Button
                         className="w-full"
                         variant="outline"
-                        disabled={!jobForm.concept || activeSession}
+                        disabled={!jobForm.concept || !!activeSession}
                         onClick={() => handleCreateJob()}
                       >
                         <Search className="h-4 w-4 mr-2" />
-                        Search Across Sites
+                        {t('scrapes.workflows.searchAcrossSites')}
                       </Button>
                     </div>
                   </div>
 
                   {/* Category Scraping */}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Category Scraping</Label>
-                    <p className="text-xs text-muted-foreground">Scrape specific categories from sites</p>
+                    <Label className="text-sm font-medium">{t('scrapes.workflows.categoryScraping')}</Label>
+                    <p className="text-xs text-muted-foreground">{t('scrapes.workflows.categoryScrapingDescription')}</p>
                     <div className="space-y-2">
                       <Input
-                        placeholder="Enter category (e.g., products, articles)"
+                        placeholder={t('scrapes.workflows.categoryPlaceholder')}
                         value={jobForm.category}
                         onChange={(e) => setJobForm({ ...jobForm, category: e.target.value })}
-                        disabled={activeSession}
+                        disabled={!!activeSession}
                       />
                       <Button
                         className="w-full"
                         variant="outline"
-                        disabled={!jobForm.category || activeSession}
+                        disabled={!jobForm.category || !!activeSession}
                         onClick={() => handleCreateJob()}
                       >
                         <Layers className="h-4 w-4 mr-2" />
-                        Scrape Category
+                        {t('scrapes.workflows.scrapeCategory')}
                       </Button>
                     </div>
                   </div>
@@ -1038,8 +1068,8 @@ export default function ScrapesPage() {
               {/* Active Jobs Progress */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Active Jobs</CardTitle>
-                  <CardDescription>Real-time progress</CardDescription>
+                  <CardTitle className="text-lg">{t('scrapes.activeJobs.title')}</CardTitle>
+                  <CardDescription>{t('scrapes.activeJobs.description')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -1057,13 +1087,13 @@ export default function ScrapesPage() {
                         </div>
                         <div className="flex justify-between text-xs text-muted-foreground">
                           <span>{job.progress}%</span>
-                          <span>{job.itemsFound || 0} items</span>
+                          <span>{job.itemsFound || 0} {t('scrapes.jobs.items')}</span>
                         </div>
                       </div>
                     ))}
                     {scrapeJobs.filter(job => job.status === 'running' || job.status === 'pending').length === 0 && (
                       <p className="text-center text-muted-foreground py-4">
-                        No active jobs
+                        {t('scrapes.activeJobs.noActiveJobs')}
                       </p>
                     )}
                   </div>
@@ -1075,23 +1105,23 @@ export default function ScrapesPage() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Filter className="h-5 w-5" />
-                    Filter Jobs
+                    {t('scrapes.filterJobs.title')}
                   </CardTitle>
-                  <CardDescription>Filter by status, type, and more</CardDescription>
+                  <CardDescription>{t('scrapes.filterJobs.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="filter-search">Search</Label>
+                    <Label htmlFor="filter-search">{t('common.search')}</Label>
                     <Input
                       id="filter-search"
-                      placeholder="Search jobs..."
+                      placeholder={t('scrapes.filterJobs.searchPlaceholder')}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
 
                   <div>
-                    <Label>Status</Label>
+                    <Label>{t('common.status')}</Label>
                     <div className="space-y-2 mt-2">
                       {['pending', 'running', 'completed', 'failed', 'paused'].map(status => (
                         <div key={status} className="flex items-center space-x-2">
@@ -1113,7 +1143,7 @@ export default function ScrapesPage() {
                             }}
                           />
                           <Label htmlFor={`status-${status}`} className="text-sm capitalize">
-                            {status}
+                            {t(`scrapes.status.${status}`)}
                           </Label>
                         </div>
                       ))}
@@ -1121,7 +1151,7 @@ export default function ScrapesPage() {
                   </div>
 
                   <div>
-                    <Label>Progress Range</Label>
+                    <Label>{t('scrapes.filterJobs.progressRange')}</Label>
                     <div className="mt-2">
                       <Slider
                         value={filterOptions.progressRange}
@@ -1149,7 +1179,7 @@ export default function ScrapesPage() {
                       }
                     />
                     <Label htmlFor="filter-errors" className="text-sm">
-                      Show only jobs with errors
+                      {t('scrapes.filterJobs.showOnlyJobsWithErrors')}
                     </Label>
                   </div>
 
@@ -1165,7 +1195,7 @@ export default function ScrapesPage() {
                     })}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
-                    Reset Filters
+                    {t('scrapes.filterJobs.resetFilters')}
                   </Button>
                 </CardContent>
               </Card>
@@ -1175,14 +1205,14 @@ export default function ScrapesPage() {
             <div className="lg:col-span-8">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-gray-900">Jobs ({filteredJobs.length})</h3>
+                  <h3 className="text-lg font-medium text-gray-900">{t('scrapes.jobs.title', { count: filteredJobs.length })}</h3>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowFilters(!showFilters)}
                   >
                     <SlidersHorizontal className="h-4 w-4 mr-2" />
-                    Filters
+                    {t('common.filters')}
                     {filterOptions.status.length > 0 || filterOptions.hasErrors && (
                       <Badge className="ml-2" variant="secondary">
                         {filterOptions.status.length + (filterOptions.hasErrors ? 1 : 0)}
@@ -1200,7 +1230,7 @@ export default function ScrapesPage() {
                 ) : filteredJobs.length === 0 ? (
                   <Card className="text-center py-12">
                     <CardContent>
-                      <p className="text-muted-foreground">No jobs found</p>
+                      <p className="text-muted-foreground">{t('scrapes.jobs.noJobsFound')}</p>
                     </CardContent>
                   </Card>
                 ) : (
@@ -1213,13 +1243,13 @@ export default function ScrapesPage() {
                               <div className="flex items-center gap-3 mb-2">
                                 <h4 className="font-medium text-gray-900 truncate">{job.siteName || job.url}</h4>
                                 <Badge variant="outline" className="text-xs">
-                                  {job.type || 'quick'}
+                                  {t(`scrapes.jobTypes.${job.type || 'quick'}`)}
                                 </Badge>
                                 {getStatusBadge(job.status)}
                                 {job.error && (
-                                  <Badge variant="destructive" className="text-xs">
+                                  <Badge variant="error" className="text-xs">
                                     <AlertCircle className="h-3 w-3 mr-1" />
-                                    Error
+                                    {t('common.error')}
                                   </Badge>
                                 )}
                               </div>
@@ -1234,7 +1264,7 @@ export default function ScrapesPage() {
                               )}
 
                               <div className="flex items-center gap-4 text-sm text-gray-600">
-                                <span>{job.itemsFound || 0} items</span>
+                                <span>{job.itemsFound || 0} {t('scrapes.jobs.items')}</span>
                                 <span>{job.duration ? formatDuration(job.duration) : '-'}</span>
                                 <span>{formatDate(job.createdAt)}</span>
                               </div>
@@ -1268,7 +1298,7 @@ export default function ScrapesPage() {
                               )}
                               <ConfirmTooltip
                                 onConfirm={() => handleDeleteJob(job.id)}
-                                message="Delete this job?"
+                                message={t('scrapes.jobs.deleteJobConfirm')}
                                 side="top"
                               >
                                 <Button
@@ -1295,41 +1325,41 @@ export default function ScrapesPage() {
           {/* Search Data Section - Moved to top */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Search Data</CardTitle>
-              <CardDescription>Find scraped content</CardDescription>
+              <CardTitle className="text-lg">{t('scrapes.searchData.title')}</CardTitle>
+              <CardDescription>{t('scrapes.searchData.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <Label htmlFor="data-search">Search</Label>
+                  <Label htmlFor="data-search">{t('common.search')}</Label>
                   <Input
                     id="data-search"
-                    placeholder="Search in content..."
+                    placeholder={t('scrapes.searchData.searchPlaceholder')}
                     value={dataForm.search}
                     onChange={(e) => setDataForm({ ...dataForm, search: e.target.value })}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="data-type">Type</Label>
+                  <Label htmlFor="data-type">{t('common.type')}</Label>
                   <Select value={dataForm.type} onValueChange={(value) => setDataForm({ ...dataForm, type: value })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="concept">Concept</SelectItem>
-                      <SelectItem value="category">Category</SelectItem>
-                      <SelectItem value="entity">Entity</SelectItem>
-                      <SelectItem value="product">Product</SelectItem>
-                      <SelectItem value="article">Article</SelectItem>
+                      <SelectItem value="all">{t('scrapes.dataTypes.allTypes')}</SelectItem>
+                      <SelectItem value="concept">{t('scrapes.dataTypes.concept')}</SelectItem>
+                      <SelectItem value="category">{t('scrapes.dataTypes.category')}</SelectItem>
+                      <SelectItem value="entity">{t('scrapes.dataTypes.entity')}</SelectItem>
+                      <SelectItem value="product">{t('scrapes.dataTypes.product')}</SelectItem>
+                      <SelectItem value="article">{t('scrapes.dataTypes.article')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="data-category">Category</Label>
+                  <Label htmlFor="data-category">{t('common.category')}</Label>
                   <Input
                     id="data-category"
-                    placeholder="Filter by category"
+                    placeholder={t('scrapes.searchData.categoryPlaceholder')}
                     value={dataForm.category}
                     onChange={(e) => setDataForm({ ...dataForm, category: e.target.value })}
                   />
@@ -1337,7 +1367,7 @@ export default function ScrapesPage() {
                 <div className="flex items-end">
                   <Button className="w-full">
                     <Search className="h-4 w-4 mr-2" />
-                    Search Data
+                    {t('scrapes.searchData.searchData')}
                   </Button>
                 </div>
               </div>
@@ -1350,26 +1380,26 @@ export default function ScrapesPage() {
               {/* Data Statistics */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Data Stats</CardTitle>
-                  <CardDescription>Scraped data overview</CardDescription>
+                  <CardTitle className="text-lg">{t('scrapes.dataStats.title')}</CardTitle>
+                  <CardDescription>{t('scrapes.dataStats.description')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex justify-between">
-                      <span className="text-sm">Total Items</span>
+                      <span className="text-sm">{t('scrapes.dataStats.totalItems')}</span>
                       <span className="font-medium">{scrapedData.length}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm">Today</span>
+                      <span className="text-sm">{t('scrapes.dataStats.today')}</span>
                       <span className="font-medium">{stats.todayScraped}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm">Avg Content Length</span>
+                      <span className="text-sm">{t('scrapes.dataStats.avgContentLength')}</span>
                       <span className="font-medium">
                         {scrapedData.length > 0
                           ? Math.round(scrapedData.reduce((acc, d) => acc + (d.content?.length || 0), 0) / scrapedData.length)
-                          : 0} chars
-                        </span>
+                          : 0} {t('scrapes.dataStats.chars')}
+                      </span>
                     </div>
                   </div>
                 </CardContent>
@@ -1378,26 +1408,26 @@ export default function ScrapesPage() {
               {/* Export & Translation Options */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Export & Tools</CardTitle>
-                  <CardDescription>Process scraped data</CardDescription>
+                  <CardTitle className="text-lg">{t('scrapes.exportTools.title')}</CardTitle>
+                  <CardDescription>{t('scrapes.exportTools.description')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Button variant="outline" className="w-full">
-                    Export as CSV
+                    {t('scrapes.exportTools.exportAsCSV')}
                   </Button>
                   <Button variant="outline" className="w-full">
-                    Export as JSON
+                    {t('scrapes.exportTools.exportAsJSON')}
                   </Button>
                   <Button variant="outline" className="w-full">
-                    Export to Database
+                    {t('scrapes.exportTools.exportToDatabase')}
                   </Button>
                   <div className="border-t pt-3">
                     <Button variant="default" className="w-full gap-2">
                       <Languages className="h-4 w-4" />
-                      Translate Selected Data
+                      {t('scrapes.exportTools.translateSelectedData')}
                     </Button>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Translate scraped content to multiple languages
+                      {t('scrapes.exportTools.translateDescription')}
                     </p>
                   </div>
                 </CardContent>
@@ -1407,11 +1437,11 @@ export default function ScrapesPage() {
             {/* Right Panel - Data Table */}
             <div className="lg:col-span-8">
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Scraped Data ({scrapedData.length})</h3>
+                <h3 className="text-lg font-medium text-gray-900">{t('scrapes.scrapedData.title', { count: scrapedData.length })}</h3>
                 {scrapedData.length === 0 ? (
                   <Card className="text-center py-12">
                     <CardContent>
-                      <p className="text-muted-foreground">No scraped data yet</p>
+                      <p className="text-muted-foreground">{t('scrapes.scrapedData.noData')}</p>
                     </CardContent>
                   </Card>
                 ) : (
@@ -1424,13 +1454,13 @@ export default function ScrapesPage() {
                               <h4 className="font-medium text-gray-900 line-clamp-2">{data.title}</h4>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs">
-                                  {data.type}
+                                  {t(`scrapes.dataTypes.${data.type}`)}
                                 </Badge>
                                 {data.category && (
                                   <span className="text-xs text-gray-500">{data.category}</span>
                                 )}
                                 <span className="text-xs text-gray-400">
-                                  {data.content?.length || 0} chars
+                                  {data.content?.length || 0} {t('scrapes.dataStats.chars')}
                                 </span>
                               </div>
                             </div>
@@ -1469,14 +1499,14 @@ export default function ScrapesPage() {
           {/* Sites Header with Actions */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-gray-900">Sites ({sites.length})</h3>
-              <p className="text-sm text-muted-foreground">Manage and configure scraping sites</p>
+              <h3 className="text-lg font-medium text-gray-900">{t('scrapes.sites.title', { count: sites.length })}</h3>
+              <p className="text-sm text-muted-foreground">{t('scrapes.sites.description')}</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search sites..."
+                  placeholder={t('scrapes.sites.searchPlaceholder')}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 w-64"
@@ -1484,24 +1514,24 @@ export default function ScrapesPage() {
               </div>
               <Button onClick={() => setShowSiteAnalyzerModal(true)}>
                 <Zap className="h-4 w-4 mr-2" />
-                Intelligent Add Site
+                {t('scrapes.sites.intelligentAddSite')}
               </Button>
             </div>
           </div>
 
           {/* Sites Filters */}
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Filter:</span>
+            <span className="text-muted-foreground">{t('common.filter')}:</span>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-28 h-7 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="configured">Configured</SelectItem>
-                <SelectItem value="not_configured">Not Configured</SelectItem>
-                <SelectItem value="analyzing">Analyzing</SelectItem>
-                <SelectItem value="analyzed">Analyzed</SelectItem>
+                <SelectItem value="all">{t('scrapes.sites.allStatus')}</SelectItem>
+                <SelectItem value="configured">{t('scrapes.sites.configured')}</SelectItem>
+                <SelectItem value="not_configured">{t('scrapes.sites.notConfigured')}</SelectItem>
+                <SelectItem value="analyzing">{t('scrapes.sites.analyzing')}</SelectItem>
+                <SelectItem value="analyzed">{t('scrapes.sites.analyzed')}</SelectItem>
               </SelectContent>
             </Select>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -1509,17 +1539,17 @@ export default function ScrapesPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="website">Website</SelectItem>
-                <SelectItem value="ecommerce">E-commerce</SelectItem>
-                <SelectItem value="blog">Blog</SelectItem>
-                <SelectItem value="news">News Site</SelectItem>
-                <SelectItem value="forum">Forum</SelectItem>
-                <SelectItem value="directory">Directory</SelectItem>
+                <SelectItem value="all">{t('scrapes.sites.allTypes')}</SelectItem>
+                <SelectItem value="website">{t('scrapes.sites.website')}</SelectItem>
+                <SelectItem value="ecommerce">{t('scrapes.sites.ecommerce')}</SelectItem>
+                <SelectItem value="blog">{t('scrapes.sites.blog')}</SelectItem>
+                <SelectItem value="news">{t('scrapes.sites.newsSite')}</SelectItem>
+                <SelectItem value="forum">{t('scrapes.sites.forum')}</SelectItem>
+                <SelectItem value="directory">{t('scrapes.sites.directory')}</SelectItem>
               </SelectContent>
             </Select>
             <Input
-              placeholder="Category"
+              placeholder={t('common.category')}
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="w-24 h-7 text-xs"
@@ -1535,12 +1565,12 @@ export default function ScrapesPage() {
                     <Globe className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-medium">No sites configured yet</h3>
-                    <p className="text-muted-foreground mt-1">Add your first site to start scraping</p>
+                    <h3 className="text-lg font-medium">{t('scrapes.sites.noSitesConfigured')}</h3>
+                    <p className="text-muted-foreground mt-1">{t('scrapes.sites.addFirstSite')}</p>
                   </div>
                   <Button onClick={() => setShowSiteAnalyzerModal(true)}>
                     <Zap className="h-4 w-4 mr-2" />
-                    Add Your First Site
+                    {t('scrapes.sites.addYourFirstSite')}
                   </Button>
                 </div>
               </CardContent>
@@ -1550,7 +1580,7 @@ export default function ScrapesPage() {
               {sites
                 .filter(site => {
                   const matchesSearch = site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                     site.category.toLowerCase().includes(searchTerm.toLowerCase());
+                    site.category.toLowerCase().includes(searchTerm.toLowerCase());
                   const matchesStatus = statusFilter === 'all' || site.status === statusFilter;
                   const matchesType = typeFilter === 'all' || site.type === typeFilter;
                   const matchesCategory = !categoryFilter || site.category.toLowerCase().includes(categoryFilter.toLowerCase());
@@ -1563,66 +1593,66 @@ export default function ScrapesPage() {
                   }
 
                   return (
-                <Card key={site.id} className="hover:shadow-lg transition-all duration-200 cursor-pointer group">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      {/* Header */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-                            {site.name}
-                          </h4>
-                        </div>
-                        <Badge
-                          variant={site.status === 'configured' ? 'default' : 'secondary'}
-                          className="ml-2 flex-shrink-0 text-xs"
-                        >
-                          {site.status === 'configured' ? 'Ready' : 'Setup'}
-                        </Badge>
-                      </div>
-
-                      {/* Meta Info */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="capitalize">{site.type}</span>
-                          <span>{site.totalScraped || 0} items</span>
-                        </div>
-                        {site.lastScraped && (
-                          <div className="text-xs text-muted-foreground">
-                            Last: {formatDate(site.lastScraped)}
+                    <Card key={site.id} className="hover:shadow-lg transition-all duration-200 cursor-pointer group">
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          {/* Header */}
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+                                {site.name}
+                              </h4>
+                            </div>
+                            <Badge
+                              variant={site.status === 'configured' ? 'default' : 'secondary'}
+                              className="ml-2 flex-shrink-0 text-xs"
+                            >
+                              {site.status === 'configured' ? t('scrapes.sites.ready') : t('scrapes.sites.setup')}
+                            </Badge>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Actions */}
-                      <div className="flex gap-2 pt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-8 text-xs p-2 flex items-center justify-center"
-                          onClick={() => {
-                            setSelectedSite(site);
-                            setShowSiteConfigureDialog(true);
-                          }}
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 h-8 text-xs p-2 flex items-center justify-center"
-                          onClick={() => {
-                            setSelectedSite(site);
-                            setShowSiteAnalyzeDialog(true);
-                            handleAnalyzeSite(site.id);
-                          }}
-                        >
-                          <Activity className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                          {/* Meta Info */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span className="capitalize">{t(`scrapes.sites.${site.type}`)}</span>
+                              <span>{site.totalScraped || 0} {t('scrapes.sites.items')}</span>
+                            </div>
+                            {site.lastScraped && (
+                              <div className="text-xs text-muted-foreground">
+                                {t('scrapes.sites.last')}: {formatDate(site.lastScraped)}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-8 text-xs p-2 flex items-center justify-center"
+                              onClick={() => {
+                                setSelectedSite(site);
+                                setShowSiteConfigureDialog(true);
+                              }}
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-8 text-xs p-2 flex items-center justify-center"
+                              onClick={() => {
+                                setSelectedSite(site);
+                                setShowSiteAnalyzeDialog(true);
+                                handleAnalyzeSite(site.id);
+                              }}
+                            >
+                              <Activity className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   );
                 })}
             </div>
@@ -1634,37 +1664,37 @@ export default function ScrapesPage() {
       <Dialog open={!!selectedSite} onOpenChange={() => setSelectedSite(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Site Details</DialogTitle>
+            <DialogTitle>{t('scrapes.siteDetails.title')}</DialogTitle>
           </DialogHeader>
           {selectedSite && (
             <div className="space-y-4">
               <div>
-                <Label>Site Name</Label>
+                <Label>{t('scrapes.siteDetails.siteName')}</Label>
                 <p className="text-sm text-muted-foreground">{selectedSite.name}</p>
               </div>
               <div>
-                <Label>Base URL</Label>
+                <Label>{t('scrapes.siteDetails.baseUrl')}</Label>
                 <p className="text-sm text-muted-foreground">{selectedSite.base_url}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Type</Label>
+                  <Label>{t('common.type')}</Label>
                   <p className="text-sm">{selectedSite.type}</p>
                 </div>
                 <div>
-                  <Label>Status</Label>
+                  <Label>{t('common.status')}</Label>
                   <Badge variant={selectedSite.status === 'configured' ? 'default' : 'secondary'}>
-                    {selectedSite.status || 'Not configured'}
+                    {selectedSite.status ? t(`scrapes.sites.${selectedSite.status}`) : t('scrapes.siteDetails.notConfigured')}
                   </Badge>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Total Scraped</Label>
-                  <p className="text-sm">{selectedSite.totalScraped || 0} items</p>
+                  <Label>{t('scrapes.siteDetails.totalScraped')}</Label>
+                  <p className="text-sm">{selectedSite.totalScraped || 0} {t('scrapes.sites.items')}</p>
                 </div>
                 <div>
-                  <Label>Success Rate</Label>
+                  <Label>{t('scrapes.siteDetails.successRate')}</Label>
                   <p className="text-sm">{selectedSite.successRate || 0}%</p>
                 </div>
               </div>
@@ -1677,30 +1707,30 @@ export default function ScrapesPage() {
       <Dialog open={showSiteAnalyzeDialog} onOpenChange={setShowSiteAnalyzeDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Analyze Site Structure</DialogTitle>
+            <DialogTitle>{t('scrapes.analyzeSite.title')}</DialogTitle>
             <DialogDescription>
-              Analyzing site structure to identify optimal content selectors...
+              {t('scrapes.analyzeSite.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center justify-center py-8">
               <div className="flex flex-col items-center space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="text-muted-foreground">Analyzing site structure...</p>
+                <p className="text-muted-foreground">{t('scrapes.analyzeSite.analyzing')}</p>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Detecting content areas</span>
-                <span className="text-muted-foreground">In progress...</span>
+                <span>{t('scrapes.analyzeSite.detectingContentAreas')}</span>
+                <span className="text-muted-foreground">{t('scrapes.analyzeSite.inProgress')}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>Identifying navigation patterns</span>
-                <span className="text-muted-foreground">Pending...</span>
+                <span>{t('scrapes.analyzeSite.identifyingNavigationPatterns')}</span>
+                <span className="text-muted-foreground">{t('scrapes.analyzeSite.pending')}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span>Analyzing page structure</span>
-                <span className="text-muted-foreground">Pending...</span>
+                <span>{t('scrapes.analyzeSite.analyzingPageStructure')}</span>
+                <span className="text-muted-foreground">{t('scrapes.analyzeSite.pending')}</span>
               </div>
             </div>
           </div>
@@ -1711,49 +1741,49 @@ export default function ScrapesPage() {
       <Dialog open={showSiteConfigureDialog} onOpenChange={setShowSiteConfigureDialog}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Configure Site</DialogTitle>
+            <DialogTitle>{t('scrapes.configureSite.title')}</DialogTitle>
             <DialogDescription>
-              Set up content extraction and scraping behavior for {selectedSite?.name}
+              {t('scrapes.configureSite.description', { siteName: selectedSite?.name })}
             </DialogDescription>
           </DialogHeader>
           {selectedSite && (
             <div className="space-y-6">
               {/* Content Selectors */}
               <div>
-                <h4 className="text-sm font-medium mb-3">Content Selectors</h4>
+                <h4 className="text-sm font-medium mb-3">{t('scrapes.configureSite.contentSelectors')}</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="config-content">Content Selector</Label>
+                    <Label htmlFor="config-content">{t('scrapes.configureSite.contentSelector')}</Label>
                     <Input
                       id="config-content"
-                      placeholder="main, article, .content"
+                      placeholder={t('scrapes.configureSite.contentSelectorPlaceholder')}
                       value={siteConfig.contentSelector}
                       onChange={(e) => setSiteConfig(prev => ({ ...prev, contentSelector: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="config-title">Title Selector</Label>
+                    <Label htmlFor="config-title">{t('scrapes.configureSite.titleSelector')}</Label>
                     <Input
                       id="config-title"
-                      placeholder="h1, .title"
+                      placeholder={t('scrapes.configureSite.titleSelectorPlaceholder')}
                       value={siteConfig.titleSelector}
                       onChange={(e) => setSiteConfig(prev => ({ ...prev, titleSelector: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="config-description">Description Selector</Label>
+                    <Label htmlFor="config-description">{t('scrapes.configureSite.descriptionSelector')}</Label>
                     <Input
                       id="config-description"
-                      placeholder=".description, .summary"
+                      placeholder={t('scrapes.configureSite.descriptionSelectorPlaceholder')}
                       value={siteConfig.descriptionSelector}
                       onChange={(e) => setSiteConfig(prev => ({ ...prev, descriptionSelector: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="config-links">Links Selector</Label>
+                    <Label htmlFor="config-links">{t('scrapes.configureSite.linksSelector')}</Label>
                     <Input
                       id="config-links"
-                      placeholder="a[href]"
+                      placeholder={t('scrapes.configureSite.linksSelectorPlaceholder')}
                       value={siteConfig.linksSelector}
                       onChange={(e) => setSiteConfig(prev => ({ ...prev, linksSelector: e.target.value }))}
                     />
@@ -1763,47 +1793,47 @@ export default function ScrapesPage() {
 
               {/* Scraping Behavior */}
               <div>
-                <h4 className="text-sm font-medium mb-3">Scraping Behavior</h4>
+                <h4 className="text-sm font-medium mb-3">{t('scrapes.configureSite.scrapingBehavior')}</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="config-max-depth">Max Depth</Label>
+                    <Label htmlFor="config-max-depth">{t('scrapes.configureSite.maxDepth')}</Label>
                     <Select value={siteConfig.maxDepth.toString()} onValueChange={(value) => setSiteConfig(prev => ({ ...prev, maxDepth: parseInt(value) }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">1 level</SelectItem>
-                        <SelectItem value="2">2 levels</SelectItem>
-                        <SelectItem value="3">3 levels</SelectItem>
-                        <SelectItem value="5">5 levels</SelectItem>
+                        <SelectItem value="1">{t('scrapes.configureSite.oneLevel')}</SelectItem>
+                        <SelectItem value="2">{t('scrapes.configureSite.twoLevels')}</SelectItem>
+                        <SelectItem value="3">{t('scrapes.configureSite.threeLevels')}</SelectItem>
+                        <SelectItem value="5">{t('scrapes.configureSite.fiveLevels')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="config-max-pages">Max Pages</Label>
+                    <Label htmlFor="config-max-pages">{t('scrapes.configureSite.maxPages')}</Label>
                     <Select value={siteConfig.maxPages.toString()} onValueChange={(value) => setSiteConfig(prev => ({ ...prev, maxPages: parseInt(value) }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="10">10 pages</SelectItem>
-                        <SelectItem value="50">50 pages</SelectItem>
-                        <SelectItem value="100">100 pages</SelectItem>
-                        <SelectItem value="500">500 pages</SelectItem>
+                        <SelectItem value="10">{t('scrapes.configureSite.tenPages')}</SelectItem>
+                        <SelectItem value="50">{t('scrapes.configureSite.fiftyPages')}</SelectItem>
+                        <SelectItem value="100">{t('scrapes.configureSite.hundredPages')}</SelectItem>
+                        <SelectItem value="500">{t('scrapes.configureSite.fiveHundredPages')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="config-rate-limit">Rate Limit (requests/second)</Label>
+                    <Label htmlFor="config-rate-limit">{t('scrapes.configureSite.rateLimit')}</Label>
                     <Select value={siteConfig.rateLimit.toString()} onValueChange={(value) => setSiteConfig(prev => ({ ...prev, rateLimit: parseInt(value) }))}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">1/sec</SelectItem>
-                        <SelectItem value="5">5/sec</SelectItem>
-                        <SelectItem value="10">10/sec</SelectItem>
-                        <SelectItem value="20">20/sec</SelectItem>
+                        <SelectItem value="1">{t('scrapes.configureSite.onePerSec')}</SelectItem>
+                        <SelectItem value="5">{t('scrapes.configureSite.fivePerSec')}</SelectItem>
+                        <SelectItem value="10">{t('scrapes.configureSite.tenPerSec')}</SelectItem>
+                        <SelectItem value="20">{t('scrapes.configureSite.twentyPerSec')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1812,10 +1842,10 @@ export default function ScrapesPage() {
 
               {/* Options */}
               <div>
-                <h4 className="text-sm font-medium mb-3">Options</h4>
+                <h4 className="text-sm font-medium mb-3">{t('scrapes.configureSite.options')}</h4>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="config-enabled">Enable Scraping</Label>
+                    <Label htmlFor="config-enabled">{t('scrapes.configureSite.enableScraping')}</Label>
                     <Switch
                       id="config-enabled"
                       checked={siteConfig.enabled}
@@ -1823,7 +1853,7 @@ export default function ScrapesPage() {
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="config-clean-html">Clean HTML</Label>
+                    <Label htmlFor="config-clean-html">{t('scrapes.configureSite.cleanHtml')}</Label>
                     <Switch
                       id="config-clean-html"
                       checked={siteConfig.cleanHtml}
@@ -1831,7 +1861,7 @@ export default function ScrapesPage() {
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="config-respect-robots">Respect robots.txt</Label>
+                    <Label htmlFor="config-respect-robots">{t('scrapes.configureSite.respectRobots')}</Label>
                     <Switch
                       id="config-respect-robots"
                       checked={siteConfig.respectRobots}
@@ -1857,14 +1887,14 @@ export default function ScrapesPage() {
                   }}
                 >
                   <Zap className="h-4 w-4 mr-2" />
-                  Auto Detect
+                  {t('scrapes.configureSite.autoDetect')}
                 </Button>
                 <Button
                   className="flex-1"
                   onClick={() => handleConfigureSite(selectedSite.id)}
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Save Configuration
+                  {t('scrapes.configureSite.saveConfiguration')}
                 </Button>
               </div>
             </div>
@@ -1876,39 +1906,39 @@ export default function ScrapesPage() {
       <Dialog open={!!selectedJob} onOpenChange={() => setSelectedJob(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Job Details</DialogTitle>
+            <DialogTitle>{t('scrapes.jobDetails.title')}</DialogTitle>
           </DialogHeader>
           {selectedJob && (
             <div className="space-y-4">
               <div>
-                <Label>URL</Label>
+                <Label>{t('common.url')}</Label>
                 <p className="text-sm text-muted-foreground break-all">{selectedJob.url}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Status</Label>
+                  <Label>{t('common.status')}</Label>
                   <div className="mt-1">{getStatusBadge(selectedJob.status)}</div>
                 </div>
                 <div>
-                  <Label>Type</Label>
-                  <p className="text-sm">{selectedJob.type || 'quick'}</p>
+                  <Label>{t('common.type')}</Label>
+                  <p className="text-sm">{t(`scrapes.jobTypes.${selectedJob.type || 'quick'}`)}</p>
                 </div>
               </div>
               {selectedJob.concept && (
                 <div>
-                  <Label>Concept</Label>
+                  <Label>{t('scrapes.jobDetails.concept')}</Label>
                   <p className="text-sm">{selectedJob.concept}</p>
                 </div>
               )}
               {selectedJob.category && (
                 <div>
-                  <Label>Category</Label>
+                  <Label>{t('scrapes.jobDetails.category')}</Label>
                   <p className="text-sm">{selectedJob.category}</p>
                 </div>
               )}
               {selectedJob.error && (
                 <div>
-                  <Label>Error</Label>
+                  <Label>{t('common.error')}</Label>
                   <Alert className="mt-1">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{selectedJob.error}</AlertDescription>
@@ -1917,7 +1947,7 @@ export default function ScrapesPage() {
               )}
               {selectedJob.result && (
                 <div>
-                  <Label>Result Preview</Label>
+                  <Label>{t('scrapes.jobDetails.resultPreview')}</Label>
                   <pre className="mt-1 p-3 bg-gray-100 rounded text-sm overflow-auto max-h-40">
                     {JSON.stringify(selectedJob.result, null, 2)}
                   </pre>
@@ -1932,22 +1962,22 @@ export default function ScrapesPage() {
       <Dialog open={!!selectedData} onOpenChange={() => setSelectedData(null)}>
         <DialogContent className="max-w-4xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Scraped Data</DialogTitle>
+            <DialogTitle>{t('scrapes.scrapedDataDetails.title')}</DialogTitle>
           </DialogHeader>
           {selectedData && (
             <div className="space-y-4">
               <div>
-                <Label>Title</Label>
+                <Label>{t('scrapes.scrapedDataDetails.title')}</Label>
                 <p className="font-medium">{selectedData.title}</p>
               </div>
               <div>
-                <Label>URL</Label>
+                <Label>{t('common.url')}</Label>
                 <a href={selectedData.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
                   {selectedData.url}
                 </a>
               </div>
               <div>
-                <Label>Content</Label>
+                <Label>{t('scrapes.scrapedDataDetails.content')}</Label>
                 <div className="mt-1 p-3 bg-gray-100 rounded max-h-60 overflow-auto">
                   <pre className="whitespace-pre-wrap text-sm">{selectedData.content}</pre>
                 </div>
@@ -1961,62 +1991,62 @@ export default function ScrapesPage() {
       <Dialog open={showNewSiteDialog} onOpenChange={setShowNewSiteDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add New Site</DialogTitle>
+            <DialogTitle>{t('scrapes.addNewSite.title')}</DialogTitle>
             <DialogDescription>
-              Add a new website to configure for scraping
+              {t('scrapes.addNewSite.description')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="new-site-name">Site Name</Label>
+              <Label htmlFor="new-site-name">{t('scrapes.addNewSite.siteName')}</Label>
               <Input
                 id="new-site-name"
-                placeholder="My Website"
+                placeholder={t('scrapes.addNewSite.siteNamePlaceholder')}
                 value={newSite.name}
                 onChange={(e) => setNewSite({ ...newSite, name: e.target.value })}
               />
             </div>
             <div>
-              <Label htmlFor="new-site-url">URL</Label>
+              <Label htmlFor="new-site-url">{t('common.url')}</Label>
               <Input
                 id="new-site-url"
-                placeholder="https://example.com"
+                placeholder={t('scrapes.addNewSite.urlPlaceholder')}
                 value={newSite.url}
                 onChange={(e) => setNewSite({ ...newSite, url: e.target.value })}
               />
             </div>
             <div>
-              <Label htmlFor="new-site-type">Type</Label>
+              <Label htmlFor="new-site-type">{t('common.type')}</Label>
               <Select value={newSite.type} onValueChange={(value) => setNewSite({ ...newSite, type: value })}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="website">Website</SelectItem>
-                  <SelectItem value="ecommerce">E-commerce</SelectItem>
-                  <SelectItem value="blog">Blog</SelectItem>
-                  <SelectItem value="news">News Site</SelectItem>
-                  <SelectItem value="forum">Forum</SelectItem>
-                  <SelectItem value="directory">Directory</SelectItem>
+                  <SelectItem value="website">{t('scrapes.sites.website')}</SelectItem>
+                  <SelectItem value="ecommerce">{t('scrapes.sites.ecommerce')}</SelectItem>
+                  <SelectItem value="blog">{t('scrapes.sites.blog')}</SelectItem>
+                  <SelectItem value="news">{t('scrapes.sites.newsSite')}</SelectItem>
+                  <SelectItem value="forum">{t('scrapes.sites.forum')}</SelectItem>
+                  <SelectItem value="directory">{t('scrapes.sites.directory')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor="new-site-category">Category</Label>
+              <Label htmlFor="new-site-category">{t('common.category')}</Label>
               <Input
                 id="new-site-category"
-                placeholder="General"
+                placeholder={t('scrapes.addNewSite.categoryPlaceholder')}
                 value={newSite.category}
                 onChange={(e) => setNewSite({ ...newSite, category: e.target.value })}
               />
             </div>
             <div className="flex gap-2 pt-4">
               <Button variant="outline" onClick={() => setShowNewSiteDialog(false)} className="flex-1">
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleCreateSite} className="flex-1">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Site
+                {t('scrapes.addNewSite.addSite')}
               </Button>
             </div>
           </div>
@@ -2030,8 +2060,8 @@ export default function ScrapesPage() {
         onSiteCreated={(site) => {
           fetchSites();
           toast({
-            title: 'Success',
-            description: 'Site created with intelligent analysis',
+            title: t('common.success'),
+            description: t('scrapes.notifications.siteCreatedWithIntelligentAnalysis'),
           });
         }}
       />

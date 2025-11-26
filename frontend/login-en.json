@@ -1,0 +1,17 @@
+﻿{
+  \"login\": {
+    \"title\": \"Login\",
+    \"email\": \"Email\",
+    \"emailPlaceholder\": \"example@email.com\",
+    \"password\": \"Password\",
+    \"passwordPlaceholder\": \"\",
+    \"signIn\": \"Sign In\",
+    \"signingIn\": \"Signing in...\",
+    \"noAccount\": \"Don't have an account?\",
+    \"signUp\": \"Sign up\",
+    \"success\": \"Success\",
+    \"redirectingToDashboard\": \"Redirecting to dashboard...\",
+    \"failed\": \"Login Failed\",
+    \"failedMessage\": \"Invalid email or password\"
+  }
+}

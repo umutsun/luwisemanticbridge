@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,7 @@ export function CSVViewer({
   stats,
   columnTypes = []
 }: CSVViewerProps) {
+  const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -162,25 +164,25 @@ export function CSVViewer({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Total Rows</div>
+              <div className="text-xs text-muted-foreground">{t('csvViewer.stats.totalRows')}</div>
               <div className="text-lg font-bold">{stats.totalRows.toLocaleString()}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Columns</div>
+              <div className="text-xs text-muted-foreground">{t('csvViewer.stats.totalColumns')}</div>
               <div className="text-lg font-bold">{stats.totalColumns}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Numeric</div>
+              <div className="text-xs text-muted-foreground">{t('csvViewer.stats.numeric')}</div>
               <div className="text-lg font-bold">{stats.numericColumns}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-3">
-              <div className="text-xs text-muted-foreground">Categorical</div>
+              <div className="text-xs text-muted-foreground">{t('csvViewer.stats.categorical')}</div>
               <div className="text-lg font-bold">{stats.categoricalColumns}</div>
             </CardContent>
           </Card>
@@ -197,7 +199,7 @@ export function CSVViewer({
             </CardTitle>
             <Button onClick={exportCSV} variant="outline" size="sm">
               <Download className="w-4 h-4 mr-1" />
-              Export
+              {t('csvViewer.controls.export')}
             </Button>
           </div>
         </CardHeader>
@@ -207,7 +209,7 @@ export function CSVViewer({
             <div className="relative flex-1">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search across all columns..."
+                placeholder={t('csvViewer.controls.searchPlaceholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8"
@@ -219,13 +221,13 @@ export function CSVViewer({
                 onChange={(e) => setFilterColumn(e.target.value)}
                 className="px-3 py-2 border rounded-md text-sm"
               >
-                <option value="">All Columns</option>
+                <option value="">{t('csvViewer.controls.allColumns')}</option>
                 {columns.map(col => (
                   <option key={col} value={col}>{col}</option>
                 ))}
               </select>
               <Input
-                placeholder="Filter value..."
+                placeholder={t('csvViewer.controls.filterValue')}
                 value={filterValue}
                 onChange={(e) => setFilterValue(e.target.value)}
                 className="w-40"
@@ -269,7 +271,7 @@ export function CSVViewer({
                       <td key={column} className="p-2 text-sm max-w-[200px]">
                         <div className="truncate" title={String(row[column] || '')}>
                           {row[column] === null || row[column] === '' ? (
-                            <span className="text-muted-foreground italic">NULL</span>
+                            <span className="text-muted-foreground italic">{t('csvViewer.table.null')}</span>
                           ) : (
                             String(row[column])
                           )}
@@ -285,8 +287,8 @@ export function CSVViewer({
           {/* Pagination */}
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
-              Showing {startIndex + 1} to {Math.min(endIndex, processedData.length)} of{' '}
-              {processedData.length.toLocaleString()} entries
+              {t('csvViewer.controls.showing')} {startIndex + 1} {t('common.to')} {Math.min(endIndex, processedData.length)} {t('csvViewer.controls.of')}{' '}
+              {processedData.length.toLocaleString()} {t('csvViewer.controls.entries')}
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -296,9 +298,10 @@ export function CSVViewer({
                 disabled={currentPage === 1}
               >
                 <ChevronLeft className="w-4 h-4" />
+                <span className="sr-only">{t('csvViewer.controls.previous')}</span>
               </Button>
               <span className="text-sm">
-                Page {currentPage} of {totalPages}
+                {t('csvViewer.controls.pageOf', { current: currentPage, total: totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -307,6 +310,7 @@ export function CSVViewer({
                 disabled={currentPage === totalPages}
               >
                 <ChevronRight className="w-4 h-4" />
+                <span className="sr-only">{t('csvViewer.controls.next')}</span>
               </Button>
             </div>
           </div>

@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store/useStore';
+import { useTranslation } from 'react-i18next';
 import { Command } from 'cmdk';
-import { 
+import {
   Search,
   Home,
   MessageSquare,
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react';
 
 const CommandPalette = () => {
+  const { t } = useTranslation();
   const { commandPaletteOpen, setCommandPaletteOpen, setTheme, theme, clearMessages, addNotification } = useStore();
   const [search, setSearch] = useState('');
 
@@ -44,42 +46,44 @@ const CommandPalette = () => {
 
   const commands = [
     {
-      category: 'Navigation',
+      category: t('commandPalette.categories.navigation'),
       items: [
-        { icon: Home, label: 'Go to Dashboard', shortcut: 'G D', action: () => window.location.href = '/' },
-        { icon: MessageSquare, label: 'New Chat', shortcut: 'N C', action: () => { clearMessages(); setCommandPaletteOpen(false); } },
-        { icon: Activity, label: 'View Analytics', shortcut: 'V A', action: () => { addNotification('info', 'Opening analytics...'); setCommandPaletteOpen(false); } },
+        { icon: Home, label: t('commandPalette.commands.navigation.goToDashboard'), shortcut: 'G D', action: () => window.location.href = '/' },
+        { icon: MessageSquare, label: t('commandPalette.commands.navigation.newChat'), shortcut: 'N C', action: () => { clearMessages(); setCommandPaletteOpen(false); } },
+        { icon: Activity, label: t('commandPalette.commands.navigation.viewAnalytics'), shortcut: 'V A', action: () => { addNotification('info', t('commandPalette.messages.openingAnalytics')); setCommandPaletteOpen(false); } },
       ]
     },
     {
-      category: 'Theme',
+      category: t('commandPalette.categories.theme'),
       items: [
-        { icon: Sun, label: 'Light Mode', shortcut: 'T L', action: () => { setTheme('light'); setCommandPaletteOpen(false); } },
-        { icon: Moon, label: 'Dark Mode', shortcut: 'T D', action: () => { setTheme('dark'); setCommandPaletteOpen(false); } },
-        { icon: Monitor, label: 'System Theme', shortcut: 'T S', action: () => { setTheme('system'); setCommandPaletteOpen(false); } },
+        { icon: Sun, label: t('commandPalette.commands.theme.lightMode'), shortcut: 'T L', action: () => { setTheme('light'); setCommandPaletteOpen(false); } },
+        { icon: Moon, label: t('commandPalette.commands.theme.darkMode'), shortcut: 'T D', action: () => { setTheme('dark'); setCommandPaletteOpen(false); } },
+        { icon: Monitor, label: t('commandPalette.commands.theme.systemMode'), shortcut: 'T S', action: () => { setTheme('system'); setCommandPaletteOpen(false); } },
       ]
     },
     {
-      category: 'Actions',
+      category: t('commandPalette.categories.actions'),
       items: [
-        { icon: RefreshCw, label: 'Refresh Dashboard', shortcut: 'R', action: () => { window.location.reload(); } },
-        { icon: Database, label: 'View Database Status', shortcut: 'D B', action: () => { addNotification('info', 'Opening database status...'); setCommandPaletteOpen(false); } },
-        { icon: Brain, label: 'AI Settings', shortcut: 'A I', action: () => { addNotification('info', 'Opening AI settings...'); setCommandPaletteOpen(false); } },
-        { icon: Globe, label: 'Web Scraper', shortcut: 'W S', action: () => { addNotification('info', 'Opening web scraper...'); setCommandPaletteOpen(false); } },
-        { icon: Code, label: 'API Documentation', shortcut: 'A P I', action: () => { window.open('/api-docs', '_blank'); setCommandPaletteOpen(false); } },
+        { icon: RefreshCw, label: t('commandPalette.commands.actions.refreshData'), shortcut: 'R', action: () => { window.location.reload(); } },
+        { icon: Database, label: t('commandPalette.commands.data.viewDatabase'), shortcut: 'D B', action: () => { addNotification('info', t('commandPalette.messages.viewingDatabase')); setCommandPaletteOpen(false); } },
+        { icon: Brain, label: t('commandPalette.commands.actions.aiSettings'), shortcut: 'A I', action: () => { addNotification('info', t('commandPalette.messages.openingAISettings')); setCommandPaletteOpen(false); } },
+        { icon: Globe, label: t('commandPalette.commands.actions.webScraper'), shortcut: 'W S', action: () => { addNotification('info', t('commandPalette.messages.openingWebScraper')); setCommandPaletteOpen(false); } },
+        { icon: Code, label: t('commandPalette.commands.actions.apiDocumentation'), shortcut: 'A P I', action: () => { window.open('/api-docs', '_blank'); setCommandPaletteOpen(false); } },
       ]
     },
     {
-      category: 'Data',
+      category: t('commandPalette.categories.data'),
       items: [
-        { icon: Upload, label: 'Import Data', shortcut: 'I', action: () => { addNotification('info', 'Opening import dialog...'); setCommandPaletteOpen(false); } },
-        { icon: Download, label: 'Export Data', shortcut: 'E', action: () => { addNotification('info', 'Preparing export...'); setCommandPaletteOpen(false); } },
-        { icon: Trash2, label: 'Clear All Data', shortcut: 'C A', action: () => { 
-          if (confirm('Are you sure you want to clear all data?')) {
-            addNotification('warning', 'Clearing all data...');
-            setCommandPaletteOpen(false);
+        { icon: Upload, label: t('commandPalette.commands.actions.importData'), shortcut: 'I', action: () => { addNotification('info', t('commandPalette.messages.openingImportDialog')); setCommandPaletteOpen(false); } },
+        { icon: Download, label: t('commandPalette.commands.actions.exportData'), shortcut: 'E', action: () => { addNotification('info', t('commandPalette.messages.preparingExport')); setCommandPaletteOpen(false); } },
+        {
+          icon: Trash2, label: t('commandPalette.commands.actions.clearAllData'), shortcut: 'C A', action: () => {
+            if (confirm(t('commandPalette.messages.confirmClearAllData'))) {
+              addNotification('warning', t('commandPalette.messages.clearingAllData'));
+              setCommandPaletteOpen(false);
+            }
           }
-        }},
+        },
       ]
     },
   ];
@@ -98,7 +102,7 @@ const CommandPalette = () => {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998]"
             onClick={() => setCommandPaletteOpen(false)}
           />
-          
+
           {/* Command Palette */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: -20 }}
@@ -112,7 +116,7 @@ const CommandPalette = () => {
                 <div className="flex items-center px-4 py-3 border-b border-gray-200 dark:border-gray-800">
                   <Search className="w-5 h-5 text-gray-400 mr-3" />
                   <Command.Input
-                    placeholder="Type a command or search..."
+                    placeholder={t('commandPalette.placeholder')}
                     value={search}
                     onValueChange={setSearch}
                     className="flex-1 bg-transparent outline-none text-gray-900 dark:text-gray-100 placeholder-gray-500"
@@ -124,12 +128,12 @@ const CommandPalette = () => {
                     <X className="w-4 h-4 text-gray-500" />
                   </button>
                 </div>
-                
+
                 <Command.List className="max-h-[400px] overflow-y-auto p-2">
                   <Command.Empty className="py-6 text-center text-gray-500">
-                    No results found.
+                    {t('commandPalette.noResults')}
                   </Command.Empty>
-                  
+
                   {commands.map((group) => (
                     <Command.Group key={group.category} heading={group.category} className="mb-2">
                       <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 px-2 py-1.5">
@@ -160,26 +164,26 @@ const CommandPalette = () => {
                     </Command.Group>
                   ))}
                 </Command.List>
-                
+
                 <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <div className="flex items-center gap-4">
                       <span className="flex items-center gap-1">
                         <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-800 rounded">↑↓</kbd>
-                        Navigate
+                        {t('commandPalette.keyboardShortcuts.navigate')}
                       </span>
                       <span className="flex items-center gap-1">
                         <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-800 rounded">↵</kbd>
-                        Select
+                        {t('commandPalette.keyboardShortcuts.select')}
                       </span>
                       <span className="flex items-center gap-1">
                         <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-800 rounded">Esc</kbd>
-                        Close
+                        {t('commandPalette.keyboardShortcuts.close')}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
                       <CommandIcon className="w-3 h-3" />
-                      <span>Command Palette</span>
+                      <span>{t('commandPalette.title')}</span>
                     </div>
                   </div>
                 </div>

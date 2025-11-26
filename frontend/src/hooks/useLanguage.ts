@@ -13,13 +13,13 @@ export function useLanguage() {
     try {
       // i18n dilini değiştir
       await i18n.changeLanguage(language);
-      
+
       // HTML lang attribute'ini güncelle
       if (typeof document !== 'undefined') {
         document.documentElement.lang = language;
       }
-      
-      // Config context'teki locale'u güncelle
+
+      // Config context'teki locale'u güncelle (backend'e kaydedilir)
       if (config && updateConfig) {
         try {
           await updateConfig({
@@ -29,11 +29,13 @@ export function useLanguage() {
               locale: language
             }
           });
+          console.log(`✅ Language changed to ${language} and synced with backend`);
         } catch (error) {
-          console.error('Failed to update language in config:', error);
+          console.error('Failed to update language in backend config:', error);
+          // Fallback: Still update localStorage even if backend update fails
         }
       }
-      
+
       // Local storage'a kaydet
       if (typeof window !== 'undefined') {
         localStorage.setItem('selectedLanguage', language);
@@ -48,10 +50,10 @@ export function useLanguage() {
     if (typeof window !== 'undefined') {
       const savedLanguage = localStorage.getItem('selectedLanguage');
       const configLocale = config?.app?.locale;
-      
-      // Öncelik: 1. Config'ten gelen locale, 2. Kaydedilmiş dil, 3. Browser dili
+
+      // Öncelik: 1. Config'ten gelen locale (backend settings), 2. Kaydedilmiş dil, 3. Browser dili
       const targetLanguage = configLocale || savedLanguage || i18n.language;
-      
+
       if (targetLanguage && targetLanguage !== i18n.language) {
         i18n.changeLanguage(targetLanguage);
         document.documentElement.lang = targetLanguage;

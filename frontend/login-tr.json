@@ -1,0 +1,17 @@
+﻿{
+  \"login\": {
+    \"title\": \"Giriş Yap\",
+    \"email\": \"E-posta\",
+    \"emailPlaceholder\": \"ornek@email.com\",
+    \"password\": \"Şifre\",
+    \"passwordPlaceholder\": \"\",
+    \"signIn\": \"Giriş Yap\",
+    \"signingIn\": \"Giriş yapılıyor...\",
+    \"noAccount\": \"Hesabınız yok mu?\",
+    \"signUp\": \"Kayıt ol\",
+    \"success\": \"Başarılı\",
+    \"redirectingToDashboard\": \"Dashboard'a yönlendiriliyorsunuz...\",
+    \"failed\": \"Giriş Başarısız\",
+    \"failedMessage\": \"E-posta veya şifre hatalı\"
+  }
+}

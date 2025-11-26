@@ -611,7 +611,239 @@
     "description": "View and manage all system users",
     "loadFailed": "Failed to load users",
     "statusUpdated": "User status updated",
-    "statusUpdateFailed": "Failed to update status"
+    "statusUpdateFailed": "Failed to update status",
+    "tabs": {
+      "overview": "Overview",
+      "activeUsers": "Active Users",
+      "inactiveUsers": "Inactive Users",
+      "userRoles": "User Roles",
+      "activity": "Activity"
+    },
+    "stats": {
+      "totalUsers": "Total Users",
+      "activeUsers": "Active Users",
+      "inactiveUsers": "Inactive Users",
+      "newUsersToday": "New Users Today",
+      "newUsersThisWeek": "New Users This Week",
+      "newUsersThisMonth": "New Users This Month",
+      "adminUsers": "Admin Users",
+      "regularUsers": "Regular Users"
+    },
+    "search": {
+      "placeholder": "Search users...",
+      "filterByRole": "Filter by role",
+      "filterByStatus": "Filter by status",
+      "allRoles": "All Roles",
+      "allStatuses": "All Statuses",
+      "active": "Active",
+      "inactive": "Inactive",
+      "admin": "Admin",
+      "user": "User"
+    },
+    "table": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "lastLogin": "Last Login",
+      "createdAt": "Created",
+      "actions": "Actions"
+    },
+    "actions": {
+      "viewDetails": "View Details",
+      "editUser": "Edit User",
+      "activateUser": "Activate User",
+      "deactivateUser": "Deactivate User",
+      "resetPassword": "Reset Password",
+      "deleteUser": "Delete User",
+      "sendNotification": "Send Notification",
+      "exportData": "Export Data"
+    },
+    "userDetails": {
+      "title": "User Details",
+      "personalInfo": "Personal Information",
+      "accountInfo": "Account Information",
+      "activityInfo": "Activity Information",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "username": "Username",
+      "email": "Email",
+      "phone": "Phone",
+      "role": "Role",
+      "status": "Status",
+      "lastLogin": "Last Login",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "loginCount": "Login Count",
+      "lastActive": "Last Active",
+      "sessionDuration": "Session Duration"
+    },
+    "roles": {
+      "admin": "Admin",
+      "user": "User",
+      "moderator": "Moderator",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "suspended": "Suspended",
+      "pending": "Pending",
+      "banned": "Banned"
+    },
+    "createUser": {
+      "title": "Create New User",
+      "description": "Add a new user to the system",
+      "personalInfo": "Personal Information",
+      "accountSettings": "Account Settings",
+      "permissions": "Permissions",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "username": "Username",
+      "email": "Email",
+      "phone": "Phone",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "role": "Role",
+      "status": "Status",
+      "sendWelcomeEmail": "Send Welcome Email",
+      "createButton": "Create User",
+      "cancelButton": "Cancel",
+      "creating": "Creating...",
+      "success": "User created successfully",
+      "error": "Failed to create user"
+    },
+    "editUser": {
+      "title": "Edit User",
+      "description": "Update user information",
+      "personalInfo": "Personal Information",
+      "accountSettings": "Account Settings",
+      "permissions": "Permissions",
+      "firstName": "First Name",
+      "lastName": "Last Name",
+      "username": "Username",
+      "email": "Email",
+      "phone": "Phone",
+      "role": "Role",
+      "status": "Status",
+      "changePassword": "Change Password",
+      "newPassword": "New Password",
+      "confirmNewPassword": "Confirm New Password",
+      "saveButton": "Save Changes",
+      "cancelButton": "Cancel",
+      "saving": "Saving...",
+      "success": "User information updated successfully",
+      "error": "Failed to update user information"
+    },
+    "notifications": {
+      "userActivated": "User activated successfully",
+      "userDeactivated": "User deactivated successfully",
+      "userDeleted": "User deleted successfully",
+      "passwordReset": "Password reset link sent",
+      "welcomeEmailSent": "Welcome email sent",
+      "userCreated": "New user created successfully",
+      "userUpdated": "User information updated successfully",
+      "bulkActionCompleted": "Bulk action completed successfully",
+      "errorActivatingUser": "Failed to activate user",
+      "errorDeactivatingUser": "Failed to deactivate user",
+      "errorDeletingUser": "Failed to delete user",
+      "errorResettingPassword": "Failed to reset password",
+      "errorSendingWelcomeEmail": "Failed to send welcome email",
+      "errorCreatingUser": "Failed to create user",
+      "errorUpdatingUser": "Failed to update user",
+      "confirmDeleteUser": "Are you sure you want to delete this user? This action cannot be undone.",
+      "confirmBulkAction": "Are you sure you want to perform this action on the selected users?",
+      "noUsersSelected": "Please select at least one user for the operation",
+      "maxUsersSelected": "You can select a maximum of 50 users at a time"
+    },
+    "bulkActions": {
+      "title": "Bulk Actions",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "selectedCount": "{count} users selected",
+      "activateSelected": "Activate Selected",
+      "deactivateSelected": "Deactivate Selected",
+      "deleteSelected": "Delete Selected",
+      "exportSelected": "Export Selected",
+      "sendNotificationToSelected": "Send Notification to Selected",
+      "confirmActivate": "Are you sure you want to activate the selected {count} users?",
+      "confirmDeactivate": "Are you sure you want to deactivate the selected {count} users?",
+      "confirmDelete": "Are you sure you want to delete the selected {count} users? This action cannot be undone.",
+      "activating": "Activating users...",
+      "deactivating": "Deactivating users...",
+      "deleting": "Deleting users...",
+      "exporting": "Exporting data...",
+      "sendingNotification": "Sending notification..."
+    },
+    "export": {
+      "title": "Export User Data",
+      "description": "Export user data in different formats",
+      "format": "Format",
+      "selectAllFields": "Select All Fields",
+      "selectFields": "Select Fields",
+      "includeInactiveUsers": "Include Inactive Users",
+      "dateRange": "Date Range",
+      "allTime": "All Time",
+      "last30Days": "Last 30 Days",
+      "last90Days": "Last 90 Days",
+      "lastYear": "Last Year",
+      "customRange": "Custom Range",
+      "exportButton": "Export",
+      "exporting": "Exporting...",
+      "success": "Data exported successfully",
+      "error": "Failed to export data"
+    },
+    "activity": {
+      "title": "User Activity",
+      "description": "Monitor user activities in the system",
+      "filterByUser": "Filter by user",
+      "filterByAction": "Filter by action",
+      "filterByDate": "Filter by date",
+      "allUsers": "All Users",
+      "allActions": "All Actions",
+      "login": "Login",
+      "logout": "Logout",
+      "passwordChange": "Password Change",
+      "profileUpdate": "Profile Update",
+      "roleChange": "Role Change",
+      "accountCreated": "Account Created",
+      "accountDeleted": "Account Deleted",
+      "exportData": "Export Data",
+      "bulkOperation": "Bulk Operation",
+      "date": "Date",
+      "user": "User",
+      "action": "Action",
+      "details": "Details",
+      "ipAddress": "IP Address",
+      "userAgent": "User Agent",
+      "noActivityFound": "No activity found"
+    },
+    "settings": {
+      "title": "User Settings",
+      "description": "Configure user management settings",
+      "generalSettings": "General Settings",
+      "securitySettings": "Security Settings",
+      "notificationSettings": "Notification Settings",
+      "defaultRole": "Default Role",
+      "allowUserRegistration": "Allow User Registration",
+      "requireEmailVerification": "Require Email Verification",
+      "passwordPolicy": "Password Policy",
+      "minPasswordLength": "Minimum Password Length",
+      "requireUppercase": "Require Uppercase",
+      "requireLowercase": "Require Lowercase",
+      "requireNumbers": "Require Numbers",
+      "requireSpecialChars": "Require Special Characters",
+      "sessionTimeout": "Session Timeout",
+      "maxLoginAttempts": "Max Login Attempts",
+      "lockoutDuration": "Lockout Duration",
+      "welcomeEmailTemplate": "Welcome Email Template",
+      "passwordResetEmailTemplate": "Password Reset Email Template",
+      "saveSettings": "Save Settings",
+      "saving": "Saving...",
+      "success": "Settings saved successfully",
+      "error": "Failed to save settings"
+    }
   },
   "toasts": {
     "settingsSavedSuccessTitle": "Success ✨",
@@ -2400,6 +2632,1350 @@
     "register": {
       "passwordPlaceholder": "•••••••",
       "confirmPasswordPlaceholder": "•••••••"
+    }
+  },
+  "scraper": {
+    "title": "Web Scraper",
+    "description": "Extract and analyze content from web pages",
+    "refreshButton": "Refresh",
+    "scraperTab": "Scraper",
+    "historyTab": "History",
+    "urlPlaceholder": "https://example.com",
+    "scrapeButton": "Scrape",
+    "scrapingButton": "Scraping...",
+    "searchPlaceholder": "Search...",
+    "noPages": "No pages scraped yet",
+    "table": {
+      "title": "Title",
+      "url": "URL",
+      "size": "Size",
+      "chunks": "Chunks",
+      "mode": "Mode",
+      "date": "Date",
+      "actions": "Actions"
+    },
+    "actions": {
+      "viewDetails": "View Details",
+      "createEmbeddings": "Create Embeddings",
+      "delete": "Delete"
+    },
+    "history": {
+      "title": "Scraping History",
+      "loading": "Loading...",
+      "noHistory": "No history yet",
+      "success": "Success",
+      "failed": "Failed",
+      "embeddings": "Embeddings",
+      "noEmbeddings": "No embeddings"
+    },
+    "details": {
+      "title": "Page Details",
+      "description": "Description",
+      "content": "Content",
+      "url": "URL",
+      "length": "Content Length",
+      "characters": "characters",
+      "created": "Created"
+    },
+    "toasts": {
+      "enterUrl": "Please enter a URL",
+      "validUrl": "Please enter a valid URL",
+      "scrapeSuccess": "Successfully scraped: {{title}}",
+      "scrapeFailed": "Scraping failed",
+      "networkError": "Network error",
+      "embeddingsSuccess": "Embeddings created for {{title}}",
+      "embeddingsFailed": "Failed to create embeddings",
+      "pageDeleted": "Page deleted",
+      "pageDeleteFailed": "Failed to delete page",
+      "historyDeleted": "History entry deleted",
+      "historyDeleteFailed": "Failed to delete entry",
+      "historyCleared": "History cleared",
+      "historyClearFailed": "Failed to clear history",
+      "copied": "Copied to clipboard",
+      "confirmClearHistory": "All history records will be deleted. Are you sure?",
+      "pageLoadFailed": "Failed to load pages"
+    },
+    "stats": {
+      "totalPages": "Total Pages",
+      "totalSize": "Total Size",
+      "totalChunks": "Total Chunks",
+      "successRate": "Success Rate"
+    }
+  },
+  "workflows": {
+    "title": "Workflows",
+    "description": "Manage and monitor automation workflows",
+    "tabs": {
+      "workflows": "Workflows",
+      "executions": "Executions",
+      "templates": "Templates",
+      "settings": "Settings"
+    },
+    "header": {
+      "title": "n8n Workflows",
+      "description": "Manage and monitor automation workflows",
+      "n8nPanel": "n8n Panel",
+      "newWorkflow": "New Workflow"
+    },
+    "createDialog": {
+      "title": "Create New Workflow",
+      "description": "Start a new workflow in n8n",
+      "name": "Name",
+      "namePlaceholder": "Workflow name",
+      "description": "Description",
+      "descriptionPlaceholder": "Workflow description",
+      "type": "Type",
+      "cancel": "Cancel",
+      "create": "Create"
+    },
+    "stats": {
+      "totalWorkflows": "Total Workflows",
+      "active": "Active",
+      "totalExecutions": "Total Executions",
+      "nodeCount": "Node Count"
+    },
+    "templates": {
+      "title": "Ready Templates",
+      "description": "Workflow templates specially prepared for LSEM",
+      "deploy": "Deploy"
+    },
+    "activeWorkflows": {
+      "title": "Current Workflows",
+      "noWorkflows": "No workflows yet"
+    },
+    "executions": {
+      "title": "Workflow Executions",
+      "description": "Complete workflow execution history",
+      "execution": "Execution #",
+      "workflowId": "Workflow ID",
+      "started": "Start",
+      "finished": "Finish"
+    },
+    "templateGallery": {
+      "title": "Advanced Template Gallery",
+      "description": "Ready-to-use workflow templates",
+      "useTemplate": "Use Template"
+    },
+    "settings": {
+      "title": "Workflow Settings",
+      "description": "Configure n8n and workflow features",
+      "n8nUrl": "n8n URL",
+      "apiKey": "API Key",
+      "defaultExecutionSettings": "Default Execution Settings",
+      "manual": "Manual",
+      "scheduled": "Scheduled",
+      "webhookTrigger": "Trigger with Webhook",
+      "errorSettings": "Error Settings",
+      "sendEmailOnErrors": "Send email on errors",
+      "autoRetry": "Auto retry",
+      "saveSettings": "Save Settings"
+    },
+    "types": {
+      "custom": "Custom",
+      "rag": "RAG Pipeline",
+      "scraper": "Web Scraper",
+      "embedding": "Embedding",
+      "automation": "Automation"
+    },
+    "status": {
+      "active": "active",
+      "inactive": "inactive",
+      "error": "error",
+      "success": "success",
+      "running": "running",
+      "completed": "completed",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    }
+  },
+  "chatInterface": {
+    "title": "Chat Interface",
+    "inputPlaceholder": "Type your message here...",
+    "sendButton": "Send",
+    "typingIndicator": "AI is typing...",
+    "sources": "Sources",
+    "relatedTopics": "Related Topics",
+    "noSources": "No sources available",
+    "noRelatedTopics": "No related topics available",
+    "sourceCount": "{{count}} source(s)",
+    "topicCount": "{{count}} topic(s)",
+    "viewSource": "View Source",
+    "viewTopic": "View Topic",
+    "source": "Source",
+    "topic": "Topic",
+    "loading": "Loading...",
+    "error": "Error",
+    "retry": "Retry",
+    "clearChat": "Clear Chat",
+    "exportChat": "Export Chat",
+    "chatHistory": "Chat History",
+    "newChat": "New Chat",
+    "deleteChat": "Delete Chat",
+    "confirmDeleteChat": "Are you sure you want to delete this chat?",
+    "chatDeleted": "Chat deleted successfully",
+    "chatDeleteFailed": "Failed to delete chat",
+    "chatExported": "Chat exported successfully",
+    "chatExportFailed": "Failed to export chat",
+    "noMessages": "No messages yet",
+    "startConversation": "Start a conversation by typing a message below",
+    "welcomeMessage": "Welcome! How can I help you today?",
+    "suggestions": {
+      "title": "Suggestions",
+      "taxQuestions": "Tax Questions",
+      "legalQuestions": "Legal Questions",
+      "generalQuestions": "General Questions",
+      "example1": "What are the tax rates?",
+      "example2": "How to prepare a rental contract?",
+      "example3": "What are the legal requirements?",
+      "example4": "How to calculate income tax?",
+      "example5": "What documents do I need?",
+      "example6": "How to file a tax return?"
+    },
+    "settings": {
+      "title": "Chat Settings",
+      "language": "Language",
+      "theme": "Theme",
+      "fontSize": "Font Size",
+      "autoSave": "Auto Save",
+      "notifications": "Notifications",
+      "soundEffects": "Sound Effects",
+      "keyboardShortcuts": "Keyboard Shortcuts",
+      "about": "About"
+    },
+    "quality": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "confidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    }
+  },
+  "chat": {
+    "source": {
+      "default": "Default",
+      "table": {
+        "documents": "Documents",
+        "scraped_content": "Scraped Content",
+        "message_history": "Message History",
+        "legal_documents": "Legal Documents",
+        "tax_regulations": "Tax Regulations",
+        "court_decisions": "Court Decisions",
+        "commercial_law": "Commercial Law",
+        "tax_law": "Tax Law",
+        "labor_law": "Labor Law",
+        "corporate_law": "Corporate Law"
+      }
+    },
+    "errors": {
+      "adminLimit": "As an admin user, you should have unlimited access. However, we see a technical issue.",
+      "queryLimit": "Sorry, you have reached your monthly question limit. To continue, please upgrade your subscription plan or contact an administrator.",
+      "general": "Sorry, an error occurred."
+    },
+    "newChat": "New Chat",
+    "input": {
+      "help": "Press Enter to send, Shift+Enter for new line"
+    },
+    "messageCount": "{{count}} messages"
+  },
+  "chatInterface": {
+    "welcomeMessage": "Welcome! How can I help you today?",
+    "confidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "source": {
+      "detailedResearch": "Conduct detailed research on this topic",
+      "legalConditions": "and in this case, relevant legal provisions apply.",
+      "timeConditions": "These conditions are considered when calculating this period.",
+      "taxConditions": "Legal provisions are referenced for this issue.",
+      "generalConditions": "Detailed information can be accessed from the sources on the subject.",
+      "showMore": "Show more ({{count}} more topics)"
+    },
+    "keyword": {
+      "fromQuery": "🔍 From your search query: \"{{keyword}}\"",
+      "keyword": "Keyword"
+    }
+  },
+  "systemMonitor": {
+    "title": "System Monitor",
+    "description": "Real-time system performance and resource monitoring",
+    "refreshInterval": "Refresh Interval",
+    "seconds": "seconds",
+    "autoRefresh": "Auto Refresh",
+    "lastUpdated": "Last Updated",
+    "systemStatus": {
+      "title": "System Status",
+      "overall": "Overall Status",
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical",
+      "unknown": "Unknown"
+    },
+    "resources": {
+      "title": "System Resources",
+      "cpu": {
+        "title": "CPU Usage",
+        "usage": "Usage",
+        "cores": "Cores",
+        "frequency": "Frequency"
+      },
+      "memory": {
+        "title": "Memory Usage",
+        "total": "Total",
+        "used": "Used",
+        "free": "Free",
+        "cached": "Cached"
+      },
+      "disk": {
+        "title": "Disk Usage",
+        "total": "Total",
+        "used": "Used",
+        "free": "Free",
+        "available": "Available"
+      },
+      "network": {
+        "title": "Network",
+        "incoming": "Incoming",
+        "outgoing": "Outgoing",
+        "connections": "Connections"
+      }
+    },
+    "services": {
+      "title": "Services",
+      "status": {
+        "running": "Running",
+        "stopped": "Stopped",
+        "error": "Error",
+        "unknown": "Unknown"
+      },
+      "actions": {
+        "start": "Start",
+        "stop": "Stop",
+        "restart": "Restart",
+        "viewLogs": "View Logs"
+      }
+    },
+    "processes": {
+      "title": "Processes",
+      "name": "Name",
+      "pid": "PID",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "status": "Status",
+      "actions": "Actions",
+      "kill": "Kill Process",
+      "confirmKill": "Are you sure you want to kill this process?"
+    },
+    "logs": {
+      "title": "System Logs",
+      "level": "Level",
+      "message": "Message",
+      "timestamp": "Timestamp",
+      "source": "Source",
+      "levels": {
+        "error": "Error",
+        "warning": "Warning",
+        "info": "Info",
+        "debug": "Debug"
+      },
+      "filters": {
+        "allLevels": "All Levels",
+        "lastHour": "Last Hour",
+        "last24Hours": "Last 24 Hours",
+        "lastWeek": "Last Week"
+      }
+    },
+    "alerts": {
+      "title": "System Alerts",
+      "type": "Type",
+      "severity": "Severity",
+      "message": "Message",
+      "timestamp": "Timestamp",
+      "acknowledged": "Acknowledged",
+      "severities": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "actions": {
+        "acknowledge": "Acknowledge",
+        "resolve": "Resolve",
+        "delete": "Delete"
+      }
+    },
+    "charts": {
+      "cpuUsage": "CPU Usage (%)",
+      "memoryUsage": "Memory Usage (%)",
+      "diskUsage": "Disk Usage (%)",
+      "networkTraffic": "Network Traffic (MB/s)",
+      "responseTime": "Response Time (ms)",
+      "requestRate": "Request Rate (req/s)",
+      "errorRate": "Error Rate (%)"
+    },
+    "settings": {
+      "title": "Monitor Settings",
+      "refreshInterval": "Refresh Interval",
+      "enableNotifications": "Enable Notifications",
+      "alertThresholds": "Alert Thresholds",
+      "cpuThreshold": "CPU Threshold (%)",
+      "memoryThreshold": "Memory Threshold (%)",
+      "diskThreshold": "Disk Threshold (%)",
+      "saveSettings": "Save Settings",
+      "resetToDefaults": "Reset to Defaults"
+    }
+  },
+  "scrapes": {
+    "title": "Scraping Management",
+    "description": "Manage web scraping operations and data extraction",
+    "tabs": {
+      "overview": "Overview",
+      "jobs": "Jobs",
+      "scrapedData": "Scraped Data",
+      "sites": "Sites"
+    },
+    "stats": {
+      "totalSites": "Total Sites",
+      "configured": "configured",
+      "activeJobs": "Active Jobs",
+      "running": "running",
+      "scrapedItems": "Scraped Items",
+      "today": "today",
+      "successRate": "Success Rate",
+      "avg": "Avg"
+    },
+    "recentJobs": {
+      "title": "Recent Jobs",
+      "noJobs": "No jobs yet. Start scraping to see activity."
+    },
+    "topSites": {
+      "title": "Top Sites",
+      "items": "items",
+      "noSites": "No sites configured yet."
+    },
+    "activeWorkflow": {
+      "title": "Active Scraping Workflow",
+      "url": "URL",
+      "urlsFound": "URLs found"
+    },
+    "createJob": {
+      "title": "Create New Job",
+      "description": "Start a new scraping job",
+      "site": "Site",
+      "selectSite": "Select a site",
+      "type": "Type",
+      "concept": "Concept",
+      "conceptPlaceholder": "Enter concept to search for",
+      "category": "Category",
+      "categoryPlaceholder": "Enter category to scrape",
+      "startJob": "Start Job"
+    },
+    "jobTypes": {
+      "quickScrape": "Quick Scrape",
+      "conceptSearch": "Concept Search",
+      "categorySearch": "Category Search",
+      "entityExtraction": "Entity Extraction"
+    },
+    "workflows": {
+      "title": "Scraping Workflows",
+      "description": "Start comprehensive scraping workflows",
+      "quickSiteScraping": "Quick Site Scraping",
+      "quickSiteScrapingDescription": "Scrape selected site with AI analysis",
+      "startSiteScraping": "Start Site Scraping",
+      "multiSiteConceptSearch": "Multi-Site Concept Search",
+      "multiSiteConceptSearchDescription": "Search concept across all configured sites",
+      "conceptPlaceholder": "Enter concept to search...",
+      "searchAcrossSites": "Search Across Sites",
+      "categoryScraping": "Category Scraping",
+      "categoryScrapingDescription": "Scrape specific categories from sites",
+      "categoryPlaceholder": "Enter category (e.g., products, articles)",
+      "scrapeCategory": "Scrape Category"
+    },
+    "activeJobs": {
+      "title": "Active Jobs",
+      "description": "Real-time progress",
+      "noActiveJobs": "No active jobs"
+    },
+    "filterJobs": {
+      "title": "Filter Jobs",
+      "description": "Filter by status, type, and more",
+      "searchPlaceholder": "Search jobs...",
+      "progressRange": "Progress Range",
+      "showOnlyJobsWithErrors": "Show only jobs with errors",
+      "resetFilters": "Reset Filters"
+    },
+    "jobs": {
+      "title": "Jobs ({count})",
+      "noJobsFound": "No jobs found",
+      "items": "items",
+      "deleteJobConfirm": "Delete this job?"
+    },
+    "searchData": {
+      "title": "Search Data",
+      "description": "Find scraped content",
+      "searchPlaceholder": "Search in content...",
+      "categoryPlaceholder": "Filter by category",
+      "searchData": "Search Data"
+    },
+    "dataTypes": {
+      "allTypes": "All Types",
+      "concept": "Concept",
+      "category": "Category",
+      "entity": "Entity",
+      "product": "Product",
+      "article": "Article"
+    },
+    "dataStats": {
+      "title": "Data Stats",
+      "description": "Scraped data overview",
+      "totalItems": "Total Items",
+      "today": "Today",
+      "avgContentLength": "Avg Content Length",
+      "chars": "chars"
+    },
+    "exportTools": {
+      "title": "Export & Tools",
+      "description": "Process scraped data",
+      "exportAsCSV": "Export as CSV",
+      "exportAsJSON": "Export as JSON",
+      "exportToDatabase": "Export to Database",
+      "translateSelectedData": "Translate Selected Data",
+      "translateDescription": "Translate scraped content to multiple languages"
+    },
+    "scrapedData": {
+      "title": "Scraped Data ({count})",
+      "noData": "No scraped data yet",
+      "chars": "chars"
+    },
+    "sites": {
+      "title": "Sites ({count})",
+      "description": "Manage and configure scraping sites",
+      "searchPlaceholder": "Search sites...",
+      "intelligentAddSite": "Intelligent Add Site",
+      "allStatus": "All Status",
+      "configured": "Configured",
+      "notConfigured": "Not Configured",
+      "analyzing": "Analyzing",
+      "analyzed": "Analyzed",
+      "allTypes": "All Types",
+      "website": "Website",
+      "ecommerce": "E-commerce",
+      "blog": "Blog",
+      "newsSite": "News Site",
+      "forum": "Forum",
+      "directory": "Directory",
+      "noSitesConfigured": "No sites configured yet",
+      "addFirstSite": "Add your first site to start scraping",
+      "addYourFirstSite": "Add Your First Site",
+      "ready": "Ready",
+      "setup": "Setup",
+      "items": "items",
+      "last": "Last"
+    },
+    "siteDetails": {
+      "title": "Site Details",
+      "siteName": "Site Name",
+      "baseUrl": "Base URL",
+      "notConfigured": "Not configured",
+      "totalScraped": "Total Scraped",
+      "successRate": "Success Rate"
+    },
+    "analyzeSite": {
+      "title": "Analyze Site Structure",
+      "description": "Analyzing site structure to identify optimal content selectors...",
+      "analyzing": "Analyzing site structure...",
+      "detectingContentAreas": "Detecting content areas",
+      "inProgress": "In progress...",
+      "identifyingNavigationPatterns": "Identifying navigation patterns",
+      "pending": "Pending...",
+      "analyzingPageStructure": "Analyzing page structure"
+    },
+    "configureSite": {
+      "title": "Configure Site",
+      "description": "Set up content extraction and scraping behavior for {siteName}",
+      "contentSelectors": "Content Selectors",
+      "contentSelector": "Content Selector",
+      "contentSelectorPlaceholder": "main, article, .content",
+      "titleSelector": "Title Selector",
+      "titleSelectorPlaceholder": "h1, .title",
+      "descriptionSelector": "Description Selector",
+      "descriptionSelectorPlaceholder": ".description, .summary",
+      "linksSelector": "Links Selector",
+      "linksSelectorPlaceholder": "a[href]",
+      "scrapingBehavior": "Scraping Behavior",
+      "maxDepth": "Max Depth",
+      "oneLevel": "1 level",
+      "twoLevels": "2 levels",
+      "threeLevels": "3 levels",
+      "fiveLevels": "5 levels",
+      "maxPages": "Max Pages",
+      "tenPages": "10 pages",
+      "fiftyPages": "50 pages",
+      "hundredPages": "100 pages",
+      "fiveHundredPages": "500 pages",
+      "rateLimit": "Rate Limit (requests/second)",
+      "onePerSec": "1/sec",
+      "fivePerSec": "5/sec",
+      "tenPerSec": "10/sec",
+      "twentyPerSec": "20/sec",
+      "options": "Options",
+      "enableScraping": "Enable Scraping",
+      "cleanHtml": "Clean HTML",
+      "respectRobots": "Respect robots.txt",
+      "autoDetect": "Auto Detect",
+      "saveConfiguration": "Save Configuration"
+    },
+    "jobDetails": {
+      "title": "Job Details",
+      "concept": "Concept",
+      "category": "Category",
+      "resultPreview": "Result Preview"
+    },
+    "scrapedDataDetails": {
+      "title": "Scraped Data",
+      "title": "Title",
+      "content": "Content"
+    },
+    "addNewSite": {
+      "title": "Add New Site",
+      "description": "Add a new website to configure for scraping",
+      "siteName": "Site Name",
+      "siteNamePlaceholder": "My Website",
+      "urlPlaceholder": "https://example.com",
+      "categoryPlaceholder": "General",
+      "addSite": "Add Site"
+    },
+    "status": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "paused": "Paused",
+      "pending": "Pending"
+    },
+    "notifications": {
+      "scrapingStarted": "Scraping Started",
+      "startedWorkflow": "Started {workflowType} scraping workflow",
+      "failedToStartScraping": "Failed to start scraping",
+      "scrapingStopped": "Scraping Stopped",
+      "scrapingStoppedSuccessfully": "Scraping workflow stopped successfully",
+      "siteCreatedSuccessfully": "Site created successfully",
+      "failedToCreateSite": "Failed to create site",
+      "pleaseSelectSite": "Please select a site",
+      "pleaseEnterConceptOrCategory": "Please enter concept or category",
+      "failedToCreateJob": "Failed to create job",
+      "siteAnalysisStarted": "Site analysis started",
+      "failedToAnalyzeSite": "Failed to analyze site",
+      "siteConfigurationSaved": "Site configuration saved",
+      "failedToConfigureSite": "Failed to configure site",
+      "jobDeletedSuccessfully": "Job deleted successfully",
+      "siteCreatedWithIntelligentAnalysis": "Site created with intelligent analysis"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "jobs": "Jobs",
+      "scrapedData": "Scraped Data",
+      "sites": "Sites"
+    },
+    "stats": {
+      "totalSites": "Total Sites",
+      "configured": "configured",
+      "activeJobs": "Active Jobs",
+      "running": "running",
+      "scrapedItems": "Scraped Items",
+      "today": "today",
+      "successRate": "Success Rate",
+      "avg": "Avg"
+    },
+    "recentJobs": {
+      "title": "Recent Jobs",
+      "noJobs": "No jobs yet. Start scraping to see activity."
+    },
+    "topSites": {
+      "title": "Top Sites",
+      "items": "items",
+      "noSites": "No sites configured yet."
+    },
+    "activeWorkflow": {
+      "title": "Active Scraping Workflow",
+      "url": "URL",
+      "urlsFound": "URLs found"
+    }
+  },
+  "siteAnalyzer": {
+    "title": "Intelligent Site Analyzer",
+    "subtitle": "GPT-4o-mini powered automatic site analysis and CSS selector detection",
+    "analyzeButton": "Analyze",
+    "aiPoweredBadge": "AI-Powered",
+    "urlInput": {
+      "label": "Website URL",
+      "placeholder": "https://example.com"
+    },
+    "progress": {
+      "analyzing": "Analyzing",
+      "steps": {
+        "robots_check": "Robots.txt",
+        "initialization": "Browser",
+        "structure_analysis": "Structure",
+        "detecting_content_areas": "Content",
+        "identifying_navigation_patterns": "Navigation",
+        "analyzing_page_structure": "AI Analysis"
+      }
+    },
+    "tabs": {
+      "analysis": "Analysis",
+      "selectors": "Selectors",
+      "entities": "Entities",
+      "technical": "Technical"
+    },
+    "analysis": {
+      "completedSuccessfully": "Analysis Completed Successfully",
+      "completedDescription": "AI-powered detection completed in real-time",
+      "siteType": "Site Type",
+      "detectedEntities": "Detected Entities",
+      "seoAnalysis": "SEO Analysis",
+      "internalLinks": "Internal Links",
+      "externalLinks": "External Links",
+      "totalImages": "Total Images",
+      "withAltText": "With Alt Text",
+      "metaDescription": "Meta Description",
+      "confidence": {
+        "high": "High confidence detection",
+        "medium": "Medium confidence detection",
+        "low": "Low confidence detection"
+      }
+    },
+    "selectors": {
+      "title": "AI-Powered CSS Selectors",
+      "description": "Automatically detected with GPT-4o-mini and validated on live page",
+      "coreSelectors": "Core Selectors",
+      "ecommerceSelectors": "E-commerce Selectors",
+      "notDetected": "Not detected"
+    },
+    "entities": {
+      "products": "Products",
+      "articles": "Articles",
+      "reviews": "Reviews",
+      "prices": "Prices",
+      "dates": "Dates",
+      "authors": "Authors",
+      "categories": "Categories",
+      "detected": "Detected",
+      "notDetected": "Not Detected"
+    },
+    "technical": {
+      "technologyStack": "Technology Stack",
+      "structuredData": "Structured Data",
+      "cms": "CMS",
+      "framework": "Framework",
+      "language": "Language",
+      "pagination": "Pagination",
+      "openGraph": "Open Graph",
+      "twitterCards": "Twitter Cards",
+      "microdataTypes": "Microdata Types"
+    },
+    "configuration": {
+      "title": "Site Configuration",
+      "description": "Configure site settings before adding to your collection",
+      "siteName": "Site Name",
+      "siteNamePlaceholder": "My Website",
+      "category": "Category",
+      "categoryPlaceholder": "Category",
+      "addSite": "Add Site"
+    },
+    "notifications": {
+      "error": "Error",
+      "invalidUrl": "Please enter a valid URL",
+      "invalidUrlFormat": "Please enter a valid URL (e.g., https://example.com)",
+      "analysisComplete": "Analysis Complete",
+      "analysisDescription": "Successfully analyzed {{hostname}} with AI-powered detection",
+      "analysisBasic": "Successfully analyzed site with basic analysis",
+      "analysisFailed": "Analysis Failed",
+      "completeRequiredFields": "Please complete all required fields",
+      "siteCreated": "Success",
+      "siteCreatedDescription": "Site created and configured successfully",
+      "createSiteFailed": "Failed to create site"
+    }
+  },
+  "scraperPage": {
+    "title": "Advanced Scraper",
+    "subtitle": "Intelligent Web Scraping & Content Processing System",
+    "realTimeProcessing": "Real-time Processing",
+    "smartAnalytics": "Smart Analytics",
+    "lightningFast": "Lightning Fast",
+    "tabs": {
+      "projects": "Projects",
+      "configurations": "Configurations",
+      "scraping": "Scraping",
+      "processing": "Processing"
+    },
+    "projects": {
+      "title": "Scraping Projects",
+      "description": "Manage and monitor your web scraping projects",
+      "newProject": "New Project",
+      "createProject": "Create Project",
+      "noProjects": "No projects yet",
+      "createFirstProject": "Create your first scraping project to get started",
+      "createNewProject": "Create Project"
+    },
+    "configurations": {
+      "title": "Site Configurations",
+      "description": "Manage and configure websites for intelligent scraping",
+      "addNewSite": "Add New Site",
+      "importConfig": "Import Config",
+      "siteSelection": "Site Selection",
+      "siteSelectionDescription": "Select sites to scrape from your configured list",
+      "searchSites": "Search sites...",
+      "noSitesConfigured": "No sites configured yet",
+      "noSitesFound": "No sites found",
+      "addNewSiteButton": "Add New Site",
+      "sitesSelected": "site(s) selected",
+      "clearAll": "Clear All",
+      "siteConfiguration": "Site Configuration",
+      "siteConfigurationDescription": "Configure scraping parameters and selectors for selected sites",
+      "noSiteSelected": "No Site Selected",
+      "noSiteSelectedDescription": "Select one or more sites from left panel to configure their scraping parameters, selectors, and advanced settings.",
+      "basicSettings": "Basic Settings",
+      "scrapingMode": "Scraping Mode",
+      "staticHtml": "Static HTML",
+      "dynamicJavascript": "Dynamic JavaScript",
+      "hybridMode": "Hybrid Mode",
+      "contentCategory": "Content Category",
+      "contentCategoryPlaceholder": "e.g., products, articles, news",
+      "depthLevel": "Depth Level",
+      "advancedSettings": "Advanced Settings",
+      "generateEmbeddings": "Generate Embeddings",
+      "generateEmbeddingsDescription": "Create semantic search vectors",
+      "processWithAI": "Process with AI",
+      "processWithAIDescription": "Analyze content with LLM",
+      "realTimeUpdates": "Real-time Updates",
+      "realTimeUpdatesDescription": "Live progress notifications",
+      "reset": "Reset",
+      "startScraping": "Start Scraping"
+    },
+    "scraping": {
+      "title": "Scraping Control Center",
+      "description": "Configure and launch intelligent web scraping operations",
+      "scrapingControls": "Scraping Controls",
+      "selectProject": "Select Project",
+      "chooseProject": "Choose a project...",
+      "contentCategory": "Content Category",
+      "targetSites": "Target Sites",
+      "noSiteConfigurations": "No site configurations available",
+      "startIntelligentScraping": "Start Intelligent Scraping",
+      "pleaseSelectProjectAndSite": "Please select a project and at least one site",
+      "liveProgress": "Live Progress",
+      "scrapingProgress": "Scraping Progress",
+      "overallProgress": "Overall Progress",
+      "currentlyProcessing": "Currently Processing:",
+      "sessionId": "Session ID",
+      "estimatedTime": "Est. Time",
+      "calculating": "Calculating...",
+      "completed": "Completed",
+      "running": "Running",
+      "paused": "Paused",
+      "failed": "Failed",
+      "pause": "Pause",
+      "resume": "Resume",
+      "stop": "Stop",
+      "forceStop": "Force Stop",
+      "scrapedResults": "Scraped Results",
+      "exportData": "Export Data",
+      "processWithAI": "Process with AI",
+      "viewDetails": "View Details",
+      "items": "items",
+      "characters": "characters"
+    },
+    "processing": {
+      "title": "AI Processing Center",
+      "description": "Advanced content processing with AI and semantic analysis",
+      "refreshQueue": "Refresh Queue",
+      "processAll": "Process All",
+      "processingQueue": "Processing Queue",
+      "queueLength": "Queue Length",
+      "processing": "Processing",
+      "completed": "Completed",
+      "embeddings": "Embeddings",
+      "itemsProcessing": "items processing",
+      "lastActivity": "Last activity: 2 minutes ago",
+      "processedContent": "Processed Content",
+      "processedContentDescription": "AI-processed content with semantic analysis and embeddings",
+      "exportResults": "Export Results",
+      "viewAnalytics": "View Analytics",
+      "manageData": "Manage Data",
+      "eCommerceProductAnalysis": "E-commerce Product Analysis",
+      "newsArticleProcessing": "News Article Processing",
+      "blogContentAnalysis": "Blog Content Analysis",
+      "items": "items",
+      "time": "time",
+      "justNow": "Just now"
+    },
+    "dialogs": {
+      "addNewSite": {
+        "title": "Add New Site",
+        "basicInfo": "Basic Info",
+        "siteName": "Site Name",
+        "siteNamePlaceholder": "e.g., Tech News Portal",
+        "baseUrl": "Base URL",
+        "baseUrlPlaceholder": "https://example.com",
+        "category": "Category",
+        "categoryPlaceholder": "e.g., news, e-commerce, blog",
+        "selectors": "Selectors",
+        "titleSelector": "Title Selector",
+        "titleSelectorPlaceholder": "h1, h2, h3, .title, .post-title",
+        "titleSelectorDescription": "CSS selector for extracting titles",
+        "contentSelector": "Content Selector",
+        "contentSelectorPlaceholder": "article, .content, .main, .post-content",
+        "contentSelectorDescription": "CSS selector for extracting main content",
+        "imagesSelector": "Images Selector",
+        "imagesSelectorPlaceholder": "img, .image, .picture",
+        "linksSelector": "Links Selector",
+        "linksSelectorPlaceholder": "a, .link, .nav",
+        "configuration": "Configuration",
+        "maxPages": "Max Pages",
+        "maxPagesDescription": "Maximum number of pages to scrape",
+        "maxDepth": "Max Depth",
+        "maxDepthDescription": "How many levels deep to crawl links",
+        "requestDelay": "Request Delay (ms)",
+        "requestDelayDescription": "Delay between requests to avoid blocking",
+        "domainsOnly": "Domains Only",
+        "followExternalLinks": "Follow External Links",
+        "respectRobots": "Respect robots.txt",
+        "review": "Review",
+        "confirmSettings": "Confirm settings",
+        "siteNameLabel": "Site Name:",
+        "urlLabel": "URL:",
+        "categoryLabel": "Category:",
+        "maxPagesLabel": "Max Pages:",
+        "maxDepthLabel": "Max Depth:",
+        "delayLabel": "Delay:",
+        "addSite": "Add Site"
+      },
+      "createNewProject": {
+        "title": "Create New Project",
+        "projectName": "Project Name",
+        "projectNamePlaceholder": "e.g., E-commerce Product Analysis",
+        "description": "Description",
+        "descriptionPlaceholder": "Describe what this project will scrape and analyze...",
+        "defaultCategory": "Default Category",
+        "defaultCategoryPlaceholder": "e.g., products, articles, news",
+        "smartFeatures": "Smart Features",
+        "autoProcessWithAI": "Auto-process with AI",
+        "autoProcessWithAIDescription": "Automatically analyze scraped content",
+        "generateEmbeddings": "Generate Embeddings",
+        "generateEmbeddingsDescription": "Create semantic search vectors",
+        "realTimeUpdates": "Real-time Updates",
+        "realTimeUpdatesDescription": "Live progress notifications",
+        "createProject": "Create Project"
+      }
+    }
+  },
+  "workflowPage": {
+    "title": "Workflows",
+    "subtitle": "Manage and monitor automation workflows",
+    "tabs": {
+      "workflows": "Workflows",
+      "executions": "Executions",
+      "templates": "Templates",
+      "settings": "Settings"
+    },
+    "header": {
+      "title": "n8n Workflows",
+      "description": "Manage and monitor automation workflows",
+      "n8nPanel": "n8n Panel",
+      "newWorkflow": "New Workflow"
+    },
+    "createDialog": {
+      "title": "Create New Workflow",
+      "description": "Start a new workflow in n8n",
+      "name": "Name",
+      "namePlaceholder": "Workflow name",
+      "description": "Description",
+      "descriptionPlaceholder": "Workflow description",
+      "type": "Type",
+      "cancel": "Cancel",
+      "create": "Create"
+    },
+    "stats": {
+      "totalWorkflows": "Total Workflows",
+      "active": "Active",
+      "totalExecutions": "Total Executions",
+      "nodeCount": "Node Count"
+    },
+    "templates": {
+      "title": "Ready Templates",
+      "description": "Workflow templates specially prepared for LSEM",
+      "deploy": "Deploy"
+    },
+    "activeWorkflows": {
+      "title": "Current Workflows",
+      "noWorkflows": "No workflows yet"
+    },
+    "executions": {
+      "title": "Workflow Executions",
+      "description": "Complete workflow execution history",
+      "execution": "Execution #",
+      "workflowId": "Workflow ID",
+      "started": "Started",
+      "finished": "Finished"
+    },
+    "templateGallery": {
+      "title": "Advanced Template Gallery",
+      "description": "Ready-to-use workflow templates",
+      "useTemplate": "Use Template"
+    },
+    "settings": {
+      "title": "Workflow Settings",
+      "description": "Configure n8n and workflow features",
+      "n8nUrl": "n8n URL",
+      "apiKey": "API Key",
+      "defaultExecutionSettings": "Default Execution Settings",
+      "manual": "Manual",
+      "scheduled": "Scheduled",
+      "webhookTrigger": "Trigger with Webhook",
+      "errorSettings": "Error Settings",
+      "sendEmailOnErrors": "Send email on errors",
+      "autoRetry": "Auto retry",
+      "saveSettings": "Save Settings"
+    },
+    "types": {
+      "custom": "Custom",
+      "rag": "RAG Pipeline",
+      "scraper": "Web Scraper",
+      "embedding": "Embedding",
+      "automation": "Automation"
+    },
+    "status": {
+      "active": "active",
+      "inactive": "inactive",
+      "error": "error",
+      "success": "success",
+      "running": "running",
+      "completed": "completed",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    }
+  },
+  "commandPalette": {
+    "title": "Command Palette",
+    "placeholder": "Type a command or search...",
+    "categories": {
+      "navigation": "Navigation",
+      "theme": "Theme",
+      "actions": "Actions",
+      "data": "Data"
+    },
+    "commands": {
+      "navigation": {
+        "goToDashboard": "Go to Dashboard",
+        "newChat": "New Chat",
+        "viewAnalytics": "View Analytics",
+        "openSettings": "Open Settings",
+        "viewDocuments": "View Documents",
+        "viewQueries": "View Queries",
+        "viewUsers": "View Users",
+        "viewSystemMonitor": "View System Monitor"
+      },
+      "theme": {
+        "toggleTheme": "Toggle Theme",
+        "lightMode": "Light Mode",
+        "darkMode": "Dark Mode",
+        "systemMode": "System Mode"
+      },
+      "actions": {
+        "createDocument": "Create Document",
+        "uploadFile": "Upload File",
+        "exportData": "Export Data",
+        "importData": "Import Data",
+        "refreshData": "Refresh Data",
+        "clearCache": "Clear Cache"
+      },
+      "data": {
+        "viewDatabase": "View Database",
+        "viewEmbeddings": "View Embeddings",
+        "viewAnalytics": "View Analytics",
+        "viewLogs": "View Logs",
+        "viewMetrics": "View Metrics"
+      }
+    },
+    "messages": {
+      "openingDashboard": "Opening dashboard...",
+      "openingAnalytics": "Opening analytics...",
+      "openingSettings": "Opening settings...",
+      "creatingDocument": "Creating document...",
+      "uploadingFile": "Uploading file...",
+      "exportingData": "Exporting data...",
+      "importingData": "Importing data...",
+      "refreshingData": "Refreshing data...",
+      "clearingCache": "Clearing cache...",
+      "viewingDocuments": "Viewing documents...",
+      "viewingQueries": "Viewing queries...",
+      "viewingUsers": "Viewing users...",
+      "viewingSystemMonitor": "Viewing system monitor...",
+      "viewingDatabase": "Viewing database...",
+      "viewingEmbeddings": "Viewing embeddings...",
+      "viewingLogs": "Viewing logs...",
+      "viewingMetrics": "Viewing metrics...",
+      "togglingTheme": "Toggling theme...",
+      "switchingToLight": "Switching to light mode...",
+      "switchingToDark": "Switching to dark mode...",
+      "switchingToSystem": "Switching to system mode..."
+    },
+    "noResults": "No commands found",
+    "recentCommands": "Recent Commands"
+  },
+  "documentManager": {
+    "title": "Document Manager",
+    "stats": {
+      "totalDocuments": "Total Documents",
+      "description": "Total documents in system",
+      "analyzedDocuments": "Analyzed Documents",
+      "analyzedDescription": "Documents with metadata analysis",
+      "embeddedDocuments": "Embedded Documents",
+      "embeddedDescription": "Documents with vector embeddings"
+    },
+    "tabs": {
+      "list": "Document List",
+      "add": "New Document",
+      "import": "Import from URL"
+    },
+    "search": {
+      "placeholder": "Search documents...",
+      "status": "Status:",
+      "all": "All",
+      "embedded": "Has Embedding",
+      "notEmbedded": "No Embedding"
+    },
+    "table": {
+      "headers": {
+        "title": "Title",
+        "source": "Source",
+        "chunks": "Chunks",
+        "embedding": "Embedding",
+        "analyzeStatus": "Analyze Status",
+        "date": "Date",
+        "actions": "Actions"
+      },
+      "noDocuments": "No documents found yet",
+      "csvFilesDisabled": "CSV files cannot be batch analyzed"
+    },
+    "batchOperations": {
+      "selected": "documents selected",
+      "batchEmbedding": "Batch Embedding",
+      "clearSelection": "Clear Selection",
+      "processing": "Processing...",
+      "embeddingsCreated": "Embeddings created successfully!",
+      "selectAtLeastOne": "Please select at least one document",
+      "embeddingInProgress": "Creating embeddings for {count} documents...",
+      "embeddingComplete": "Batch embedding complete!",
+      "noDocumentsToEmbed": "No documents to embed",
+      "selectPdfDocuments": "Please select PDF, TXT, MD, or DOC files for embedding"
+    },
+    "form": {
+      "title": "Document Title",
+      "titlePlaceholder": "Document title",
+      "content": "Content",
+      "contentPlaceholder": "Document content",
+      "fileUpload": "Upload from File (Optional)",
+      "supportedFormats": "Supported formats: Text (.txt, .md, .json, .csv), PDF (.pdf), Word (.doc, .docx), Excel (.xls, .xlsx)",
+      "addAndProcess": "Add Document and Process",
+      "clear": "Clear"
+    },
+    "urlImport": {
+      "title": "Import from URL",
+      "description": "Extract content from web page and add as document",
+      "urlPlaceholder": "https://example.com",
+      "fetchContent": "Fetch Content",
+      "fetched": "Content fetched successfully",
+      "fetchFailed": "Failed to fetch content",
+      "saveAsDocument": "Save as Document"
+    },
+    "actions": {
+      "createEmbedding": "Create Embedding",
+      "deleteEmbedding": "Delete Embedding",
+      "viewDetails": "View Details",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "dialogs": {
+      "documentDetails": {
+        "title": "Document Details",
+        "description": "Document details",
+        "metadata": "Metadata",
+        "content": "Content"
+      },
+      "editDocument": {
+        "title": "Edit Document",
+        "placeholder": "Title",
+        "contentPlaceholder": "Content",
+        "save": "Save",
+        "cancel": "Cancel"
+      }
+    },
+    "status": {
+      "waiting": "Waiting",
+      "analyzed": "Analyzed",
+      "transformed": "Transformed",
+      "hasEmbedding": "Has Embedding",
+      "noEmbedding": "No Embedding",
+      "csvCannotBeAnalyzed": "CSV files cannot be batch analyzed"
+    },
+    "messages": {
+      "documentsLoaded": "Documents loaded successfully",
+      "loadFailed": "Failed to load documents",
+      "documentAdded": "Document added successfully",
+      "documentAddFailed": "Failed to add document",
+      "documentUpdated": "Document updated successfully",
+      "documentUpdateFailed": "Failed to update document",
+      "documentDeleted": "Document deleted successfully",
+      "documentDeleteFailed": "Failed to delete document",
+      "embeddingCreated": "Embedding created successfully",
+      "embeddingCreateFailed": "Failed to create embedding",
+      "embeddingDeleted": "Embedding deleted successfully",
+      "embeddingDeleteFailed": "Failed to delete embedding",
+      "confirmDelete": "Are you sure you want to delete this document?",
+      "confirmDeleteEmbedding": "Are you sure you want to delete this embedding?",
+      "fileUploaded": "File uploaded successfully",
+      "fileUploadFailed": "Failed to upload file",
+      "contentFetched": "Content fetched successfully",
+      "contentFetchFailed": "Failed to fetch content"
+    }
+  },
+  "csvViewer": {
+    "title": "CSV Data Viewer",
+    "stats": {
+      "totalRows": "Total Rows",
+      "totalColumns": "Total Columns",
+      "numeric": "Numeric",
+      "categorical": "Categorical"
+    },
+    "controls": {
+      "export": "Export",
+      "searchPlaceholder": "Search across all columns...",
+      "filterColumn": "Filter by column",
+      "allColumns": "All Columns",
+      "filterValue": "Filter value...",
+      "previous": "Previous",
+      "next": "Next",
+      "showing": "Showing",
+      "of": "of",
+      "entries": "entries",
+      "pageOf": "Page {current} of {total}"
+    },
+    "table": {
+      "no": "No",
+      "null": "NULL",
+      "columnType": {
+        "numeric": "Numeric",
+        "text": "Text",
+        "date": "Date"
+      }
+    },
+    "messages": {
+      "exportSuccess": "Data exported successfully",
+      "exportFailed": "Failed to export data",
+      "noDataAvailable": "No CSV data available"
+    }
+  },
+  "commandPalette": {
+    "title": "Command Palette",
+    "placeholder": "Type a command or search...",
+    "categories": {
+      "navigation": "Navigation",
+      "theme": "Theme",
+      "actions": "Actions",
+      "data": "Data"
+    },
+    "commands": {
+      "navigation": {
+        "goToDashboard": "Go to Dashboard",
+        "newChat": "New Chat",
+        "viewAnalytics": "View Analytics",
+        "openSettings": "Open Settings",
+        "viewDocuments": "View Documents",
+        "viewQueries": "View Queries",
+        "viewUsers": "View Users",
+        "viewSystemMonitor": "View System Monitor"
+      },
+      "theme": {
+        "toggleTheme": "Toggle Theme",
+        "lightMode": "Light Mode",
+        "darkMode": "Dark Mode",
+        "systemMode": "System Mode"
+      },
+      "actions": {
+        "createDocument": "Create Document",
+        "uploadFile": "Upload File",
+        "exportData": "Export Data",
+        "importData": "Import Data",
+        "refreshData": "Refresh Data",
+        "clearCache": "Clear Cache",
+        "aiSettings": "AI Settings",
+        "webScraper": "Web Scraper",
+        "apiDocumentation": "API Documentation",
+        "clearAllData": "Clear All Data"
+      },
+      "data": {
+        "viewDatabase": "View Database",
+        "viewEmbeddings": "View Embeddings",
+        "viewAnalytics": "View Analytics",
+        "viewLogs": "View Logs",
+        "viewMetrics": "View Metrics"
+      }
+    },
+    "messages": {
+      "openingDashboard": "Opening dashboard...",
+      "openingAnalytics": "Opening analytics...",
+      "openingSettings": "Opening settings...",
+      "creatingDocument": "Creating document...",
+      "uploadingFile": "Uploading file...",
+      "exportingData": "Exporting data...",
+      "importingData": "Importing data...",
+      "refreshingData": "Refreshing data...",
+      "clearingCache": "Clearing cache...",
+      "viewingDocuments": "Viewing documents...",
+      "viewingQueries": "Viewing queries...",
+      "viewingUsers": "Viewing users...",
+      "viewingSystemMonitor": "Viewing system monitor...",
+      "viewingDatabase": "Viewing database...",
+      "viewingEmbeddings": "Viewing embeddings...",
+      "viewingLogs": "Viewing logs...",
+      "viewingMetrics": "Viewing metrics...",
+      "togglingTheme": "Toggling theme...",
+      "switchingToLight": "Switching to light mode...",
+      "switchingToDark": "Switching to dark mode...",
+      "switchingToSystem": "Switching to system mode...",
+      "openingAISettings": "Opening AI settings...",
+      "openingWebScraper": "Opening web scraper...",
+      "openingImportDialog": "Opening import dialog...",
+      "preparingExport": "Preparing export...",
+      "confirmClearAllData": "Are you sure you want to clear all data?",
+      "clearingAllData": "Clearing all data..."
+    },
+    "noResults": "No commands found",
+    "recentCommands": "Recent Commands",
+    "keyboardShortcuts": {
+      "navigate": "Navigate",
+      "select": "Select",
+      "close": "Close"
+    },
+    "actions": {
+      "aiSettings": "AI Settings",
+      "webScraper": "Web Scraper",
+      "apiDocumentation": "API Documentation",
+      "clearAllData": "Clear All Data"
+    },
+    "messages": {
+      "openingAISettings": "Opening AI settings...",
+      "openingWebScraper": "Opening web scraper...",
+      "openingImportDialog": "Opening import dialog...",
+      "preparingExport": "Preparing export...",
+      "confirmClearAllData": "Are you sure you want to clear all data?",
+      "clearingAllData": "Clearing all data...",
+      "executingCommand": "Executing command..."
     }
   }
 }

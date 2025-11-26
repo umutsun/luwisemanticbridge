@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, CheckCircle, AlertCircle, Globe, ShoppingCart, FileText, Users, Building, Search, Zap, Database, Cpu, Package, Tag, Calendar, User, Brain, Sparkles, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +76,18 @@ interface SiteAnalysis {
   };
 }
 
+interface Site {
+  id: string;
+  name: string;
+  baseUrl: string;
+  type: string;
+  category: string;
+  selectors: Record<string, string[]>;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface AnalysisProgress {
   step: string;
   progress: number;
@@ -85,11 +98,12 @@ interface AnalysisProgress {
 interface SiteAnalyzerModalProps {
   open: boolean;
   onClose: () => void;
-  onSiteCreated?: (site: any) => void;
+  onSiteCreated?: (site: Site) => void;
   initialUrl?: string;
 }
 
 export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initialUrl = '' }: SiteAnalyzerModalProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [url, setUrl] = useState(initialUrl);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -115,8 +129,8 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
   const handleAnalyze = async () => {
     if (!url) {
       toast({
-        title: 'Error',
-        description: 'Please enter a valid URL',
+        title: t('siteAnalyzer.notifications.error'),
+        description: t('siteAnalyzer.notifications.invalidUrl'),
         variant: 'destructive'
       });
       return;
@@ -127,8 +141,8 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
       new URL(url);
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Please enter a valid URL (e.g., https://example.com)',
+        title: t('siteAnalyzer.notifications.error'),
+        description: t('siteAnalyzer.notifications.invalidUrlFormat'),
         variant: 'destructive'
       });
       return;
@@ -199,8 +213,8 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
 
                 // Show success toast
                 toast({
-                  title: 'Analysis Complete',
-                  description: `Successfully analyzed ${new URL(url).hostname} with AI-powered detection`,
+                  title: t('siteAnalyzer.notifications.analysisComplete'),
+                  description: t('siteAnalyzer.notifications.analysisDescription', { hostname: new URL(url).hostname }),
                 });
                 return;
               } else if (data.type === 'error') {
@@ -267,16 +281,16 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
 
           setIsAnalyzing(false);
           toast({
-            title: 'Analysis Complete',
-            description: 'Successfully analyzed site with basic analysis',
+            title: t('siteAnalyzer.notifications.analysisComplete'),
+            description: t('siteAnalyzer.notifications.analysisBasic'),
           });
         } else {
           throw new Error('Basic analysis also failed');
         }
       } catch (fallbackError) {
         toast({
-          title: 'Analysis Failed',
-          description: error instanceof Error ? error.message : 'Failed to analyze site',
+          title: t('siteAnalyzer.notifications.analysisFailed'),
+          description: error instanceof Error ? error.message : t('siteAnalyzer.notifications.analysisFailed'),
           variant: 'destructive'
         });
       }
@@ -286,8 +300,8 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
   const handleCreateSite = async () => {
     if (!analysis || !siteName) {
       toast({
-        title: 'Error',
-        description: 'Please complete all required fields',
+        title: t('siteAnalyzer.notifications.error'),
+        description: t('siteAnalyzer.notifications.completeRequiredFields'),
         variant: 'destructive'
       });
       return;
@@ -313,24 +327,24 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
       if (response.ok) {
         const result = await response.json();
         toast({
-          title: 'Success',
-          description: 'Site created and configured successfully',
+          title: t('siteAnalyzer.notifications.siteCreated'),
+          description: t('siteAnalyzer.notifications.siteCreatedDescription'),
         });
         onSiteCreated?.(result.site);
         onClose();
       } else {
         const error = await response.json();
         toast({
-          title: 'Error',
-          description: error.error || 'Failed to create site',
+          title: t('siteAnalyzer.notifications.error'),
+          description: error.error || t('siteAnalyzer.notifications.createSiteFailed'),
           variant: 'destructive'
         });
       }
     } catch (error) {
       console.error('Failed to create site:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to create site',
+        title: t('siteAnalyzer.notifications.error'),
+        description: t('siteAnalyzer.notifications.createSiteFailed'),
         variant: 'destructive'
       });
     }
@@ -362,14 +376,14 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
               <Brain className="h-6 w-6 text-primary" />
               <Sparkles className="h-3 w-3 text-primary/60 absolute -top-1 -right-1 animate-pulse" />
             </div>
-            Intelligent Site Analyzer
+            {t('siteAnalyzer.title')}
             <Badge variant="outline" className="ml-2">
               <Cpu className="h-3 w-3 mr-1" />
-              AI-Powered
+              {t('siteAnalyzer.aiPowered')}
             </Badge>
           </DialogTitle>
           <DialogDescription>
-            GPT-4o-mini destekli otomatik site analizi ve CSS selector tespiti
+            {t('siteAnalyzer.subtitle')}
           </DialogDescription>
         </DialogHeader>
 
@@ -377,11 +391,11 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
           {/* URL Input */}
           <div className="space-y-4">
             <div>
-              <Label htmlFor="site-url" className="text-sm font-medium">Website URL</Label>
+              <Label htmlFor="site-url" className="text-sm font-medium">{t('siteAnalyzer.urlInput.label')}</Label>
               <div className="flex gap-2 mt-1.5">
                 <Input
                   id="site-url"
-                  placeholder="https://example.com"
+                  placeholder={t('siteAnalyzer.urlInput.placeholder')}
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   disabled={isAnalyzing}
@@ -396,7 +410,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                   ) : (
                     <Search className="h-4 w-4 mr-2" />
                   )}
-                  Analyze
+                  {t('siteAnalyzer.urlInput.analyze')}
                 </Button>
               </div>
             </div>
@@ -431,22 +445,21 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                       {/* Step Indicators */}
                       <div className="flex items-center gap-2 text-xs flex-wrap">
                         {[
-                          { step: 'robots_check', label: 'Robots.txt', progress: 5 },
-                          { step: 'initialization', label: 'Browser', progress: 15 },
-                          { step: 'structure_analysis', label: 'Structure', progress: 30 },
-                          { step: 'detecting_content_areas', label: 'Content', progress: 50 },
-                          { step: 'identifying_navigation_patterns', label: 'Navigation', progress: 70 },
-                          { step: 'analyzing_page_structure', label: 'AI Analysis', progress: 85 }
+                          { step: 'robots_check', label: t('siteAnalyzer.progress.steps.robots'), progress: 5 },
+                          { step: 'initialization', label: t('siteAnalyzer.progress.steps.browser'), progress: 15 },
+                          { step: 'structure_analysis', label: t('siteAnalyzer.progress.steps.structure'), progress: 30 },
+                          { step: 'detecting_content_areas', label: t('siteAnalyzer.progress.steps.content'), progress: 50 },
+                          { step: 'identifying_navigation_patterns', label: t('siteAnalyzer.progress.steps.navigation'), progress: 70 },
+                          { step: 'analyzing_page_structure', label: t('siteAnalyzer.progress.steps.aiAnalysis'), progress: 85 }
                         ].map((s) => (
                           <div
                             key={s.step}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all ${
-                              progress.progress >= s.progress
-                                ? 'bg-primary/10 text-primary border border-primary/20'
-                                : progress.progress >= s.progress - 10
+                            className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all ${progress.progress >= s.progress
+                              ? 'bg-primary/10 text-primary border border-primary/20'
+                              : progress.progress >= s.progress - 10
                                 ? 'bg-primary/5 text-primary/70 animate-pulse border border-primary/10'
                                 : 'bg-muted text-muted-foreground'
-                            }`}
+                              }`}
                           >
                             {progress.progress >= s.progress ? (
                               <CheckCircle className="h-3 w-3" />
@@ -491,7 +504,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         <div className="text-3xl font-bold">
                           {progress.progress}%
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">Analyzing</div>
+                        <div className="text-xs text-muted-foreground mt-1">{t('siteAnalyzer.progress.analyzing')}</div>
                       </div>
                     </div>
                   </div>
@@ -504,10 +517,10 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
           {analysis && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="analysis">Analysis</TabsTrigger>
-                <TabsTrigger value="selectors">Selectors</TabsTrigger>
-                <TabsTrigger value="entities">Entities</TabsTrigger>
-                <TabsTrigger value="technical">Technical</TabsTrigger>
+                <TabsTrigger value="analysis">{t('siteAnalyzer.tabs.analysis')}</TabsTrigger>
+                <TabsTrigger value="selectors">{t('siteAnalyzer.tabs.selectors')}</TabsTrigger>
+                <TabsTrigger value="entities">{t('siteAnalyzer.tabs.entities')}</TabsTrigger>
+                <TabsTrigger value="technical">{t('siteAnalyzer.tabs.technical')}</TabsTrigger>
               </TabsList>
 
               {/* Analysis Tab */}
@@ -519,8 +532,8 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                       <CheckCircle className="h-6 w-6 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold">Analysis Completed Successfully</div>
-                      <div className="text-sm text-muted-foreground">AI-powered detection completed in real-time</div>
+                      <div className="font-semibold">{t('siteAnalyzer.analysis.completedSuccessfully')}</div>
+                      <div className="text-sm text-muted-foreground">{t('siteAnalyzer.analysis.completedDescription')}</div>
                     </div>
                     <Badge variant="outline">
                       <Brain className="h-3 w-3 mr-1" />
@@ -537,7 +550,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         <div className="p-2 bg-primary/10 rounded-lg">
                           {getSiteTypeIcon(analysis.siteType)}
                         </div>
-                        Site Type
+                        {t('siteAnalyzer.analysis.siteType')}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
@@ -559,9 +572,9 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                           </Badge>
                         </div>
                         <div className={`text-sm font-medium ${getConfidenceColor(analysis.confidence)}`}>
-                          {analysis.confidence >= 0.8 ? 'High confidence detection' :
-                           analysis.confidence >= 0.6 ? 'Medium confidence detection' :
-                           'Low confidence detection'}
+                          {analysis.confidence >= 0.8 ? t('siteAnalyzer.analysis.confidence.high') :
+                            analysis.confidence >= 0.6 ? t('siteAnalyzer.analysis.confidence.medium') :
+                              t('siteAnalyzer.analysis.confidence.low')}
                         </div>
                       </div>
                     </CardContent>
@@ -574,7 +587,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         <div className="p-2 bg-primary/10 rounded-lg">
                           <Package className="h-5 w-5" />
                         </div>
-                        Detected Entities
+                        {t('siteAnalyzer.analysis.detectedEntities')}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
@@ -582,15 +595,14 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         {Object.entries(analysis.entities).map(([key, value], index) => (
                           <div
                             key={key}
-                            className={`flex items-center justify-between p-2 rounded-lg transition-all hover:bg-accent ${
-                              value ? 'bg-primary/5' : ''
-                            }`}
+                            className={`flex items-center justify-between p-2 rounded-lg transition-all hover:bg-accent ${value ? 'bg-primary/5' : ''
+                              }`}
                           >
                             <span className="text-sm font-medium capitalize">{key}</span>
                             {value ? (
                               <div className="flex items-center gap-1">
                                 <CheckCircle className="h-4 w-4 text-primary" />
-                                <span className="text-xs text-primary font-medium">Detected</span>
+                                <span className="text-xs text-primary font-medium">{t('siteAnalyzer.analysis.detected')}</span>
                               </div>
                             ) : (
                               <AlertCircle className="h-4 w-4 text-muted-foreground/30" />
@@ -609,7 +621,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                       <div className="p-2 bg-primary/10 rounded-lg">
                         <Search className="h-5 w-5" />
                       </div>
-                      SEO Analysis
+                      {t('siteAnalyzer.analysis.seoAnalysis')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4">
@@ -618,30 +630,30 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         <div className="text-3xl font-bold">
                           {analysis.seo.internalLinks}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1 font-medium">Internal Links</div>
+                        <div className="text-xs text-muted-foreground mt-1 font-medium">{t('siteAnalyzer.analysis.internalLinks')}</div>
                       </div>
                       <div className="text-center p-3 rounded-lg bg-accent hover:shadow-md transition-all">
                         <div className="text-3xl font-bold">
                           {analysis.seo.externalLinks}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1 font-medium">External Links</div>
+                        <div className="text-xs text-muted-foreground mt-1 font-medium">{t('siteAnalyzer.analysis.externalLinks')}</div>
                       </div>
                       <div className="text-center p-3 rounded-lg bg-accent hover:shadow-md transition-all">
                         <div className="text-3xl font-bold">
                           {analysis.seo.totalImages}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1 font-medium">Total Images</div>
+                        <div className="text-xs text-muted-foreground mt-1 font-medium">{t('siteAnalyzer.analysis.totalImages')}</div>
                       </div>
                       <div className="text-center p-3 rounded-lg bg-accent hover:shadow-md transition-all">
                         <div className="text-3xl font-bold">
                           {analysis.seo.imagesWithAlt}
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1 font-medium">With Alt Text</div>
+                        <div className="text-xs text-muted-foreground mt-1 font-medium">{t('siteAnalyzer.analysis.withAltText')}</div>
                       </div>
                     </div>
                     {analysis.seo.metaDescription && (
                       <div className="mt-4 p-3 bg-muted rounded-lg border">
-                        <Label className="text-sm font-semibold">Meta Description</Label>
+                        <Label className="text-sm font-semibold">{t('siteAnalyzer.analysis.metaDescription')}</Label>
                         <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{analysis.seo.metaDescription}</p>
                       </div>
                     )}
@@ -658,8 +670,8 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                       <Brain className="h-5 w-5 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold">AI-Powered CSS Selectors</div>
-                      <div className="text-sm text-muted-foreground">Automatically detected with GPT-4o-mini and validated on live page</div>
+                      <div className="font-semibold">{t('siteAnalyzer.selectors.aiPowered')}</div>
+                      <div className="text-sm text-muted-foreground">{t('siteAnalyzer.selectors.aiDescription')}</div>
                     </div>
                   </div>
                 </div>
@@ -671,9 +683,9 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                       <div className="p-2 bg-primary/10 rounded-lg">
                         <Database className="h-5 w-5" />
                       </div>
-                      Core Selectors
+                      {t('siteAnalyzer.selectors.coreSelectors')}
                       <Badge variant="outline" className="ml-auto">
-                        {Object.values(analysis.selectors).flat().length} selectors
+                        {Object.values(analysis.selectors).flat().length} {t('siteAnalyzer.selectors.count')}
                       </Badge>
                     </CardTitle>
                   </CardHeader>
@@ -695,7 +707,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                                 </code>
                               ))
                             ) : (
-                              <p className="text-xs text-muted-foreground italic">Not detected</p>
+                              <p className="text-xs text-muted-foreground italic">{t('siteAnalyzer.selectors.notDetected')}</p>
                             )}
                           </div>
                         </div>
@@ -712,9 +724,9 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         <div className="p-2 bg-primary/10 rounded-lg">
                           <ShoppingCart className="h-5 w-5" />
                         </div>
-                        E-commerce Selectors
+                        {t('siteAnalyzer.selectors.ecommerceSelectors')}
                         <Badge variant="outline" className="ml-auto">
-                          {Object.values(analysis.ecommerce).flat().length} selectors
+                          {Object.values(analysis.ecommerce).flat().length} {t('siteAnalyzer.selectors.count')}
                         </Badge>
                       </CardTitle>
                     </CardHeader>
@@ -738,7 +750,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                                   </code>
                                 ))
                               ) : (
-                                <p className="text-xs text-muted-foreground italic">Not detected</p>
+                                <p className="text-xs text-muted-foreground italic">{t('siteAnalyzer.selectors.notDetected')}</p>
                               )}
                             </div>
                           </div>
@@ -765,9 +777,9 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                             {key === 'authors' && <User className="h-8 w-8 mx-auto" />}
                             {key === 'categories' && <Database className="h-8 w-8 mx-auto" />}
                           </div>
-                          <div className="font-medium capitalize">{key}</div>
+                          <div className="font-medium capitalize">{t(`siteAnalyzer.entities.${key}`)}</div>
                           <div className={`text-sm ${detected ? 'text-green-600' : 'text-gray-400'}`}>
-                            {detected ? 'Detected' : 'Not Detected'}
+                            {detected ? t('siteAnalyzer.entities.detected') : t('siteAnalyzer.entities.notDetected')}
                           </div>
                         </div>
                       </CardContent>
@@ -783,25 +795,25 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Cpu className="h-5 w-5" />
-                        Technology Stack
+                        {t('siteAnalyzer.technical.technologyStack')}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
                         <div className="flex justify-between">
-                          <span className="text-sm">CMS</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.cms')}</span>
                           <Badge variant="outline">{analysis.technical.cms}</Badge>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-sm">Framework</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.framework')}</span>
                           <Badge variant="outline">{analysis.technical.framework}</Badge>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-sm">Language</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.language')}</span>
                           <Badge variant="outline">{analysis.technical.language}</Badge>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-sm">Pagination</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.pagination')}</span>
                           <Badge variant="outline">{analysis.technical.paginationType}</Badge>
                         </div>
                       </div>
@@ -812,13 +824,13 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Database className="h-5 w-5" />
-                        Structured Data
+                        {t('siteAnalyzer.technical.structuredData')}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
                         <div className="flex justify-between">
-                          <span className="text-sm">Structured Data</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.structuredData')}</span>
                           {analysis.technical.hasStructuredData ? (
                             <CheckCircle className="h-4 w-4 text-green-600" />
                           ) : (
@@ -826,7 +838,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                           )}
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-sm">Open Graph</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.openGraph')}</span>
                           {analysis.technical.hasOpenGraph ? (
                             <CheckCircle className="h-4 w-4 text-green-600" />
                           ) : (
@@ -834,7 +846,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                           )}
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-sm">Twitter Cards</span>
+                          <span className="text-sm">{t('siteAnalyzer.technical.twitterCards')}</span>
                           {analysis.technical.hasTwitterCards ? (
                             <CheckCircle className="h-4 w-4 text-green-600" />
                           ) : (
@@ -843,7 +855,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                         </div>
                         {analysis.technical.microdataTypes.length > 0 && (
                           <div>
-                            <span className="text-sm">Microdata Types:</span>
+                            <span className="text-sm">{t('siteAnalyzer.technical.microdataTypes')}:</span>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {analysis.technical.microdataTypes.map((type, index) => (
                                 <Badge key={index} variant="secondary" className="text-xs">
@@ -865,29 +877,29 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
           {analysis && (
             <Card>
               <CardHeader>
-                <CardTitle>Site Configuration</CardTitle>
+                <CardTitle>{t('siteAnalyzer.configuration.title')}</CardTitle>
                 <CardDescription>
-                  Configure the site settings before adding to your collection
+                  {t('siteAnalyzer.configuration.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="site-name">Site Name</Label>
+                    <Label htmlFor="site-name">{t('siteAnalyzer.configuration.siteName')}</Label>
                     <Input
                       id="site-name"
                       value={siteName}
                       onChange={(e) => setSiteName(e.target.value)}
-                      placeholder="My Website"
+                      placeholder={t('siteAnalyzer.configuration.siteNamePlaceholder')}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="site-category">Category</Label>
+                    <Label htmlFor="site-category">{t('siteAnalyzer.configuration.category')}</Label>
                     <Input
                       id="site-category"
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      placeholder="Category"
+                      placeholder={t('siteAnalyzer.configuration.categoryPlaceholder')}
                     />
                   </div>
                 </div>
@@ -895,7 +907,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
                 <div className="flex justify-center">
                   <Button onClick={handleCreateSite} className="min-w-[200px]" size="lg">
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    Add Site
+                    {t('siteAnalyzer.configuration.addSite')}
                   </Button>
                 </div>
               </CardContent>

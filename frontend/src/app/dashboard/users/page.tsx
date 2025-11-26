@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +65,7 @@ interface SubscriptionPlan {
 }
 
 export default function UsersPage() {
+  const { t } = useTranslation();
 
   const [users, setUsers] = useState<User[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -274,25 +276,25 @@ export default function UsersPage() {
       setUsers(prev => prev.map(user =>
         user.id === userId
           ? {
-              ...user,
-              subscription: {
-                ...user.subscription,
-                plan_id: planId,
-                plan_name: plan.name,
-                monthly_limit: plan.monthly_tokens,
-                status: 'active',
-                start_date: new Date().toISOString(),
-                end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-                features: [...plan.features]
-              },
-              token_usage: {
-                ...user.token_usage,
-                monthly_limit: plan.monthly_tokens,
-                usage_percentage: user.token_usage ?
-                  Math.round((user.token_usage.total_tokens / plan.monthly_tokens) * 100) : 0,
-                remaining_tokens: plan.monthly_tokens - (user.token_usage?.total_tokens || 0)
-              }
+            ...user,
+            subscription: {
+              ...user.subscription,
+              plan_id: planId,
+              plan_name: plan.name,
+              monthly_limit: plan.monthly_tokens,
+              status: 'active',
+              start_date: new Date().toISOString(),
+              end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+              features: [...plan.features]
+            },
+            token_usage: {
+              ...user.token_usage,
+              monthly_limit: plan.monthly_tokens,
+              usage_percentage: user.token_usage ?
+                Math.round((user.token_usage.total_tokens / plan.monthly_tokens) * 100) : 0,
+              remaining_tokens: plan.monthly_tokens - (user.token_usage?.total_tokens || 0)
             }
+          }
           : user
       ));
 
@@ -313,22 +315,22 @@ export default function UsersPage() {
         setUsers(prev => prev.map(user =>
           user.id === userId
             ? {
-                ...user,
-                subscription: {
-                  ...user.subscription,
-                  plan_id: planId,
-                  plan_name: plan.name,
-                  monthly_limit: plan.monthly_tokens,
-                  status: 'active'
-                },
-                token_usage: {
-                  ...user.token_usage,
-                  monthly_limit: plan.monthly_tokens,
-                  usage_percentage: user.token_usage ?
-                    Math.round((user.token_usage.total_tokens / plan.monthly_tokens) * 100) : 0,
-                  remaining_tokens: plan.monthly_tokens - (user.token_usage?.total_tokens || 0)
-                }
+              ...user,
+              subscription: {
+                ...user.subscription,
+                plan_id: planId,
+                plan_name: plan.name,
+                monthly_limit: plan.monthly_tokens,
+                status: 'active'
+              },
+              token_usage: {
+                ...user.token_usage,
+                monthly_limit: plan.monthly_tokens,
+                usage_percentage: user.token_usage ?
+                  Math.round((user.token_usage.total_tokens / plan.monthly_tokens) * 100) : 0,
+                remaining_tokens: plan.monthly_tokens - (user.token_usage?.total_tokens || 0)
               }
+            }
             : user
         ));
         setError(`Warning: Local update completed. API error: ${errorMsg}`);
@@ -476,7 +478,7 @@ export default function UsersPage() {
   // Filter users
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.name.toLowerCase().includes(searchTerm.toLowerCase());
+      user.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
 
@@ -518,21 +520,21 @@ export default function UsersPage() {
     <div className="w-[90%] mx-auto p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-semibold">User Management</h1>
-        <p className="text-gray-600">Manage users and their subscriptions</p>
+        <h1 className="text-xl font-semibold">{t('users.title')}</h1>
+        <p className="text-gray-600">{t('users.description')}</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-gray-600">Total Users</div>
+            <div className="text-sm text-gray-600">{t('users.stats.totalUsers')}</div>
             <div className="text-2xl font-bold">{users.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-gray-600">Active Users</div>
+            <div className="text-sm text-gray-600">{t('users.stats.activeUsers')}</div>
             <div className="text-2xl font-bold text-green-600">
               {users.filter(u => u.status === 'active').length}
             </div>
@@ -540,7 +542,7 @@ export default function UsersPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-gray-600">Premium Users</div>
+            <div className="text-sm text-gray-600">{t('users.stats.premiumUsers')}</div>
             <div className="text-2xl font-bold text-purple-600">
               {users.filter(u => u.subscription?.plan_id === 'premium').length}
             </div>
@@ -548,7 +550,7 @@ export default function UsersPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-gray-600">Total Tokens Used</div>
+            <div className="text-sm text-gray-600">{t('users.stats.totalTokensUsed')}</div>
             <div className="text-2xl font-bold">
               {users.reduce((sum, user) => sum + (user.token_usage?.total_tokens || 0), 0).toLocaleString()}
             </div>
@@ -563,9 +565,9 @@ export default function UsersPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Subscription Management</CardTitle>
+                  <CardTitle>{t('users.subscriptionManagement.title')}</CardTitle>
                   <CardDescription>
-                    Overview of all subscription plans and user distribution
+                    {t('users.subscriptionManagement.description')}
                   </CardDescription>
                 </div>
                 <Button
@@ -573,7 +575,7 @@ export default function UsersPage() {
                   onClick={handleAddPlan}
                   className="text-green-600 hover:text-green-800 hover:bg-green-50"
                 >
-                  + Add Plan
+                  + {t('users.subscriptionManagement.addPlan')}
                 </Button>
               </div>
             </CardHeader>
@@ -591,31 +593,31 @@ export default function UsersPage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="font-semibold text-lg">{plan.name}</h3>
-                        <p className="text-sm text-gray-600">${plan.price}/month</p>
+                        <p className="text-sm text-gray-600">${plan.price}/{t('users.subscriptionManagement.month')}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className={plan.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                          {plan.is_active ? 'Active' : 'Inactive'}
+                          {plan.is_active ? t('users.subscriptionManagement.active') : t('users.subscriptionManagement.inactive')}
                         </Badge>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
                           onClick={() => handleEditPlan(plan)}
-                          title="Edit Plan"
+                          title={t('users.subscriptionManagement.editPlan')}
                         >
                           ⚙
                         </Button>
                         <ConfirmTooltip
                           onConfirm={() => handleDeletePlan(plan.id)}
-                          message="Delete this plan?"
+                          message={t('users.subscriptionManagement.deletePlanConfirm')}
                           side="top"
                         >
                           <Button
                             variant="ghost"
                             size="sm"
                             className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50"
-                            title="Delete Plan"
+                            title={t('users.subscriptionManagement.deletePlan')}
                           >
                             ×
                           </Button>
@@ -625,24 +627,24 @@ export default function UsersPage() {
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span>Users:</span>
+                        <span>{t('users.subscriptionManagement.users')}:</span>
                         <span className="font-medium">{userCount}</span>
                       </div>
                       <Progress value={percentage} className="h-2" />
                       <div className="flex justify-between text-xs text-gray-600">
-                        <span>{percentage.toFixed(1)}% of all users</span>
-                        <span>{plan.monthly_tokens.toLocaleString()} tokens/month</span>
+                        <span>{percentage.toFixed(1)}% {t('users.subscriptionManagement.ofAllUsers')}</span>
+                        <span>{plan.monthly_tokens.toLocaleString()} {t('users.subscriptionManagement.tokensPerMonth')}</span>
                       </div>
                       {userCount > 0 && (
                         <div className="flex justify-between text-xs text-gray-600 pt-2 border-t">
-                          <span>Avg usage:</span>
-                          <span>{Math.round(avgUsage).toLocaleString()} tokens</span>
+                          <span>{t('users.subscriptionManagement.avgUsage')}:</span>
+                          <span>{Math.round(avgUsage).toLocaleString()} {t('users.subscriptionManagement.tokens')}</span>
                         </div>
                       )}
                     </div>
 
                     <div className="space-y-1">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Features:</p>
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('users.subscriptionManagement.features')}:</p>
                       {plan.features.slice(0, 2).map((feature, index) => (
                         <div key={index} className="text-xs text-gray-600 dark:text-gray-400">
                           • {feature}
@@ -650,7 +652,7 @@ export default function UsersPage() {
                       ))}
                       {plan.features.length > 2 && (
                         <div className="text-xs text-gray-500">
-                          • +{plan.features.length - 2} more features
+                          • +{plan.features.length - 2} {t('users.subscriptionManagement.moreFeatures')}
                         </div>
                       )}
                     </div>
@@ -665,227 +667,227 @@ export default function UsersPage() {
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle>Users ({filteredUsers.length})</CardTitle>
+              <CardTitle>{t('users.table.title')} ({filteredUsers.length})</CardTitle>
               <CardDescription>
-                View and manage all system users
+                {t('users.table.description')}
               </CardDescription>
 
               {/* Filters Section */}
               <div className="flex gap-4 pt-4">
                 <div className="flex-1">
                   <Input
-                    placeholder="Search users..."
+                    placeholder={t('users.table.searchPlaceholder')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
                   <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Role" />
+                    <SelectValue placeholder={t('users.table.rolePlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    <SelectItem value="user">User</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="premium">Premium</SelectItem>
+                    <SelectItem value="all">{t('users.table.allRoles')}</SelectItem>
+                    <SelectItem value="user">{t('users.table.user')}</SelectItem>
+                    <SelectItem value="admin">{t('users.table.admin')}</SelectItem>
+                    <SelectItem value="premium">{t('users.table.premium')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder={t('users.table.statusPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                    <SelectItem value="suspended">Suspended</SelectItem>
+                    <SelectItem value="all">{t('users.table.allStatus')}</SelectItem>
+                    <SelectItem value="active">{t('users.table.active')}</SelectItem>
+                    <SelectItem value="inactive">{t('users.table.inactive')}</SelectItem>
+                    <SelectItem value="suspended">{t('users.table.suspended')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </CardHeader>
             <CardContent>
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="space-y-1">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="h-16 bg-gray-100 dark:bg-gray-800 rounded mb-1">
-                    <div className="grid grid-cols-8 gap-4 h-full items-center px-4">
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
-                      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
-                      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-                      <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-40"></div>
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-28"></div>
-                      <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-                    </div>
-                  </div>
+              {error && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                  {error}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Subscription</TableHead>
-                    <TableHead>Token Usage</TableHead>
-                    <TableHead>Messages</TableHead>
-                    <TableHead>Last Activity</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-sm text-gray-600">{user.email}</div>
-                          <div className="text-xs text-gray-500">
-                            Joined {new Date(user.created_at).toLocaleDateString()}
-                          </div>
+              )}
+
+              {loading ? (
+                <div className="space-y-1">
+                  {[...Array(8)].map((_, i) => (
+                    <div key={i} className="animate-pulse">
+                      <div className="h-16 bg-gray-100 dark:bg-gray-800 rounded mb-1">
+                        <div className="grid grid-cols-8 gap-4 h-full items-center px-4">
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
+                          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+                          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-40"></div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-28"></div>
+                          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getRoleBadgeColor(user.role)}>
-                          {user.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getStatusBadgeColor(user.status)}>
-                            {user.status}
-                          </Badge>
-                          <Switch
-                            checked={user.status === 'active'}
-                            onCheckedChange={() => handleToggleStatus(user.id)}
-                            size="sm"
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {user.subscription ? (
-                          <div className="space-y-1">
-                            <Select
-                              value={user.subscription.plan_id || ''}
-                              onValueChange={(value) => handleUpdateSubscription(user.id, value)}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {plans.map(plan => (
-                                  <SelectItem key={plan.id} value={plan.id}>
-                                    {plan.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Badge className={getSubscriptionBadgeColor(user.subscription.status || '')}>
-                              {user.subscription.status}
-                            </Badge>
-                          </div>
-                        ) : (
-                          <Select
-                            value=""
-                            onValueChange={(value) => handleUpdateSubscription(user.id, value)}
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue placeholder="No plan" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {plans.map(plan => (
-                                <SelectItem key={plan.id} value={plan.id}>
-                                  {plan.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {user.token_usage && (
-                          <div className="w-40">
-                            <div className="flex justify-between text-sm mb-1">
-                              <span>{user.token_usage.usage_percentage}%</span>
-                              <span>{user.token_usage.remaining_tokens.toLocaleString()} left</span>
-                            </div>
-                            <Progress value={Math.min(user.token_usage.usage_percentage, 100)} className="h-2" />
-                            <div className="text-xs text-gray-500 mt-1">
-                              {user.token_usage.total_tokens.toLocaleString()} / {user.token_usage.monthly_limit.toLocaleString()}
-                            </div>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {user.message_stats && (
-                          <div>
-                            <div className="font-medium">{user.message_stats.total_messages}</div>
-                            <div className="text-xs text-gray-500">
-                              {user.message_stats.total_sessions} sessions
-                            </div>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {user.last_login ? (
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('users.table.columns.user')}</TableHead>
+                        <TableHead>{t('users.table.columns.role')}</TableHead>
+                        <TableHead>{t('users.table.columns.status')}</TableHead>
+                        <TableHead>{t('users.table.columns.subscription')}</TableHead>
+                        <TableHead>{t('users.table.columns.tokenUsage')}</TableHead>
+                        <TableHead>{t('users.table.columns.messages')}</TableHead>
+                        <TableHead>{t('users.table.columns.lastActivity')}</TableHead>
+                        <TableHead>{t('users.table.columns.actions')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredUsers.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell>
                             <div>
-                              <div>{new Date(user.last_login).toLocaleDateString()}</div>
-                              <div className="text-gray-500">
-                                {new Date(user.last_login).toLocaleTimeString()}
+                              <div className="font-medium">{user.name}</div>
+                              <div className="text-sm text-gray-600">{user.email}</div>
+                              <div className="text-xs text-gray-500">
+                                {t('users.table.joined')} {new Date(user.created_at).toLocaleDateString()}
                               </div>
                             </div>
-                          ) : (
-                            <span className="text-gray-500">Never</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowEditDialog(true);
-                            }}
-                            title="Edit User"
-                          >
-                            ⚙
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-50"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setShowResetPasswordDialog(true);
-                              setNewPassword('');
-                            }}
-                            title="Reset Password"
-                          >
-                            ⋮
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getRoleBadgeColor(user.role)}>
+                              {user.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Badge className={getStatusBadgeColor(user.status)}>
+                                {user.status}
+                              </Badge>
+                              <Switch
+                                checked={user.status === 'active'}
+                                onCheckedChange={() => handleToggleStatus(user.id)}
+                                size="sm"
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {user.subscription ? (
+                              <div className="space-y-1">
+                                <Select
+                                  value={user.subscription.plan_id || ''}
+                                  onValueChange={(value) => handleUpdateSubscription(user.id, value)}
+                                >
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {plans.map(plan => (
+                                      <SelectItem key={plan.id} value={plan.id}>
+                                        {plan.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Badge className={getSubscriptionBadgeColor(user.subscription.status || '')}>
+                                  {user.subscription.status}
+                                </Badge>
+                              </div>
+                            ) : (
+                              <Select
+                                value=""
+                                onValueChange={(value) => handleUpdateSubscription(user.id, value)}
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue placeholder={t('users.table.noPlan')} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {plans.map(plan => (
+                                    <SelectItem key={plan.id} value={plan.id}>
+                                      {plan.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {user.token_usage && (
+                              <div className="w-40">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span>{user.token_usage.usage_percentage}%</span>
+                                  <span>{user.token_usage.remaining_tokens.toLocaleString()} {t('users.table.left')}</span>
+                                </div>
+                                <Progress value={Math.min(user.token_usage.usage_percentage, 100)} className="h-2" />
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {user.token_usage.total_tokens.toLocaleString()} / {user.token_usage.monthly_limit.toLocaleString()}
+                                </div>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {user.message_stats && (
+                              <div>
+                                <div className="font-medium">{user.message_stats.total_messages}</div>
+                                <div className="text-xs text-gray-500">
+                                  {user.message_stats.total_sessions} {t('users.table.sessions')}
+                                </div>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {user.last_login ? (
+                                <div>
+                                  <div>{new Date(user.last_login).toLocaleDateString()}</div>
+                                  <div className="text-gray-500">
+                                    {new Date(user.last_login).toLocaleTimeString()}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-gray-500">{t('users.table.never')}</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowEditDialog(true);
+                                }}
+                                title={t('users.table.editUser')}
+                              >
+                                ⚙
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="p-2 text-orange-600 hover:text-orange-800 hover:bg-orange-50"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowResetPasswordDialog(true);
+                                  setNewPassword('');
+                                }}
+                                title={t('users.table.resetPassword')}
+                              >
+                                ⋮
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -895,55 +897,55 @@ export default function UsersPage() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Edit User Details</DialogTitle>
+            <DialogTitle>{t('users.dialogs.editUser.title')}</DialogTitle>
             <DialogDescription>
-              Modify user information and subscription
+              {t('users.dialogs.editUser.description')}
             </DialogDescription>
           </DialogHeader>
           {selectedUser && (
             <div className="grid gap-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium">Name</Label>
+                  <Label className="text-sm font-medium">{t('users.dialogs.editUser.name')}</Label>
                   <Input value={selectedUser.name} className="mt-1" />
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Email</Label>
+                  <Label className="text-sm font-medium">{t('users.dialogs.editUser.email')}</Label>
                   <Input value={selectedUser.email} disabled className="mt-1" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium">Role</Label>
+                  <Label className="text-sm font-medium">{t('users.dialogs.editUser.role')}</Label>
                   <Select value={selectedUser.role}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="user">User</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
+                      <SelectItem value="user">{t('users.dialogs.editUser.user')}</SelectItem>
+                      <SelectItem value="admin">{t('users.dialogs.editUser.admin')}</SelectItem>
+                      <SelectItem value="premium">{t('users.dialogs.editUser.premium')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium">Status</Label>
+                  <Label className="text-sm font-medium">{t('users.dialogs.editUser.status')}</Label>
                   <Select value={selectedUser.status}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                      <SelectItem value="suspended">Suspended</SelectItem>
+                      <SelectItem value="active">{t('users.dialogs.editUser.active')}</SelectItem>
+                      <SelectItem value="inactive">{t('users.dialogs.editUser.inactive')}</SelectItem>
+                      <SelectItem value="suspended">{t('users.dialogs.editUser.suspended')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div>
-                <Label className="text-sm font-medium">Subscription Plan</Label>
+                <Label className="text-sm font-medium">{t('users.dialogs.editUser.subscriptionPlan')}</Label>
                 <Select
                   value={selectedUser.subscription?.plan_id || ''}
                   onValueChange={(value) => handleUpdateSubscription(selectedUser.id, value)}
@@ -954,7 +956,7 @@ export default function UsersPage() {
                   <SelectContent>
                     {plans.map(plan => (
                       <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name} - ${plan.price}/month ({plan.monthly_tokens.toLocaleString()} tokens)
+                        {plan.name} - ${plan.price}/{t('users.subscriptionManagement.month')} ({plan.monthly_tokens.toLocaleString()} {t('users.subscriptionManagement.tokens')})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -963,18 +965,18 @@ export default function UsersPage() {
 
               {selectedUser.token_usage && (
                 <div>
-                  <Label className="text-sm font-medium">Token Usage</Label>
+                  <Label className="text-sm font-medium">{t('users.dialogs.editUser.tokenUsage')}</Label>
                   <div className="mt-2 space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span>Total Used:</span>
+                      <span>{t('users.dialogs.editUser.totalUsed')}:</span>
                       <span>{selectedUser.token_usage.total_tokens.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span>Monthly Limit:</span>
+                      <span>{t('users.dialogs.editUser.monthlyLimit')}:</span>
                       <span>{selectedUser.token_usage.monthly_limit.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span>Remaining:</span>
+                      <span>{t('users.dialogs.editUser.remaining')}:</span>
                       <span>{selectedUser.token_usage.remaining_tokens.toLocaleString()}</span>
                     </div>
                     <Progress value={Math.min(selectedUser.token_usage.usage_percentage, 100)} className="h-2" />
@@ -983,15 +985,15 @@ export default function UsersPage() {
               )}
 
               <div>
-                <Label className="text-sm font-medium">Message Statistics</Label>
+                <Label className="text-sm font-medium">{t('users.dialogs.editUser.messageStatistics')}</Label>
                 <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <div className="font-medium">{selectedUser.message_stats?.total_messages || 0}</div>
-                    <div className="text-gray-500">Total Messages</div>
+                    <div className="text-gray-500">{t('users.dialogs.editUser.totalMessages')}</div>
                   </div>
                   <div>
                     <div className="font-medium">{selectedUser.message_stats?.total_sessions || 0}</div>
-                    <div className="text-gray-500">Total Sessions</div>
+                    <div className="text-gray-500">{t('users.dialogs.editUser.totalSessions')}</div>
                   </div>
                 </div>
               </div>
@@ -999,10 +1001,10 @@ export default function UsersPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              Cancel
+              {t('users.dialogs.editUser.cancel')}
             </Button>
             <Button onClick={() => setShowEditDialog(false)}>
-              Save Changes
+              {t('users.dialogs.editUser.saveChanges')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1012,22 +1014,22 @@ export default function UsersPage() {
       <Dialog open={showResetPasswordDialog} onOpenChange={setShowResetPasswordDialog}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
+            <DialogTitle>{t('users.dialogs.resetPassword.title')}</DialogTitle>
             <DialogDescription>
-              Reset password for {selectedUser?.name}
+              {t('users.dialogs.resetPassword.description', { name: selectedUser?.name })}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="new-password" className="text-right">
-                New Password
+                {t('users.dialogs.resetPassword.newPassword')}
               </Label>
               <Input
                 id="new-password"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password (min 6 chars)"
+                placeholder={t('users.dialogs.resetPassword.passwordPlaceholder')}
                 className="col-span-3"
               />
             </div>
@@ -1039,7 +1041,7 @@ export default function UsersPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowResetPasswordDialog(false)}>
-              Cancel
+              {t('users.dialogs.resetPassword.cancel')}
             </Button>
             <Button
               onClick={() => {
@@ -1049,7 +1051,7 @@ export default function UsersPage() {
               }}
               disabled={!newPassword || newPassword.length < 6}
             >
-              Reset Password
+              {t('users.dialogs.resetPassword.resetPassword')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1072,40 +1074,40 @@ export default function UsersPage() {
           <div className="grid gap-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-sm font-medium">Plan Name</Label>
+                <Label className="text-sm font-medium">{t('users.dialogs.subscriptionPlan.planName')}</Label>
                 <Input
                   value={planForm.name}
                   onChange={(e) => setPlanForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Professional"
+                  placeholder={t('users.dialogs.subscriptionPlan.planNamePlaceholder')}
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label className="text-sm font-medium">Price ($/month)</Label>
+                <Label className="text-sm font-medium">{t('users.dialogs.subscriptionPlan.price')}</Label>
                 <Input
                   type="number"
                   value={planForm.price}
                   onChange={(e) => setPlanForm(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                  placeholder="29.99"
+                  placeholder={t('users.dialogs.subscriptionPlan.pricePlaceholder')}
                   className="mt-1"
                 />
               </div>
             </div>
 
             <div>
-              <Label className="text-sm font-medium">Monthly Tokens</Label>
+              <Label className="text-sm font-medium">{t('users.dialogs.subscriptionPlan.monthlyTokens')}</Label>
               <Input
                 type="number"
                 value={planForm.monthly_tokens}
                 onChange={(e) => setPlanForm(prev => ({ ...prev, monthly_tokens: parseInt(e.target.value) || 0 }))}
-                placeholder="100000"
+                placeholder={t('users.dialogs.subscriptionPlan.monthlyTokensPlaceholder')}
                 className="mt-1"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label className="text-sm font-medium">Features</Label>
+                <Label className="text-sm font-medium">{t('users.dialogs.subscriptionPlan.features')}</Label>
                 <Button
                   type="button"
                   variant="outline"
@@ -1113,7 +1115,7 @@ export default function UsersPage() {
                   onClick={handleAddFeature}
                   className="text-green-600 hover:text-green-800 hover:bg-green-50"
                 >
-                  + Add Feature
+                  + {t('users.dialogs.subscriptionPlan.addFeature')}
                 </Button>
               </div>
               <div className="space-y-2">
@@ -1122,7 +1124,7 @@ export default function UsersPage() {
                     <Input
                       value={feature}
                       onChange={(e) => handleUpdateFeature(index, e.target.value)}
-                      placeholder="Enter feature description"
+                      placeholder={t('users.dialogs.subscriptionPlan.featurePlaceholder')}
                       className="flex-1"
                     />
                     {planForm.features.length > 1 && (
@@ -1146,15 +1148,15 @@ export default function UsersPage() {
                 checked={planForm.is_active}
                 onCheckedChange={(checked) => setPlanForm(prev => ({ ...prev, is_active: checked }))}
               />
-              <Label className="text-sm font-medium">Plan is active</Label>
+              <Label className="text-sm font-medium">{t('users.dialogs.subscriptionPlan.planIsActive')}</Label>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSubscriptionDialog(false)}>
-              Cancel
+              {t('users.dialogs.subscriptionPlan.cancel')}
             </Button>
             <Button onClick={handleSavePlan}>
-              {editingPlan ? 'Update Plan' : 'Create Plan'}
+              {editingPlan ? t('users.dialogs.subscriptionPlan.updatePlan') : t('users.dialogs.subscriptionPlan.createPlan')}
             </Button>
           </DialogFooter>
         </DialogContent>

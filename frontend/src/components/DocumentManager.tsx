@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,6 +87,7 @@ interface Document {
 }
 
 export default function DocumentManager() {
+  const { t } = useTranslation();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -162,7 +164,7 @@ export default function DocumentManager() {
       }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
-      setError('Dokümanlar yüklenemedi');
+      setError(t('documentManager.messages.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -189,7 +191,7 @@ export default function DocumentManager() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Doküman eklenemedi');
+        throw new Error(errorData.error || t('documentManager.messages.documentAddFailed'));
       }
 
       const result = await response.json();
@@ -202,13 +204,13 @@ export default function DocumentManager() {
         });
 
         if (embedResponse.ok) {
-          setSuccess('Doküman başarıyla eklendi ve embedding oluşturuldu');
+          setSuccess(t('documentManager.messages.documentAdded') + ' ' + t('documentManager.messages.embeddingCreated'));
         } else {
-          setSuccess('Doküman eklendi (embedding oluşturulamadı)');
+          setSuccess(t('documentManager.messages.documentAdded') + ' (' + t('documentManager.messages.embeddingCreateFailed') + ')');
         }
       } catch (embedErr) {
         console.warn('Embedding creation failed:', embedErr);
-        setSuccess('Doküman eklendi (embedding oluşturulamadı)');
+        setSuccess(t('documentManager.messages.documentAdded') + ' (' + t('documentManager.messages.embeddingCreateFailed') + ')');
       }
 
       // Reset form
@@ -220,7 +222,7 @@ export default function DocumentManager() {
       // Refresh documents list
       await fetchDocuments();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Doküman eklenemedi');
+      setError(err instanceof Error ? err.message : t('documentManager.messages.documentAddFailed'));
       console.error(err);
     } finally {
       setUploading(false);
@@ -246,21 +248,21 @@ export default function DocumentManager() {
 
         if (response.ok) {
           const result = await response.json();
-          setSuccess('Dosya başarıyla yüklendi ve işlendi');
+          setSuccess(t('documentManager.messages.fileUploaded'));
           await fetchDocuments(); // Refresh the document list
         } else {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Dosya yüklenemedi');
+          throw new Error(errorData.error || t('documentManager.messages.fileUploadFailed'));
         }
       } else {
         // For text files, read directly
         const text = await file.text();
         setNewTitle(file.name);
         setNewContent(text);
-        setSuccess('Dosya içeriği yüklendi. Şimdi dokümanı ekleyebilirsiniz.');
+        setSuccess(t('documentManager.messages.fileContentLoaded'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Dosya işlenemedi');
+      setError(err instanceof Error ? err.message : t('documentManager.messages.fileUploadFailed'));
       console.error(err);
     } finally {
       setUploading(false);
@@ -269,7 +271,7 @@ export default function DocumentManager() {
 
   // Delete document
   const handleDeleteDocument = async (id: string) => {
-    if (!confirm('Bu dokümanı silmek istediğinizden emin misiniz?')) return;
+    if (!confirm(t('documentManager.messages.confirmDelete'))) return;
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
@@ -279,13 +281,13 @@ export default function DocumentManager() {
 
       if (response.ok) {
         setDocuments(documents.filter(d => d.id !== id));
-        setSuccess('Doküman silindi');
+        setSuccess(t('documentManager.messages.documentDeleted'));
       } else {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Doküman silinemedi');
+        throw new Error(errorData.error || t('documentManager.messages.documentDeleteFailed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Doküman silinemedi');
+      setError(err instanceof Error ? err.message : t('documentManager.messages.documentDeleteFailed'));
       console.error(err);
     }
   };
@@ -309,13 +311,13 @@ export default function DocumentManager() {
       if (response.ok) {
         await fetchDocuments();
         setEditingDocument(null);
-        setSuccess('Doküman güncellendi');
+        setSuccess(t('documentManager.messages.documentUpdated'));
       } else {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Doküman güncellenemedi');
+        throw new Error(errorData.error || t('documentManager.messages.documentUpdateFailed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Doküman güncellenemedi');
+      setError(err instanceof Error ? err.message : t('documentManager.messages.documentUpdateFailed'));
       console.error(err);
     }
   };
@@ -323,11 +325,11 @@ export default function DocumentManager() {
   // Search documents
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         doc.content.toLowerCase().includes(searchQuery.toLowerCase());
+      doc.content.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesEmbeddingFilter = filterEmbedding === 'all' ||
-                                 (filterEmbedding === 'embedded' && doc.hasEmbeddings) ||
-                                 (filterEmbedding === 'not-embedded' && !doc.hasEmbeddings);
+      (filterEmbedding === 'embedded' && doc.hasEmbeddings) ||
+      (filterEmbedding === 'not-embedded' && !doc.hasEmbeddings);
 
     return matchesSearch && matchesEmbeddingFilter;
   });
@@ -351,7 +353,7 @@ export default function DocumentManager() {
 
   const handleBatchEmbedding = async () => {
     if (selectedDocuments.length === 0) {
-      setError('Lütfen en az bir doküman seçin');
+      setError(t('documentManager.batchOperations.selectAtLeastOne'));
       return;
     }
 
@@ -373,7 +375,7 @@ export default function DocumentManager() {
           continue;
         }
 
-        setEmbeddingStatus(`"${doc.title}" için embedding oluşturuluyor...`);
+        setEmbeddingStatus(t('documentManager.batchOperations.embeddingInProgress', { count: 1 }) + ` "${doc.title}"`);
 
         const response = await fetch(`${baseUrl}/api/v2/documents/${docId}/embeddings`, {
           method: 'POST',
@@ -390,11 +392,11 @@ export default function DocumentManager() {
         }
       }
 
-      setSuccess(`${selectedDocuments.length} doküman için embedding işlemi tamamlandı`);
+      setSuccess(t('documentManager.batchOperations.embeddingComplete'));
       setSelectedDocuments([]);
       await fetchDocuments();
     } catch (error) {
-      setError('Toplu embedding işlemi sırasında hata oluştu');
+      setError(t('documentManager.messages.embeddingCreateFailed'));
       console.error(error);
     } finally {
       setBatchEmbedding(false);
@@ -404,7 +406,7 @@ export default function DocumentManager() {
   };
 
   const handleDeleteEmbeddings = async (docId: string) => {
-    if (!confirm('Bu dokümanın embedding\'lerini silmek istediğinizden emin misiniz?')) return;
+    if (!confirm(t('documentManager.messages.confirmDeleteEmbedding'))) return;
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
@@ -413,13 +415,13 @@ export default function DocumentManager() {
       });
 
       if (response.ok) {
-        setSuccess('Embedding\'ler silindi');
+        setSuccess(t('documentManager.messages.embeddingDeleted'));
         await fetchDocuments();
       } else {
-        throw new Error('Embedding\'ler silinemedi');
+        throw new Error(t('documentManager.messages.embeddingDeleteFailed'));
       }
     } catch (error) {
-      setError('Embedding\'ler silinemedi');
+      setError(t('documentManager.messages.embeddingDeleteFailed'));
       console.error(error);
     }
   };
@@ -448,20 +450,20 @@ export default function DocumentManager() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('documentManager.stats.totalDocuments')}</CardTitle>
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{documents.length}</div>
             <p className="text-xs text-muted-foreground">
-              Total documents in system
+              {t('documentManager.stats.description')}
             </p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => setTemplateManagerOpen(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Analyzed Documents</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('documentManager.stats.analyzedDocuments')}</CardTitle>
             <div className="flex items-center gap-2">
               <Brain className="h-4 w-4 text-blue-600" />
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); setTemplateManagerOpen(true); }}>
@@ -472,20 +474,20 @@ export default function DocumentManager() {
           <CardContent>
             <div className="text-2xl font-bold">{analyzedCount}</div>
             <p className="text-xs text-muted-foreground">
-              Documents with metadata analysis
+              {t('documentManager.stats.analyzedDescription')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Embedded Documents</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('documentManager.stats.embeddedDocuments')}</CardTitle>
             <Database className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{embeddedCount}</div>
             <p className="text-xs text-muted-foreground">
-              Documents with vector embeddings
+              {t('documentManager.stats.embeddedDescription')}
             </p>
           </CardContent>
         </Card>
@@ -518,14 +520,14 @@ export default function DocumentManager() {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>LightRAG Dokümanları</CardTitle>
+                  <CardTitle>LightRAG {t('documentManager.title')}</CardTitle>
                   <CardDescription>
-                    Toplam {documents.length} doküman
+                    {t('documentManager.stats.totalDocuments')}: {documents.length}
                   </CardDescription>
                 </div>
                 <Button onClick={fetchDocuments} variant="outline" size="sm">
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Yenile
+                  {t('common.refresh')}
                 </Button>
               </div>
             </CardHeader>
@@ -542,7 +544,7 @@ export default function DocumentManager() {
                             onCheckedChange={toggleSelectAll}
                           />
                           <span className="text-sm font-medium">
-                            {selectedDocuments.length} doküman seçildi
+                            {selectedDocuments.length} {t('documentManager.batchOperations.selected')}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -556,7 +558,7 @@ export default function DocumentManager() {
                             ) : (
                               <Brain className="h-4 w-4 mr-2" />
                             )}
-                            Toplu Embedding
+                            {t('documentManager.batchOperations.batchEmbedding')}
                           </Button>
                           <Button
                             size="sm"
@@ -564,14 +566,14 @@ export default function DocumentManager() {
                             onClick={() => setSelectedDocuments([])}
                           >
                             <X className="h-4 w-4 mr-2" />
-                            Seçimi Temizle
+                            {t('documentManager.batchOperations.clearSelection')}
                           </Button>
                         </div>
                       </div>
                       {batchEmbedding && (
                         <div className="mt-3 space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span>{embeddingStatus || 'İşleniyor...'}</span>
+                            <span>{embeddingStatus || t('documentManager.batchOperations.processing')}</span>
                             <span>{Math.round(embeddingProgress)}%</span>
                           </div>
                         </div>
@@ -585,15 +587,15 @@ export default function DocumentManager() {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
-                      placeholder="Doküman ara..."
+                      placeholder={t('documentManager.search.placeholder')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Durum:</span>
-                    <Select value={filterEmbedding} onValueChange={(value: any) => setFilterEmbedding(value)}>
+                    <span className="text-sm font-medium">{t('documentManager.search.status')}</span>
+                    <Select value={filterEmbedding} onValueChange={(value: 'all' | 'embedded' | 'not-embedded') => setFilterEmbedding(value)}>
                       <SelectTrigger className="w-[150px]">
                         <SelectValue />
                       </SelectTrigger>
@@ -622,20 +624,20 @@ export default function DocumentManager() {
                               onCheckedChange={toggleSelectAll}
                             />
                           </TableHead>
-                          <TableHead>Başlık</TableHead>
-                          <TableHead>Kaynak</TableHead>
-                          <TableHead>Chunks</TableHead>
-                          <TableHead>Embedding</TableHead>
-                          <TableHead>Analyze Status</TableHead>
-                          <TableHead>Tarih</TableHead>
-                          <TableHead className="text-right">İşlemler</TableHead>
+                          <TableHead>{t('documentManager.table.headers.title')}</TableHead>
+                          <TableHead>{t('documentManager.table.headers.source')}</TableHead>
+                          <TableHead>{t('documentManager.table.headers.chunks')}</TableHead>
+                          <TableHead>{t('documentManager.table.headers.embedding')}</TableHead>
+                          <TableHead>{t('documentManager.table.headers.analyzeStatus')}</TableHead>
+                          <TableHead>{t('documentManager.table.headers.date')}</TableHead>
+                          <TableHead className="text-right">{t('documentManager.table.headers.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredDocuments.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={8} className="text-center text-muted-foreground">
-                              Henüz doküman bulunmuyor
+                              {t('documentManager.table.noDocuments')}
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -654,7 +656,7 @@ export default function DocumentManager() {
                                   <Checkbox
                                     disabled
                                     className="opacity-30"
-                                    title="CSV files cannot be batch analyzed"
+                                    title={t('documentManager.status.csvCannotBeAnalyzed')}
                                   />
                                 )}
                               </TableCell>
@@ -683,12 +685,12 @@ export default function DocumentManager() {
                                 {doc.hasEmbeddings ? (
                                   <div className="flex items-center gap-1 text-green-600">
                                     <CheckCircle className="h-4 w-4" />
-                                    <span className="text-sm">Var</span>
+                                    <span className="text-sm">{t('documentManager.status.hasEmbedding')}</span>
                                   </div>
                                 ) : (
                                   <div className="flex items-center gap-1 text-orange-600">
                                     <AlertCircle className="h-4 w-4" />
-                                    <span className="text-sm">Yok</span>
+                                    <span className="text-sm">{t('documentManager.status.noEmbedding')}</span>
                                   </div>
                                 )}
                               </TableCell>
@@ -701,10 +703,10 @@ export default function DocumentManager() {
                                     <div className="flex flex-col gap-1">
                                       <Badge variant={
                                         status === 'analyzed' ? 'default' :
-                                        status === 'transformed' ? 'success' : 'secondary'
+                                          status === 'transformed' ? 'success' : 'secondary'
                                       }>
-                                        {status === 'waiting' ? 'Waiting' :
-                                         status === 'analyzed' ? 'Analyzed' : 'Transformed'}
+                                        {status === 'waiting' ? t('documentManager.status.waiting') :
+                                          status === 'analyzed' ? t('documentManager.status.analyzed') : t('documentManager.status.transformed')}
                                       </Badge>
                                       {template && (
                                         <span className="text-xs text-muted-foreground">
@@ -737,11 +739,11 @@ export default function DocumentManager() {
                                             headers: { 'Content-Type': 'application/json' }
                                           });
                                           if (response.ok) {
-                                            setSuccess('Embedding oluşturuldu');
+                                            setSuccess(t('documentManager.messages.embeddingCreated'));
                                             await fetchDocuments();
                                           }
                                         } catch (error) {
-                                          setError('Embedding oluşturulamadı');
+                                          setError(t('documentManager.messages.embeddingCreateFailed'));
                                         }
                                       }}
                                     >
@@ -771,12 +773,12 @@ export default function DocumentManager() {
                                       <DialogHeader>
                                         <DialogTitle>{doc.title}</DialogTitle>
                                         <DialogDescription>
-                                          Doküman detayları
+                                          {t('documentManager.dialogs.documentDetails.description')}
                                         </DialogDescription>
                                       </DialogHeader>
                                       <div className="space-y-4">
                                         <div>
-                                          <h4 className="font-medium mb-2">Metadata</h4>
+                                          <h4 className="font-medium mb-2">{t('documentManager.dialogs.documentDetails.metadata')}</h4>
                                           <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded text-sm space-y-1">
                                             {Object.entries(doc.metadata || {}).map(([key, value]) => (
                                               <div key={key} className="flex justify-between">
@@ -787,7 +789,7 @@ export default function DocumentManager() {
                                           </div>
                                         </div>
                                         <div>
-                                          <h4 className="font-medium mb-2">İçerik</h4>
+                                          <h4 className="font-medium mb-2">{t('documentManager.dialogs.documentDetails.content')}</h4>
                                           <ScrollArea className="h-[400px] rounded-md border p-4">
                                             <p className="whitespace-pre-wrap">{doc.content}</p>
                                           </ScrollArea>
@@ -827,17 +829,17 @@ export default function DocumentManager() {
         <TabsContent value="add" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Yeni Doküman Ekle</CardTitle>
+              <CardTitle>{t('documentManager.tabs.add')}</CardTitle>
               <CardDescription>
-                Metin veya dosya yükleyerek yeni doküman ekleyin
+                {t('documentManager.form.description')}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAddDocument} className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">Başlık</label>
+                  <label className="text-sm font-medium">{t('documentManager.form.title')}</label>
                   <Input
-                    placeholder="Doküman başlığı"
+                    placeholder={t('documentManager.form.titlePlaceholder')}
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     required
@@ -845,9 +847,9 @@ export default function DocumentManager() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium">İçerik</label>
+                  <label className="text-sm font-medium">{t('documentManager.form.content')}</label>
                   <Textarea
-                    placeholder="Doküman içeriği"
+                    placeholder={t('documentManager.form.contentPlaceholder')}
                     value={newContent}
                     onChange={(e) => setNewContent(e.target.value)}
                     className="min-h-[300px]"
@@ -856,7 +858,7 @@ export default function DocumentManager() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium">Dosyadan Yükle (Opsiyonel)</label>
+                  <label className="text-sm font-medium">{t('documentManager.form.fileUpload')}</label>
                   <div className="flex gap-2">
                     <Input
                       type="file"
@@ -871,7 +873,7 @@ export default function DocumentManager() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Desteklenen formatlar: Text (.txt, .md, .json, .csv), PDF (.pdf), Word (.doc, .docx), Excel (.xls, .xlsx)
+                    {t('documentManager.form.supportedFormats')}
                   </p>
                 </div>
 
@@ -882,10 +884,10 @@ export default function DocumentManager() {
                     ) : (
                       <Upload className="h-4 w-4 mr-2" />
                     )}
-                    Doküman Ekle ve İşle
+                    {t('documentManager.form.addAndProcess')}
                   </Button>
-                  <Button 
-                    type="button" 
+                  <Button
+                    type="button"
                     variant="outline"
                     onClick={() => {
                       setNewTitle('');
@@ -893,7 +895,7 @@ export default function DocumentManager() {
                       setNewFile(null);
                     }}
                   >
-                    Temizle
+                    {t('documentManager.form.clear')}
                   </Button>
                 </div>
               </form>
@@ -914,7 +916,7 @@ export default function DocumentManager() {
               <div className="space-y-4">
                 <div className="flex gap-2">
                   <Input
-                    placeholder="https://example.com"
+                    placeholder={t('documentManager.urlImport.urlPlaceholder')}
                     value={newUrl}
                     onChange={(e) => setNewUrl(e.target.value)}
                     type="url"
@@ -930,15 +932,15 @@ export default function DocumentManager() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ url: newUrl })
                         });
-                        
+
                         if (response.ok) {
                           const data = await response.json();
-                          setNewTitle(data.title || 'İsimsiz');
+                          setNewTitle(data.title || t('documentManager.urlImport.fetched'));
                           setNewContent(data.content || '');
-                          setSuccess('İçerik başarıyla çekildi');
+                          setSuccess(t('documentManager.urlImport.fetched'));
                         }
                       } catch (err) {
-                        setError('İçerik çekilemedi');
+                        setError(t('documentManager.urlImport.fetchFailed'));
                       } finally {
                         setUploading(false);
                       }
@@ -967,7 +969,7 @@ export default function DocumentManager() {
                       <div className="mt-4 flex gap-2">
                         <Button onClick={handleAddDocument}>
                           <Save className="h-4 w-4 mr-2" />
-                          Doküman Olarak Kaydet
+                          {t('documentManager.urlImport.saveAsDocument')}
                         </Button>
                         <Button
                           variant="outline"
@@ -978,7 +980,7 @@ export default function DocumentManager() {
                           }}
                         >
                           <X className="h-4 w-4 mr-2" />
-                          İptal
+                          {t('common.cancel')}
                         </Button>
                       </div>
                     </CardContent>
@@ -995,7 +997,7 @@ export default function DocumentManager() {
         <Dialog open={!!editingDocument} onOpenChange={() => setEditingDocument(null)}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
             <DialogHeader>
-              <DialogTitle>Dokümanı Düzenle</DialogTitle>
+              <DialogTitle>{t('documentManager.dialogs.editDocument.title')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <Input
@@ -1004,7 +1006,7 @@ export default function DocumentManager() {
                   ...editingDocument,
                   title: e.target.value
                 })}
-                placeholder="Başlık"
+                placeholder={t('documentManager.dialogs.editDocument.placeholder')}
               />
               <Textarea
                 value={editingDocument.content}
@@ -1013,15 +1015,15 @@ export default function DocumentManager() {
                   content: e.target.value
                 })}
                 className="min-h-[300px]"
-                placeholder="İçerik"
+                placeholder={t('documentManager.dialogs.editDocument.contentPlaceholder')}
               />
               <div className="flex justify-end gap-2">
                 <Button onClick={handleUpdateDocument}>
                   <Save className="h-4 w-4 mr-2" />
-                  Kaydet
+                  {t('documentManager.dialogs.editDocument.save')}
                 </Button>
                 <Button variant="outline" onClick={() => setEditingDocument(null)}>
-                  İptal
+                  {t('documentManager.dialogs.editDocument.cancel')}
                 </Button>
               </div>
             </div>
