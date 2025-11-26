@@ -1084,13 +1084,13 @@ function LLMSettings() {
             </CardHeader>
             <CardContent className="space-y-4">
               {Object.entries({
-              openai: { key: llmConfig?.openai?.apiKey, name: 'OpenAI' },
-              google: { key: llmConfig?.google?.apiKey, name: 'Google AI' },
-              anthropic: { key: llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
-              deepseek: { key: llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
-              huggingface: { key: llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
-              openrouter: { key: llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
-              deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
+              openai: { key: tempConfig?.openai?.apiKey ?? llmConfig?.openai?.apiKey, name: 'OpenAI' },
+              google: { key: tempConfig?.google?.apiKey ?? llmConfig?.google?.apiKey, name: 'Google AI' },
+              anthropic: { key: tempConfig?.anthropic?.apiKey ?? llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
+              deepseek: { key: tempConfig?.deepseek?.apiKey ?? llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
+              huggingface: { key: tempConfig?.huggingface?.apiKey ?? llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
+              openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
+              deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL' },
             }).map(([provider, data]) => {
               const providerStatus = getProviderStatus(provider);
               const isValidated = isProviderValidated(provider);
