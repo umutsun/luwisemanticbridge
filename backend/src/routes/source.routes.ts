@@ -322,6 +322,13 @@ router.post('/tables/:tableName/insert', async (req: Request, res: Response) => 
       for (const row of data) {
         const columns = Object.keys(row);
 
+        // Skip empty rows - they cause SQL syntax errors
+        if (columns.length === 0) {
+          console.log('[Source DB] Skipping empty row');
+          skippedCount++;
+          continue;
+        }
+
         // Convert arrays and objects to JSON strings for PostgreSQL
         const values = Object.values(row).map(value => {
           if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
