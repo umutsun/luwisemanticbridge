@@ -264,8 +264,9 @@ router.get('/stats', async (req: Request, res: Response) => {
 
     for (const table of tables) {
       try {
+        // Use quotes around table name for case-sensitive tables (like EMLAKMEVZUAT)
         const countResult = await pools.sourcePool.query(
-          `SELECT COUNT(*) FROM public.${table}`
+          `SELECT COUNT(*) FROM public."${table}"`
         );
         const count = parseInt(countResult.rows[0].count);
 
