@@ -21,30 +21,36 @@ async function initializeSourcePool() {
 
     // Get source database settings using getDatabaseSettings()
     // This function reads database.* keys and combines them into config object
-    const dbConfig = await getDatabaseSettings();
+    const dbSettingsResult = await getDatabaseSettings();
 
-    console.log('[Source DB] Database config:', dbConfig ? 'Found' : 'Not found');
+    console.log('[Source DB] Database settings result:', dbSettingsResult ? 'Found' : 'Not found');
 
-    if (!dbConfig) {
+    if (!dbSettingsResult) {
       throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
     }
 
+    // getDatabaseSettings returns { database: { name, host, user, password, ... } }
+    // Unwrap the nested structure
+    const dbConfig = dbSettingsResult.database || dbSettingsResult;
+
     console.log('[Source DB] Config details:', {
-      hasName: !!dbConfig.database,
+      hasName: !!dbConfig.name || !!dbConfig.database,
       hasHost: !!dbConfig.host,
       hasUser: !!dbConfig.user,
       hasPassword: !!dbConfig.password
     });
 
+    // Get database name (could be 'name' or 'database' field)
+    const sourceDatabaseName = dbConfig.name || dbConfig.database;
+
     // Validate required settings
-    if (!dbConfig.database || !dbConfig.user || !dbConfig.password) {
+    if (!sourceDatabaseName || !dbConfig.user || !dbConfig.password) {
       throw new Error('Source database not configured. Please configure database settings in Settings > Database.');
     }
 
-    console.log(`[Source DB] ✓ Using database: ${dbConfig.database} on ${dbConfig.host}:${dbConfig.port}`);
+    console.log(`[Source DB] ✓ Using database: ${sourceDatabaseName} on ${dbConfig.host}:${dbConfig.port}`);
 
     // Use config values directly
-    const sourceDatabaseName = dbConfig.database;
     const sourceHost = dbConfig.host || '91.99.229.96';
     const sourcePort = dbConfig.port || 5432;
     const sourceUser = dbConfig.user;
