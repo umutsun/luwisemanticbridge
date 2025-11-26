@@ -11,12 +11,25 @@ let sourcePool: Pool | null = null;
 let targetPool: Pool | null = null;
 
 // Initialize database pools from settings
-async function initializePools() {
-  if (sourcePool && targetPool) {
+async function initializePools(forceRefresh: boolean = false) {
+  // Return cached pools unless force refresh is requested
+  if (!forceRefresh && sourcePool && targetPool) {
     return { sourcePool, targetPool };
   }
 
   try {
+    // Close existing pools if refreshing
+    if (forceRefresh) {
+      if (sourcePool) {
+        await sourcePool.end().catch(() => {});
+        sourcePool = null;
+      }
+      if (targetPool) {
+        await targetPool.end().catch(() => {});
+        targetPool = null;
+      }
+    }
+
     const { pool: lsembPool } = await import('../config/database');
 
     // Get database settings from settings table
@@ -37,10 +50,17 @@ async function initializePools() {
     // Build connection strings from settings
     const username = dbSettings.user || dbSettings.username;
     const database = dbSettings.name || dbSettings.database;
-    const sourceConnectionString = `postgresql://${username}:${dbSettings.password}@${dbSettings.host}:${dbSettings.port}/${database}`;
+    const host = dbSettings.host || process.env.POSTGRES_HOST || 'localhost';
+    const port = dbSettings.port || process.env.POSTGRES_PORT || 5432;
+    const password = dbSettings.password || process.env.POSTGRES_PASSWORD;
+
+    const sourceConnectionString = `postgresql://${username}:${password}@${host}:${port}/${database}`;
 
     // Target is same as main database (lsemb)
     const targetConnectionString = process.env.DATABASE_URL || sourceConnectionString;
+
+    console.log(`[Migration] Source DB: ${database} on ${host}:${port}`);
+    console.log(`[Migration] Target DB: Using ${process.env.DATABASE_URL ? 'DATABASE_URL' : 'source connection'}`);
 
     sourcePool = new Pool({ connectionString: sourceConnectionString });
     targetPool = new Pool({ connectionString: targetConnectionString });
@@ -184,8 +204,9 @@ let globalTokenUsage: TokenUsage = {
 // Get migration statistics
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    // Initialize pools from settings
-    const pools = await initializePools();
+    // Force refresh pools if requested (useful after settings change)
+    const forceRefresh = req.query.refresh === 'true';
+    const pools = await initializePools(forceRefresh);
 
     // Get embedding provider and model from settings (use correct keys from llmSettings)
     const embeddingSettings = await getEmbeddingSettings();
