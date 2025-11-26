@@ -225,7 +225,13 @@ router.post('/tables/create', async (req: Request, res: Response) => {
     console.log('[Source DB] Building column definitions...');
     const columnDefs = columns.map((col: any, idx: number) => {
       console.log(`[Source DB] Column ${idx}:`, col);
-      let def = `"${col.columnName}" ${col.sqlType}`;
+      // Replace VARCHAR(255) with TEXT for crawler data - content can be much longer
+      let sqlType = col.sqlType;
+      if (sqlType === 'VARCHAR(255)') {
+        sqlType = 'TEXT';
+        console.log(`[Source DB] Column ${idx}: Upgraded VARCHAR(255) to TEXT`);
+      }
+      let def = `"${col.columnName}" ${sqlType}`;
       // Don't add NOT NULL for crawler data - data may have null values
       // if (!col.nullable) def += ' NOT NULL';
       if (col.isPrimaryKey) def += ' PRIMARY KEY';
