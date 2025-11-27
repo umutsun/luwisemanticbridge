@@ -307,6 +307,20 @@ export default function EmbeddingsManagerPage() {
     }
   }, []);
 
+  // Fetch total tokens used (defined before connectToProgressStream to avoid circular dep)
+  const fetchTokenStats = useCallback(async () => {
+    try {
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Token stats received:', data);
+        setTotalTokensUsed(data.tokenUsage?.total_tokens || 0);
+      }
+    } catch (error) {
+      console.log('Error fetching token stats:', error);
+    }
+  }, []);
+
   // SSE EventSource ref for cleanup
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -395,20 +409,6 @@ export default function EmbeddingsManagerPage() {
       console.error('Error checking active migration:', error);
     }
   }, [connectToProgressStream]);
-
-  // Fetch total tokens used
-  const fetchTokenStats = useCallback(async () => {
-    try {
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Token stats received:', data);
-        setTotalTokensUsed(data.tokenUsage?.total_tokens || 0);
-      }
-    } catch (error) {
-      console.log('Error fetching token stats:', error);
-    }
-  }, []);
 
   // Fetch skipped records for a table
   const fetchSkippedRecords = useCallback(async (tableName: string) => {
