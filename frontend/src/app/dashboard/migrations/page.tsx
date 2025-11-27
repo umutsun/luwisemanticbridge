@@ -148,6 +148,10 @@ export default function EmbeddingsManagerPage() {
   const [embeddingProvider, setEmbeddingProvider] = useState<string>('openai');
   const [embeddingModel, setEmbeddingModel] = useState<string>('text-embedding-ada-002');
   const [showSkippedModal, setShowSkippedModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewOffset, setPreviewOffset] = useState(0);
+  const [previewHasMore, setPreviewHasMore] = useState(true);
+  const [isLoadingMorePreview, setIsLoadingMorePreview] = useState(false);
   const [skippedRecords, setSkippedRecords] = useState<any[]>([]);
   const [isLoadingSkipped, setIsLoadingSkipped] = useState(false);
   const [selectedTableForSkipped, setSelectedTableForSkipped] = useState<string | null>(null);
@@ -245,39 +249,48 @@ export default function EmbeddingsManagerPage() {
     }
   }, []);
 
-  // Fetch table preview data
-  const fetchTablePreview = useCallback(async (tableName: string) => {
-    setIsLoadingPreview(true);
-    try {
-      console.log(`Fetching preview for ${tableName}...`);
+  // Fetch table preview data with pagination
+  const PREVIEW_PAGE_SIZE = 10;
 
-      // Try the unified embeddings endpoint (no source_name needed)
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings/unified-preview?source_table=${tableName}&limit=10`);
+  const fetchTablePreview = useCallback(async (tableName: string, offset: number = 0, append: boolean = false) => {
+    if (append) {
+      setIsLoadingMorePreview(true);
+    } else {
+      setIsLoadingPreview(true);
+      setPreviewOffset(0);
+      setPreviewHasMore(true);
+    }
+
+    try {
+      // Fetch with sort=desc to get most recent first
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/embeddings/unified-preview?source_table=${tableName}&limit=${PREVIEW_PAGE_SIZE}&offset=${offset}&sort=desc`
+      );
+
       if (response.ok) {
         const data = await response.json();
-        console.log(`Success! Unified preview data for ${tableName}:`, data);
-        setTablePreviewData(data.data || []);
-      } else {
-        console.log(`Required endpoint not found, trying fallback... Status: ${response.status}`);
+        const records = data.data || [];
 
-        // Fallback to working endpoint
-        const fallbackResponse = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings/table/${tableName}/embedded-recent`);
-        if (fallbackResponse.ok) {
-          const fallbackData = await fallbackResponse.json();
-          console.log(`Fallback success! Data for ${tableName}:`, fallbackData);
-          console.log('Embedded records sample:', fallbackData.embeddedRecords?.[0]);
-          setTablePreviewData(fallbackData.embeddedRecords || []);
+        if (append) {
+          setTablePreviewData(prev => [...prev, ...records]);
         } else {
-          console.log(`Both endpoints failed for ${tableName}`);
-          setTablePreviewData([]);
+          setTablePreviewData(records);
         }
-      }
 
+        // Check if there are more records
+        setPreviewHasMore(records.length === PREVIEW_PAGE_SIZE);
+        setPreviewOffset(offset + records.length);
+      } else {
+        if (!append) setTablePreviewData([]);
+        setPreviewHasMore(false);
+      }
     } catch (error) {
       console.log(`Could not fetch preview for ${tableName}:`, error);
-      setTablePreviewData([]);
+      if (!append) setTablePreviewData([]);
+      setPreviewHasMore(false);
     } finally {
       setIsLoadingPreview(false);
+      setIsLoadingMorePreview(false);
     }
   }, []);
 
@@ -678,15 +691,11 @@ export default function EmbeddingsManagerPage() {
   };
 
   const handlePreviewTable = (table: TableInfo) => {
+    // Normalize table name to lowercase for API query
+    const normalizedName = table.name.toLowerCase();
     setSelectedTableForPreview(table.name);
-    fetchTablePreview(table.name);
-    const newExpanded = new Set(expandedTables);
-    if (expandedTables.has(table.name)) {
-      newExpanded.delete(table.name);
-    } else {
-      newExpanded.add(table.name);
-    }
-    setExpandedTables(newExpanded);
+    fetchTablePreview(normalizedName);
+    setShowPreviewModal(true);
   };
 
   const handleStartSingleMigration = (table: TableInfo) => {
@@ -888,90 +897,98 @@ export default function EmbeddingsManagerPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Control Panel */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Progress Card - Always visible */}
-            <Card className="border-0 shadow-none bg-transparent">
-              <CardContent className="p-0">
-                <div className="border rounded-lg p-4 bg-white dark:bg-slate-900/30 border-slate-200 dark:border-slate-700/50">
-                  <div className="flex flex-col items-center gap-4">
-                    <ProgressCircle
-                      progress={Math.round(progress?.percentage || 0)}
-                      showPulse={progress?.status === 'processing'}
-                      size={140}
-                      statusText={
-                        progress?.status === 'processing' ? "Processing" :
-                        progress?.status === 'completed' ? "Complete" :
-                        progress?.status === 'idle' ? "Ready" :
-                        "Paused"
-                      }
-                    />
-                    {/* Processing Stats */}
-                    {progress?.status === 'processing' && (
-                      <div className="w-full space-y-2 text-sm">
-                        {progress.currentTable && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-600 dark:text-slate-400">Table:</span>
-                            <span className="font-medium">{progress.currentTable}</span>
-                          </div>
-                        )}
-                        {progress.current !== undefined && progress.total !== undefined && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-600 dark:text-slate-400">Records:</span>
-                            <span className="font-medium">{progress.current} / {progress.total}</span>
-                          </div>
-                        )}
-                        {progress.processingSpeed && (
-                          <div className="flex justify-between">
-                            <span className="text-slate-600 dark:text-slate-400">Speed:</span>
-                            <span className="font-medium">{progress.processingSpeed.toFixed(1)} rec/min</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {/* Selected Tables Info - Only show when idle with selections */}
-                    {(!progress || progress.status === 'idle') && selectedTables.length > 0 && (
-                      <div className="w-full bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                            {selectedTables.length} table{selectedTables.length > 1 ? 's' : ''} selected
-                          </span>
-                        </div>
-                        <div className="text-xs text-blue-700 dark:text-blue-300">
-                          {availableTables
-                            .filter(t => selectedTables.includes(t.name))
-                            .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0)
-                            .toLocaleString()} records to process
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Migration Settings Card */}
+            {/* Migration Settings Card with Progress */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Migration Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="pt-6 space-y-4">
+                {/* Progress Circle - Always visible, above Batch Size */}
+                <div className="flex flex-col items-center gap-3 pb-2">
+                  <ProgressCircle
+                    progress={Math.round(progress?.percentage || 0)}
+                    showPulse={progress?.status === 'processing'}
+                    size={120}
+                    statusText={
+                      progress?.status === 'processing' ? "Processing" :
+                      progress?.status === 'completed' ? "Complete" :
+                      progress?.status === 'idle' ? "Ready" :
+                      "Paused"
+                    }
+                  />
+
+                  {/* Real-time Status Info - Processing */}
+                  {progress?.status === 'processing' && (
+                    <div className="w-full space-y-1.5 text-sm bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
+                      {progress.currentTable && (
+                        <div className="flex justify-between">
+                          <span className="text-blue-600 dark:text-blue-400">Table:</span>
+                          <span className="font-medium text-blue-900 dark:text-blue-100">{progress.currentTable}</span>
+                        </div>
+                      )}
+                      {progress.current !== undefined && progress.total !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-blue-600 dark:text-blue-400">Records:</span>
+                          <span className="font-medium text-blue-900 dark:text-blue-100">{progress.current.toLocaleString()} / {progress.total.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {progress.tokensUsed !== undefined && progress.tokensUsed > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-blue-600 dark:text-blue-400">Tokens:</span>
+                          <span className="font-medium text-blue-900 dark:text-blue-100">{progress.tokensUsed.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {progress.message && (
+                        <div className="text-xs text-blue-700 dark:text-blue-300 mt-2 pt-2 border-t border-blue-200 dark:border-blue-700">
+                          {progress.message}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Completed Status */}
+                  {progress?.status === 'completed' && (
+                    <div className="w-full space-y-1.5 text-sm bg-green-50 dark:bg-green-950/30 rounded-lg p-3 border border-green-200 dark:border-green-800">
+                      <div className="flex justify-between">
+                        <span className="text-green-600 dark:text-green-400">Status:</span>
+                        <span className="font-medium text-green-900 dark:text-green-100">✓ Completed</span>
+                      </div>
+                      {progress.current !== undefined && (
+                        <div className="flex justify-between">
+                          <span className="text-green-600 dark:text-green-400">Processed:</span>
+                          <span className="font-medium text-green-900 dark:text-green-100">{progress.current.toLocaleString()} records</span>
+                        </div>
+                      )}
+                      {progress.message && (
+                        <div className="text-xs text-green-700 dark:text-green-300 mt-2 pt-2 border-t border-green-200 dark:border-green-700">
+                          {progress.message}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Selected Tables Info - Only show when idle with selections */}
+                  {(!progress || progress.status === 'idle') && selectedTables.length > 0 && (
+                    <div className="w-full bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {selectedTables.length} table{selectedTables.length > 1 ? 's' : ''} queued
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                        {availableTables
+                          .filter(t => selectedTables.includes(t.name))
+                          .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0)
+                          .toLocaleString()} records to process
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Embedding Model - Read from DB Settings */}
-                <div className="p-4 bg-gray-100 dark:bg-gray-950 border border-gray-300 dark:border-gray-800 rounded-lg">
-                  <div className="text-xs font-semibold text-gray-700 dark:text-gray-100 uppercase tracking-wider mb-3">
-                    Embedding Model
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">Provider:</span>
-                      <span className="text-sm font-mono font-semibold text-gray-900 dark:text-gray-100">
-                        {embeddingProvider}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">Model:</span>
-                      <span className="text-xs font-mono text-gray-900 dark:text-gray-100 truncate">
-                        {embeddingModel}
-                      </span>
-                    </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-950/50 border border-gray-200 dark:border-gray-800 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Model:</span>
+                    <span className="text-xs font-mono font-medium text-gray-900 dark:text-gray-100">
+                      {embeddingProvider}/{embeddingModel}
+                    </span>
                   </div>
                 </div>
 
@@ -1279,18 +1296,11 @@ export default function EmbeddingsManagerPage() {
                       <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
                         {selectedTableRows.size} table(s) selected
                       </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedTableRows(new Set())}
-                        className="h-7 text-xs"
-                      >
-                        Clear
-                      </Button>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
                         size="sm"
+                        variant="outline"
                         onClick={() => {
                           const tablesToAdd = Array.from(selectedTableRows);
                           setSelectedTables(prev => {
@@ -1299,19 +1309,27 @@ export default function EmbeddingsManagerPage() {
                           });
                           setSelectedTableRows(new Set());
                           toast({
-                            title: 'Added to Queue',
-                            description: `${tablesToAdd.length} table(s) added to migration queue`,
+                            title: 'Kuyruğa Eklendi',
+                            description: `${tablesToAdd.length} tablo migration kuyruğuna eklendi. Sol panelden başlatabilirsiniz.`,
                           });
                         }}
                         className="h-7 text-xs"
                       >
-                        <Play className="w-3 h-3 mr-1" />
-                        Add & Start Migration
+                        <Plus className="w-3 h-3 mr-1" />
+                        Kuyruğa Ekle
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedTableRows(new Set())}
+                        className="h-7 text-xs text-muted-foreground"
+                      >
+                        Temizle
                       </Button>
                       <ConfirmTooltip
                         onConfirm={handleBulkDelete}
-                        title="Delete Selected Tables"
-                        description={`Are you sure you want to delete ${selectedTableRows.size} table(s)?`}
+                        title="Seçili Tabloları Sil"
+                        description={`${selectedTableRows.size} tablo(ları) silmek istediğinize emin misiniz?`}
                       >
                         <Button
                           size="sm"
@@ -1377,6 +1395,114 @@ export default function EmbeddingsManagerPage() {
                 </div>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Embed Preview Modal - Minimal Design */}
+      <Dialog open={showPreviewModal} onOpenChange={() => {
+        setShowPreviewModal(false);
+        setTablePreviewData([]);
+        setSelectedTableForPreview(null);
+        setPreviewOffset(0);
+        setPreviewHasMore(true);
+      }}>
+        <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden flex flex-col">
+          <DialogHeader className="px-4 py-3 border-b flex-shrink-0">
+            <DialogTitle className="text-sm font-medium">
+              Embed Preview
+              {selectedTableForPreview && (
+                <span className="ml-2 font-normal text-muted-foreground">
+                  — {selectedTableForPreview}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {isLoadingPreview ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Yükleniyor...</span>
+              </div>
+            ) : tablePreviewData.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-sm">Bu tablo için embed kaydı bulunamadı.</p>
+                <p className="text-xs mt-1">Migration çalıştırarak embedding oluşturabilirsiniz.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {tablePreviewData.map((record, idx) => (
+                  <div
+                    key={record.id || idx}
+                    className="border rounded p-3 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {record.source_name || record.title || `Kayıt #${record.source_id || record.id}`}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                          <span>ID: {record.source_id || record.id}</span>
+                          {record.source_type && (
+                            <>
+                              <span>•</span>
+                              <span>{record.source_type}</span>
+                            </>
+                          )}
+                          {record.metadata?.tokens_used && (
+                            <>
+                              <span>•</span>
+                              <span>{record.metadata.tokens_used} token</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-xs text-green-600 dark:text-green-500 whitespace-nowrap">
+                        ✓ embedded
+                      </span>
+                    </div>
+
+                    <div className="bg-muted/50 rounded p-2">
+                      <pre className="whitespace-pre-wrap text-xs leading-relaxed max-h-24 overflow-y-auto text-muted-foreground">
+                        {record.content?.substring(0, 400)}{record.content?.length > 400 ? '...' : ''}
+                      </pre>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Footer with pagination */}
+          {tablePreviewData.length > 0 && (
+            <div className="px-4 py-3 border-t flex-shrink-0 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {tablePreviewData.length} kayıt gösteriliyor
+              </span>
+              {previewHasMore && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedTableForPreview) {
+                      fetchTablePreview(selectedTableForPreview.toLowerCase(), previewOffset, true);
+                    }
+                  }}
+                  disabled={isLoadingMorePreview}
+                  className="h-7 text-xs"
+                >
+                  {isLoadingMorePreview ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                      Yükleniyor...
+                    </>
+                  ) : (
+                    'Daha Fazla Yükle'
+                  )}
+                </Button>
+              )}
+            </div>
           )}
         </DialogContent>
       </Dialog>
