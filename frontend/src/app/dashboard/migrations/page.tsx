@@ -27,7 +27,8 @@ import {
   Eye,
   Trash2,
   MoreHorizontal,
-  Filter
+  Filter,
+  Plus
 } from 'lucide-react';
 import {
   Dialog,
@@ -644,7 +645,7 @@ export default function EmbeddingsManagerPage() {
     }
   };
 
-  const handleBatchMigration = async () => {
+  const handleAddToQueue = () => {
     if (selectedTableRows.size === 0) {
       toast({
         title: 'No Tables Selected',
@@ -654,9 +655,17 @@ export default function EmbeddingsManagerPage() {
       return;
     }
 
-    const tablesToMigrate = Array.from(selectedTableRows);
-    setSelectedTables(tablesToMigrate);
-    await startMigration();
+    const tablesToAdd = Array.from(selectedTableRows);
+    // Add to selectedTables without duplicates
+    setSelectedTables(prev => {
+      const newSet = new Set([...prev, ...tablesToAdd]);
+      return Array.from(newSet);
+    });
+    setSelectedTableRows(new Set()); // Clear row selection
+    toast({
+      title: 'Added to Queue',
+      description: `${tablesToAdd.length} table(s) added to migration queue`,
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -878,7 +887,68 @@ export default function EmbeddingsManagerPage() {
         {/* Main Content - Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Control Panel */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-4">
+            {/* Progress Card - Always visible */}
+            <Card className="border-0 shadow-none bg-transparent">
+              <CardContent className="p-0">
+                <div className="border rounded-lg p-4 bg-white dark:bg-slate-900/30 border-slate-200 dark:border-slate-700/50">
+                  <div className="flex flex-col items-center gap-4">
+                    <ProgressCircle
+                      progress={Math.round(progress?.percentage || 0)}
+                      showPulse={progress?.status === 'processing'}
+                      size={140}
+                      statusText={
+                        progress?.status === 'processing' ? "Processing" :
+                        progress?.status === 'completed' ? "Complete" :
+                        progress?.status === 'idle' ? "Ready" :
+                        "Paused"
+                      }
+                    />
+                    {/* Processing Stats */}
+                    {progress?.status === 'processing' && (
+                      <div className="w-full space-y-2 text-sm">
+                        {progress.currentTable && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Table:</span>
+                            <span className="font-medium">{progress.currentTable}</span>
+                          </div>
+                        )}
+                        {progress.current !== undefined && progress.total !== undefined && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Records:</span>
+                            <span className="font-medium">{progress.current} / {progress.total}</span>
+                          </div>
+                        )}
+                        {progress.processingSpeed && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-600 dark:text-slate-400">Speed:</span>
+                            <span className="font-medium">{progress.processingSpeed.toFixed(1)} rec/min</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Selected Tables Info - Only show when idle with selections */}
+                    {(!progress || progress.status === 'idle') && selectedTables.length > 0 && (
+                      <div className="w-full bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                            {selectedTables.length} table{selectedTables.length > 1 ? 's' : ''} selected
+                          </span>
+                        </div>
+                        <div className="text-xs text-blue-700 dark:text-blue-300">
+                          {availableTables
+                            .filter(t => selectedTables.includes(t.name))
+                            .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0)
+                            .toLocaleString()} records to process
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Migration Settings Card */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Migration Settings</CardTitle>
@@ -972,159 +1042,9 @@ export default function EmbeddingsManagerPage() {
             </Card>
           </div>
 
-          {/* Right Column - Progress + Tables */}
+          {/* Right Column - Tables */}
           <div className="lg:col-span-2 space-y-2">
-            {/* Progress Card */}
-            {progress && (
-              <Card className="border-0 shadow-none bg-transparent">
-                <CardContent className="p-0">
-                  <div className="border rounded-lg p-4 bg-white dark:bg-slate-900/30 border-slate-200 dark:border-slate-700/50">
-                    <div className="flex items-center gap-6">
-                      <div className="flex-shrink-0">
-                        <ProgressCircle
-                          progress={Math.round(progress.percentage || 0)}
-                          showPulse={progress.status === 'processing'}
-                          size={120}
-                          statusText={
-                            progress.status === 'processing' ? "Processing" :
-                            progress.status === 'completed' ? "Complete" :
-                            progress.status === 'idle' ? "Ready" :
-                            "Paused"
-                          }
-                        />
-                      </div>
-                      <div className="flex-1 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                            Migration Progress
-                          </h3>
-                        </div>
-
-                      {/* Selected Tables Info - Only show when idle with selections */}
-                      {progress.status === 'idle' && selectedTables.length > 0 && (
-                        <div className="bg-white dark:bg-slate-800/50 rounded-lg p-3 border border-slate-200 dark:border-slate-700/50">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                              Selected: {selectedTables.length} table{selectedTables.length > 1 ? 's' : ''}
-                            </span>
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                              {availableTables
-                                .filter(t => selectedTables.includes(t.name))
-                                .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0)
-                                .toLocaleString()} records to process
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {selectedTables.slice(0, 3).map(tableName => (
-                              <span key={tableName} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-slate-200/80 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300">
-                                {tableName}
-                              </span>
-                            ))}
-                            {selectedTables.length > 3 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
-                                +{selectedTables.length - 3} more
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Processing/Completed Info */}
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        {progress.current !== undefined && progress.total !== undefined && progress.status !== 'idle' && (
-                          <div>
-                            <span className="text-slate-600 dark:text-slate-400">Records:</span>
-                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
-                              {progress.current} / {progress.total}
-                            </span>
-                          </div>
-                        )}
-                        {progress.currentTable && (
-                          <div>
-                            <span className="text-slate-600 dark:text-slate-400">Table:</span>
-                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
-                              {progress.currentTable}
-                            </span>
-                          </div>
-                        )}
-                        {progress.tokensUsed !== undefined && progress.tokensUsed > 0 && (
-                          <div>
-                            <span className="text-slate-600 dark:text-slate-400">Tokens:</span>
-                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
-                              {progress.tokensUsed.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                        {progress.processingSpeed && (
-                          <div>
-                            <span className="text-slate-600 dark:text-slate-400">Speed:</span>
-                            <span className="ml-2 font-medium text-slate-900 dark:text-slate-100">
-                              {progress.processingSpeed.toFixed(1)} rec/min
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {progress.message && (
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">
-                          {progress.message}
-                        </p>
-                      )}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Batch Toolbar */}
-            {selectedTableRows.size > 0 && (
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                      {selectedTableRows.size} table(s) selected
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setSelectedTableRows(new Set())}
-                      className="h-7 text-xs"
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleBatchMigration}
-                      className="h-7 text-xs"
-                      disabled={progress?.status === 'processing'}
-                    >
-                      <Play className="w-3 h-3 mr-1" />
-                      Start Migration
-                    </Button>
-                    <ConfirmTooltip
-                      onConfirm={handleBulkDelete}
-                      title="Delete Selected Tables"
-                      description={`Are you sure you want to delete ${selectedTableRows.size} table(s)?`}
-                    >
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" />
-                        Delete Selected
-                      </Button>
-                    </ConfirmTooltip>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Search and Filter */}
+            {/* Search, Filter and Stats */}
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-2">
@@ -1149,6 +1069,9 @@ export default function EmbeddingsManagerPage() {
                       <SelectItem value="pending">Pending</SelectItem>
                     </SelectContent>
                   </Select>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    {availableTables.length} tables
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -1347,6 +1270,61 @@ export default function EmbeddingsManagerPage() {
                 {/* Expanded Details - Commented out for now, can be added back later as a modal
                 */}
               </CardContent>
+
+              {/* Selection Footer - Shows when rows selected */}
+              {selectedTableRows.size > 0 && (
+                <div className="border-t border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 px-4 py-3 rounded-b-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        {selectedTableRows.size} table(s) selected
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedTableRows(new Set())}
+                        className="h-7 text-xs"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const tablesToAdd = Array.from(selectedTableRows);
+                          setSelectedTables(prev => {
+                            const newSet = new Set([...prev, ...tablesToAdd]);
+                            return Array.from(newSet);
+                          });
+                          setSelectedTableRows(new Set());
+                          toast({
+                            title: 'Added to Queue',
+                            description: `${tablesToAdd.length} table(s) added to migration queue`,
+                          });
+                        }}
+                        className="h-7 text-xs"
+                      >
+                        <Play className="w-3 h-3 mr-1" />
+                        Add & Start Migration
+                      </Button>
+                      <ConfirmTooltip
+                        onConfirm={handleBulkDelete}
+                        title="Delete Selected Tables"
+                        description={`Are you sure you want to delete ${selectedTableRows.size} table(s)?`}
+                      >
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </ConfirmTooltip>
+                    </div>
+                  </div>
+                </div>
+              )}
             </Card>
           </div>
         </div>
