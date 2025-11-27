@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fetchWithAuth } from '@/lib/auth-fetch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { TaoProgressBar } from '@/components/ui/tao-progress-bar';
@@ -134,8 +133,6 @@ export default function EmbeddingsManagerPage() {
   const [selectedTableRows, setSelectedTableRows] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [availableTables, setAvailableTables] = useState<TableInfo[]>([]);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [isStartingMigration, setIsStartingMigration] = useState(false);
   const [isLoadingTables, setIsLoadingTables] = useState(true);
   const [selectedTableForPreview, setSelectedTableForPreview] = useState<string | null>(null);
@@ -157,6 +154,7 @@ export default function EmbeddingsManagerPage() {
   const [selectedTableForSkipped, setSelectedTableForSkipped] = useState<string | null>(null);
   const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
   const [isDeletingSkipped, setIsDeletingSkipped] = useState(false);
+  const [isReembedding, setIsReembedding] = useState(false);
   const { toast } = useToast();
 
   // Settings state
@@ -184,7 +182,6 @@ export default function EmbeddingsManagerPage() {
   // Fetch available tables
   const fetchAvailableTables = useCallback(async () => {
     setIsLoadingTables(true);
-    setError('');
     try {
       console.log('Fetching tables from:', `${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}`);
       const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}`);
@@ -234,20 +231,36 @@ export default function EmbeddingsManagerPage() {
         }
 
         if (!data.tables || data.tables.length === 0) {
-          setError('No tables found. Please check database connection.');
+          toast({
+            title: "Warning",
+            description: "No tables found. Please check database connection.",
+            variant: "destructive",
+          });
         }
       } else if (response.status === 401) {
-        setError('Authentication required. Please log in again.');
+        toast({
+          title: "Authentication Error",
+          description: "Authentication required. Please log in again.",
+          variant: "destructive",
+        });
       } else {
-        setError(`Failed to fetch tables. Status: ${response.status}`);
+        toast({
+          title: "Error",
+          description: `Failed to fetch tables. Status: ${response.status}`,
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('Error fetching tables:', error);
-      setError('Could not connect to the server to fetch tables.');
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to the server to fetch tables.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoadingTables(false);
     }
-  }, []);
+  }, [toast]);
 
   // Fetch table preview data with pagination
   const PREVIEW_PAGE_SIZE = 10;
@@ -425,6 +438,68 @@ export default function EmbeddingsManagerPage() {
     }
   }, [selectedSkippedIds, skippedRecords.length, toast, fetchAvailableTables]);
 
+  // Re-embed selected skipped records
+  const reembedSkippedRecords = useCallback(async () => {
+    if (selectedSkippedIds.size === 0 || !selectedTableForSkipped) {
+      toast({
+        title: "No records selected",
+        description: "Please select records to re-embed",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsReembedding(true);
+    try {
+      // First delete the selected records from skipped_embeddings
+      const deleteResponse = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/migration/skipped`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: Array.from(selectedSkippedIds) })
+        }
+      );
+
+      if (deleteResponse.ok) {
+        // Remove deleted records from state
+        setSkippedRecords(prev =>
+          prev.filter(record => !selectedSkippedIds.has(record.id))
+        );
+        setSelectedSkippedIds(new Set());
+
+        // Close modal
+        setShowSkippedModal(false);
+
+        // Add the table to selected tables and start migration
+        setSelectedTables([selectedTableForSkipped]);
+
+        toast({
+          title: "Re-embedding started",
+          description: `${selectedSkippedIds.size} record(s) will be re-processed`,
+        });
+
+        // Refresh table stats
+        fetchAvailableTables();
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to prepare records for re-embedding",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error re-embedding skipped records:', error);
+      toast({
+        title: "Error",
+        description: "Failed to re-embed skipped records",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReembedding(false);
+    }
+  }, [selectedSkippedIds, selectedTableForSkipped, toast, fetchAvailableTables, setSelectedTables]);
+
   // Toggle individual skipped record selection
   const toggleSkippedRecord = useCallback((id: number) => {
     setSelectedSkippedIds(prev => {
@@ -461,7 +536,6 @@ export default function EmbeddingsManagerPage() {
     console.log('Available tables:', availableTables.map(t => ({name: t.name, total: t.totalRecords, embedded: t.embeddedRecords})));
 
     if (selectedTables.length === 0) {
-      setError('Please select at least one table.');
       toast({
         title: "Error",
         description: "Please select at least one table.",
@@ -469,9 +543,6 @@ export default function EmbeddingsManagerPage() {
       });
       return;
     }
-
-    setError('');
-    setSuccess('');
     setIsStartingMigration(true);
 
     try {
@@ -498,7 +569,11 @@ export default function EmbeddingsManagerPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to start migration.');
+        toast({
+          title: "Migration Error",
+          description: errorData.error || 'Failed to start migration.',
+          variant: "destructive",
+        });
         setProgress(null);
         setIsStartingMigration(false);
         return;
@@ -585,7 +660,11 @@ export default function EmbeddingsManagerPage() {
       }
     } catch (error) {
       console.error('Migration start error:', error);
-      setError('An error occurred while starting the migration.');
+      toast({
+        title: "Error",
+        description: 'An error occurred while starting the migration.',
+        variant: "destructive",
+      });
       setProgress(null);
       setIsStartingMigration(false);
     }
@@ -603,7 +682,11 @@ export default function EmbeddingsManagerPage() {
         });
       }
     } catch (error) {
-      setError('Failed to stop migration.');
+      toast({
+        title: "Error",
+        description: 'Failed to stop migration.',
+        variant: "destructive",
+      });
     }
   };
 
@@ -750,20 +833,7 @@ export default function EmbeddingsManagerPage() {
           </div>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {success && (
-          <Alert>
-            <CheckCircle className="h-4 w-4" />
-            <AlertDescription>{success}</AlertDescription>
-          </Alert>
-        )}
+        {/* Alerts removed - using toast notifications instead */}
 
         {/* Progress Card moved to right column below Migration Settings */}
         {false && progress && (progress.status === 'processing' || progress.status === 'completed') && (
@@ -1102,7 +1172,6 @@ export default function EmbeddingsManagerPage() {
                       <TableRow>
                         <TableHead className="w-12"><Skeleton className="h-4 w-4" /></TableHead>
                         <TableHead className="w-64"><Skeleton className="h-4 w-32" /></TableHead>
-                        <TableHead className="w-32"><Skeleton className="h-4 w-20" /></TableHead>
                         <TableHead className="w-24"><Skeleton className="h-4 w-16" /></TableHead>
                         <TableHead className="w-24"><Skeleton className="h-4 w-12" /></TableHead>
                         <TableHead className="w-24"><Skeleton className="h-4 w-16" /></TableHead>
@@ -1114,7 +1183,6 @@ export default function EmbeddingsManagerPage() {
                         <TableRow key={i}>
                           <TableCell><Skeleton className="h-4 w-4 rounded" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-                          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                           <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -1145,7 +1213,6 @@ export default function EmbeddingsManagerPage() {
                           />
                         </TableHead>
                         <TableHead className="w-64">Table Name</TableHead>
-                        <TableHead className="w-32">Database</TableHead>
                         <TableHead className="w-24">Status</TableHead>
                         <TableHead className="w-24">Total</TableHead>
                         <TableHead className="w-24">Embedded</TableHead>
@@ -1191,11 +1258,6 @@ export default function EmbeddingsManagerPage() {
                             </div>
                           </TableCell>
 
-                          {/* Database column */}
-                          <TableCell className="text-sm text-muted-foreground">
-                            scriptus_lsemb
-                          </TableCell>
-
                           {/* Status column with dropdown */}
                           <TableCell>
                             <DropdownMenu>
@@ -1238,26 +1300,21 @@ export default function EmbeddingsManagerPage() {
 
                           {/* Embedded column */}
                           <TableCell className="text-sm">
-                            <div className="flex items-center gap-2">
+                            {skipped > 0 ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  fetchSkippedRecords(table.name);
+                                }}
+                                className="hover:underline cursor-pointer"
+                                title="View skipped records"
+                              >
+                                <span>{table.embeddedRecords.toLocaleString()}</span>
+                                <span className="text-yellow-600 dark:text-yellow-500">/{skipped}</span>
+                              </button>
+                            ) : (
                               <span>{table.embeddedRecords.toLocaleString()}</span>
-                              {skipped > 0 && (
-                                <>
-                                  <span className="text-xs text-yellow-600 dark:text-yellow-500">
-                                    ({skipped} skipped)
-                                  </span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      fetchSkippedRecords(table.name);
-                                    }}
-                                    className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded p-0.5 transition-colors"
-                                    title="View skipped records"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
+                            )}
                           </TableCell>
 
                           {/* Progress column */}
@@ -1515,47 +1572,17 @@ export default function EmbeddingsManagerPage() {
         setSelectedSkippedIds(new Set());
       }}>
         <DialogContent className="max-w-6xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
-          {/* Glassmorphic Header */}
-          <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 flex-shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 dark:from-yellow-500/10 dark:to-orange-500/10" />
-            <div className="relative px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-lg font-semibold">
-                    Skipped Records
-                    {selectedTableForSkipped && (
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        {selectedTableForSkipped}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {skippedRecords.length} record{skippedRecords.length !== 1 ? 's' : ''} could not be embedded
-                  </div>
-                </div>
-                {selectedSkippedIds.size > 0 && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={deleteSkippedRecords}
-                    disabled={isDeletingSkipped}
-                    className="shadow-lg"
-                  >
-                    {isDeletingSkipped ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                        Deleting...
-                      </>
-                    ) : (
-                      <>
-                        Delete ({selectedSkippedIds.size})
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* Minimal Header */}
+          <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
+            <DialogTitle className="text-sm font-medium">
+              Skipped Records
+              {selectedTableForSkipped && (
+                <span className="ml-2 font-normal text-muted-foreground">
+                  — {selectedTableForSkipped}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
 
           {isLoadingSkipped ? (
             <div className="flex items-center justify-center py-16">
@@ -1644,20 +1671,47 @@ export default function EmbeddingsManagerPage() {
             </div>
           )}
 
-          {/* Glassmorphic Footer */}
+          {/* Footer with actions */}
           {skippedRecords.length > 0 && (
-            <div className="relative bg-gradient-to-br from-white/95 via-white/90 to-white/95 dark:from-gray-900/95 dark:via-gray-900/90 dark:to-gray-900/95 backdrop-blur-xl border-t border-gray-200/50 dark:border-gray-700/50 flex-shrink-0">
-              <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 to-orange-500/5 dark:from-yellow-500/10 dark:to-orange-500/10" />
-              <div className="relative px-6 py-3">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="text-muted-foreground">
-                    Total: <span className="font-semibold text-yellow-600 dark:text-yellow-500">{skippedRecords.length}</span> skipped record{skippedRecords.length !== 1 ? 's' : ''}
-                  </div>
-                  <div className="text-muted-foreground">
-                    Selected: <span className="font-semibold">{selectedSkippedIds.size}</span>
-                  </div>
+            <div className="px-6 py-3 border-t flex-shrink-0 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {skippedRecords.length} record{skippedRecords.length !== 1 ? 's' : ''}
+                {selectedSkippedIds.size > 0 && (
+                  <span className="ml-2 font-medium">• {selectedSkippedIds.size} selected</span>
+                )}
+              </span>
+              {selectedSkippedIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={reembedSkippedRecords}
+                    disabled={isReembedding}
+                    className="h-7 text-xs"
+                  >
+                    {isReembedding ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3 mr-1" />
+                    )}
+                    Re-embed
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={deleteSkippedRecords}
+                    disabled={isDeletingSkipped}
+                    className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                    title="Delete selected"
+                  >
+                    {isDeletingSkipped ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </Button>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </DialogContent>
