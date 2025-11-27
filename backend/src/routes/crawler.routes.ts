@@ -1276,42 +1276,78 @@ router.post('/crawler-directories/:crawlerName/script', upload.single('script'),
     const { crawlerName } = req.params;
     const { builtIn, crawlerName: builtInCrawlerName } = req.body;
 
-    console.log(' [Upload Script] Received request');
-    console.log(' Crawler Name:', crawlerName);
-    console.log(' Built-in:', builtIn, 'Built-in Crawler:', builtInCrawlerName);
+    console.log('[Upload Script] Received request');
+    console.log('[Upload Script] Crawler Name (from params):', crawlerName);
+    console.log('[Upload Script] Built-in flag:', builtIn, '| Type:', typeof builtIn);
+    console.log('[Upload Script] Built-in Crawler Name:', builtInCrawlerName);
+    console.log('[Upload Script] Full req.body:', JSON.stringify(req.body));
 
-    // Handle built-in crawler linking
-    if (builtIn === 'true' && builtInCrawlerName) {
+    // Handle built-in crawler linking - check for both string 'true' and boolean true
+    const isBuiltIn = builtIn === 'true' || builtIn === true;
+
+    if (isBuiltIn && builtInCrawlerName) {
+      console.log('[Upload Script] Processing built-in crawler linking...');
+
       // Map built-in crawler names to actual _crawler.py files
       const builtInScriptPath = path.join(__dirname, '../../python-services/crawlers', `${builtInCrawlerName}_crawler.py`);
+      console.log('[Upload Script] Built-in script path:', builtInScriptPath);
 
       if (!fs.existsSync(builtInScriptPath)) {
+        console.error('[Upload Script] Built-in script NOT FOUND:', builtInScriptPath);
         return res.status(404).json({
           success: false,
           error: `Built-in crawler '${builtInCrawlerName}' not found at ${builtInScriptPath}`
         });
       }
+      console.log('[Upload Script] Built-in script EXISTS');
 
-      // Copy built-in crawler to crawler directory (without _crawler suffix in filename)
+      // Copy built-in crawler to crawler directory
       const targetPath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}.py`);
+      console.log('[Upload Script] Target path:', targetPath);
 
-      // Remove existing file if exists
-      if (fs.existsSync(targetPath)) {
-        fs.unlinkSync(targetPath);
+      try {
+        // Remove existing file if exists
+        if (fs.existsSync(targetPath)) {
+          console.log('[Upload Script] Removing existing file at target...');
+          fs.unlinkSync(targetPath);
+        }
+
+        // Copy the built-in crawler file
+        console.log('[Upload Script] Copying built-in crawler...');
+        fs.copyFileSync(builtInScriptPath, targetPath);
+
+        // Verify the copy succeeded
+        if (!fs.existsSync(targetPath)) {
+          throw new Error('File copy failed - target file does not exist after copy');
+        }
+
+        const targetStats = fs.statSync(targetPath);
+        const sourceStats = fs.statSync(builtInScriptPath);
+        console.log('[Upload Script] Copy verified - Source size:', sourceStats.size, '| Target size:', targetStats.size);
+
+        if (targetStats.size !== sourceStats.size) {
+          throw new Error(`File size mismatch after copy - source: ${sourceStats.size}, target: ${targetStats.size}`);
+        }
+
+        console.log('[Upload Script] SUCCESS - Copied built-in crawler:', builtInCrawlerName, 'to', crawlerName);
+
+        return res.json({
+          success: true,
+          message: `Linked to built-in crawler: ${builtInCrawlerName}`,
+          filename: `${crawlerName}.py`,
+          path: targetPath,
+          builtIn: true,
+          fileSize: targetStats.size
+        });
+      } catch (copyError: any) {
+        console.error('[Upload Script] File copy error:', copyError.message);
+        return res.status(500).json({
+          success: false,
+          error: `Failed to copy built-in crawler: ${copyError.message}`
+        });
       }
-
-      // Copy the built-in crawler file
-      fs.copyFileSync(builtInScriptPath, targetPath);
-
-      console.log(' Copied built-in crawler:', builtInCrawlerName, 'to', crawlerName);
-
-      return res.json({
-        success: true,
-        message: `Linked to built-in crawler: ${builtInCrawlerName}`,
-        filename: `${crawlerName}.py`,
-        path: targetPath,
-        builtIn: true
-      });
+    } else {
+      console.log('[Upload Script] Not a built-in request or missing crawlerName. isBuiltIn:', isBuiltIn, '| builtInCrawlerName:', builtInCrawlerName);
     }
 
     // Handle custom script upload
@@ -1394,9 +1430,26 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     }
 
     if (!fs.existsSync(scriptPath)) {
+      // List available scripts in the crawlers directory for debugging
+      const crawlersDir = path.join(__dirname, '../../python-services/crawlers');
+      let availableScripts: string[] = [];
+      try {
+        availableScripts = fs.readdirSync(crawlersDir)
+          .filter(f => f.endsWith('.py'))
+          .map(f => f.replace('.py', ''));
+      } catch (e) {
+        console.error('[Run Script] Could not list crawlers directory:', e);
+      }
+
+      console.error('[Run Script] Script NOT FOUND:', scriptPath);
+      console.error('[Run Script] Available scripts:', availableScripts.join(', '));
+
       return res.status(404).json({
         success: false,
-        error: 'Script not found'
+        error: `Script not found: ${crawlerName}.py`,
+        details: `Looking for: ${scriptPath}`,
+        hint: 'Please link a built-in crawler or upload a custom script first.',
+        availableScripts: availableScripts.slice(0, 10) // Show first 10
       });
     }
 
