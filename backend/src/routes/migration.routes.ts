@@ -362,6 +362,103 @@ router.get('/progress', async (req: Request, res: Response) => {
   }
 });
 
+// SSE Progress Stream - for real-time updates after page refresh
+router.get('/progress-stream', (req: Request, res: Response) => {
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+  res.flushHeaders();
+
+  // Send current progress state immediately
+  const allProgress = migrationProgress.getAllProgress();
+  const activeProgress = allProgress.find(p => p.status === 'processing' || p.status === 'paused');
+
+  if (activeProgress) {
+    res.write(`data: ${JSON.stringify(activeProgress)}\n\n`);
+  } else {
+    res.write(`data: ${JSON.stringify({ status: 'idle' })}\n\n`);
+  }
+
+  // Listen for progress updates
+  const onProgress = (data: any) => {
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (e) {
+      // Client disconnected
+    }
+  };
+
+  migrationProgress.on('progress', onProgress);
+
+  // Send heartbeat every 30 seconds to keep connection alive
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: heartbeat\n\n`);
+    } catch (e) {
+      clearInterval(heartbeat);
+    }
+  }, 30000);
+
+  // Cleanup on client disconnect
+  req.on('close', () => {
+    migrationProgress.off('progress', onProgress);
+    clearInterval(heartbeat);
+  });
+});
+
+// Pause migration (without ID - uses latest)
+router.post('/pause', async (req: Request, res: Response) => {
+  try {
+    const allProgress = migrationProgress.getAllProgress();
+    const activeProgress = allProgress.find(p => p.status === 'processing');
+    if (activeProgress) {
+      migrationProgress.pauseMigration(activeProgress.id);
+      res.json({ success: true, message: 'Migration paused', id: activeProgress.id });
+    } else {
+      res.status(404).json({ error: 'No active migration to pause' });
+    }
+  } catch (error) {
+    console.error('Pause error:', error);
+    res.status(500).json({ error: 'Failed to pause migration' });
+  }
+});
+
+// Resume migration (without ID - uses latest)
+router.post('/resume', async (req: Request, res: Response) => {
+  try {
+    const allProgress = migrationProgress.getAllProgress();
+    const pausedProgress = allProgress.find(p => p.status === 'paused');
+    if (pausedProgress) {
+      migrationProgress.resumeMigration(pausedProgress.id);
+      res.json({ success: true, message: 'Migration resumed', id: pausedProgress.id });
+    } else {
+      res.status(404).json({ error: 'No paused migration to resume' });
+    }
+  } catch (error) {
+    console.error('Resume error:', error);
+    res.status(500).json({ error: 'Failed to resume migration' });
+  }
+});
+
+// Stop migration (without ID - uses latest)
+router.post('/stop', async (req: Request, res: Response) => {
+  try {
+    const allProgress = migrationProgress.getAllProgress();
+    const activeProgress = allProgress.find(p => p.status === 'processing' || p.status === 'paused');
+    if (activeProgress) {
+      migrationProgress.stopMigration(activeProgress.id);
+      res.json({ success: true, message: 'Migration stopped', id: activeProgress.id });
+    } else {
+      res.status(404).json({ error: 'No active migration to stop' });
+    }
+  } catch (error) {
+    console.error('Stop error:', error);
+    res.status(500).json({ error: 'Failed to stop migration' });
+  }
+});
+
 // Pause migration
 router.post('/pause/:id', async (req: Request, res: Response) => {
   const { id } = req.params;

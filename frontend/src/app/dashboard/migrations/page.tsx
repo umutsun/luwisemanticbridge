@@ -307,7 +307,76 @@ export default function EmbeddingsManagerPage() {
     }
   }, []);
 
-  // Check for active migration
+  // SSE EventSource ref for cleanup
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Connect to SSE progress stream for real-time updates
+  const connectToProgressStream = useCallback(() => {
+    // Close existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const sseUrl = `${API_MIGRATION}/progress-stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+    console.log('📡 Connecting to SSE progress stream...');
+    const eventSource = new EventSource(sseUrl);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('📡 SSE Progress:', data);
+
+        if (data.status === 'idle') {
+          // No active migration
+          return;
+        }
+
+        // Update progress in real-time
+        setProgress({
+          status: data.status || 'processing',
+          current: data.current || 0,
+          total: data.total || 0,
+          percentage: data.percentage || 0,
+          currentTable: data.currentTable || null,
+          error: data.error || null,
+          tokensUsed: data.tokenUsage?.total || data.tokensUsed || 0,
+          message: data.message || null
+        });
+
+        // Update selected tables if available
+        if (data.tables) {
+          setSelectedTables(data.tables);
+        }
+
+        // Handle completion
+        if (data.status === 'completed') {
+          fetchAvailableTables();
+          fetchTokenStats();
+        }
+      } catch (e) {
+        console.error('Error parsing SSE data:', e);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      // Reconnect after 5 seconds if connection lost
+      setTimeout(() => {
+        if (eventSourceRef.current === eventSource) {
+          connectToProgressStream();
+        }
+      }, 5000);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [fetchAvailableTables, fetchTokenStats]);
+
+  // Check for active migration (initial check only)
   const checkActiveMigration = useCallback(async () => {
     try {
       const response = await fetchWithAuth(`${API_MIGRATION}/progress`);
@@ -318,12 +387,14 @@ export default function EmbeddingsManagerPage() {
           if (data.tables) {
             setSelectedTables(data.tables);
           }
+          // If there's an active migration, connect to SSE stream
+          connectToProgressStream();
         }
       }
     } catch (error) {
       console.error('Error checking active migration:', error);
     }
-  }, []);
+  }, [connectToProgressStream]);
 
   // Fetch total tokens used
   const fetchTokenStats = useCallback(async () => {
@@ -522,14 +593,24 @@ export default function EmbeddingsManagerPage() {
     }
   }, [selectedSkippedIds.size, skippedRecords]);
 
-  // Initial data fetch
+  // Initial data fetch and SSE connection
   useEffect(() => {
     fetchAvailableTables();
-    checkActiveMigration();
     fetchTokenStats();
-  }, [fetchAvailableTables, checkActiveMigration, fetchTokenStats]);
 
-  // Note: Progress polling removed - now using real-time SSE updates from startMigration()
+    // Connect to SSE progress stream for real-time updates
+    connectToProgressStream();
+
+    // Cleanup on unmount
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+    };
+  }, [fetchAvailableTables, fetchTokenStats, connectToProgressStream]);
+
+  // Note: Progress updates now come from SSE stream (connectToProgressStream)
 
   const startMigration = async () => {
     console.log('Starting migration with selectedTables:', selectedTables);
@@ -1106,9 +1187,26 @@ export default function EmbeddingsManagerPage() {
                 <div className="pt-4 space-y-2 border-t">
                   {progress?.status === 'processing' ? (
                     <div className="space-y-2">
-                      <Button variant="outline" className="w-full" onClick={() => fetchWithAuth(`${API_MIGRATION}/pause`, { method: 'POST' })}>
+                      <Button variant="outline" className="w-full" onClick={async () => {
+                        await fetchWithAuth(`${API_MIGRATION}/pause`, { method: 'POST' });
+                        toast({ title: "Paused", description: "Migration paused" });
+                      }}>
                         <Pause className="w-4 h-4 mr-2" />
                         Pause
+                      </Button>
+                      <Button variant="destructive" className="w-full" onClick={stopMigration}>
+                        <Square className="w-4 h-4 mr-2" />
+                        Stop
+                      </Button>
+                    </div>
+                  ) : progress?.status === 'paused' ? (
+                    <div className="space-y-2">
+                      <Button variant="default" className="w-full" onClick={async () => {
+                        await fetchWithAuth(`${API_MIGRATION}/resume`, { method: 'POST' });
+                        toast({ title: "Resumed", description: "Migration resumed" });
+                      }}>
+                        <Play className="w-4 h-4 mr-2" />
+                        Resume
                       </Button>
                       <Button variant="destructive" className="w-full" onClick={stopMigration}>
                         <Square className="w-4 h-4 mr-2" />
