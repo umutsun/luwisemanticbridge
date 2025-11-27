@@ -546,11 +546,16 @@ export default function EmbeddingsManagerPage() {
     setIsStartingMigration(true);
 
     try {
-      // Set initial progress state immediately
+      // Calculate real total from selected tables
+      const selectedTotal = availableTables
+        .filter(t => selectedTables.includes(t.name))
+        .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0);
+
+      // Set initial progress state immediately with real total
       setProgress({
         status: 'processing',
         current: 0,
-        total: 100,
+        total: selectedTotal || 1, // Avoid division by zero
         percentage: 0,
         currentTable: selectedTables[0] || null,
         error: null,
