@@ -131,7 +131,7 @@ export class SemanticSearchService {
 
   /**
    * Load all unique record types from unified_embeddings table
-   * Uses metadata->>'table' field which contains the actual table name
+   * Checks multiple metadata fields: 'table', '_sourceTable', 'source_table', and source_table column
    */
   private async loadUnifiedRecordTypes(): Promise<void> {
     try {
@@ -141,17 +141,26 @@ export class SemanticSearchService {
       }
 
       const result = await lsembPool.query(`
-        SELECT DISTINCT metadata->>'table' as record_type
+        SELECT DISTINCT COALESCE(
+          metadata->>'table',
+          metadata->>'_sourceTable',
+          metadata->>'source_table',
+          source_table
+        ) as record_type
         FROM unified_embeddings
-        WHERE metadata->>'table' IS NOT NULL
+        WHERE (
+          metadata->>'table' IS NOT NULL OR
+          metadata->>'_sourceTable' IS NOT NULL OR
+          metadata->>'source_table' IS NOT NULL OR
+          source_table IS NOT NULL
+        )
         ORDER BY record_type
       `);
 
       this.unifiedRecordTypes = result.rows.map(row => row.record_type).filter(t => t);
       this.lastRecordTypesRefresh = Date.now();
 
-      // Silent - no need to log record types on every refresh
-      // console.log('[SemanticSearch] Loaded unified record types:', this.unifiedRecordTypes);
+      console.log('[SemanticSearch] Loaded unified record types:', this.unifiedRecordTypes);
     } catch (error) {
       console.error('[SemanticSearch] Failed to load unified record types:', error);
       this.unifiedRecordTypes = [];
@@ -159,13 +168,13 @@ export class SemanticSearchService {
   }
 
   /**
-   * Refresh record types if cache is expired
+   * Refresh record types if cache is expired OR if array is empty (race condition fix)
    */
   private async refreshUnifiedRecordTypes(): Promise<void> {
-    if (Date.now() - this.lastRecordTypesRefresh < this.RECORD_TYPES_CACHE_TTL) {
-      return;
+    // Also refresh if the array is empty (handles race condition at startup)
+    if (this.unifiedRecordTypes.length === 0 || Date.now() - this.lastRecordTypesRefresh >= this.RECORD_TYPES_CACHE_TTL) {
+      await this.loadUnifiedRecordTypes();
     }
-    await this.loadUnifiedRecordTypes();
   }
 
   /**
@@ -985,11 +994,21 @@ export class SemanticSearchService {
 
       // If no types enabled, return empty results
       if (enabledTypes.length === 0) {
-        console.log('[SemanticSearch] All record types are disabled in settings');
+        console.log('[SemanticSearch] All record types are disabled in settings', {
+          enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
+          unifiedRecordTypesCount: this.unifiedRecordTypes.length,
+          unifiedRecordTypes: this.unifiedRecordTypes,
+          enableMessageEmbeddings: this.enableMessageEmbeddings,
+          enableDocumentEmbeddings: this.enableDocumentEmbeddings,
+          enableScrapeEmbeddings: this.enableScrapeEmbeddings
+        });
         return [];
       }
 
-      console.log('[SemanticSearch] Searching with enabled types:', enabledTypes);
+      console.log('[SemanticSearch] Searching with enabled types:', enabledTypes, {
+        enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
+        unifiedRecordTypesCount: this.unifiedRecordTypes.length
+      });
 
       // Build type filter clause
       const typeFilterPlaceholders = enabledTypes.map((_, index) => `$${index + 6}`).join(', ');
@@ -1001,6 +1020,7 @@ export class SemanticSearchService {
 
       // OPTIMIZED QUERY: Uses CTE to calculate distance once, leverages DiskANN index
       // Performance improvement: 10-100x faster on large datasets
+      // Checks multiple metadata fields: 'table', '_sourceTable', 'source_table', and source_table column
       const searchQuery = `
         WITH ranked_results AS (
           SELECT
@@ -1010,10 +1030,10 @@ export class SemanticSearchService {
             ue.source_id,
             ue.embedding <=> $1::vector AS distance,
             1 - (ue.embedding <=> $1::vector) AS similarity_score,
-            ue.metadata->>'table' AS record_type
+            COALESCE(ue.metadata->>'table', ue.metadata->>'_sourceTable', ue.metadata->>'source_table', ue.source_table) AS record_type
           FROM unified_embeddings ue
           WHERE ue.embedding IS NOT NULL
-            AND ue.metadata->>'table' IN (${typeFilterPlaceholders})
+            AND COALESCE(ue.metadata->>'table', ue.metadata->>'_sourceTable', ue.metadata->>'source_table', ue.source_table) IN (${typeFilterPlaceholders})
           ORDER BY ue.embedding <=> $1::vector  -- Uses DiskANN index efficiently
           LIMIT $4 * 2  -- Fetch 2x results for post-filtering
         )
