@@ -32,6 +32,7 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '@/hooks/useLanguage';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
 import { MessageSkeleton } from '@/components/chat/message-skeleton';
 import {
@@ -112,6 +113,8 @@ const getKeywordColor = (keyword: string, isBoosted: boolean = false): string =>
 export default function ChatInterface() {
   const { token, user, logout } = useAuth();
   const { t } = useTranslation();
+  // useLanguage hook syncs language from config settings
+  useLanguage();
 
   // Chatbot settings state - NO hardcoded defaults, will load from database
   const [chatbotSettings, setChatbotSettings] = useState<{
@@ -1501,7 +1504,7 @@ export default function ChatInterface() {
                 {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
               </p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{t('chat.messageCount', `${messages.length - 1} mesaj`)}</span>
+                <span>{t('chat.messageCount', { count: messages.length - 1 })}</span>
               </div>
             </div>
           </div>
