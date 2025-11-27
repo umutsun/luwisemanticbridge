@@ -1675,9 +1675,10 @@ export default function EmbeddingsManagerPage() {
           {skippedRecords.length > 0 && (
             <div className="px-6 py-3 border-t flex-shrink-0 flex items-center justify-between">
               <span className="text-xs text-muted-foreground">
-                {skippedRecords.length} record{skippedRecords.length !== 1 ? 's' : ''}
-                {selectedSkippedIds.size > 0 && (
-                  <span className="ml-2 font-medium">• {selectedSkippedIds.size} selected</span>
+                {selectedSkippedIds.size > 0 ? (
+                  <span className="font-medium">{selectedSkippedIds.size}/{skippedRecords.length}</span>
+                ) : (
+                  <span>{skippedRecords.length}</span>
                 )}
               </span>
               {selectedSkippedIds.size > 0 && (
