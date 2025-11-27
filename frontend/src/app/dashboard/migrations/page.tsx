@@ -1681,20 +1681,20 @@ export default function EmbeddingsManagerPage() {
                 )}
               </span>
               {selectedSkippedIds.size > 0 && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     onClick={reembedSkippedRecords}
                     disabled={isReembedding}
-                    className="h-7 text-xs"
+                    className="h-7 w-7 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600"
+                    title="Re-embed selected"
                   >
                     {isReembedding ? (
-                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Play className="w-3 h-3 mr-1" />
+                      <Play className="w-4 h-4" />
                     )}
-                    Re-embed
                   </Button>
                   <Button
                     size="sm"
