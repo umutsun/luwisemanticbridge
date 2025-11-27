@@ -140,42 +140,44 @@ router.get('/api/v2/search/samples', async (req: Request, res: Response) => {
  */
 router.get('/api/v2/search/source-tables', async (req: Request, res: Response) => {
   try {
+    // Use the semantic search service which has the correct pool and query
+    const recordTypes = await semanticSearch.getUnifiedRecordTypes();
+
+    // Get embedding counts for each type from the working query in semantic search
     const { lsembPool } = require('../config/database.config');
 
-    const result = await lsembPool.query(`
+    // Simple count query that matches the working loadUnifiedRecordTypes query
+    const countResult = await lsembPool.query(`
       SELECT
         COALESCE(
           metadata->>'table',
+          metadata->>'_sourceTable',
           metadata->>'source_table',
-          metadata->>'tableName',
-          metadata->>'sourceTable',
-          'unknown'
+          source_table
         ) as source_table,
         COUNT(*) as embedding_count
       FROM unified_embeddings
-      WHERE embedding IS NOT NULL
-        AND metadata IS NOT NULL
-        AND (
-          metadata->>'table' IS NOT NULL OR
-          metadata->>'source_table' IS NOT NULL OR
-          metadata->>'tableName' IS NOT NULL OR
-          metadata->>'sourceTable' IS NOT NULL
-        )
-      GROUP BY
-        COALESCE(
-          metadata->>'table',
-          metadata->>'source_table',
-          metadata->>'tableName',
-          metadata->>'sourceTable',
-          'unknown'
-        )
-      ORDER BY source_table ASC
+      WHERE (
+        metadata->>'table' IS NOT NULL OR
+        metadata->>'_sourceTable' IS NOT NULL OR
+        metadata->>'source_table' IS NOT NULL OR
+        source_table IS NOT NULL
+      )
+      GROUP BY COALESCE(
+        metadata->>'table',
+        metadata->>'_sourceTable',
+        metadata->>'source_table',
+        source_table
+      )
     `);
 
+    // Build source tables with counts
+    const countMap = new Map(countResult.rows.map(row => [row.source_table, parseInt(row.embedding_count, 10)]));
+
     res.json({
-      sourceTables: result.rows.map(row => ({
-        name: row.source_table,
-        embeddingCount: parseInt(row.embedding_count, 10)
+      sourceTables: recordTypes.map(name => ({
+        name,
+        embeddingCount: countMap.get(name) || 0
       }))
     });
   } catch (error) {
