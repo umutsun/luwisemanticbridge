@@ -1594,7 +1594,7 @@ export default function EmbeddingsManagerPage() {
               <div className="space-y-2">
                 {tablePreviewData.map((record, idx) => (
                   <div
-                    key={record.id || idx}
+                    key={`${record.id}-${idx}`}
                     className="border rounded p-3 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">
@@ -1722,7 +1722,7 @@ export default function EmbeddingsManagerPage() {
                 <tbody>
                   {skippedRecords.map((record, index) => (
                     <tr
-                      key={record.id || index}
+                      key={`${record.id}-${index}`}
                       className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
                     >
                       <td className="p-3">
