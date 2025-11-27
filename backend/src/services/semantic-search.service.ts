@@ -117,9 +117,10 @@ export class SemanticSearchService {
         Özet:
       `;
 
-      const response = await llmManager.generateText(prompt, {
+      const response = await llmManager.generateChatResponse(prompt, {
         temperature: 0.3,
-        maxTokens: 50
+        maxTokens: 100,
+        systemPrompt: 'Kısa ve öz özetler yaz. Tek cümleyle açıkla.'
       });
 
       return response?.content?.trim() || 'Özet oluşturulamadı';
