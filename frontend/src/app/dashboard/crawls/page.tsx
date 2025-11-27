@@ -3270,8 +3270,8 @@ export default function CrawlerDataPage() {
                     value={scriptUrl}
                     onChange={(e) => setScriptUrl(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleRunScript();
+                      if (e.key === 'Enter' && urlDialogDirectory) {
+                        handleRunScript(urlDialogDirectory, scriptUrl);
                       }
                     }}
                     className="border-slate-300 dark:border-slate-700"
@@ -3296,8 +3296,9 @@ export default function CrawlerDataPage() {
                     Cancel
                   </Button>
                   <Button
-                    onClick={handleRunScript}
-                    className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white"
+                    onClick={() => urlDialogDirectory && handleRunScript(urlDialogDirectory, scriptUrl)}
+                    disabled={!urlDialogDirectory || !scriptUrl.trim()}
+                    className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white disabled:opacity-50"
                   >
                     Run Script
                   </Button>
