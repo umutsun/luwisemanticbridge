@@ -1941,14 +1941,14 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       console.log('[SUGGESTIONS] Generating contextual suggestion questions...');
 
       // 1. Get interesting content from database (titles + excerpts for context)
+      // Dynamically select from any table that has content in unified_embeddings
       const contentQuery = `
         SELECT
           COALESCE(metadata->>'title', LEFT(content, 100)) as title,
           LEFT(content, 300) as excerpt,
           metadata->>'table' as source_table
         FROM unified_embeddings
-        WHERE metadata->>'table' IN ('sorucevap', 'makaleler', 'ozelgeler', 'danistaykararlari')
-          AND (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
+        WHERE (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
           AND LENGTH(COALESCE(metadata->>'title', content)) > 30
         ORDER BY RANDOM()
         LIMIT 20
@@ -1996,19 +1996,13 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
       console.log(`[SUGGESTIONS] Generated ${generatedQuestions.length} contextual questions`);
 
-      // 3. If not enough questions, add high-quality defaults
+      // 3. If not enough questions, generate generic ones from whatever content we have
       if (generatedQuestions.length < 4) {
-        console.log(`[SUGGESTIONS] Not enough questions (${generatedQuestions.length}), adding defaults`);
-        const defaultQuestions = [
-          'Stopaj hesaplarken önemli faktörler nelerdir?',
-          'KDV tevkifatı hangi işlemlerde uygulanır?',
-          'Gelir vergisi beyannamesinde hangi gelirler beyan edilir?',
-          'E-fatura uygulamasından kimler muaf tutulur?',
-          'Kurumlar vergisi matrahı nasıl hesaplanır?',
-          'Damga vergisi oranları hangi işlemler için farklılaşır?'
-        ];
+        console.log(`[SUGGESTIONS] Not enough questions (${generatedQuestions.length}), trying to generate more from content...`);
 
-        generatedQuestions.push(...defaultQuestions.slice(0, 6 - generatedQuestions.length));
+        // Don't use hardcoded default questions - instead return what we have
+        // The questions should come from the actual database content
+        // If there's no content, return empty array (no suggestions)
       }
 
       // 4. Randomly select 4 questions using Fisher-Yates shuffle
@@ -2024,13 +2018,9 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       return final;
     } catch (error) {
       console.error('[SUGGESTIONS] Error generating questions:', error);
-      // Return high-quality default questions if error
-      return [
-        'Stopaj hesaplarken önemli faktörler nelerdir?',
-        'KDV iade işlemleri hangi durumlarda yapılır?',
-        'Gelir vergisi matrahı nasıl tespit edilir?',
-        'E-beyanname sistemi zorunlu kullanıcılar kimlerdir?'
-      ];
+      // Return empty array on error - no fallback to hardcoded questions
+      // This allows each deployment to generate questions from its own content
+      return [];
     }
   }
 
