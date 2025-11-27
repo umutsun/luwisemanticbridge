@@ -193,13 +193,23 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
       type: 'crawler'
     }));
 
-    // Get running crawlers
+    // Get running crawlers and clean up stale entries
     const runningKeys = await crawl4aiRedis.keys('crawler_running:*');
     const runningCrawlers = await Promise.all(
       runningKeys.map(async (key) => {
         const data = await crawl4aiRedis.get(key);
         if (data) {
           const parsed = JSON.parse(data);
+          const startedAt = new Date(parsed.startedAt);
+          const hoursSinceStart = (Date.now() - startedAt.getTime()) / (1000 * 60 * 60);
+
+          // Clean up stale running keys (older than 24 hours)
+          if (hoursSinceStart > 24) {
+            console.log(`[Cleanup] Removing stale running key for ${key} (started ${hoursSinceStart.toFixed(1)} hours ago)`);
+            await crawl4aiRedis.del(key);
+            return null;
+          }
+
           return {
             crawlerName: key.replace('crawler_running:', ''),
             ...parsed
@@ -1461,7 +1471,7 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
     const jobId = `script_run_${crawlerName}_${Date.now()}`;
     console.log(` Job ID: ${jobId}`);
 
-    // Mark crawler as running in Redis
+    // Mark crawler as running in Redis with 24h TTL to prevent zombie states
     await crawl4aiRedis.set(
       `crawler_running:${crawlerName}`,
       JSON.stringify({
@@ -1469,9 +1479,11 @@ router.post('/crawler-directories/:crawlerName/script/run', async (req: Request,
         startedAt: new Date().toISOString(),
         url,
         status: 'running'
-      })
+      }),
+      'EX',
+      86400 // 24 hours TTL
     );
-    console.log(` Marked ${crawlerName} as running in Redis`);
+    console.log(` Marked ${crawlerName} as running in Redis (24h TTL)`);
 
     // Start Python process with URL and crawler name as arguments
     // Set PYTHONUNBUFFERED=1 to disable stdout buffering for immediate output
