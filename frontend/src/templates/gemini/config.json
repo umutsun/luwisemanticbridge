@@ -1,0 +1,29 @@
+{
+    "id": "gemini",
+    "name": "Gemini Style",
+    "description": "Clean and minimalist design inspired by Google Gemini",
+    "version": "1.0.0",
+    "extends": "base",
+    "theme": {
+        "primaryColor": "#2563eb",
+        "secondaryColor": "#f8fafc",
+        "backgroundColor": "#ffffff",
+        "panelBackground": "#ffffff",
+        "textColor": "#0f172a",
+        "borderRadius": "24px",
+        "fontFamily": "Inter, sans-serif",
+        "messageSpacing": "2rem",
+        "headerHeight": "64px"
+    },
+    "features": {
+        "showLogo": true,
+        "showSuggestions": true,
+        "showSources": true,
+        "showTimestamp": false,
+        "showAvatar": true,
+        "enableFullPage": true,
+        "enableVoiceInput": true,
+        "enableFileUpload": true
+    },
+    "customCSS": ".gemini-gradient { background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }"
+}

@@ -460,20 +460,18 @@ export class RAGChatService {
       const citationInstruction = responseLanguage === 'en'
         ? `\n\nCRITICAL FORMATTING RULES:\n` +
         ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
-        ` INLINE CITATIONS: Place **[1]** immediately after each statement, like footnotes. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
+        ` INLINE CITATIONS: Place **[1]** after relevant statements. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
+        ` NO DUPLICATE CITATIONS: Each source number should appear only ONCE in the response. Don't repeat **[1]** multiple times.\n` +
         ` Use ONLY source numbers 1-${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
-        ` NEVER cite sources beyond number ${initialDisplayCount}\n` +
-        ` NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
-        ` NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
-        `Write flowing text with inline citations marking each fact's source.`
+        ` NEVER add section headings or labels like "REFERENCES:"\n` +
+        `Write flowing text with unique inline citations.`
         : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
         ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
-        ` INLINE (SATIR İÇİ) KAYNAKÇA: Her bilginin hemen ardına **[1]** koy, dipnot gibi. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
-        ` SADECE 1-${initialDisplayCount} arası kaynak numarası kullan (sadece ${initialDisplayCount} kaynak var)\n` +
-        ` ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme\n` +
-        ` ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
-        ` ASLA "KAYNAKLAR:" veya "REFERANSLAR:" gibi etiket ekleme\n` +
-        `Akıcı metin yaz, her bilginin kaynağını inline olarak belirt.`;
+        ` INLINE KAYNAKÇA: İlgili bilgiden sonra **[1]** koy. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
+        ` TEKRAR ETME: Her kaynak numarası yanıtta sadece BİR KEZ geçsin. **[1]**'i birden fazla kullanma.\n` +
+        ` SADECE 1-${initialDisplayCount} arası kaynak numarası kullan\n` +
+        ` ASLA bölüm başlığı veya "KAYNAKLAR:" gibi etiket ekleme\n` +
+        `Akıcı metin yaz, her kaynağı tek seferde kullan.`;
 
       const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
@@ -722,6 +720,41 @@ export class RAGChatService {
   }
 
   /**
+   * Convert ALL CAPS text to proper sentence case
+   * - First letter uppercase, rest lowercase
+   * - Capitalize after periods, question marks, exclamation marks
+   * - Preserve proper nouns that might be intentionally capitalized (skip if mixed case)
+   */
+  private toSentenceCase(text: string): string {
+    if (!text) return '';
+
+    // Only transform if text is mostly UPPERCASE (more than 70% uppercase letters)
+    const letters = text.replace(/[^a-zA-ZçğıöşüÇĞİÖŞÜ]/g, '');
+    const upperCount = (text.match(/[A-ZÇĞİÖŞÜ]/g) || []).length;
+    const isAllCaps = letters.length > 0 && (upperCount / letters.length) > 0.7;
+
+    if (!isAllCaps) return text; // Already mixed case, don't transform
+
+    // Convert to lowercase first
+    let result = text.toLowerCase();
+
+    // Capitalize first letter
+    result = result.charAt(0).toUpperCase() + result.slice(1);
+
+    // Capitalize after sentence-ending punctuation (. ! ?)
+    result = result.replace(/([.!?])\s+([a-zçğıöşü])/g, (match, punct, letter) => {
+      return punct + ' ' + letter.toUpperCase();
+    });
+
+    // Capitalize Turkish specific: after line breaks
+    result = result.replace(/\n([a-zçğıöşü])/g, (match, letter) => {
+      return '\n' + letter.toUpperCase();
+    });
+
+    return result;
+  }
+
+  /**
    * Strip section headings from LLM response
    * Removes headings like "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:", etc.
    */
@@ -844,9 +877,9 @@ export class RAGChatService {
           }
         }
 
-        // Clean HTML from title and excerpt
-        const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
-        const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+        // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
+        const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation));
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
 
         return {
           originalResult: r,
@@ -1745,7 +1778,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           title = title.substring(0, 77) + '...';
         }
 
-        const cleanExcerpt = this.stripHtml(result.excerpt || result.content || '');
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(result.excerpt || result.content || ''));
 
         // Enable LLM generation for related topics
         let processedContent = cleanExcerpt;
@@ -1884,7 +1917,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           title = title.substring(0, 77) + '...';
         }
 
-        const cleanExcerpt = this.stripHtml(result.excerpt || result.content || '');
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(result.excerpt || result.content || ''));
 
         // Generate LLM-processed content and question
         let processedContent = cleanExcerpt;
@@ -2118,9 +2151,9 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       }
     }
 
-    // Clean HTML from title and excerpt
-    const cleanTitle = this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation);
-    const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+    // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
+    const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation));
+    const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
 
     // Prepare content
     let processedContent = cleanExcerpt;
@@ -2172,8 +2205,8 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
   private createFallbackResult(r: any, idx: number): any {
     const category = this.categorizeSource(r);
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
-    const cleanTitle = this.stripHtml(r.title || `Kaynak ${idx + 1}`);
-    const cleanExcerpt = this.stripHtml(r.excerpt || r.content || '');
+    const cleanTitle = this.toSentenceCase(this.stripHtml(r.title || `Kaynak ${idx + 1}`));
+    const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
 
     return {
       id: r.id,
