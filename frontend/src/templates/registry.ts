@@ -26,6 +26,15 @@ export const chatTemplates: Record<string, TemplateConfig> = {
     config: () => import('./base/config.json')
   },
 
+  'modern': {
+    id: 'modern',
+    name: 'Modern Dark',
+    description: 'Sleek dark theme with glassmorphism effects',
+    version: '1.0.0',
+    ChatInterface: () => import('./modern/ChatInterface'),
+    config: () => import('./modern/config.json')
+  },
+
   // Example: Add custom templates here
   // 'custom1': {
   //   id: 'custom1',

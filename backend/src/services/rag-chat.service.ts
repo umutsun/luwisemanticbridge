@@ -456,21 +456,24 @@ export class RAGChatService {
 
       // Add citation format instruction with STRONG emphasis on NO HEADINGS
       // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
+      // INLINE CITATIONS: Place citations right after the relevant statement (footnote style)
       const citationInstruction = responseLanguage === 'en'
         ? `\n\nCRITICAL FORMATTING RULES:\n` +
         ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
-        ` Add citations at paragraph ends using ONLY source numbers 1-${initialDisplayCount}: **[1]**, **[2, 3]**, etc.\n` +
-        ` NEVER cite sources beyond number ${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+        ` INLINE CITATIONS: Place **[1]** immediately after each statement, like footnotes. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
+        ` Use ONLY source numbers 1-${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+        ` NEVER cite sources beyond number ${initialDisplayCount}\n` +
         ` NEVER add section headings (NO "Introduction:", "Main Points:", "Application:", etc.)\n` +
         ` NEVER add labels like "REFERENCES:" or "SOURCES:"\n` +
-        `Just write flowing paragraphs with citation numbers at the end.`
+        `Write flowing text with inline citations marking each fact's source.`
         : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
         ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
-        ` Paragraf sonlarına SADECE 1-${initialDisplayCount} arası kaynak numarası kullan: **[1]**, **[2, 3]**, vb.\n` +
-        ` ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme (sadece ${initialDisplayCount} kaynak var)\n` +
+        ` INLINE (SATIR İÇİ) KAYNAKÇA: Her bilginin hemen ardına **[1]** koy, dipnot gibi. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
+        ` SADECE 1-${initialDisplayCount} arası kaynak numarası kullan (sadece ${initialDisplayCount} kaynak var)\n` +
+        ` ASLA ${initialDisplayCount} numarasından büyük kaynak belirtme\n` +
         ` ASLA bölüm başlığı ekleme (HİÇBİR "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:" başlığı YASAK)\n` +
-        ` ASLA etiket ekleme\n` +
-        `Sadece akıcı paragraflar yaz, sonunda kaynak numaraları olsun.`;
+        ` ASLA "KAYNAKLAR:" veya "REFERANSLAR:" gibi etiket ekleme\n` +
+        `Akıcı metin yaz, her bilginin kaynağını inline olarak belirt.`;
 
       const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
