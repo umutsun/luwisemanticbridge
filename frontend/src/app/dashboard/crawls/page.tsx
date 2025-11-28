@@ -499,6 +499,24 @@ export default function CrawlerDataPage() {
     return () => clearTimeout(debounceTimer);
   }, [searchTerm]);
 
+  // Extract script type from docstring (e.g., """WordPress Crawler...""" -> "WordPress")
+  const extractScriptType = (scriptContent: string): string | null => {
+    // Match common docstring patterns
+    const patterns = [
+      /"""([A-Za-z]+)\s+(?:Site\s+)?Crawler/i,  // """Drupal Site Crawler
+      /'''([A-Za-z]+)\s+(?:Site\s+)?Crawler/i,  // '''WordPress Crawler
+      /#\s*([A-Za-z]+)\s+Crawler/i,              // # WooCommerce Crawler
+    ];
+
+    for (const pattern of patterns) {
+      const match = scriptContent.match(pattern);
+      if (match && match[1]) {
+        return match[1]; // Return "Drupal", "WordPress", etc.
+      }
+    }
+    return null;
+  };
+
   const loadPythonScripts = async () => {
     const scriptsMap = new Map<string, File>();
 
@@ -513,9 +531,12 @@ export default function CrawlerDataPage() {
         // If script exists, response will be text/plain with script content
         const scriptText = await response.text();
         if (scriptText && scriptText.length > 0) {
-          // Create a virtual File object to represent the existing script
-          const filename = `${directory.name}.py`;
-          const virtualFile = new File([scriptText], filename, { type: 'text/x-python' });
+          // Extract the script type from docstring to show proper name
+          const scriptType = extractScriptType(scriptText);
+          const displayName = scriptType ? `${scriptType} Crawler` : `${directory.name}.py`;
+
+          // Create a virtual File object with meaningful name
+          const virtualFile = new File([scriptText], displayName, { type: 'text/x-python' });
           scriptsMap.set(directory.name, virtualFile);
         }
       } catch (error) {
@@ -1024,13 +1045,15 @@ export default function CrawlerDataPage() {
 
       console.log('✅ Built-in crawler linked successfully');
 
-      // Update local state
-      setPythonScripts(prev => new Map(prev).set(directory.name, file));
+      // Update local state with proper display name (capitalize first letter)
+      const displayName = `${crawlerName.charAt(0).toUpperCase()}${crawlerName.slice(1)} Crawler`;
+      const displayFile = new File([scriptContent], displayName, { type: 'text/x-python' });
+      setPythonScripts(prev => new Map(prev).set(directory.name, displayFile));
       setShowCrawlerSelect(null);
 
       toast({
         title: 'Success',
-        description: `Linked to ${crawlerName}`,
+        description: `Linked to ${displayName}`,
       });
     } catch (error: any) {
       console.error('❌ [Select Built-in Crawler] Error:', error);
@@ -2369,10 +2392,13 @@ export default function CrawlerDataPage() {
                                                   const state = crawlerStates.get(directory.name);
                                                   const scriptName = pythonScripts.get(directory.name)?.name || 'Unknown';
                                                   if (state) {
-                                                    const queueCount = state.queue?.length || 0;
-                                                    const visitedCount = state.visited?.length || 0;
+                                                    // Support both queue/visited arrays and total/processed numbers
+                                                    const queueCount = state.queue?.length ?? state.total ?? 0;
+                                                    const visitedCount = state.visited?.length ?? state.processed ?? state.stats?.articles ?? 0;
+                                                    const totalCount = state.total ?? (state.queue?.length || 0) + (state.visited?.length || 0);
                                                     const currentUrl = scriptUrls.get(directory.name);
                                                     const domain = currentUrl?.replace(/^https?:\/\/(www\.)?/, '').split('/')[0] || '';
+                                                    const progress = totalCount > 0 ? Math.round((visitedCount / totalCount) * 100) : 0;
 
                                                     return (
                                                       <>
@@ -2381,7 +2407,7 @@ export default function CrawlerDataPage() {
                                                           <div className="flex items-center gap-1">
                                                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-sm" />
                                                             <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                                              Crawling
+                                                              {progress > 0 ? `${progress}%` : 'Crawling'}
                                                             </span>
                                                           </div>
                                                           {domain && (
@@ -2394,16 +2420,19 @@ export default function CrawlerDataPage() {
                                                         {/* Stats row */}
                                                         <div className="flex items-center gap-2 text-[9px] text-slate-600 dark:text-slate-400">
                                                           <span className="flex items-center gap-0.5 font-medium">
-                                                            <Clock className="w-2 h-2 opacity-50" />
-                                                            <span className="text-[10px]">{queueCount}</span>
-                                                            <span className="text-[8px] opacity-60">queue</span>
-                                                          </span>
-                                                          <span className="opacity-30">•</span>
-                                                          <span className="flex items-center gap-0.5 font-medium">
-                                                            <CheckCircle className="w-2 h-2 opacity-50" />
+                                                            <CheckCircle className="w-2 h-2 opacity-50 text-emerald-500" />
                                                             <span className="text-[10px]">{visitedCount}</span>
-                                                            <span className="text-[8px] opacity-60">visited</span>
+                                                            <span className="text-[8px] opacity-60">done</span>
                                                           </span>
+                                                          {totalCount > 0 && (
+                                                            <>
+                                                              <span className="opacity-30">/</span>
+                                                              <span className="flex items-center gap-0.5 font-medium">
+                                                                <span className="text-[10px]">{totalCount}</span>
+                                                                <span className="text-[8px] opacity-60">total</span>
+                                                              </span>
+                                                            </>
+                                                          )}
                                                         </div>
                                                       </>
                                                     );
