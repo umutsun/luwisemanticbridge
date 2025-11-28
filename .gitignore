@@ -451,3 +451,7 @@ frontend/src/app/dashboard/query/page.old.tsx
 frontend/src/app/dashboard/settings/settings-*.tsx
 !frontend/src/app/dashboard/settings/settings.tsx
 frontend/src/app/page-old.tsx
+
+# Development reports and docs
+reports/
+docs/reports/
