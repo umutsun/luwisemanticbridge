@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
+import { useTranslation } from 'react-i18next';
 
 // Import the Template-based ChatInterface component
 // This dynamically loads the active template from backend config
@@ -12,6 +13,7 @@ import ChatInterface from '@/components/TemplateChatInterface';
 // import ChatInterface from '@/components/ChatInterface';
 
 export default function Home() {
+  const { t } = useTranslation();
   const { token, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -50,7 +52,7 @@ export default function Home() {
               </svg>
             </div>
           </div>
-          <p className="text-gray-600">Yükleniyor...</p>
+          <p className="text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -69,12 +71,22 @@ export default function Home() {
               </svg>
             </div>
           </div>
-          <p className="text-gray-600">Yükleniyor...</p>
+          <p className="text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
   }
 
   // Regular user - show chat interface
-  return <ChatInterface />;
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-gray-600">{t('common.loading')}</p>
+        </div>
+      </div>
+    }>
+      <ChatInterface />
+    </Suspense>
+  );
 }

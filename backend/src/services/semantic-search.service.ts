@@ -1136,17 +1136,14 @@ export class SemanticSearchService {
         };
       });
 
-      // Generate summaries for each source in parallel
-      console.log(`[SemanticSearch] Generating LLM summaries for ${sources.length} sources...`);
-      const summaryPromises = sources.map(source => this.generateSourceSummary(source));
-      const summaries = await Promise.all(summaryPromises);
-
-      // Add summaries to sources
-      sources.forEach((source, index) => {
-        source.summary = summaries[index];
+      // PERFORMANCE: Skip individual LLM summaries - use excerpt instead
+      // Summary generation was causing 25+ LLM calls per search (30-90s delay)
+      // Excerpt already contains the relevant content
+      sources.forEach(source => {
+        source.summary = source.excerpt?.substring(0, 200) || '';
       });
 
-      console.log(`[SemanticSearch]  Generated summaries for all ${sources.length} sources`);
+      console.log(`[SemanticSearch] Returned ${sources.length} sources (fast mode - no LLM summaries)`);
 
       return sources;
     } catch (error) {

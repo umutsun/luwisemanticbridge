@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 
 interface LoadingStep {
   id: string;
@@ -31,15 +32,16 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   loginError,
   loginLoading
 }) => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showTitle, setShowTitle] = useState(false);
   const [steps, setSteps] = useState<LoadingStep[]>([
-    { id: '1', label: 'Bağlantı', status: 'pending' },
-    { id: '2', label: 'Veritabanı', status: 'pending' },
-    { id: '3', label: 'Servisler', status: 'pending' },
-    { id: '4', label: 'Arayüz', status: 'pending' }
+    { id: '1', label: t('login.steps.connection'), status: 'pending' },
+    { id: '2', label: t('login.steps.database'), status: 'pending' },
+    { id: '3', label: t('login.steps.services'), status: 'pending' },
+    { id: '4', label: t('login.steps.interface'), status: 'pending' }
   ]);
   const [currentDetail, setCurrentDetail] = useState('');
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -49,7 +51,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
   useEffect(() => {
     // Initialize system
     const initSystem = async () => {
-      const details = ['23ms', '3 tablo', 'Redis hazır', '247 bileşen'];
+      const details = [t('login.details.latency'), t('login.details.tables'), t('login.details.redisReady'), t('login.details.components')];
 
       for (let i = 0; i < steps.length; i++) {
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -111,7 +113,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
         eventSourceRef.current.close();
       }
     };
-  }, []);
+  }, [t]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,7 +185,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <div className="flex items-center space-x-2 mb-6">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 <span className="text-xs uppercase tracking-wider text-neutral-500 font-mono">
-                  Sistem Aktif
+                  {t('login.systemActive')}
                 </span>
               </div>
 
@@ -194,7 +196,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 transition={{ duration: 0.8 }}
                 className="text-3xl font-light text-neutral-900 dark:text-neutral-100 mb-2"
               >
-                {showTitle ? title : 'Başlatılıyor...'}
+                {showTitle ? title : t('login.initializing')}
               </motion.h1>
 
               <motion.p
@@ -203,7 +205,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                 transition={{ duration: 0.8, delay: 0.1 }}
                 className="text-sm text-neutral-600 dark:text-neutral-400"
               >
-                {showTitle ? description : 'Lütfen bekleyin'}
+                {showTitle ? description : t('login.pleaseWait')}
               </motion.p>
             </div>
 
@@ -226,11 +228,10 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                       <div className="w-3 h-3 bg-neutral-700 dark:bg-neutral-300 rounded-full" />
                     )}
                   </div>
-                  <span className={`text-sm transition-colors duration-300 ${
-                    step.status === 'complete'
-                      ? 'text-neutral-700 dark:text-neutral-300'
-                      : 'text-neutral-400 dark:text-neutral-600'
-                  }`}>
+                  <span className={`text-sm transition-colors duration-300 ${step.status === 'complete'
+                    ? 'text-neutral-700 dark:text-neutral-300'
+                    : 'text-neutral-400 dark:text-neutral-600'
+                    }`}>
                     {step.label}
                   </span>
                 </div>
@@ -259,7 +260,7 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               animate={{ opacity: 1 }}
               transition={{ duration: 0.8, delay: 0.3 }}
             >
-              <h2 className="text-xl font-light mb-6 text-center">Giriş Yap</h2>
+              <h2 className="text-xl font-light mb-6 text-center">{t('login.loginTitle')}</h2>
 
               {loginError && (
                 <Alert variant="destructive" className="mb-4 bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800">
@@ -271,14 +272,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <Label htmlFor="email" className="text-sm text-neutral-600 dark:text-neutral-400">
-                    Email
+                    {t('login.email')}
                   </Label>
                   <div className="relative mt-1">
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
                     <Input
                       id="email"
                       type="email"
-                      placeholder="ornek@email.com"
+                      placeholder={t('login.emailPlaceholder')}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 focus:border-neutral-400 dark:focus:border-neutral-600"
@@ -289,14 +290,14 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
 
                 <div>
                   <Label htmlFor="password" className="text-sm text-neutral-600 dark:text-neutral-400">
-                    Şifre
+                    {t('login.password')}
                   </Label>
                   <div className="relative mt-1">
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
+                      placeholder={t('login.passwordPlaceholder')}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="pl-10 pr-10 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 focus:border-neutral-400 dark:focus:border-neutral-600"
@@ -324,17 +325,17 @@ const UnifiedLogin: React.FC<UnifiedLoginProps> = ({
                         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                         className="w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2"
                       />
-                      Giriş yapılıyor...
+                      {t('login.loggingIn')}
                     </div>
                   ) : (
-                    'Giriş Yap'
+                    t('login.loginButton')
                   )}
                 </Button>
 
                 <p className="text-center text-xs text-neutral-500 dark:text-neutral-400 pt-2">
-                  Hesabınız yok mu?{' '}
+                  {t('login.noAccount')}{' '}
                   <Link href="/auth/register" className="text-neutral-700 dark:text-neutral-300 hover:underline">
-                    Kayıt olun
+                    {t('login.register')}
                   </Link>
                 </p>
               </form>

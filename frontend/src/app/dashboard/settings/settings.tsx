@@ -57,6 +57,7 @@ import {
   updateSettingsCategory
 } from '../../../lib/api/settings';
 import { API_CONFIG } from '../../../lib/config';
+import { chatTemplates } from '@/templates/registry';
 
 // Component for each settings category
 function CategoryTab({ category, children }: { category: string; children: React.ReactNode }) {
@@ -642,11 +643,11 @@ function LLMSettings() {
       const tokenInfoData = {
         used: totalTokensUsed,
         limit: provider === 'openai' ? 100000 :
-               provider === 'google' ? 50000 :
-               provider === 'anthropic' ? 75000 :
-               provider === 'deepseek' ? 100000 :
-               provider === 'huggingface' ? 25000 :
-               provider === 'openrouter' ? 50000 : 75000,
+          provider === 'google' ? 50000 :
+            provider === 'anthropic' ? 75000 :
+              provider === 'deepseek' ? 100000 :
+                provider === 'huggingface' ? 25000 :
+                  provider === 'openrouter' ? 50000 : 75000,
         cost: totalCost,
         models: successfulModels.length,
         totalModels: models.length,
@@ -959,8 +960,8 @@ function LLMSettings() {
       const result = modelResults.find((r: any) => {
         // Match embedding model name patterns
         return r.model === modelName ||
-               r.model?.includes(modelName) ||
-               modelName?.includes(r.model);
+          r.model?.includes(modelName) ||
+          modelName?.includes(r.model);
       });
 
       if (result && result.success) {
@@ -1084,189 +1085,189 @@ function LLMSettings() {
             </CardHeader>
             <CardContent className="space-y-4">
               {Object.entries({
-              openai: { key: tempConfig?.openai?.apiKey ?? llmConfig?.openai?.apiKey, name: 'OpenAI' },
-              google: { key: tempConfig?.google?.apiKey ?? llmConfig?.google?.apiKey, name: 'Google AI' },
-              anthropic: { key: tempConfig?.anthropic?.apiKey ?? llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
-              deepseek: { key: tempConfig?.deepseek?.apiKey ?? llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
-              huggingface: { key: tempConfig?.huggingface?.apiKey ?? llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
-              openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
-              deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL' },
-            }).map(([provider, data]) => {
-              const providerStatus = getProviderStatus(provider);
-              const isValidated = isProviderValidated(provider);
-              const verifiedDate = apiStatus[provider]?.verifiedDate ? new Date(apiStatus[provider].verifiedDate) : null;
+                openai: { key: tempConfig?.openai?.apiKey ?? llmConfig?.openai?.apiKey, name: 'OpenAI' },
+                google: { key: tempConfig?.google?.apiKey ?? llmConfig?.google?.apiKey, name: 'Google AI' },
+                anthropic: { key: tempConfig?.anthropic?.apiKey ?? llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
+                deepseek: { key: tempConfig?.deepseek?.apiKey ?? llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
+                huggingface: { key: tempConfig?.huggingface?.apiKey ?? llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
+                openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
+                deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL' },
+              }).map(([provider, data]) => {
+                const providerStatus = getProviderStatus(provider);
+                const isValidated = isProviderValidated(provider);
+                const verifiedDate = apiStatus[provider]?.verifiedDate ? new Date(apiStatus[provider].verifiedDate) : null;
 
-              return (
-                <div key={provider} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Label className="capitalize font-medium">{data.name}</Label>
-                      {providerStatus.status === 'active' && verifiedDate && (
-                        <span className="text-xs text-muted-foreground">
-                          {verifiedDate.toLocaleDateString('tr-TR')}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {/* Show error message only if validation failed */}
-                  {providerStatus.status === 'error' && providerStatus.message && (
-                    <div className="text-xs text-destructive mt-1">
-                      {providerStatus.message}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={visibleKeys[provider] ? "text" : "password"}
-                        value={data.key === '••••••••' ? '' : data.key || ''}
-                        placeholder="Enter API key"
-                        className="flex-1 pr-20"
-                        onChange={(e) => {
-                          const newConfig = { ...tempConfig };
-
-                          // Handle DeepL separately
-                          if (provider === 'deepl') {
-                            if (!newConfig.deepl) newConfig.deepl = {};
-                            newConfig.deepl.apiKey = e.target.value;
-                          } else {
-                            if (!newConfig[provider]) newConfig[provider] = {};
-                            newConfig[provider].apiKey = e.target.value;
-                          }
-
-                          setTempConfig(newConfig);
-
-                          // Reset validation status when API key is changed
-                          setApiStatus(prev => {
-                            const updated = { ...prev };
-                            delete updated[provider];
-                            return updated;
-                          });
-                          setValidatedKeys(prev => {
-                            const updated = new Set(prev);
-                            updated.delete(provider);
-                            return updated;
-                          });
-                        }}
-                      />
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="p-1 hover:bg-muted rounded"
-                          onClick={() => setVisibleKeys(prev => ({ ...prev, [provider]: !prev[provider] }))}
-                        >
-                          {visibleKeys[provider] ? (
-                            <EyeOff className="w-4 h-4 text-muted-foreground" />
-                          ) : (
-                            <Eye className="w-4 h-4 text-muted-foreground" />
-                          )}
-                        </button>
+                return (
+                  <div key={provider} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Label className="capitalize font-medium">{data.name}</Label>
+                        {providerStatus.status === 'active' && verifiedDate && (
+                          <span className="text-xs text-muted-foreground">
+                            {verifiedDate.toLocaleDateString('tr-TR')}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const apiKey = provider === 'deepl'
-                          ? tempConfig?.deepl?.apiKey
-                          : tempConfig?.[provider]?.apiKey;
-                        validateAllModelsForProvider(provider, apiKey || '');
-                      }}
-                      disabled={
-                        (provider === 'deepl' && !tempConfig?.deepl?.apiKey) ||
-                        (provider !== 'deepl' && (!tempConfig?.[provider]?.apiKey || tempConfig?.[provider]?.apiKey === '')) ||
-                        validating === provider
-                      }
-                      className={
-                        providerStatus.status === 'active'
-                          ? 'border-green-600 bg-green-50 hover:bg-green-100'
-                          : providerStatus.status === 'error'
-                          ? 'border-red-600 bg-red-50 hover:bg-red-100'
-                          : ''
-                      }
-                    >
-                      {validating === provider ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : providerStatus.status === 'active' ? (
-                        <CheckCircle className="w-4 h-4 text-green-600" />
-                      ) : providerStatus.status === 'error' ? (
-                        <XCircle className="w-4 h-4 text-red-600" />
-                      ) : (
-                        <Shield className="w-4 h-4" />
-                      )}
-                    </Button>
+                    {/* Show error message only if validation failed */}
+                    {providerStatus.status === 'error' && providerStatus.message && (
+                      <div className="text-xs text-destructive mt-1">
+                        {providerStatus.message}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type={visibleKeys[provider] ? "text" : "password"}
+                          value={data.key === '••••••••' ? '' : data.key || ''}
+                          placeholder="Enter API key"
+                          className="flex-1 pr-20"
+                          onChange={(e) => {
+                            const newConfig = { ...tempConfig };
+
+                            // Handle DeepL separately
+                            if (provider === 'deepl') {
+                              if (!newConfig.deepl) newConfig.deepl = {};
+                              newConfig.deepl.apiKey = e.target.value;
+                            } else {
+                              if (!newConfig[provider]) newConfig[provider] = {};
+                              newConfig[provider].apiKey = e.target.value;
+                            }
+
+                            setTempConfig(newConfig);
+
+                            // Reset validation status when API key is changed
+                            setApiStatus(prev => {
+                              const updated = { ...prev };
+                              delete updated[provider];
+                              return updated;
+                            });
+                            setValidatedKeys(prev => {
+                              const updated = new Set(prev);
+                              updated.delete(provider);
+                              return updated;
+                            });
+                          }}
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="p-1 hover:bg-muted rounded"
+                            onClick={() => setVisibleKeys(prev => ({ ...prev, [provider]: !prev[provider] }))}
+                          >
+                            {visibleKeys[provider] ? (
+                              <EyeOff className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const apiKey = provider === 'deepl'
+                            ? tempConfig?.deepl?.apiKey
+                            : tempConfig?.[provider]?.apiKey;
+                          validateAllModelsForProvider(provider, apiKey || '');
+                        }}
+                        disabled={
+                          (provider === 'deepl' && !tempConfig?.deepl?.apiKey) ||
+                          (provider !== 'deepl' && (!tempConfig?.[provider]?.apiKey || tempConfig?.[provider]?.apiKey === '')) ||
+                          validating === provider
+                        }
+                        className={
+                          providerStatus.status === 'active'
+                            ? 'border-green-600 bg-green-50 hover:bg-green-100'
+                            : providerStatus.status === 'error'
+                              ? 'border-red-600 bg-red-50 hover:bg-red-100'
+                              : ''
+                        }
+                      >
+                        {validating === provider ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : providerStatus.status === 'active' ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : providerStatus.status === 'error' ? (
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        ) : (
+                          <Shield className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
-            <p className="text-xs text-muted-foreground mt-6 pt-6 border-t">
-              Her provider için API key girin ve yeşil onay butonu görene kadar test edin.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Swagger API Documentation */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>API Documentation</CardTitle>
-              <div className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${swaggerActive ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm text-muted-foreground">
-                  {swaggerActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Explore and test your API endpoints using the interactive Swagger documentation.
+              <p className="text-xs text-muted-foreground mt-6 pt-6 border-t">
+                Her provider için API key girin ve yeşil onay butonu görene kadar test edin.
               </p>
-              <div className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => window.open('/api-docs', '_blank')}
-                  disabled={!swaggerActive}
-                  className="w-full justify-start"
-                >
-                  <svg
-                    className="w-4 h-4 mr-2"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10zm1-17h-2v8h2V5zm0 10h-2v2h2v-2z"/>
-                  </svg>
-                  Open Swagger UI
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => window.open('/api-docs.json', '_blank')}
-                  disabled={!swaggerActive}
-                  className="w-full justify-start"
-                >
-                  <svg
-                    className="w-4 h-4 mr-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Download OpenAPI Spec
-                </Button>
-              </div>
-              {!swaggerActive && (
-                <div className="text-sm text-destructive mt-2">
-                  Swagger documentation is not available. Please check your backend configuration.
+            </CardContent>
+          </Card>
+
+          {/* Swagger API Documentation */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>API Documentation</CardTitle>
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full ${swaggerActive ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-sm text-muted-foreground">
+                    {swaggerActive ? 'Active' : 'Inactive'}
+                  </span>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Explore and test your API endpoints using the interactive Swagger documentation.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open('/api-docs', '_blank')}
+                    disabled={!swaggerActive}
+                    className="w-full justify-start"
+                  >
+                    <svg
+                      className="w-4 h-4 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10zm1-17h-2v8h2V5zm0 10h-2v2h2v-2z" />
+                    </svg>
+                    Open Swagger UI
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open('/api-docs.json', '_blank')}
+                    disabled={!swaggerActive}
+                    className="w-full justify-start"
+                  >
+                    <svg
+                      className="w-4 h-4 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Download OpenAPI Spec
+                  </Button>
+                </div>
+                {!swaggerActive && (
+                  <div className="text-sm text-destructive mt-2">
+                    Swagger documentation is not available. Please check your backend configuration.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Right Column - Active Service Providers (Stacked) */}
         <div className="space-y-6">
@@ -1329,11 +1330,21 @@ function LLMSettings() {
                       <SelectValue placeholder="Select LLM provider" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getValidatedProviders().map(([provider, data]) => (
-                        <SelectItem key={provider} value={provider}>
-                          {data.name}
-                        </SelectItem>
-                      ))}
+                      {(() => {
+                        const validatedProviders = getValidatedProviders();
+                        if (validatedProviders.length === 0) {
+                          return (
+                            <SelectItem value="_no_providers" disabled>
+                              Önce API key doğrulayın
+                            </SelectItem>
+                          );
+                        }
+                        return validatedProviders.map(([provider, data]) => (
+                          <SelectItem key={provider} value={provider}>
+                            {data.name}
+                          </SelectItem>
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
                   <Select
@@ -1377,28 +1388,39 @@ function LLMSettings() {
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getModelsForProvider(tempConfig?.provider || llmConfig?.provider || 'gemini').map(model => {
-                        const details = getModelDetails(tempConfig?.provider || llmConfig?.provider || 'gemini', model);
-                        return (
-                          <SelectItem key={model} value={model}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{model}</span>
-                              {details && (
-                                <span className="text-xs text-gray-500">
-                                  {details.tokens} tokens · {details.responseTime}
-                                  {details.pricing && (
-                                    details.pricing.input === 0 && details.pricing.output === 0 ? (
-                                      <> · <span className="text-green-600 font-medium">Free</span></>
-                                    ) : (
-                                      <> · <span className="text-blue-600">${details.pricing.input}/${details.pricing.output}</span> per 1M</>
-                                    )
-                                  )}
-                                </span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
+                      {(() => {
+                        const currentProvider = tempConfig?.provider || llmConfig?.provider || 'gemini';
+                        // Only show models if provider is validated
+                        if (!isProviderValidated(currentProvider)) {
+                          return (
+                            <SelectItem value="_no_models" disabled>
+                              API key doğrulanmadı
+                            </SelectItem>
+                          );
+                        }
+                        return getModelsForProvider(currentProvider).map(model => {
+                          const details = getModelDetails(currentProvider, model);
+                          return (
+                            <SelectItem key={model} value={model}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{model}</span>
+                                {details && (
+                                  <span className="text-xs text-gray-500">
+                                    {details.tokens} tokens · {details.responseTime}
+                                    {details.pricing && (
+                                      details.pricing.input === 0 && details.pricing.output === 0 ? (
+                                        <> · <span className="text-green-600 font-medium">Free</span></>
+                                      ) : (
+                                        <> · <span className="text-blue-600">${details.pricing.input}/${details.pricing.output}</span> per 1M</>
+                                      )
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        });
+                      })()}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1459,11 +1481,21 @@ function LLMSettings() {
                       <SelectValue placeholder="Select embedding provider" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getValidatedProviders().map(([provider, data]) => (
-                        <SelectItem key={provider} value={provider}>
-                          {data.name}
-                        </SelectItem>
-                      ))}
+                      {(() => {
+                        const validatedProviders = getValidatedProviders();
+                        if (validatedProviders.length === 0) {
+                          return (
+                            <SelectItem value="_no_providers" disabled>
+                              Önce API key doğrulayın
+                            </SelectItem>
+                          );
+                        }
+                        return validatedProviders.map(([provider, data]) => (
+                          <SelectItem key={provider} value={provider}>
+                            {data.name}
+                          </SelectItem>
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
                   <Select
@@ -1545,56 +1577,56 @@ function LLMSettings() {
                   <div className="mt-2">
                     <Select
                       value={tempConfig?.translationProvider || 'google'}
-                    onValueChange={async (value) => {
-                      // Update translation provider in llmSettings
-                      const updatedConfig = {
-                        ...tempConfig,
-                        translationProvider: value,
-                        llmSettings: {
-                          ...tempConfig?.llmSettings,
-                          translationProvider: value
+                      onValueChange={async (value) => {
+                        // Update translation provider in llmSettings
+                        const updatedConfig = {
+                          ...tempConfig,
+                          translationProvider: value,
+                          llmSettings: {
+                            ...tempConfig?.llmSettings,
+                            translationProvider: value
+                          }
+                        };
+                        updateTempConfig('translationProvider', value);
+                        setTempConfig(updatedConfig);
+                        // Auto-save when provider changes
+                        try {
+                          await updateSettingsCategory('llm', updatedConfig);
+                          setLlmConfig(updatedConfig);
+                          toast({
+                            title: "Success",
+                            description: "Translation provider updated successfully",
+                          });
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: "Failed to update translation provider",
+                            variant: "destructive",
+                          });
                         }
-                      };
-                      updateTempConfig('translationProvider', value);
-                      setTempConfig(updatedConfig);
-                      // Auto-save when provider changes
-                      try {
-                        await updateSettingsCategory('llm', updatedConfig);
-                        setLlmConfig(updatedConfig);
-                        toast({
-                          title: "Success",
-                          description: "Translation provider updated successfully",
-                        });
-                      } catch (error) {
-                        toast({
-                          title: "Error",
-                          description: "Failed to update translation provider",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select translation provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getValidatedTranslationProviders().map(provider => {
-                        const status = getTranslationProviderStatus(provider.value as 'deepl' | 'google');
-                        return (
-                          <SelectItem key={provider.value} value={provider.value}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{provider.label}</span>
-                              {status && (
-                                <span className="text-xs text-gray-500">
-                                  {status.verifiedDate}
-                                </span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select translation provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getValidatedTranslationProviders().map(provider => {
+                          const status = getTranslationProviderStatus(provider.value as 'deepl' | 'google');
+                          return (
+                            <SelectItem key={provider.value} value={provider.value}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{provider.label}</span>
+                                {status && (
+                                  <span className="text-xs text-gray-500">
+                                    {status.verifiedDate}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -1772,67 +1804,116 @@ function LLMSettings() {
         </div>
       </div>
 
-      </>
+    </>
   );
 }
 
 
-// Template Selector Component (Experimental)
+// Template Selector Component (Enhanced)
 function TemplateSelector() {
   const [activeTemplate, setActiveTemplate] = useState('base');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
+    // Load active template from backend
     fetch('/api/v2/settings/active-template')
       .then(res => res.json())
       .then(data => {
         setActiveTemplate(data.active || 'base');
-        setLoading(false);
       })
-      .catch(() => {
+      .catch(err => {
+        console.error('Failed to load active template:', err);
         setActiveTemplate('base');
-        setLoading(false);
       });
   }, []);
 
   const handleTemplateChange = async (value: string) => {
+    setLoading(true);
     try {
       const res = await fetch('/api/v2/settings/set-active-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId: value })
       });
+
       if (res.ok) {
         setActiveTemplate(value);
         toast({
           title: "Template Activated",
           description: `Template "${value}" is now active. Refresh page to see changes.`,
         });
+      } else {
+        throw new Error('Failed to set template');
       }
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to activate template",
-        variant: "destructive"
+        variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return <Spinner size="sm" />;
-  }
+  const templates = Object.values(chatTemplates);
 
   return (
-    <Select value={activeTemplate} onValueChange={handleTemplateChange}>
-      <SelectTrigger>
-        <SelectValue placeholder="Select template" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="base">Default Template</SelectItem>
-        <SelectItem value="example-custom" disabled>Example Custom (Not Registered)</SelectItem>
-      </SelectContent>
-    </Select>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {templates.map((template) => (
+          <Card
+            key={template.id}
+            className={`cursor-pointer transition-all hover:border-primary ${activeTemplate === template.id ? 'border-2 border-primary ring-2 ring-primary/20' : ''} ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+            onClick={() => !loading && handleTemplateChange(template.id)}
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex justify-between items-center">
+                {template.name}
+                {activeTemplate === template.id && <Badge>Active</Badge>}
+              </CardTitle>
+              <CardDescription>{template.description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-video bg-muted rounded-md mb-4 flex items-center justify-center relative overflow-hidden group">
+                {template.id === 'base' ? (
+                  <div className="text-center">
+                    <Settings className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Standard Interface</span>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <Sparkles className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Custom Theme</span>
+                  </div>
+                )}
+
+                {/* Hover overlay */}
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="secondary" size="sm">Select Template</Button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-xs text-muted-foreground">
+                <span>v{template.version}</span>
+                <span className="font-mono bg-muted px-1 rounded">{template.id}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground border border-border">
+        <div className="flex items-start gap-2">
+          <Sparkles className="h-4 w-4 mt-0.5 text-primary" />
+          <div>
+            <p className="font-medium mb-1 text-foreground">Developer Note</p>
+            <p>To add more templates, create a new folder in <code>frontend/src/templates/</code> and register it in <code>registry.ts</code>.</p>
+            <p className="mt-2 text-xs">Each template can have its own ChatInterface component, configuration, and styles.</p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1905,7 +1986,7 @@ function RAGSettings() {
         chatbot: {
           title: chatbotResponse.title,
           logoUrl: chatbotResponse.logoUrl,
-          openingMessage: chatbotResponse.welcomeMessage,
+          welcomeMessage: chatbotResponse.welcomeMessage,
           subtitle: chatbotResponse.subtitle,
           placeholder: chatbotResponse.placeholder,
           primaryColor: chatbotResponse.primaryColor,
@@ -2259,158 +2340,158 @@ function RAGSettings() {
         <div className="space-y-6">
           {/* Chatbot Configuration */}
           <Card>
-          <CardHeader>
-            <CardTitle>Chat Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Branding */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Branding</h3>
+            <CardHeader>
+              <CardTitle>Chat Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Branding */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Branding</h3>
 
-              <div className="space-y-2">
-                <Label htmlFor="chatbotTitle">Title</Label>
-                <Input
-                  id="chatbotTitle"
-                  value={tempChatbotConfig?.chatbot?.title || chatbotConfig?.chatbot?.title || ''}
-                  onChange={(e) => updateChatbotSetting('title', e.target.value)}
-                  placeholder="Enter title"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Appears in the chat header
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="chatbotLogo">Logo URL</Label>
-                <Input
-                  id="chatbotLogo"
-                  value={tempChatbotConfig?.chatbot?.logoUrl || chatbotConfig?.chatbot?.logoUrl || ''}
-                  onChange={(e) => updateChatbotSetting('logoUrl', e.target.value)}
-                  placeholder="Enter logo URL"
-                />
-                <p className="text-xs text-muted-foreground">
-                  URL to your logo image
-                </p>
-              </div>
-            </div>
-
-            {/* Opening Messages */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Opening Messages</h3>
-
-              <div className="space-y-2">
-                <Label htmlFor="welcomeMessage">Welcome Message</Label>
-                <Textarea
-                  id="welcomeMessage"
-                  value={tempChatbotConfig?.chatbot?.welcomeMessage || chatbotConfig?.chatbot?.welcomeMessage || ''}
-                  onChange={(e) => updateChatbotSetting('welcomeMessage', e.target.value)}
-                  placeholder="Merhaba! Size nasıl yardımcı olabilirim?"
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  First message shown when chat loads
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="placeholder">Input Placeholder Text</Label>
-                <Input
-                  id="placeholder"
-                  value={tempChatbotConfig?.chatbot?.placeholder || chatbotConfig?.chatbot?.placeholder || ''}
-                  onChange={(e) => updateChatbotSetting('placeholder', e.target.value)}
-                  placeholder="Sorunuzu yazın..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Placeholder text in the chat input field
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <Label>Enable Question Suggestions</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Show suggested questions in chat interface
+                <div className="space-y-2">
+                  <Label htmlFor="chatbotTitle">Title</Label>
+                  <Input
+                    id="chatbotTitle"
+                    value={tempChatbotConfig?.chatbot?.title || chatbotConfig?.chatbot?.title || ''}
+                    onChange={(e) => updateChatbotSetting('title', e.target.value)}
+                    placeholder="Enter title"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Appears in the chat header
                   </p>
                 </div>
-                <Switch
-                  checked={tempChatbotConfig?.chatbot?.enableSuggestions ?? true}
-                  onCheckedChange={(checked) => updateChatbotSetting('enableSuggestions', checked)}
-                />
-              </div>
 
-              {/* Keyword-Based Suggestions - Disabled (not implemented yet, reserved for future) */}
-              <div className="flex items-center justify-between opacity-50">
-                <div className="flex-1">
-                  <Label>Use Keyword-Based Suggestions</Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Enable to use keywords below for generating suggestions. When disabled, shows popular questions from database. (Feature will be implemented later)
+                <div className="space-y-2">
+                  <Label htmlFor="chatbotLogo">Logo URL</Label>
+                  <Input
+                    id="chatbotLogo"
+                    value={tempChatbotConfig?.chatbot?.logoUrl || chatbotConfig?.chatbot?.logoUrl || ''}
+                    onChange={(e) => updateChatbotSetting('logoUrl', e.target.value)}
+                    placeholder="Enter logo URL"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    URL to your logo image
                   </p>
                 </div>
-                <Switch disabled checked={false} />
               </div>
 
-              {/* Suggestion Keywords - Disabled (not implemented yet) */}
-              <div className="space-y-2 opacity-50">
-                <Label htmlFor="suggestionKeywords">Suggestion Keywords</Label>
-                <Input disabled id="suggestionKeywords" value="" placeholder="Feature will be implemented later" />
-                <p className="text-xs text-muted-foreground">Reserved for future use</p>
-              </div>
-            </div>
+              {/* Opening Messages */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Opening Messages</h3>
 
-            {/* Response Generation Settings */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Response Generation</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="welcomeMessage">Welcome Message</Label>
+                  <Textarea
+                    id="welcomeMessage"
+                    value={tempChatbotConfig?.chatbot?.welcomeMessage || chatbotConfig?.chatbot?.welcomeMessage || ''}
+                    onChange={(e) => updateChatbotSetting('welcomeMessage', e.target.value)}
+                    placeholder="Merhaba! Size nasıl yardımcı olabilirim?"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    First message shown when chat loads
+                  </p>
+                </div>
 
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label>Max Response Length</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Maximum characters for AI responses
-                    </p>
-                  </div>
-                  <div className="w-24">
-                    <Input
-                      type="number"
-                      value={tempChatbotConfig?.chatbot?.maxResponseLength || 1000}
-                      onChange={(e) =>
-                        updateChatbotSetting(
-                          "maxResponseLength",
-                          parseInt(e.target.value) || 1000
-                        )
-                      }
-                      min="100"
-                      max="5000"
-                      step="100"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="placeholder">Input Placeholder Text</Label>
+                  <Input
+                    id="placeholder"
+                    value={tempChatbotConfig?.chatbot?.placeholder || chatbotConfig?.chatbot?.placeholder || ''}
+                    onChange={(e) => updateChatbotSetting('placeholder', e.target.value)}
+                    placeholder="Sorunuzu yazın..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Placeholder text in the chat input field
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label>Max Question Length</Label>
+                    <Label>Enable Question Suggestions</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Maximum characters for user questions
+                      Show suggested questions in chat interface
                     </p>
                   </div>
-                  <div className="w-24">
-                    <Input
-                      type="number"
-                      value={tempChatbotConfig?.chatbot?.maxQuestionLength || 500}
-                      onChange={(e) =>
-                        updateChatbotSetting(
-                          "maxQuestionLength",
-                          parseInt(e.target.value) || 500
-                        )
-                      }
-                      min="50"
-                      max="2000"
-                      step="50"
-                    />
-                  </div>
+                  <Switch
+                    checked={tempChatbotConfig?.chatbot?.enableSuggestions ?? true}
+                    onCheckedChange={(checked) => updateChatbotSetting('enableSuggestions', checked)}
+                  />
                 </div>
 
-                {/* Question Template - Disabled (not currently used)
+                {/* Keyword-Based Suggestions - Disabled (not implemented yet, reserved for future) */}
+                <div className="flex items-center justify-between opacity-50">
+                  <div className="flex-1">
+                    <Label>Use Keyword-Based Suggestions</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enable to use keywords below for generating suggestions. When disabled, shows popular questions from database. (Feature will be implemented later)
+                    </p>
+                  </div>
+                  <Switch disabled checked={false} />
+                </div>
+
+                {/* Suggestion Keywords - Disabled (not implemented yet) */}
+                <div className="space-y-2 opacity-50">
+                  <Label htmlFor="suggestionKeywords">Suggestion Keywords</Label>
+                  <Input disabled id="suggestionKeywords" value="" placeholder="Feature will be implemented later" />
+                  <p className="text-xs text-muted-foreground">Reserved for future use</p>
+                </div>
+              </div>
+
+              {/* Response Generation Settings */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Response Generation</h3>
+
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <Label>Max Response Length</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Maximum characters for AI responses
+                      </p>
+                    </div>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        value={tempChatbotConfig?.chatbot?.maxResponseLength || 1000}
+                        onChange={(e) =>
+                          updateChatbotSetting(
+                            "maxResponseLength",
+                            parseInt(e.target.value) || 1000
+                          )
+                        }
+                        min="100"
+                        max="5000"
+                        step="100"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <Label>Max Question Length</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Maximum characters for user questions
+                      </p>
+                    </div>
+                    <div className="w-24">
+                      <Input
+                        type="number"
+                        value={tempChatbotConfig?.chatbot?.maxQuestionLength || 500}
+                        onChange={(e) =>
+                          updateChatbotSetting(
+                            "maxQuestionLength",
+                            parseInt(e.target.value) || 500
+                          )
+                        }
+                        min="50"
+                        max="2000"
+                        step="50"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Question Template - Disabled (not currently used)
                 <div>
                   <Label htmlFor="questionTemplate">Question Template</Label>
                   <Textarea disabled id="questionTemplate" value="Future feature" rows={2} />
@@ -2418,62 +2499,62 @@ function RAGSettings() {
                 </div>
                 */}
 
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label>Auto-generate Questions</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Automatically generate relevant questions
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <Label>Auto-generate Questions</Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Automatically generate relevant questions
+                      </p>
+                    </div>
+                    <Switch
+                      checked={tempChatbotConfig?.chatbot?.autoGenerateQuestions ?? false}
+                      onCheckedChange={(checked) =>
+                        updateChatbotSetting("autoGenerateQuestions", checked)
+                      }
+                    />
                   </div>
-                  <Switch
-                    checked={tempChatbotConfig?.chatbot?.autoGenerateQuestions ?? false}
-                    onCheckedChange={(checked) =>
-                      updateChatbotSetting("autoGenerateQuestions", checked)
-                    }
-                  />
                 </div>
               </div>
-            </div>
 
-            {/* Note: Max/Min Results are configured in RAG Settings tab */}
-          </CardContent>
-        </Card>
+              {/* Note: Max/Min Results are configured in RAG Settings tab */}
+            </CardContent>
+          </Card>
 
-        {/* Template Management - Right Column (Experimental) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Template Management
-              <Badge variant="outline" className="text-xs">Experimental</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-              <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                <strong>Experimental Feature:</strong> Template system allows customizing chat interface per customer without code changes.
-              </AlertDescription>
-            </Alert>
+          {/* Template Management - Right Column (Experimental) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Template Management
+                <Badge variant="outline" className="text-xs">Experimental</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+                <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                  <strong>Experimental Feature:</strong> Template system allows customizing chat interface per customer without code changes.
+                </AlertDescription>
+              </Alert>
 
-            {/* Template Selection */}
-            <div className="space-y-2">
-              <Label>Active Template</Label>
-              <TemplateSelector />
-              <p className="text-xs text-muted-foreground">
-                Select which template to use for the chat interface
-              </p>
-            </div>
+              {/* Template Selection */}
+              <div className="space-y-2">
+                <Label>Active Template</Label>
+                <TemplateSelector />
+                <p className="text-xs text-muted-foreground">
+                  Select which template to use for the chat interface
+                </p>
+              </div>
 
-            {/* Quick Info */}
-            <div className="space-y-2 pt-2">
-              <h4 className="text-sm font-medium">Current Setup:</h4>
-              <ul className="text-xs space-y-1 text-muted-foreground">
-                <li>• Base template: Always available</li>
-                <li>• Custom templates: Add via code (see docs)</li>
-                <li>• Location: frontend/src/templates/</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+              {/* Quick Info */}
+              <div className="space-y-2 pt-2">
+                <h4 className="text-sm font-medium">Current Setup:</h4>
+                <ul className="text-xs space-y-1 text-muted-foreground">
+                  <li>• Base template: Always available</li>
+                  <li>• Custom templates: Add via code (see docs)</li>
+                  <li>• Location: frontend/src/templates/</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
         </div>
         {/* End Right Column */}
 
@@ -2925,188 +3006,188 @@ function SecuritySettings() {
               <CardTitle>Security Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label>Enable Authentication</Label>
-            <Switch
-              checked={tempConfig?.security?.enableAuth ?? securityConfig?.security?.enableAuth}
-              onCheckedChange={(checked) => setTempConfig({
-                ...tempConfig,
-                security: {
-                  ...tempConfig.security,
-                  enableAuth: checked
-                }
-              })}
-            />
-          </div>
+              <div className="flex items-center justify-between">
+                <Label>Enable Authentication</Label>
+                <Switch
+                  checked={tempConfig?.security?.enableAuth ?? securityConfig?.security?.enableAuth}
+                  onCheckedChange={(checked) => setTempConfig({
+                    ...tempConfig,
+                    security: {
+                      ...tempConfig.security,
+                      enableAuth: checked
+                    }
+                  })}
+                />
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Session Timeout (hours)</Label>
-              <Input
-                type="number"
-                value={tempConfig?.security?.sessionTimeout ?? securityConfig?.security?.sessionTimeout ?? 24}
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  security: {
-                    ...tempConfig.security,
-                    sessionTimeout: parseInt(e.target.value)
-                  }
-                })}
-              />
-            </div>
-            <div>
-              <Label>Rate Limit (req/min)</Label>
-              <Input
-                type="number"
-                value={tempConfig?.security?.rateLimit ?? securityConfig?.security?.rateLimit ?? 100}
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  security: {
-                    ...tempConfig.security,
-                    rateLimit: parseInt(e.target.value)
-                  }
-                })}
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Session Timeout (hours)</Label>
+                  <Input
+                    type="number"
+                    value={tempConfig?.security?.sessionTimeout ?? securityConfig?.security?.sessionTimeout ?? 24}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      security: {
+                        ...tempConfig.security,
+                        sessionTimeout: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                </div>
+                <div>
+                  <Label>Rate Limit (req/min)</Label>
+                  <Input
+                    type="number"
+                    value={tempConfig?.security?.rateLimit ?? securityConfig?.security?.rateLimit ?? 100}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      security: {
+                        ...tempConfig.security,
+                        rateLimit: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                </div>
+              </div>
 
-          <div>
-            <Label>JWT Secret</Label>
-            <Input
-              type="password"
-              value={(tempConfig?.security?.jwtSecret ?? securityConfig?.security?.jwtSecret) || ''}
-              placeholder="Enter JWT secret"
-              onChange={(e) => setTempConfig({
-                ...tempConfig,
-                security: {
-                  ...tempConfig.security,
-                  jwtSecret: e.target.value
-                }
-              })}
-            />
-          </div>
-        </CardContent>
-      </Card>
+              <div>
+                <Label>JWT Secret</Label>
+                <Input
+                  type="password"
+                  value={(tempConfig?.security?.jwtSecret ?? securityConfig?.security?.jwtSecret) || ''}
+                  placeholder="Enter JWT secret"
+                  onChange={(e) => setTempConfig({
+                    ...tempConfig,
+                    security: {
+                      ...tempConfig.security,
+                      jwtSecret: e.target.value
+                    }
+                  })}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      <Card className="bg-blue-50/30 dark:bg-blue-950/10">
-        <CardHeader>
-          <CardTitle>File Storage Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Documents Folder Path</Label>
-              <Input
-                value={tempConfig?.storage?.docsPath ?? securityConfig?.storage?.docsPath ?? './docs'}
-                placeholder="./docs (default)"
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  storage: {
-                    ...tempConfig.storage,
-                    docsPath: e.target.value
-                  }
-                })}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Path where uploaded documents are stored
-              </p>
-            </div>
-            <div>
-              <Label>Logs Folder Path</Label>
-              <Input
-                value={tempConfig?.storage?.logsPath ?? securityConfig?.storage?.logsPath ?? './logs'}
-                placeholder="./logs"
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  storage: {
-                    ...tempConfig.storage,
-                    logsPath: e.target.value
-                  }
-                })}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Path where system logs are stored
-              </p>
-            </div>
-          </div>
-        </CardContent>
+          <Card className="bg-blue-50/30 dark:bg-blue-950/10">
+            <CardHeader>
+              <CardTitle>File Storage Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Documents Folder Path</Label>
+                  <Input
+                    value={tempConfig?.storage?.docsPath ?? securityConfig?.storage?.docsPath ?? './docs'}
+                    placeholder="./docs (default)"
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      storage: {
+                        ...tempConfig.storage,
+                        docsPath: e.target.value
+                      }
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Path where uploaded documents are stored
+                  </p>
+                </div>
+                <div>
+                  <Label>Logs Folder Path</Label>
+                  <Input
+                    value={tempConfig?.storage?.logsPath ?? securityConfig?.storage?.logsPath ?? './logs'}
+                    placeholder="./logs"
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      storage: {
+                        ...tempConfig.storage,
+                        logsPath: e.target.value
+                      }
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Path where system logs are stored
+                  </p>
+                </div>
+              </div>
+            </CardContent>
           </Card>
 
           <Card className="bg-green-50/30 dark:bg-green-950/10">
             <CardHeader>
               <CardTitle>Upload Limits</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Configure maximum file sizes for uploads (requires backend restart)
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label>JSON Payload Limit (MB)</Label>
-              <Input
-                type="number"
-                min="1"
-                max="500"
-                value={tempConfig?.advanced?.upload_json_limit_mb ?? securityConfig?.advanced?.upload_json_limit_mb ?? 100}
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  advanced: {
-                    ...tempConfig.advanced,
-                    upload_json_limit_mb: parseInt(e.target.value)
-                  }
-                })}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                For API requests with large CSV data
+              <p className="text-sm text-muted-foreground">
+                Configure maximum file sizes for uploads (requires backend restart)
               </p>
-            </div>
-            <div>
-              <Label>File Upload Limit (MB)</Label>
-              <Input
-                type="number"
-                min="1"
-                max="500"
-                value={tempConfig?.advanced?.upload_file_limit_mb ?? securityConfig?.advanced?.upload_file_limit_mb ?? 100}
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  advanced: {
-                    ...tempConfig.advanced,
-                    upload_file_limit_mb: parseInt(e.target.value)
-                  }
-                })}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Maximum size for document uploads
-              </p>
-            </div>
-            <div>
-              <Label>Text Limit (MB)</Label>
-              <Input
-                type="number"
-                min="1"
-                max="50"
-                value={tempConfig?.advanced?.upload_text_limit_mb ?? securityConfig?.advanced?.upload_text_limit_mb ?? 1}
-                onChange={(e) => setTempConfig({
-                  ...tempConfig,
-                  advanced: {
-                    ...tempConfig.advanced,
-                    upload_text_limit_mb: parseInt(e.target.value)
-                  }
-                })}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                For text-only payloads
-              </p>
-            </div>
-          </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>JSON Payload Limit (MB)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="500"
+                    value={tempConfig?.advanced?.upload_json_limit_mb ?? securityConfig?.advanced?.upload_json_limit_mb ?? 100}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      advanced: {
+                        ...tempConfig.advanced,
+                        upload_json_limit_mb: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For API requests with large CSV data
+                  </p>
+                </div>
+                <div>
+                  <Label>File Upload Limit (MB)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="500"
+                    value={tempConfig?.advanced?.upload_file_limit_mb ?? securityConfig?.advanced?.upload_file_limit_mb ?? 100}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      advanced: {
+                        ...tempConfig.advanced,
+                        upload_file_limit_mb: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Maximum size for document uploads
+                  </p>
+                </div>
+                <div>
+                  <Label>Text Limit (MB)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={tempConfig?.advanced?.upload_text_limit_mb ?? securityConfig?.advanced?.upload_text_limit_mb ?? 1}
+                    onChange={(e) => setTempConfig({
+                      ...tempConfig,
+                      advanced: {
+                        ...tempConfig.advanced,
+                        upload_text_limit_mb: parseInt(e.target.value)
+                      }
+                    })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For text-only payloads
+                  </p>
+                </div>
+              </div>
 
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-3">
-            <p className="text-xs text-yellow-800 dark:text-yellow-200">
-              ⚠️ <strong>Note:</strong> Changes to upload limits require backend restart to take effect.
-              Current limits are loaded on server startup.
-            </p>
-          </div>
-        </CardContent>
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-3">
+                <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                  ⚠️ <strong>Note:</strong> Changes to upload limits require backend restart to take effect.
+                  Current limits are loaded on server startup.
+                </p>
+              </div>
+            </CardContent>
           </Card>
         </div>
 
@@ -3315,9 +3396,9 @@ function SecuritySettings() {
 
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                  💡 <strong>Popular Providers:</strong><br/>
-                  • Gmail: smtp.gmail.com:587 (TLS)<br/>
-                  • Brevo: smtp-relay.brevo.com:587<br/>
+                  💡 <strong>Popular Providers:</strong><br />
+                  • Gmail: smtp.gmail.com:587 (TLS)<br />
+                  • Brevo: smtp-relay.brevo.com:587<br />
                   • Outlook: smtp-mail.outlook.com:587
                 </p>
               </div>
@@ -3441,12 +3522,12 @@ function AppSettings() {
                     const i18nModule = await import('@/lib/i18n');
                     const i18n = i18nModule.default || i18nModule.i18n;
                     await i18n.changeLanguage(value);
-                    
+
                     // HTML lang attribute'ini güncelle
                     if (typeof document !== 'undefined') {
                       document.documentElement.lang = value;
                     }
-                    
+
                     // Local storage'a kaydet
                     if (typeof window !== 'undefined') {
                       localStorage.setItem('selectedLanguage', value);
@@ -3534,7 +3615,7 @@ function AppSettings() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              
+
               {/* Dil Değiştirme Bilgilendirmesi */}
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-2">
@@ -3568,7 +3649,7 @@ function AppSettings() {
                     </div>
                   )}
                 </div>
-                
+
                 {/* SVG Logo Seçenekleri */}
                 <div className="mt-4">
                   <Label className="text-sm font-medium mb-2">Hazır SVG Logolar</Label>
@@ -3988,18 +4069,16 @@ function PromptsSettings() {
             {tempConfig?.prompts?.list?.map((prompt: any) => (
               <div
                 key={prompt.id}
-                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                  activePromptId === prompt.id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:bg-muted'
-                }`}
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${activePromptId === prompt.id
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:bg-muted'
+                  }`}
                 onClick={() => setActivePromptId(prompt.id)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${
-                      prompt.isActive ? 'bg-green-500' : 'bg-gray-300'
-                    }`} />
+                    <div className={`w-2 h-2 rounded-full ${prompt.isActive ? 'bg-green-500' : 'bg-gray-300'
+                      }`} />
                     <span className="font-medium">{prompt.name}</span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -4648,9 +4727,8 @@ function TemplatesManager() {
               {templates.map((template) => (
                 <div
                   key={template.id}
-                  className={`flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors cursor-pointer ${
-                    selectedTemplate?.id === template.id ? 'bg-muted' : ''
-                  }`}
+                  className={`flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors cursor-pointer ${selectedTemplate?.id === template.id ? 'bg-muted' : ''
+                    }`}
                   onClick={() => handleSelectTemplate(template)}
                 >
                   <span className="text-xl">{template.icon}</span>
