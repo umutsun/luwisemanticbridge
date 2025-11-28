@@ -100,6 +100,7 @@ export default function ChatInterface() {
     title: '',
     subtitle: '',
     logoUrl: '',
+    welcomeMessage: '',  // Welcome message from settings
     placeholder: '',
     primaryColor: '',
     activeChatModel: '',
@@ -297,6 +298,7 @@ export default function ChatInterface() {
           title: chatbotData.title || '',
           subtitle: chatbotData.subtitle || '',
           logoUrl: chatbotData.logoUrl || '',
+          welcomeMessage: chatbotData.welcomeMessage || '',  // Welcome message from settings
           placeholder: chatbotData.placeholder || '',  // NO fallback
           primaryColor: chatbotData.primaryColor || '',  // NO fallback
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',  // NO fallback - must be configured
@@ -852,7 +854,9 @@ export default function ChatInterface() {
 
       let userFriendlyMessage = 'Üzgünüm, şu anda yanıt veremiyorum. Lütfen daha sonra tekrar deneyin.';
 
-      if (errorMessage.includes('429') || errorMessage.includes('QUERY_LIMIT_EXCEEDED')) {
+      // More specific check for 429 status - only match HTTP status format, not arbitrary '429' in text
+      const is429Error = errorMessage.includes(': 429') || errorMessage.includes('status 429') || errorMessage.includes('QUERY_LIMIT_EXCEEDED');
+      if (is429Error) {
         userFriendlyMessage = user?.role === 'admin'
           ? 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır. Ancak teknik bir sorun oluştuğunu görüyoruz. Lütfen sistem yöneticisi ile iletişime geçin.'
           : 'Üzgünüm, aylık soru limitinizi doldurdunuz. devam etmek için lütfen abonelik paketinizi yükseltin veya bir yönetici ile iletişime geçin.';
