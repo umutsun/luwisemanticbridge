@@ -727,7 +727,7 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
 // Get active template
 router.get('/active-template', async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
+    const result = await lsembPool.query(
       `SELECT value FROM settings WHERE key = 'template.active'`
     );
     const active = result.rows.length > 0 ? result.rows[0].value : 'base';
@@ -742,7 +742,7 @@ router.get('/active-template', async (req: Request, res: Response) => {
 router.post('/set-active-template', async (req: Request, res: Response) => {
   try {
     const { templateId } = req.body;
-    await pool.query(
+    await lsembPool.query(
       `INSERT INTO settings (key, value, category, description, updated_at)
        VALUES ('template.active', $1, 'app', 'Active document template', CURRENT_TIMESTAMP)
        ON CONFLICT (key)
