@@ -20,10 +20,7 @@ router.get('/settings', async (req: Request, res: Response) => {
     for (const row of result.rows) {
       if (row.key === 'chatbot') {
         const rawValue = row.value;
-        console.log('[DEBUG] Chatbot raw value type:', typeof rawValue);
-        console.log('[DEBUG] Chatbot raw value:', rawValue ? JSON.stringify(rawValue).substring(0, 200) : 'null');
         chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
-        console.log('[DEBUG] Parsed chatbotData.welcomeMessage:', chatbotData.welcomeMessage);
       } else if (row.key === 'app.name') {
         appName = row.value;
       } else if (row.key === 'app.description') {
