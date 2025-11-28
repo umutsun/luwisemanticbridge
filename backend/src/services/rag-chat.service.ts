@@ -2009,9 +2009,9 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           continue;
         }
 
-        // Clean the text
-        const cleanTitle = title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-        const cleanExcerpt = excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        // Clean the text and convert ALL CAPS to sentence case
+        const cleanTitle = this.toSentenceCase(title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
+        const cleanExcerpt = this.toSentenceCase(excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
 
         // Skip URLs and unwanted patterns
         if (cleanTitle.includes('http') || cleanExcerpt.includes('http')) {
