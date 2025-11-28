@@ -234,6 +234,9 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
       }
     }
 
+    console.log(`[Crawlers API] Found ${runningCrawlers.length} running crawlers:`, runningCrawlers.map((rc: any) => rc.crawlerName));
+    console.log(`[Crawlers API] Found ${Object.keys(crawlerStates).length} crawler states:`, Object.keys(crawlerStates));
+
     res.json({
       success: true,
       directories,

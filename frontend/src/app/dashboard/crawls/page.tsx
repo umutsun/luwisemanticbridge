@@ -1145,6 +1145,13 @@ export default function CrawlerDataPage() {
       setScriptStartTime(new Date());
       setScriptLogs(prev => new Map(prev).set(result.jobId, [`[${new Date().toLocaleTimeString()}] Script started\n[${new Date().toLocaleTimeString()}] Crawling URL: ${url}\n`]));
 
+      // Add to running scripts immediately on success
+      setRunningScripts(prev => {
+        const next = new Set(prev);
+        next.add(directory.name);
+        return next;
+      });
+
       toast({
         title: 'Script Running',
         description: `${directory.displayName} crawler started in background`
