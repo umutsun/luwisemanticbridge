@@ -1951,13 +1951,16 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         WHERE (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
           AND LENGTH(COALESCE(metadata->>'title', content)) > 30
         ORDER BY RANDOM()
-        LIMIT 20
+        LIMIT 50
       `;
 
       const contentResult = await this.pool.query(contentQuery);
       const generatedQuestions: string[] = [];
 
       console.log(`[SUGGESTIONS] Processing ${contentResult.rows.length} database entries...`);
+
+      // Early exit once we have enough questions (for performance)
+      const TARGET_QUESTIONS = 8; // Generate 8, pick 4 randomly
 
       // 2. Generate contextual questions from each content
       for (const row of contentResult.rows) {
@@ -1992,6 +1995,12 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
         generatedQuestions.push(smartQuestion);
         console.log(`   [OK] Generated: "${smartQuestion.substring(0, 80)}..."`);
+
+        // Early exit once we have enough questions (performance optimization)
+        if (generatedQuestions.length >= TARGET_QUESTIONS) {
+          console.log(`[SUGGESTIONS] Reached target of ${TARGET_QUESTIONS} questions, stopping early`);
+          break;
+        }
       }
 
       console.log(`[SUGGESTIONS] Generated ${generatedQuestions.length} contextual questions`);
