@@ -274,11 +274,17 @@ export class LLMManager {
       // Update API keys and models - ALWAYS use database value if present
       const claudeApiKey = settings['anthropic.apiKey'] || settings['claude.apiKey'];
       if (claudeApiKey) {
+        // CRITICAL FIX: Only use this.actualModel if Claude is the active provider
+        // Otherwise use the Claude-specific model from settings, or a sensible default
+        const claudeModel = (this.defaultProvider === 'claude' && this.actualModel)
+          ? this.actualModel
+          : settings['llmSettings.claudeModel'] || 'claude-3-5-sonnet-20241022';
+
         this.updateProviderSettings('claude', {
           apiKey: claudeApiKey,
-          model: this.actualModel === 'claude-3-sonnet-20240229' ? 'claude-3-5-sonnet-20241022' : (this.actualModel || 'claude-3-5-sonnet-20241022')
+          model: claudeModel
         });
-        console.log(' Updated Claude API key from database');
+        console.log(` Updated Claude API key from database with model: ${claudeModel}`);
       }
 
       const openaiApiKey = settings['openai.apiKey'];
