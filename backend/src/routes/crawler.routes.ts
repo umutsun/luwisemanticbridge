@@ -1079,11 +1079,11 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
   try {
     const { crawlerName } = req.params;
 
-    console.log('️  [Delete Directory] Received request');
-    console.log(' Crawler Name:', crawlerName);
+    console.log('🗑️  [Delete Directory] Received request');
+    console.log('📁 Crawler Name:', crawlerName);
 
     if (!crawlerName) {
-      console.error(' Missing crawlerName');
+      console.error('❌ Missing crawlerName');
       return res.status(400).json({
         success: false,
         error: 'Crawler name is required'
@@ -1091,45 +1091,83 @@ router.delete('/crawler-directories/:crawlerName', async (req: Request, res: Res
     }
 
     if (!crawl4aiRedis) {
-      console.error(' Redis not available');
+      console.error('❌ Redis not available');
       return res.status(503).json({
         success: false,
         error: 'Redis not available'
       });
     }
 
-    // Get all keys for this crawler
-    const pattern = `crawl4ai:${crawlerName}:*`;
-    console.log(' Searching pattern:', pattern);
+    let totalDeletedCount = 0;
+    const deletedItems: { type: string; count: number }[] = [];
 
-    const keys = await crawl4aiRedis.keys(pattern);
-    console.log(` Found ${keys.length} keys to delete`);
+    // 1. Delete crawl4ai data keys
+    const dataPattern = `crawl4ai:${crawlerName}:*`;
+    console.log('🔍 Searching data pattern:', dataPattern);
+    const dataKeys = await crawl4aiRedis.keys(dataPattern);
+    if (dataKeys.length > 0) {
+      for (const key of dataKeys) {
+        await crawl4aiRedis.del(key);
+      }
+      console.log(`✅ Deleted ${dataKeys.length} crawl4ai data keys`);
+      deletedItems.push({ type: 'crawl4ai_data', count: dataKeys.length });
+      totalDeletedCount += dataKeys.length;
+    }
 
-    if (keys.length === 0) {
-      console.warn('️  No keys found for crawler:', crawlerName);
+    // 2. Delete crawler_running key
+    const runningKey = `crawler_running:${crawlerName}`;
+    const runningExists = await crawl4aiRedis.exists(runningKey);
+    if (runningExists) {
+      await crawl4aiRedis.del(runningKey);
+      console.log('✅ Deleted crawler_running key');
+      deletedItems.push({ type: 'crawler_running', count: 1 });
+      totalDeletedCount += 1;
+    }
+
+    // 3. Delete crawl_logs keys (may have multiple job IDs)
+    const logsPattern = `crawl_logs:${crawlerName}:*`;
+    console.log('🔍 Searching logs pattern:', logsPattern);
+    const logsKeys = await crawl4aiRedis.keys(logsPattern);
+    if (logsKeys.length > 0) {
+      for (const key of logsKeys) {
+        await crawl4aiRedis.del(key);
+      }
+      console.log(`✅ Deleted ${logsKeys.length} crawl_logs keys`);
+      deletedItems.push({ type: 'crawl_logs', count: logsKeys.length });
+      totalDeletedCount += logsKeys.length;
+    }
+
+    // 4. Delete state file if exists
+    const stateFilePath = path.join(__dirname, '../../python-services/crawlers', `${crawlerName}_crawler_state.json`);
+    let stateFileDeleted = false;
+    if (fs.existsSync(stateFilePath)) {
+      fs.unlinkSync(stateFilePath);
+      console.log('✅ Deleted state file:', stateFilePath);
+      deletedItems.push({ type: 'state_file', count: 1 });
+      stateFileDeleted = true;
+    }
+
+    // If nothing was found to delete, return 404
+    if (totalDeletedCount === 0 && !stateFileDeleted) {
+      console.warn('⚠️  No data found for crawler:', crawlerName);
       return res.status(404).json({
         success: false,
         error: 'Crawler directory not found'
       });
     }
 
-    // Delete all keys
-    let deletedCount = 0;
-    for (const key of keys) {
-      await crawl4aiRedis.del(key);
-      deletedCount++;
-    }
-
-    console.log(` Deleted ${deletedCount} items from Redis`);
+    console.log(`🎉 Total cleanup: ${totalDeletedCount} Redis keys + ${stateFileDeleted ? 1 : 0} state file`);
 
     res.json({
       success: true,
-      message: `Crawler directory deleted successfully`,
+      message: `Crawler directory and all associated data deleted successfully`,
       crawlerName,
-      deletedCount
+      deletedCount: totalDeletedCount,
+      stateFileDeleted,
+      details: deletedItems
     });
   } catch (error: any) {
-    console.error(' Failed to delete crawler directory:', error);
+    console.error('❌ Failed to delete crawler directory:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to delete crawler directory'
