@@ -2746,6 +2746,17 @@ router.get('/stats', async (req: Request, res: Response) => {
       FROM unified_embeddings
     `);
 
+    // Get embedding dimensions info
+    const dimensionStats = await lsembPool.query(`
+      SELECT
+        vector_dims(embedding) as dimension,
+        COUNT(*) as count
+      FROM unified_embeddings
+      WHERE embedding IS NOT NULL
+      GROUP BY vector_dims(embedding)
+      ORDER BY count DESC
+    `);
+
     const byTable = await lsembPool.query(`
       SELECT
         source_table,
@@ -2756,14 +2767,16 @@ router.get('/stats', async (req: Request, res: Response) => {
       GROUP BY source_table
     `);
 
-    // Get embeddings by source table with document/record counts for dashboard
+    // Get embeddings by source table with document/record counts and dimension for dashboard
     const sourceStats = await lsembPool.query(`
       SELECT
         source_table,
         COUNT(*) as embedding_count,
-        COUNT(DISTINCT source_id) as record_count
+        COUNT(DISTINCT source_id) as record_count,
+        vector_dims(embedding) as dimension
       FROM unified_embeddings
-      GROUP BY source_table
+      WHERE embedding IS NOT NULL
+      GROUP BY source_table, vector_dims(embedding)
       ORDER BY embedding_count DESC
     `);
 
@@ -2825,7 +2838,14 @@ router.get('/stats', async (req: Request, res: Response) => {
         name: sourceMapping[row.source_table]?.name || row.source_table,
         category: sourceMapping[row.source_table]?.category || 'other',
         embedding_count: parseInt(row.embedding_count),
-        record_count: parseInt(row.record_count)
+        record_count: parseInt(row.record_count),
+        dimension: parseInt(row.dimension) || null
+      })),
+      // Dimension summary for quick overview
+      dimensions: dimensionStats.rows.map(row => ({
+        dimension: parseInt(row.dimension),
+        count: parseInt(row.count),
+        provider: parseInt(row.dimension) === 1536 ? 'OpenAI' : parseInt(row.dimension) === 768 ? 'Gemini' : 'Unknown'
       }))
     });
   } catch (error) {

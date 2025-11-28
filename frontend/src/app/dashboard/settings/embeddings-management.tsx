@@ -78,6 +78,7 @@ const EmbeddingsManagement = () => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [dimensions, setDimensions] = useState<Array<{ dimension: number; count: number; provider: string }>>([]);
   const { toast } = useToast();
 
   // Update setting function
@@ -125,11 +126,12 @@ const EmbeddingsManagement = () => {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const [unified, documents, scrape, messages] = await Promise.all([
+      const [unified, documents, scrape, messages, mainStats] = await Promise.all([
         fetch(apiConfig.getApiUrl('/embeddings/unified/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/documents/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/scrape/stats')).then(r => r.json()),
-        fetch(apiConfig.getApiUrl('/embeddings/messages/stats')).then(r => r.json())
+        fetch(apiConfig.getApiUrl('/embeddings/messages/stats')).then(r => r.json()),
+        fetch(apiConfig.getApiUrl('/v2/embeddings/stats')).then(r => r.json()).catch(() => null)
       ]);
 
       setConfig(prev => ({
@@ -139,6 +141,11 @@ const EmbeddingsManagement = () => {
         scrape_embeddings: { ...prev.scrape_embeddings, count: scrape.count || 0 },
         message_embeddings: { ...prev.message_embeddings, count: messages.count || 0 }
       }));
+
+      // Set dimension stats if available
+      if (mainStats?.dimensions) {
+        setDimensions(mainStats.dimensions);
+      }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     }
@@ -466,6 +473,22 @@ const EmbeddingsManagement = () => {
                   config.message_embeddings.count).toLocaleString()}
               </span>
             </div>
+            {dimensions.length > 0 && (
+              <div className="mt-3 pt-3 border-t">
+                <div className="text-sm text-muted-foreground mb-2">Embedding Dimensions:</div>
+                <div className="flex flex-wrap gap-2">
+                  {dimensions.map((dim, idx) => (
+                    <Badge
+                      key={idx}
+                      variant={dim.dimension === 1536 ? "default" : dim.dimension === 768 ? "secondary" : "outline"}
+                      className="text-xs"
+                    >
+                      {dim.dimension} dim ({dim.provider}) - {dim.count.toLocaleString()} vectors
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
