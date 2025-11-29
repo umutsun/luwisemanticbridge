@@ -1373,9 +1373,8 @@ export default function EmbeddingsManagerPage() {
                         </TableHead>
                         <TableHead className="w-64">Table Name</TableHead>
                         <TableHead className="w-24">Status</TableHead>
-                        <TableHead className="w-24">Total</TableHead>
-                        <TableHead className="w-24">Embedded</TableHead>
-                        <TableHead className="w-32">Progress</TableHead>
+                        <TableHead className="w-28">Total</TableHead>
+                        <TableHead className="w-44">Progress</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1455,41 +1454,45 @@ export default function EmbeddingsManagerPage() {
                           </TableCell>
 
                           {/* Total column */}
-                          <TableCell className="text-sm">{table.totalRecords.toLocaleString()}</TableCell>
+                          <TableCell className="text-sm font-mono">{table.totalRecords.toLocaleString()}</TableCell>
 
-                          {/* Embedded column */}
-                          <TableCell className="text-sm">
-                            {skipped > 0 ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  fetchSkippedRecords(table.name);
-                                }}
-                                className="hover:underline cursor-pointer"
-                                title="View skipped records"
-                              >
-                                <span>{table.embeddedRecords.toLocaleString()}</span>
-                                <span className="text-yellow-600 dark:text-yellow-500">/{skipped}</span>
-                              </button>
-                            ) : (
-                              <span>{table.embeddedRecords.toLocaleString()}</span>
-                            )}
-                          </TableCell>
-
-                          {/* Progress column */}
+                          {/* Combined Progress column: embedded/total + progress bar + skipped */}
                           <TableCell>
                             <div className="space-y-1">
-                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              {/* Progress counts: embedded / total */}
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="font-medium text-green-600 dark:text-green-500">
+                                  {table.embeddedRecords.toLocaleString()}
+                                </span>
+                                <span className="text-muted-foreground">/</span>
+                                <span className="text-muted-foreground">
+                                  {table.totalRecords.toLocaleString()}
+                                </span>
+                                {skipped > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      fetchSkippedRecords(table.name);
+                                    }}
+                                    className="ml-1 px-1.5 py-0.5 text-[10px] font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors"
+                                    title="View skipped records"
+                                  >
+                                    {skipped} skipped
+                                  </button>
+                                )}
+                                {isCompleted && (
+                                  <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-500 ml-auto" />
+                                )}
+                              </div>
+                              {/* Progress bar */}
+                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                                 <div
-                                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                  className={cn(
+                                    "h-1.5 rounded-full transition-all duration-300",
+                                    isCompleted ? "bg-green-500" : "bg-blue-600"
+                                  )}
                                   style={{ width: `${tableProgress}%` }}
                                 />
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">{tableProgress.toFixed(1)}%</span>
-                                {isCompleted && (
-                                  <CheckCircle className="w-3 h-3 text-green-600 dark:text-green-500" />
-                                )}
                               </div>
                             </div>
                           </TableCell>
