@@ -409,9 +409,12 @@ export default function ChatInterface() {
             <div className="flex flex-col h-screen bg-[#fff] dark:bg-[#131314] text-[#1f1f1f] dark:text-[#e3e3e3] font-sans transition-colors duration-300">
 
                 {/* Minimal Top Bar */}
-                <header className="flex items-center justify-between px-4 py-2 sticky top-0 z-50 bg-[#fff]/80 dark:bg-[#131314]/80 backdrop-blur-md">
+                <header className="flex items-center justify-between px-4 py-1.5 sticky top-0 z-50 bg-[#fff]/80 dark:bg-[#131314]/80 backdrop-blur-md border-b border-gray-100/50 dark:border-gray-800/50">
                     <div className="flex items-center gap-2 cursor-pointer" onClick={clearChat}>
-                        <span className="text-lg font-medium tracking-tight text-gray-800 dark:text-gray-200">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-red-500 flex items-center justify-center">
+                            <Sparkles className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="text-base font-medium tracking-tight text-gray-800 dark:text-gray-200">
                             {chatbotSettings.title || t('chat.title', 'AI')}
                         </span>
                     </div>
@@ -542,19 +545,19 @@ export default function ChatInterface() {
 
                 {/* Main Content */}
                 <main className="flex-1 overflow-hidden relative flex flex-col">
-                    <ScrollArea className="flex-1 h-full px-4 md:px-0 custom-scrollbar" style={{ height: 'calc(100vh - 180px)' }}>
-                        <div className="max-w-3xl mx-auto w-full py-8 pb-40">
+                    <ScrollArea className="flex-1 h-full px-4 md:px-0 custom-scrollbar" style={{ height: 'calc(100vh - 140px)' }}>
+                        <div className="max-w-3xl mx-auto w-full py-4 pb-40">
 
                             {/* Welcome Screen */}
                             {isClient && messages.length === 0 && (
-                                <div className="flex flex-col items-start justify-center min-h-[60vh] space-y-12 animate-in fade-in duration-700">
-                                    <div className="space-y-2">
-                                        <h1 className="text-5xl md:text-6xl font-medium tracking-tighter">
+                                <div className="flex flex-col items-start justify-start pt-4 space-y-6 animate-in fade-in duration-500">
+                                    <div className="space-y-1">
+                                        <h1 className="text-4xl md:text-5xl font-medium tracking-tighter">
                                             <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 bg-clip-text text-transparent">
                                                 {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                             </span>
                                         </h1>
-                                        <p className="text-2xl md:text-3xl text-gray-400 dark:text-gray-500 font-medium">
+                                        <p className="text-xl md:text-2xl text-gray-400 dark:text-gray-500 font-medium">
                                             {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                         </p>
                                     </div>
