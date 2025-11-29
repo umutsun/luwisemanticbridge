@@ -75,6 +75,23 @@ export default function ChatInterface() {
     const [showSuggestions, setShowSuggestions] = useState(true);
     const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
     const [isClient, setIsClient] = useState(false);
+    const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+    const [visibleSourcesCount, setVisibleSourcesCount] = useState<{ [key: string]: number }>({});
+    const [ragSettings, setRagSettings] = useState({
+        minResults: 7,
+        maxResults: 20,
+        similarityThreshold: 0.02
+    });
+    const [llmSettings, setLlmSettings] = useState({
+        temperature: 0.7,
+        maxTokens: 2048
+    });
+    const [activePrompt, setActivePrompt] = useState({
+        content: '',
+        temperature: 0.7,
+        maxTokens: 2048,
+        tone: 'professional'
+    });
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -92,20 +109,72 @@ export default function ChatInterface() {
     useEffect(() => {
         setIsClient(true);
 
-        // Fetch settings
+        // Fetch all settings
         Promise.all([
             fetch('/api/v2/chatbot/settings'),
+            fetch('/api/v2/settings?category=llm'),
+            fetch('/api/v2/settings?category=rag'),
+            fetch('/api/v2/settings?category=prompts'),
             fetch(getEndpoint('chat', 'suggestions'))
-        ]).then(async ([settingsRes, suggestionsRes]) => {
-            const settings = settingsRes.ok ? await settingsRes.json() : {};
+        ]).then(async ([chatbotRes, llmRes, ragRes, promptsRes, suggestionsRes]) => {
+            const chatbotData = chatbotRes.ok ? await chatbotRes.json() : {};
+            const llmData = llmRes.ok ? await llmRes.json() : {};
+            const ragData = ragRes.ok ? await ragRes.json() : {};
+            const promptsData = promptsRes.ok ? await promptsRes.json() : {};
             const suggestionsData = suggestionsRes.ok ? await suggestionsRes.json() : {};
+
+            // Merge settings
+            const settingsData = {
+                llmSettings: llmData.llmSettings || {},
+                ragSettings: ragData.ragSettings || {},
+                prompts: promptsData.prompts || {}
+            };
+
+            // Find active prompt
+            const promptsList = settingsData.prompts?.list || [];
+            const activePromptObj = promptsList.find((p: any) => p.isActive === true);
+
+            let activePromptData = {
+                content: '',
+                temperature: 0.7,
+                maxTokens: 2048,
+                tone: 'professional'
+            };
+
+            if (activePromptObj) {
+                activePromptData = {
+                    content: activePromptObj.systemPrompt || '',
+                    temperature: parseFloat(activePromptObj.temperature || '0.7'),
+                    maxTokens: parseInt(activePromptObj.maxTokens || '2048'),
+                    tone: activePromptObj.conversationTone || 'professional'
+                };
+            }
 
             setChatbotSettings(prev => ({
                 ...prev,
-                ...settings,
-                title: settings.title || 'Gemini',
-                placeholder: settings.placeholder || 'Enter a prompt here'
+                ...chatbotData,
+                title: chatbotData.title || 'Gemini',
+                placeholder: chatbotData.placeholder || 'Enter a prompt here',
+                activeChatModel: settingsData.llmSettings?.activeChatModel || 'google/gemini-1.5-pro'
             }));
+
+            setRagSettings({
+                minResults: settingsData.ragSettings?.minResults || 7,
+                maxResults: settingsData.ragSettings?.maxResults || 20,
+                similarityThreshold: settingsData.ragSettings?.similarityThreshold || 0.02
+            });
+
+            setLlmSettings({
+                temperature: settingsData.llmSettings?.temperature || 0.7,
+                maxTokens: settingsData.llmSettings?.maxTokens || 2048
+            });
+
+            setActivePrompt({
+                content: activePromptData.content,
+                temperature: activePromptData.temperature,
+                maxTokens: activePromptData.maxTokens,
+                tone: activePromptData.tone
+            });
 
             setSuggestedQuestions(suggestionsData.suggestions || [
                 "Explain quantum computing in simple terms",
@@ -113,6 +182,10 @@ export default function ChatInterface() {
                 "How do I make a sourdough starter?",
                 "Plan a 3-day trip to Istanbul"
             ]);
+
+            setSettingsLoaded(true);
+        }).catch(err => {
+            console.error('Failed to fetch settings:', err);
             setSettingsLoaded(true);
         });
     }, []);
@@ -148,6 +221,11 @@ export default function ChatInterface() {
         setIsStreaming(true);
 
         try {
+            // Use active prompt settings if available
+            const temperature = activePrompt.content ? activePrompt.temperature : llmSettings.temperature;
+            const maxTokens = activePrompt.content ? activePrompt.maxTokens : llmSettings.maxTokens;
+            const systemPrompt = activePrompt.content || undefined;
+
             const response = await fetch(getEndpoint('chat', 'send'), {
                 method: 'POST',
                 headers: {
@@ -156,8 +234,14 @@ export default function ChatInterface() {
                 },
                 body: JSON.stringify({
                     message: messageContent,
-                    stream: true,
-                    model: chatbotSettings.activeChatModel
+                    conversationId: conversationId,
+                    model: chatbotSettings.activeChatModel,
+                    temperature,
+                    maxTokens,
+                    systemPrompt,
+                    enableSemanticAnalysis: true,
+                    trackUserInsights: true,
+                    stream: true
                 }),
             });
 
@@ -190,9 +274,47 @@ export default function ChatInterface() {
                     }
                 }
 
-                // Finalize
+                // Fetch final data with sources
+                let finalData: any = {};
+                try {
+                    const finalResponse = await fetch(getEndpoint('chat', 'send'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                            message: messageContent,
+                            conversationId: conversationId,
+                            model: chatbotSettings.activeChatModel,
+                            temperature,
+                            maxTokens,
+                            systemPrompt,
+                            enableSemanticAnalysis: true,
+                            trackUserInsights: true,
+                            stream: false
+                        }),
+                    });
+                    if (finalResponse.ok) {
+                        finalData = await finalResponse.json();
+                        // Save conversation ID
+                        if (finalData.conversationId && !conversationId) {
+                            setConversationId(finalData.conversationId);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to get final data:', e);
+                }
+
+                // Finalize message with sources
                 setMessages(prev => prev.map(msg =>
-                    msg.id === messageId ? { ...msg, isStreaming: false } : msg
+                    msg.id === messageId ? {
+                        ...msg,
+                        content: accumulatedContent || finalData.response || msg.content,
+                        isStreaming: false,
+                        sources: finalData.sources,
+                        responseTime: msg.startTime ? Date.now() - msg.startTime : undefined
+                    } : msg
                 ));
             }
         } catch (error) {
@@ -216,6 +338,7 @@ export default function ChatInterface() {
     const clearChat = () => {
         setMessages([]);
         setShowSuggestions(true);
+        setConversationId(undefined); // Reset conversation for new session
     };
 
     return (
@@ -235,11 +358,47 @@ export default function ChatInterface() {
 
                     <div className="flex items-center gap-3">
                         <ThemeToggle />
-                        <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-gray-200 dark:hover:ring-gray-700 transition-all">
-                            <AvatarFallback className="bg-purple-600 text-white text-xs">
-                                {user?.name?.charAt(0) || 'U'}
-                            </AvatarFallback>
-                        </Avatar>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-gray-200 dark:hover:ring-gray-700 transition-all">
+                                    <AvatarFallback className="bg-purple-600 text-white text-xs">
+                                        {user?.name?.charAt(0) || 'U'}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                                <div className="px-2 py-1.5 text-sm font-medium border-b">
+                                    <div>{user?.name || 'User'}</div>
+                                    <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
+                                </div>
+                                <Link href="/profile">
+                                    <DropdownMenuItem className="cursor-pointer">
+                                        <User className="w-4 h-4 mr-2" />
+                                        Profile
+                                    </DropdownMenuItem>
+                                </Link>
+                                {user?.role === 'admin' && (
+                                    <>
+                                        <Link href="/dashboard">
+                                            <DropdownMenuItem className="cursor-pointer">
+                                                <LayoutDashboard className="w-4 h-4 mr-2" />
+                                                Dashboard
+                                            </DropdownMenuItem>
+                                        </Link>
+                                        <Link href="/dashboard/settings">
+                                            <DropdownMenuItem className="cursor-pointer">
+                                                <Settings className="w-4 h-4 mr-2" />
+                                                Settings
+                                            </DropdownMenuItem>
+                                        </Link>
+                                    </>
+                                )}
+                                <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600 focus:text-red-600">
+                                    <LogOut className="w-4 h-4 mr-2" />
+                                    Logout
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </header>
 
@@ -304,8 +463,8 @@ export default function ChatInterface() {
 
                                         {/* Message Content */}
                                         <div className={`max-w-[85%] md:max-w-[75%] ${msg.role === 'user'
-                                                ? 'bg-gray-100 dark:bg-[#2d2e30] rounded-3xl py-3 px-5'
-                                                : 'bg-transparent py-1 px-0'
+                                            ? 'bg-gray-100 dark:bg-[#2d2e30] rounded-3xl py-3 px-5'
+                                            : 'bg-transparent py-1 px-0'
                                             }`}>
                                             <div className="prose prose-lg dark:prose-invert max-w-none leading-relaxed">
                                                 {msg.role === 'user' ? (
@@ -318,6 +477,88 @@ export default function ChatInterface() {
                                                     }} />
                                                 )}
                                             </div>
+
+                                            {/* Sources Section */}
+                                            {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                                                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                                    <div className="flex items-center gap-2 mb-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                        <Sparkles className="w-3 h-3" />
+                                                        Sources & Citations
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {(() => {
+                                                            const sortedSources = msg.sources.sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+                                                            const visibleCount = visibleSourcesCount[msg.id] || ragSettings.minResults;
+                                                            const visibleSources = sortedSources.slice(0, visibleCount);
+                                                            const hasMore = sortedSources.length > visibleCount;
+
+                                                            return (
+                                                                <>
+                                                                    {visibleSources.map((source: any, idx: number) => (
+                                                                        <div
+                                                                            key={idx}
+                                                                            className="group p-3 rounded-xl bg-gray-50 dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-[#2d2e30] transition-colors cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
+                                                                        >
+                                                                            <div className="flex items-start gap-3">
+                                                                                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-xs font-medium text-blue-700 dark:text-blue-300">
+                                                                                    {idx + 1}
+                                                                                </div>
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        {source.sourceType && (
+                                                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                                                                                                {source.sourceType}
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {source.score && (
+                                                                                            <div className="flex items-center gap-1.5">
+                                                                                                <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                                                                    <div
+                                                                                                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
+                                                                                                        style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
+                                                                                                    />
+                                                                                                </div>
+                                                                                                <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                                                                                    {Math.round(source.score)}%
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    {source.summary && (
+                                                                                        <p className="text-xs text-gray-700 dark:text-gray-300 font-medium mb-1 line-clamp-2">
+                                                                                            {source.summary}
+                                                                                        </p>
+                                                                                    )}
+                                                                                    {(source.content || source.excerpt) && (
+                                                                                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
+                                                                                            {source.content || source.excerpt}
+                                                                                        </p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    {hasMore && (
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="w-full text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                                                                            onClick={() => {
+                                                                                setVisibleSourcesCount(prev => ({
+                                                                                    ...prev,
+                                                                                    [msg.id]: Math.min(visibleCount + ragSettings.minResults, sortedSources.length)
+                                                                                }));
+                                                                            }}
+                                                                        >
+                                                                            Show {Math.min(ragSettings.minResults, sortedSources.length - visibleCount)} more sources
+                                                                        </Button>
+                                                                    )}
+                                                                </>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* Assistant Actions */}
                                             {msg.role === 'assistant' && !msg.isStreaming && (
