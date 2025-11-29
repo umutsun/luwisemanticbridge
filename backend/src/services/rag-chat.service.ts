@@ -841,7 +841,17 @@ export class RAGChatService {
     const enableLLMGenerationSetting = await settingsService.getSetting('ragSettings.enableLLMSummaries');
     const enableLLMGeneration = enableLLMGenerationSetting === 'true'; // Default: false (disabled for performance)
 
-    console.log(` Formatting ${searchResults.length} sources (LLM Generation: ${enableLLMGeneration ? 'ENABLED' : 'DISABLED'} for natural summaries)`);
+    // Get maxQuestionLength from chatbot settings for question generation
+    const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
+    let maxQuestionLength = 500; // Default
+    try {
+      const chatbotSettings = chatbotSettingsRaw ? JSON.parse(chatbotSettingsRaw) : {};
+      maxQuestionLength = chatbotSettings.maxQuestionLength || 500;
+    } catch (e) {
+      // Use default if parsing fails
+    }
+
+    console.log(` Formatting ${searchResults.length} sources (LLM: ${enableLLMGeneration ? 'ON' : 'OFF'}, maxQ: ${maxQuestionLength})`);
 
     if (enableParallelLLM && searchResults.length > 1) {
       // NOTE: Parallel mode is now deprecated in favor of batch LLM processing
@@ -906,7 +916,8 @@ export class RAGChatService {
               title: p.cleanTitle,
               excerpt: p.cleanExcerpt,
               category: p.category
-            }))
+            })),
+            maxQuestionLength
           );
 
           console.log(` Batch LLM completed: ${batchLLMResults.length} results generated`);
@@ -925,7 +936,7 @@ export class RAGChatService {
 
         // Use batch LLM result if available, otherwise use fallback
         let processedContent = prep.cleanExcerpt;
-        let generatedQuestion = this.generateDynamicQuestion(prep.cleanTitle, prep.cleanExcerpt, prep.category);
+        let generatedQuestion = this.generateDynamicQuestion(prep.cleanTitle, prep.cleanExcerpt, prep.category, maxQuestionLength);
 
         if (enableLLMGeneration && batchLLMResults[i]) {
           processedContent = batchLLMResults[i].processedContent || prep.cleanExcerpt;
@@ -967,13 +978,17 @@ export class RAGChatService {
   /**
    * Generate dynamic question based on title, excerpt and category without LLM
    * IMPORTANT: Questions must include the TOPIC from title to be meaningful standalone
+   * @param maxLength - Maximum question length from settings (default 500)
    */
-  private generateDynamicQuestion(title: string, excerpt: string, category: string): string {
+  private generateDynamicQuestion(title: string, excerpt: string, category: string, maxLength: number = 500): string {
     // Detect language
     const isTurkish = /[çğıöşüÇĞİÖŞÜ]/.test(excerpt) ||
       /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
 
-    // Extract main topic from title (first 3-5 meaningful words)
+    // Calculate max topic length based on maxLength setting (question template ~50 chars)
+    const maxTopicLength = Math.min(45, Math.max(20, maxLength - 60));
+
+    // Extract main topic from title (respecting maxLength setting)
     const extractTopic = (text: string): string => {
       // Remove common prefixes and clean up
       let topic = text
@@ -982,9 +997,9 @@ export class RAGChatService {
         .replace(/\s+/g, ' ')
         .trim();
 
-      // Get first meaningful part (up to 40 chars, break at word boundary)
-      if (topic.length > 45) {
-        const truncated = topic.substring(0, 45);
+      // Get first meaningful part (respecting max topic length)
+      if (topic.length > maxTopicLength) {
+        const truncated = topic.substring(0, maxTopicLength);
         const lastSpace = truncated.lastIndexOf(' ');
         topic = lastSpace > 20 ? truncated.substring(0, lastSpace) : truncated;
       }
@@ -1044,6 +1059,13 @@ export class RAGChatService {
       smartQuestion = `What are the key details about ${topic}?`;
     }
 
+    // Final truncation to respect maxLength setting
+    if (smartQuestion.length > maxLength) {
+      const truncated = smartQuestion.substring(0, maxLength - 3);
+      const lastSpace = truncated.lastIndexOf(' ');
+      smartQuestion = (lastSpace > maxLength * 0.6 ? truncated.substring(0, lastSpace) : truncated) + '...';
+    }
+
     return smartQuestion;
   }
 
@@ -1053,7 +1075,8 @@ export class RAGChatService {
    * This is 10x faster than processing individually!
    */
   private async generateBatchContentAndQuestions(
-    results: Array<{ title: string; excerpt: string; category: string }>
+    results: Array<{ title: string; excerpt: string; category: string }>,
+    maxQuestionLength: number = 500
   ): Promise<Array<{ processedContent: string; generatedQuestion: string }>> {
     try {
       console.log(` Batch processing ${results.length} results with LLM...`);
@@ -1186,7 +1209,8 @@ Başlık: ${r.title}
           generatedQuestion: this.generateDynamicQuestion(
             cleanedResults[idx].title,
             cleanedResults[idx].excerpt,
-            cleanedResults[idx].category
+            cleanedResults[idx].category,
+            maxQuestionLength
           )
         });
       }
@@ -1197,7 +1221,7 @@ Başlık: ${r.title}
       // Fallback: return original excerpts
       return results.map(r => ({
         processedContent: r.excerpt.substring(0, 500),
-        generatedQuestion: this.generateDynamicQuestion(r.title, r.excerpt, r.category)
+        generatedQuestion: this.generateDynamicQuestion(r.title, r.excerpt, r.category, maxQuestionLength)
       }));
     }
   }
@@ -2007,6 +2031,14 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     try {
       console.log('[SUGGESTIONS] Generating contextual suggestion questions...');
 
+      // Get maxQuestionLength from chatbot settings
+      const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
+      let maxQuestionLength = 500;
+      try {
+        const chatbotSettings = chatbotSettingsRaw ? JSON.parse(chatbotSettingsRaw) : {};
+        maxQuestionLength = chatbotSettings.maxQuestionLength || 500;
+      } catch (e) { /* use default */ }
+
       // 1. Get interesting content from database (titles + excerpts for context)
       // Dynamically select from any table that has content in unified_embeddings
       const contentQuery = `
@@ -2051,7 +2083,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
         // Generate dynamic, contextual question using existing smart logic
         const category = this.categorizeContent(cleanTitle, cleanExcerpt, sourceTable);
-        const smartQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
+        const smartQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category, maxQuestionLength);
 
         // FILTER OUT GENERIC/VAGUE QUESTIONS
         const isGenericQuestion = this.isGenericQuestion(smartQuestion);
@@ -2163,7 +2195,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
      * Process a single source with LLM enrichment
      * Used by enhanced parallel processing
      */
-  private async processSourceWithLLM(r: any, idx: number, enableLLMGeneration: boolean): Promise<any> {
+  private async processSourceWithLLM(r: any, idx: number, enableLLMGeneration: boolean, maxQuestionLength: number = 500): Promise<any> {
     const category = this.categorizeSource(r);
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
 
@@ -2188,7 +2220,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
     // Prepare content
     let processedContent = cleanExcerpt;
-    let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category);
+    let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category, maxQuestionLength);
 
     // Generate LLM content if enabled
     if (enableLLMGeneration) {
@@ -2233,7 +2265,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
   /**
    * Create fallback result for failed processing
    */
-  private createFallbackResult(r: any, idx: number): any {
+  private createFallbackResult(r: any, idx: number, maxQuestionLength: number = 500): any {
     const category = this.categorizeSource(r);
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
     const cleanTitle = this.toSentenceCase(this.stripHtml(r.title || `Kaynak ${idx + 1}`));
@@ -2244,7 +2276,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       title: cleanTitle,
       excerpt: this.truncateExcerpt(cleanExcerpt, 250),
       content: cleanExcerpt,
-      question: this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category),
+      question: this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category, maxQuestionLength),
       category: category,
       sourceTable: r.source_table || 'documents',
       citation: `[Source ${idx + 1}]`,
