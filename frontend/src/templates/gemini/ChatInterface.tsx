@@ -599,10 +599,10 @@ export default function ChatInterface() {
                                         {msg.role === 'assistant' && (
                                             <div className="flex-shrink-0 mt-1">
                                                 {msg.isStreaming && !msg.content ? (
-                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-red-500 animate-spin" />
+                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 animate-spin" />
                                                 ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-white dark:bg-black border border-gray-200 dark:border-gray-700 flex items-center justify-center">
-                                                        <Sparkles className="w-5 h-5 text-blue-500 fill-blue-500" />
+                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                                                        <Sparkles className="w-4 h-4 text-white" />
                                                     </div>
                                                 )}
                                             </div>
@@ -627,14 +627,14 @@ export default function ChatInterface() {
 
                                             {/* Sources Section */}
                                             {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
-                                                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 overflow-hidden">
                                                     <div className="flex items-center justify-between mb-3">
                                                         <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                                             <Sparkles className="w-3 h-3" />
                                                             {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')} ({msg.sources.length})
                                                         </div>
                                                     </div>
-                                                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                                                    <div className="space-y-2 max-h-[400px] overflow-y-auto overflow-x-hidden">
                                                         {(() => {
                                                             const sortedSources = [...msg.sources].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
                                                             const initialCount = ragSettings.minResults;
@@ -648,31 +648,30 @@ export default function ChatInterface() {
                                                                     {visibleSources.map((source: any, idx: number) => (
                                                                         <div
                                                                             key={idx}
-                                                                            className="group p-3 rounded-xl bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-300 cursor-pointer border border-gray-100 dark:border-gray-700/50 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-md hover:shadow-blue-500/5"
+                                                                            className="group p-3 rounded-xl bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-300 cursor-pointer border border-gray-100 dark:border-gray-700/50 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-md hover:shadow-blue-500/5 overflow-hidden"
                                                                         >
-                                                                            <div className="flex items-center gap-3">
-                                                                                <div className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-xs font-bold text-blue-600 dark:text-blue-400 group-hover:from-cyan-500/30 group-hover:to-blue-500/30 transition-colors">
+                                                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                                                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-md bg-gradient-to-br from-blue-500/20 to-purple-500/20 text-xs font-bold text-blue-600 dark:text-blue-400">
                                                                                     {idx + 1}
                                                                                 </div>
-                                                                                <div className="flex-1 min-w-0 overflow-hidden">
+                                                                                <div className="flex-1 min-w-0">
                                                                                     <p className="text-sm font-medium text-gray-800 dark:text-gray-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate transition-colors">
                                                                                         {source.title || source.citation || source.summary || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                                     </p>
                                                                                     {source.score && (
-                                                                                        <div className="flex items-center gap-2 mt-1.5">
-                                                                                            <div className="w-20 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                                                        <div className="flex items-center gap-2 mt-1">
+                                                                                            <div className="w-16 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
                                                                                                 <div
-                                                                                                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500"
+                                                                                                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
                                                                                                     style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
                                                                                                 />
                                                                                             </div>
-                                                                                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                                                                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium flex-shrink-0">
                                                                                                 {Math.round(source.score)}%
                                                                                             </span>
                                                                                         </div>
                                                                                     )}
                                                                                 </div>
-                                                                                <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-blue-500 -rotate-90 flex-shrink-0 transition-colors" />
                                                                             </div>
                                                                         </div>
                                                                     ))}
