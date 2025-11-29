@@ -585,14 +585,14 @@ router.get('/skipped', async (req: Request, res: Response) => {
 // Delete skipped records (supports both individual IDs and delete-all-for-table)
 router.delete('/skipped', async (req: Request, res: Response) => {
   try {
-    const { table, all } = req.query;
+    const { table, bulkDelete } = req.query;
     const { ids } = req.body;
 
     const pools = await initializePools();
 
-    // Delete ALL records for a specific table
-    if (all === 'true' && table) {
-      console.log(`Deleting ALL skipped records for table: ${table}`);
+    // Delete ALL records for a specific table (bulkDelete=true)
+    if (bulkDelete === 'true' && table) {
+      console.log(`Bulk deleting ALL skipped records for table: ${table}`);
       const result = await pools.targetPool.query(
         `DELETE FROM skipped_embeddings WHERE LOWER(source_table) = LOWER($1)`,
         [table]

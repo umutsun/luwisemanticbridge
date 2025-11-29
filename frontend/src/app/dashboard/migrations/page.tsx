@@ -530,7 +530,7 @@ export default function EmbeddingsManagerPage() {
     setIsDeletingSkipped(true);
     try {
       const response = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/migration/skipped?table=${encodeURIComponent(selectedTableForSkipped)}&all=true`,
+        `${config.api.baseUrl}/api/v2/migration/skipped?table=${encodeURIComponent(selectedTableForSkipped)}&bulkDelete=true`,
         { method: 'DELETE' }
       );
 
