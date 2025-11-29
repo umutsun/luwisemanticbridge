@@ -17,9 +17,6 @@ import {
     Loader2,
     Sparkles,
     Plus,
-    Settings,
-    LayoutDashboard,
-    LogOut,
     Mic,
     ThumbsUp,
     ThumbsDown,
@@ -407,76 +404,59 @@ export default function ChatInterface() {
             <div className="flex flex-col h-screen bg-gradient-to-b from-gray-50 to-white dark:from-[#0a0a0b] dark:to-[#131314] text-gray-900 dark:text-gray-100 font-sans transition-colors duration-500">
 
                 {/* Elegant Top Bar */}
-                <header className="flex items-center justify-between px-6 py-3 sticky top-0 z-50 bg-white/70 dark:bg-[#0a0a0b]/70 backdrop-blur-2xl border-b border-gray-200/50 dark:border-gray-800/30">
-                    <div className="flex items-center gap-3 cursor-pointer group" onClick={clearChat}>
-                        <div className="relative">
-                            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-xl blur opacity-40 group-hover:opacity-60 transition duration-300"></div>
-                            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
-                                <Sparkles className="w-5 h-5 text-white" />
-                            </div>
-                        </div>
-                        <div className="flex flex-col">
-                            <span className="text-base font-semibold tracking-tight text-gray-900 dark:text-white">
-                                {chatbotSettings.title || t('chat.title', 'AI')}
-                            </span>
-                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                                {chatbotSettings.activeChatModel?.split('/').pop() || t('chat.ready', 'Hazır')}
-                            </span>
-                        </div>
+                <header className="flex items-center justify-between px-4 md:px-6 py-2.5 sticky top-0 z-50 bg-white/80 dark:bg-[#0a0a0b]/80 backdrop-blur-2xl border-b border-gray-100 dark:border-gray-800/50">
+                    <div className="flex items-center gap-2.5 cursor-pointer group" onClick={clearChat}>
+                        <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent">
+                            {chatbotSettings.title || t('chat.title', 'AI Asistan')}
+                        </span>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <Button
-                            variant="ghost"
-                            size="icon"
+                    <div className="flex items-center gap-1">
+                        <button
                             onClick={clearChat}
-                            className="h-9 w-9 rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50"
+                            className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5 transition-all duration-200"
                             title={t('chat.newChat', 'Yeni Sohbet')}
                         >
                             <Plus className="w-5 h-5" />
-                        </Button>
+                        </button>
                         <ThemeToggle />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <button className="relative group">
-                                    <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full opacity-0 group-hover:opacity-50 blur transition duration-300"></div>
-                                    <Avatar className="relative w-9 h-9 cursor-pointer ring-2 ring-gray-200 dark:ring-gray-700 group-hover:ring-blue-500/50 transition-all duration-300">
+                                <button className="relative group p-1">
+                                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-full opacity-0 group-hover:opacity-100 blur-md transition duration-300"></div>
+                                    <Avatar className="relative w-8 h-8 cursor-pointer ring-2 ring-transparent group-hover:ring-blue-500/30 transition-all duration-300">
                                         <AvatarImage src={user?.avatar} />
-                                        <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-sm font-semibold">
+                                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-semibold">
                                             {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                                         </AvatarFallback>
                                     </Avatar>
                                 </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-64 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-gray-200/50 dark:border-gray-700/50 shadow-2xl rounded-xl p-1">
-                                <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800">
+                            <DropdownMenuContent align="end" className="w-56 bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl border-gray-200/50 dark:border-gray-700/50 shadow-2xl shadow-black/10 dark:shadow-black/30 rounded-2xl p-2 animate-in slide-in-from-top-2 duration-200">
+                                <div className="px-3 py-2.5 mb-1 rounded-xl bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
                                     <div className="font-semibold text-sm text-gray-900 dark:text-white">{user?.name || 'User'}</div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user?.email}</div>
                                 </div>
-                                <DropdownMenuItem onClick={openProfileDialog} className="cursor-pointer rounded-lg mt-1 focus:bg-blue-50 dark:focus:bg-blue-900/20">
-                                    <User className="w-4 h-4 mr-2 text-blue-500" />
+                                <DropdownMenuItem onClick={openProfileDialog} className="cursor-pointer rounded-xl py-2.5 px-3 focus:bg-gray-100 dark:focus:bg-white/5 transition-colors">
                                     {t('profile.edit', 'Profili Düzenle')}
                                 </DropdownMenuItem>
                                 {user && ['admin', 'manager'].includes(user.role) && (
                                     <>
-                                        <DropdownMenuSeparator className="my-1" />
+                                        <DropdownMenuSeparator className="my-1 bg-gray-100 dark:bg-gray-800" />
                                         <Link href="/dashboard">
-                                            <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-purple-50 dark:focus:bg-purple-900/20">
-                                                <LayoutDashboard className="w-4 h-4 mr-2 text-purple-500" />
+                                            <DropdownMenuItem className="cursor-pointer rounded-xl py-2.5 px-3 focus:bg-gray-100 dark:focus:bg-white/5 transition-colors">
                                                 {t('nav.dashboard', 'Yönetim Paneli')}
                                             </DropdownMenuItem>
                                         </Link>
                                         <Link href="/dashboard/settings">
-                                            <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-gray-100 dark:focus:bg-gray-800">
-                                                <Settings className="w-4 h-4 mr-2 text-gray-500" />
+                                            <DropdownMenuItem className="cursor-pointer rounded-xl py-2.5 px-3 focus:bg-gray-100 dark:focus:bg-white/5 transition-colors">
                                                 {t('nav.settings', 'Ayarlar')}
                                             </DropdownMenuItem>
                                         </Link>
                                     </>
                                 )}
-                                <DropdownMenuSeparator className="my-1" />
-                                <DropdownMenuItem onClick={logout} className="cursor-pointer rounded-lg text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20">
-                                    <LogOut className="w-4 h-4 mr-2" />
+                                <DropdownMenuSeparator className="my-1 bg-gray-100 dark:bg-gray-800" />
+                                <DropdownMenuItem onClick={logout} className="cursor-pointer rounded-xl py-2.5 px-3 text-red-600 dark:text-red-400 focus:bg-red-50 dark:focus:bg-red-900/20 transition-colors">
                                     {t('auth.logout', 'Çıkış Yap')}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -579,43 +559,38 @@ export default function ChatInterface() {
 
                             {/* Welcome Screen */}
                             {isClient && messages.length === 0 && (
-                                <div className="flex flex-col items-center justify-center pt-8 md:pt-12 space-y-8 animate-in fade-in duration-700">
-                                    {/* Logo Animation */}
-                                    <div className="relative">
-                                        <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-3xl blur-2xl opacity-20 animate-pulse"></div>
-                                        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-500 flex items-center justify-center shadow-2xl">
-                                            <Sparkles className="w-8 h-8 text-white" />
-                                        </div>
-                                    </div>
-
-                                    <div className="text-center space-y-3 max-w-xl">
-                                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-                                            <span className="bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 bg-clip-text text-transparent">
+                                <div className="flex flex-col items-center justify-center pt-6 md:pt-10 space-y-5 animate-in fade-in duration-500 px-4">
+                                    <div className="text-center space-y-2 max-w-lg">
+                                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                                            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent">
                                                 {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                             </span>
                                         </h1>
-                                        <p className="text-lg text-gray-500 dark:text-gray-400 font-medium">
+                                        <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
                                             {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                         </p>
                                     </div>
 
-                                    {/* Suggestions Cards */}
+                                    {/* Suggestions Cards - Glassmorphism 3D */}
                                     {showSuggestions && suggestedQuestions.length > 0 && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mt-4">
                                             {suggestedQuestions.slice(0, 4).map((q, i) => (
                                                 <div
                                                     key={i}
                                                     onClick={() => setInputText(q)}
-                                                    className="group relative p-4 rounded-2xl bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-all duration-300 border border-gray-200/50 dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg hover:shadow-blue-500/10"
+                                                    className="group relative p-4 rounded-2xl cursor-pointer transition-all duration-300
+                                                        bg-white/60 dark:bg-white/5
+                                                        backdrop-blur-xl backdrop-saturate-150
+                                                        border border-white/50 dark:border-white/10
+                                                        hover:bg-white/80 dark:hover:bg-white/10
+                                                        hover:border-blue-200/50 dark:hover:border-blue-500/30
+                                                        hover:shadow-xl hover:shadow-blue-500/10
+                                                        hover:-translate-y-0.5 hover:scale-[1.02]
+                                                        active:scale-[0.98]"
                                                 >
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 dark:from-cyan-500/20 dark:to-blue-500/20 flex items-center justify-center group-hover:from-cyan-500/20 group-hover:to-blue-500/20 transition-colors">
-                                                            <Sparkles className="w-4 h-4 text-blue-500" />
-                                                        </div>
-                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white leading-relaxed">
-                                                            {q}
-                                                        </span>
-                                                    </div>
+                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white leading-relaxed">
+                                                        {q}
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>
@@ -819,9 +794,9 @@ export default function ChatInterface() {
                                 </div>
                             </div>
                         </div>
-                        <div className="text-center mt-3">
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-                                {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR. LÜTFEN ÖNEMLİ BİLGİLERİ DOĞRULAYIN.')}
+                        <div className="text-center mt-2">
+                            <p className="text-[9px] text-gray-400/70 dark:text-gray-500/70 font-medium tracking-wide">
+                                {t('chat.disclaimer', 'Yapay zeka hata yapabilir. Önemli bilgileri doğrulayın.')}
                             </p>
                         </div>
                     </div>
