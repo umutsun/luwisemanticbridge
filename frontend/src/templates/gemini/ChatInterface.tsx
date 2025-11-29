@@ -353,8 +353,9 @@ export default function ChatInterface() {
                         <span className="text-xl font-medium tracking-tight bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 bg-clip-text text-transparent">
                             {chatbotSettings.title}
                         </span>
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                            Advanced
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                            {chatbotSettings.activeChatModel?.split('/').pop() || 'AI'}
                         </span>
                     </div>
 
@@ -406,8 +407,8 @@ export default function ChatInterface() {
 
                 {/* Main Content */}
                 <main className="flex-1 overflow-hidden relative flex flex-col">
-                    <ScrollArea className="flex-1 px-4 md:px-0">
-                        <div className="max-w-3xl mx-auto w-full py-8 pb-32">
+                    <ScrollArea className="flex-1 h-full px-4 md:px-0" style={{ height: 'calc(100vh - 180px)' }}>
+                        <div className="max-w-3xl mx-auto w-full py-8 pb-40">
 
                             {/* Welcome Screen */}
                             {isClient && messages.length === 0 && (
@@ -483,16 +484,20 @@ export default function ChatInterface() {
                                             {/* Sources Section */}
                                             {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
                                                 <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                                                    <div className="flex items-center gap-2 mb-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                                        <Sparkles className="w-3 h-3" />
-                                                        Sources & Citations
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                            <Sparkles className="w-3 h-3" />
+                                                            Sources & Citations ({msg.sources.length})
+                                                        </div>
                                                     </div>
-                                                    <div className="space-y-2">
+                                                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                                                         {(() => {
-                                                            const sortedSources = msg.sources.sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
-                                                            const visibleCount = visibleSourcesCount[msg.id] || ragSettings.minResults;
+                                                            const sortedSources = [...msg.sources].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+                                                            const initialCount = 3;
+                                                            const visibleCount = visibleSourcesCount[msg.id] || initialCount;
                                                             const visibleSources = sortedSources.slice(0, visibleCount);
                                                             const hasMore = sortedSources.length > visibleCount;
+                                                            const canShowLess = visibleCount > initialCount;
 
                                                             return (
                                                                 <>
@@ -506,10 +511,10 @@ export default function ChatInterface() {
                                                                                     {idx + 1}
                                                                                 </div>
                                                                                 <div className="flex-1 min-w-0">
-                                                                                    <div className="flex items-center gap-2 mb-1">
-                                                                                        {source.sourceType && (
+                                                                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                                                        {(source.sourceTable || source.sourceType) && (
                                                                                             <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                                                                                                {source.sourceType}
+                                                                                                {source.sourceTable || source.sourceType}
                                                                                             </span>
                                                                                         )}
                                                                                         {source.score && (
@@ -521,40 +526,62 @@ export default function ChatInterface() {
                                                                                                     />
                                                                                                 </div>
                                                                                                 <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                                                                                                    {Math.round(source.score)}%
+                                                                                                    {Math.round(source.score)}% Match
                                                                                                 </span>
                                                                                             </div>
                                                                                         )}
                                                                                     </div>
-                                                                                    {source.summary && (
+                                                                                    {(source.title || source.citation || source.summary) && (
                                                                                         <p className="text-xs text-gray-700 dark:text-gray-300 font-medium mb-1 line-clamp-2">
-                                                                                            {source.summary}
+                                                                                            {source.title || source.citation || source.summary}
                                                                                         </p>
                                                                                     )}
                                                                                     {(source.content || source.excerpt) && (
                                                                                         <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
-                                                                                            {source.content || source.excerpt}
+                                                                                            {(source.content || source.excerpt).slice(0, 200)}...
                                                                                         </p>
                                                                                     )}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
                                                                     ))}
-                                                                    {hasMore && (
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            className="w-full text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                                                                            onClick={() => {
-                                                                                setVisibleSourcesCount(prev => ({
-                                                                                    ...prev,
-                                                                                    [msg.id]: Math.min(visibleCount + ragSettings.minResults, sortedSources.length)
-                                                                                }));
-                                                                            }}
-                                                                        >
-                                                                            Show {Math.min(ragSettings.minResults, sortedSources.length - visibleCount)} more sources
-                                                                        </Button>
-                                                                    )}
+                                                                    <div className="flex gap-2 justify-center pt-2">
+                                                                        {hasMore && (
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                                                                onClick={() => {
+                                                                                    setVisibleSourcesCount(prev => ({
+                                                                                        ...prev,
+                                                                                        [msg.id]: Math.min(visibleCount + 5, sortedSources.length)
+                                                                                    }));
+                                                                                }}
+                                                                            >
+                                                                                Show {Math.min(5, sortedSources.length - visibleCount)} more
+                                                                            </Button>
+                                                                        )}
+                                                                        {canShowLess && (
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="sm"
+                                                                                className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                                                                                onClick={() => {
+                                                                                    setVisibleSourcesCount(prev => ({
+                                                                                        ...prev,
+                                                                                        [msg.id]: initialCount
+                                                                                    }));
+                                                                                }}
+                                                                            >
+                                                                                Show less
+                                                                            </Button>
+                                                                        )}
+                                                                        {!hasMore && sortedSources.length > initialCount && (
+                                                                            <span className="text-xs text-gray-500">
+                                                                                Showing all {sortedSources.length} sources
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </>
                                                             );
                                                         })()}
@@ -595,8 +622,8 @@ export default function ChatInterface() {
                         </div>
                     </ScrollArea>
 
-                    {/* Input Area */}
-                    <div className="w-full max-w-3xl mx-auto px-4 pb-6 pt-2 bg-[#fff] dark:bg-[#131314]">
+                    {/* Input Area - Fixed at bottom */}
+                    <div className="sticky bottom-0 w-full max-w-3xl mx-auto px-4 pb-6 pt-2 bg-[#fff] dark:bg-[#131314] border-t border-gray-100 dark:border-gray-800">
                         <div className="relative flex items-end bg-gray-100 dark:bg-[#1e1f20] rounded-[32px] p-2 transition-all focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600">
                             <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 text-gray-500 hover:bg-gray-200 dark:hover:bg-[#2d2e30] mb-0.5">
                                 <Plus className="w-5 h-5" />
@@ -632,7 +659,7 @@ export default function ChatInterface() {
                         </div>
                         <div className="text-center mt-2">
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Gemini may display inaccurate info, including about people, so double-check its responses.
+                                {t('chat.disclaimer', 'AI CAN MAKE MISTAKES. PLEASE VERIFY IMPORTANT INFORMATION.')}
                             </p>
                         </div>
                     </div>
