@@ -13,7 +13,6 @@ import { Label } from '@/components/ui/label';
 import { getEndpoint } from '@/config/api.config';
 import {
     Send,
-    Bot,
     User,
     Loader2,
     Sparkles,
@@ -21,15 +20,14 @@ import {
     Settings,
     LayoutDashboard,
     LogOut,
-    Image as ImageIcon,
     Mic,
-    MoreVertical,
-    Share2,
     ThumbsUp,
     ThumbsDown,
     Copy,
     RefreshCw,
-    Check
+    Check,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -406,60 +404,80 @@ export default function ChatInterface() {
 
     return (
         <ProtectedRoute>
-            <div className="flex flex-col h-screen bg-[#fff] dark:bg-[#131314] text-[#1f1f1f] dark:text-[#e3e3e3] font-sans transition-colors duration-300">
+            <div className="flex flex-col h-screen bg-gradient-to-b from-gray-50 to-white dark:from-[#0a0a0b] dark:to-[#131314] text-gray-900 dark:text-gray-100 font-sans transition-colors duration-500">
 
-                {/* Minimal Top Bar */}
-                <header className="flex items-center justify-between px-4 py-1.5 sticky top-0 z-50 bg-[#fff]/80 dark:bg-[#131314]/80 backdrop-blur-md border-b border-gray-100/50 dark:border-gray-800/50">
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={clearChat}>
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-red-500 flex items-center justify-center">
-                            <Sparkles className="w-4 h-4 text-white" />
+                {/* Elegant Top Bar */}
+                <header className="flex items-center justify-between px-6 py-3 sticky top-0 z-50 bg-white/70 dark:bg-[#0a0a0b]/70 backdrop-blur-2xl border-b border-gray-200/50 dark:border-gray-800/30">
+                    <div className="flex items-center gap-3 cursor-pointer group" onClick={clearChat}>
+                        <div className="relative">
+                            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-xl blur opacity-40 group-hover:opacity-60 transition duration-300"></div>
+                            <div className="relative w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
+                                <Sparkles className="w-5 h-5 text-white" />
+                            </div>
                         </div>
-                        <span className="text-base font-medium tracking-tight text-gray-800 dark:text-gray-200">
-                            {chatbotSettings.title || t('chat.title', 'AI')}
-                        </span>
+                        <div className="flex flex-col">
+                            <span className="text-base font-semibold tracking-tight text-gray-900 dark:text-white">
+                                {chatbotSettings.title || t('chat.title', 'AI')}
+                            </span>
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                {chatbotSettings.activeChatModel?.split('/').pop() || t('chat.ready', 'Hazır')}
+                            </span>
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={clearChat}
+                            className="h-9 w-9 rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/50"
+                            title={t('chat.newChat', 'Yeni Sohbet')}
+                        >
+                            <Plus className="w-5 h-5" />
+                        </Button>
                         <ThemeToggle />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-gray-200 dark:hover:ring-gray-700 transition-all">
-                                    <AvatarImage src={user?.avatar} />
-                                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-blue-500 text-white text-xs font-medium">
-                                        {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                                    </AvatarFallback>
-                                </Avatar>
+                                <button className="relative group">
+                                    <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full opacity-0 group-hover:opacity-50 blur transition duration-300"></div>
+                                    <Avatar className="relative w-9 h-9 cursor-pointer ring-2 ring-gray-200 dark:ring-gray-700 group-hover:ring-blue-500/50 transition-all duration-300">
+                                        <AvatarImage src={user?.avatar} />
+                                        <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-sm font-semibold">
+                                            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
-                                    <div className="font-medium text-sm">{user?.name || 'User'}</div>
-                                    <div className="text-xs text-gray-500 truncate">{user?.email}</div>
+                            <DropdownMenuContent align="end" className="w-64 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-gray-200/50 dark:border-gray-700/50 shadow-2xl rounded-xl p-1">
+                                <div className="px-3 py-3 border-b border-gray-100 dark:border-gray-800">
+                                    <div className="font-semibold text-sm text-gray-900 dark:text-white">{user?.name || 'User'}</div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user?.email}</div>
                                 </div>
-                                <DropdownMenuItem onClick={openProfileDialog} className="cursor-pointer">
-                                    <User className="w-4 h-4 mr-2" />
-                                    {t('profile.edit', 'Edit Profile')}
+                                <DropdownMenuItem onClick={openProfileDialog} className="cursor-pointer rounded-lg mt-1 focus:bg-blue-50 dark:focus:bg-blue-900/20">
+                                    <User className="w-4 h-4 mr-2 text-blue-500" />
+                                    {t('profile.edit', 'Profili Düzenle')}
                                 </DropdownMenuItem>
-                                {user?.role === 'admin' && (
+                                {user && ['admin', 'manager'].includes(user.role) && (
                                     <>
-                                        <DropdownMenuSeparator />
+                                        <DropdownMenuSeparator className="my-1" />
                                         <Link href="/dashboard">
-                                            <DropdownMenuItem className="cursor-pointer">
-                                                <LayoutDashboard className="w-4 h-4 mr-2" />
-                                                Dashboard
+                                            <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-purple-50 dark:focus:bg-purple-900/20">
+                                                <LayoutDashboard className="w-4 h-4 mr-2 text-purple-500" />
+                                                {t('nav.dashboard', 'Yönetim Paneli')}
                                             </DropdownMenuItem>
                                         </Link>
                                         <Link href="/dashboard/settings">
-                                            <DropdownMenuItem className="cursor-pointer">
-                                                <Settings className="w-4 h-4 mr-2" />
-                                                Settings
+                                            <DropdownMenuItem className="cursor-pointer rounded-lg focus:bg-gray-100 dark:focus:bg-gray-800">
+                                                <Settings className="w-4 h-4 mr-2 text-gray-500" />
+                                                {t('nav.settings', 'Ayarlar')}
                                             </DropdownMenuItem>
                                         </Link>
                                     </>
                                 )}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600 focus:text-red-600">
+                                <DropdownMenuSeparator className="my-1" />
+                                <DropdownMenuItem onClick={logout} className="cursor-pointer rounded-lg text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20">
                                     <LogOut className="w-4 h-4 mr-2" />
-                                    {t('auth.logout', 'Logout')}
+                                    {t('auth.logout', 'Çıkış Yap')}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -468,53 +486,64 @@ export default function ChatInterface() {
 
                 {/* Profile Update Dialog */}
                 <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
-                    <DialogContent className="sm:max-w-md">
+                    <DialogContent className="sm:max-w-md bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl border-gray-200/50 dark:border-gray-700/50 rounded-2xl">
                         <DialogHeader>
-                            <DialogTitle>{t('profile.edit', 'Edit Profile')}</DialogTitle>
+                            <DialogTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                                <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20">
+                                    <User className="w-4 h-4 text-blue-500" />
+                                </div>
+                                {t('profile.edit', 'Profili Düzenle')}
+                            </DialogTitle>
                         </DialogHeader>
-                        <div className="space-y-4 py-4">
+                        <div className="space-y-5 py-4">
                             <div className="flex justify-center">
-                                <Avatar className="w-20 h-20">
-                                    <AvatarImage src={user?.avatar} />
-                                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-blue-500 text-white text-2xl font-medium">
-                                        {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                                    </AvatarFallback>
-                                </Avatar>
+                                <div className="relative group">
+                                    <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full blur opacity-30 group-hover:opacity-50 transition duration-300"></div>
+                                    <Avatar className="relative w-24 h-24 ring-4 ring-white dark:ring-gray-800">
+                                        <AvatarImage src={user?.avatar} />
+                                        <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-3xl font-semibold">
+                                            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                        </AvatarFallback>
+                                    </Avatar>
+                                </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="name">{t('profile.name', 'Name')}</Label>
+                                <Label htmlFor="name" className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('profile.name', 'Ad Soyad')}</Label>
                                 <Input
                                     id="name"
                                     value={profileForm.name}
                                     onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
-                                    placeholder={t('profile.namePlaceholder', 'Enter your name')}
+                                    placeholder={t('profile.namePlaceholder', 'Adınızı girin')}
+                                    className="rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 focus:border-blue-500 focus:ring-blue-500/20"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="email">{t('profile.email', 'Email')}</Label>
+                                <Label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('profile.email', 'E-posta')}</Label>
                                 <Input
                                     id="email"
                                     value={profileForm.email}
                                     disabled
-                                    className="bg-gray-50 dark:bg-gray-800"
+                                    className="rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
                                 />
-                                <p className="text-xs text-gray-500">{t('profile.emailNote', 'Email cannot be changed')}</p>
+                                <p className="text-[11px] text-gray-500">{t('profile.emailNote', 'E-posta değiştirilemez')}</p>
                             </div>
                             {profileUpdateError && (
-                                <p className="text-sm text-red-500">{profileUpdateError}</p>
+                                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                                    <p className="text-sm text-red-600 dark:text-red-400">{profileUpdateError}</p>
+                                </div>
                             )}
                         </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setShowProfileDialog(false)}>
-                                {t('common.cancel', 'Cancel')}
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={() => setShowProfileDialog(false)} className="rounded-xl border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800">
+                                {t('common.cancel', 'İptal')}
                             </Button>
-                            <Button onClick={handleProfileUpdate} disabled={isUpdatingProfile}>
+                            <Button onClick={handleProfileUpdate} disabled={isUpdatingProfile} className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25">
                                 {isUpdatingProfile ? (
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                 ) : (
                                     <Check className="w-4 h-4 mr-2" />
                                 )}
-                                {t('common.save', 'Save')}
+                                {t('common.save', 'Kaydet')}
                             </Button>
                         </div>
                     </DialogContent>
@@ -550,32 +579,42 @@ export default function ChatInterface() {
 
                             {/* Welcome Screen */}
                             {isClient && messages.length === 0 && (
-                                <div className="flex flex-col items-start justify-start pt-4 space-y-6 animate-in fade-in duration-500">
-                                    <div className="space-y-1">
-                                        <h1 className="text-4xl md:text-5xl font-medium tracking-tighter">
-                                            <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 bg-clip-text text-transparent">
+                                <div className="flex flex-col items-center justify-center pt-8 md:pt-12 space-y-8 animate-in fade-in duration-700">
+                                    {/* Logo Animation */}
+                                    <div className="relative">
+                                        <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-3xl blur-2xl opacity-20 animate-pulse"></div>
+                                        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-500 flex items-center justify-center shadow-2xl">
+                                            <Sparkles className="w-8 h-8 text-white" />
+                                        </div>
+                                    </div>
+
+                                    <div className="text-center space-y-3 max-w-xl">
+                                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+                                            <span className="bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 bg-clip-text text-transparent">
                                                 {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                             </span>
                                         </h1>
-                                        <p className="text-xl md:text-2xl text-gray-400 dark:text-gray-500 font-medium">
+                                        <p className="text-lg text-gray-500 dark:text-gray-400 font-medium">
                                             {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                         </p>
                                     </div>
 
-                                    {/* Suggestions Cards - Only show if suggestions exist */}
+                                    {/* Suggestions Cards */}
                                     {showSuggestions && suggestedQuestions.length > 0 && (
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
                                             {suggestedQuestions.slice(0, 4).map((q, i) => (
                                                 <div
                                                     key={i}
                                                     onClick={() => setInputText(q)}
-                                                    className="h-48 p-4 rounded-2xl bg-gray-50 dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-[#2d2e30] cursor-pointer transition-colors flex flex-col justify-between group"
+                                                    className="group relative p-4 rounded-2xl bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-all duration-300 border border-gray-200/50 dark:border-gray-700/50 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg hover:shadow-blue-500/10"
                                                 >
-                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white">
-                                                        {q}
-                                                    </span>
-                                                    <div className="self-end p-2 rounded-full bg-white dark:bg-[#131314] opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                                                        <Sparkles className="w-4 h-4 text-purple-500" />
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-gradient-to-br from-cyan-500/10 to-blue-500/10 dark:from-cyan-500/20 dark:to-blue-500/20 flex items-center justify-center group-hover:from-cyan-500/20 group-hover:to-blue-500/20 transition-colors">
+                                                            <Sparkles className="w-4 h-4 text-blue-500" />
+                                                        </div>
+                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white leading-relaxed">
+                                                            {q}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -642,84 +681,66 @@ export default function ChatInterface() {
                                                                     {visibleSources.map((source: any, idx: number) => (
                                                                         <div
                                                                             key={idx}
-                                                                            className="group p-3 rounded-xl bg-gray-50 dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-[#2d2e30] transition-colors cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-gray-700"
+                                                                            className="group p-3 rounded-xl bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-300 cursor-pointer border border-gray-100 dark:border-gray-700/50 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-md hover:shadow-blue-500/5"
                                                                         >
-                                                                            <div className="flex items-start gap-3">
-                                                                                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 text-xs font-medium text-blue-700 dark:text-blue-300">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-xs font-bold text-blue-600 dark:text-blue-400 group-hover:from-cyan-500/30 group-hover:to-blue-500/30 transition-colors">
                                                                                     {idx + 1}
                                                                                 </div>
-                                                                                <div className="flex-1 min-w-0">
-                                                                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                                                        {(source.sourceTable || source.sourceType) && (
-                                                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                                                                                                {source.sourceTable || source.sourceType}
-                                                                                            </span>
-                                                                                        )}
-                                                                                        {source.score && (
-                                                                                            <div className="flex items-center gap-1.5">
-                                                                                                <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                                                                    <div
-                                                                                                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
-                                                                                                        style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
-                                                                                                    />
-                                                                                                </div>
-                                                                                                <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                                                                                                    {Math.round(source.score)}% {t('chat.match', 'Eşleşme')}
-                                                                                                </span>
+                                                                                <div className="flex-1 min-w-0 overflow-hidden">
+                                                                                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate transition-colors">
+                                                                                        {source.title || source.citation || source.summary || t('chat.untitledSource', 'İsimsiz Kaynak')}
+                                                                                    </p>
+                                                                                    {source.score && (
+                                                                                        <div className="flex items-center gap-2 mt-1.5">
+                                                                                            <div className="w-20 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                                                                <div
+                                                                                                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500"
+                                                                                                    style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
+                                                                                                />
                                                                                             </div>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    {(source.title || source.citation || source.summary) && (
-                                                                                        <p className="text-xs text-gray-700 dark:text-gray-300 font-medium mb-1 line-clamp-2">
-                                                                                            {source.title || source.citation || source.summary}
-                                                                                        </p>
-                                                                                    )}
-                                                                                    {(source.content || source.excerpt) && (
-                                                                                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
-                                                                                            {(source.content || source.excerpt).slice(0, 200)}...
-                                                                                        </p>
+                                                                                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                                                                                {Math.round(source.score)}%
+                                                                                            </span>
+                                                                                        </div>
                                                                                     )}
                                                                                 </div>
+                                                                                <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-blue-500 -rotate-90 flex-shrink-0 transition-colors" />
                                                                             </div>
                                                                         </div>
                                                                     ))}
-                                                                    <div className="flex gap-2 justify-center pt-2">
-                                                                        {hasMore && (
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
-                                                                                onClick={() => {
-                                                                                    setVisibleSourcesCount(prev => ({
-                                                                                        ...prev,
-                                                                                        [msg.id]: Math.min(visibleCount + 5, sortedSources.length)
-                                                                                    }));
-                                                                                }}
-                                                                            >
-                                                                                {t('chat.showMore', '{{count}} daha göster', { count: Math.min(5, sortedSources.length - visibleCount) })}
-                                                                            </Button>
-                                                                        )}
-                                                                        {canShowLess && (
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                                                                                onClick={() => {
-                                                                                    setVisibleSourcesCount(prev => ({
-                                                                                        ...prev,
-                                                                                        [msg.id]: initialCount
-                                                                                    }));
-                                                                                }}
-                                                                            >
-                                                                                {t('chat.showLess', 'Daha az göster')}
-                                                                            </Button>
-                                                                        )}
-                                                                        {!hasMore && sortedSources.length > initialCount && (
-                                                                            <span className="text-xs text-gray-500">
-                                                                                {t('chat.showingAllSources', 'Tüm {{count}} kaynak gösteriliyor', { count: sortedSources.length })}
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
+                                                                    {/* Arrow buttons for show more/less */}
+                                                                    {(hasMore || canShowLess) && (
+                                                                        <div className="flex gap-2 justify-center pt-3">
+                                                                            {hasMore && (
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        setVisibleSourcesCount(prev => ({
+                                                                                            ...prev,
+                                                                                            [msg.id]: Math.min(visibleCount + 5, sortedSources.length)
+                                                                                        }));
+                                                                                    }}
+                                                                                    className="group flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-300"
+                                                                                >
+                                                                                    <span className="text-xs font-medium text-blue-600 dark:text-blue-400">+{Math.min(5, sortedSources.length - visibleCount)}</span>
+                                                                                    <ChevronDown className="w-4 h-4 text-blue-500 group-hover:translate-y-0.5 transition-transform" />
+                                                                                </button>
+                                                                            )}
+                                                                            {canShowLess && (
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        setVisibleSourcesCount(prev => ({
+                                                                                            ...prev,
+                                                                                            [msg.id]: initialCount
+                                                                                        }));
+                                                                                    }}
+                                                                                    className="group flex items-center gap-1 px-3 py-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-all duration-300"
+                                                                                >
+                                                                                    <ChevronUp className="w-4 h-4 text-gray-500 group-hover:-translate-y-0.5 transition-transform" />
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
                                                                 </>
                                                             );
                                                         })()}
@@ -764,42 +785,42 @@ export default function ChatInterface() {
                     </ScrollArea>
 
                     {/* Input Area - Fixed at bottom */}
-                    <div className="sticky bottom-0 w-full max-w-3xl mx-auto px-4 pb-6 pt-2 bg-[#fff] dark:bg-[#131314] border-t border-gray-100 dark:border-gray-800">
-                        <div className="relative flex items-end bg-gray-100 dark:bg-[#1e1f20] rounded-[32px] p-2 transition-all focus-within:ring-1 focus-within:ring-gray-300 dark:focus-within:ring-gray-600">
-                            <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 text-gray-500 hover:bg-gray-200 dark:hover:bg-[#2d2e30] mb-0.5">
-                                <Plus className="w-5 h-5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 text-gray-500 hover:bg-gray-200 dark:hover:bg-[#2d2e30] mb-0.5">
-                                <ImageIcon className="w-5 h-5" />
-                            </Button>
+                    <div className="sticky bottom-0 w-full max-w-3xl mx-auto px-4 pb-6 pt-4 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent dark:from-[#0a0a0b] dark:via-[#0a0a0b] dark:to-transparent">
+                        <div className="relative group">
+                            {/* Glow effect */}
+                            <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/20 via-blue-500/20 to-purple-500/20 rounded-3xl blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-500"></div>
 
-                            <Textarea
-                                ref={textareaRef}
-                                value={inputText}
-                                onChange={(e) => setInputText(e.target.value)}
-                                onKeyDown={handleKeyPress}
-                                placeholder={chatbotSettings.placeholder}
-                                className="flex-1 bg-transparent border-0 focus-visible:ring-0 resize-none max-h-[200px] min-h-[48px] py-3 px-2 text-base"
-                                rows={1}
-                            />
+                            <div className="relative flex items-end bg-white dark:bg-gray-800/80 rounded-2xl p-2 shadow-lg shadow-gray-200/50 dark:shadow-none border border-gray-200/50 dark:border-gray-700/50 backdrop-blur-xl transition-all focus-within:border-blue-300 dark:focus-within:border-blue-700 focus-within:shadow-xl focus-within:shadow-blue-500/10">
+                                <Textarea
+                                    ref={textareaRef}
+                                    value={inputText}
+                                    onChange={(e) => setInputText(e.target.value)}
+                                    onKeyDown={handleKeyPress}
+                                    placeholder={chatbotSettings.placeholder}
+                                    className="flex-1 bg-transparent border-0 focus-visible:ring-0 resize-none max-h-[200px] min-h-[52px] py-3.5 px-4 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                                    rows={1}
+                                />
 
-                            {inputText.trim() ? (
-                                <Button
-                                    onClick={handleSendMessage}
-                                    disabled={isLoading}
-                                    size="icon"
-                                    className="rounded-full h-10 w-10 bg-blue-600 hover:bg-blue-700 text-white mb-0.5 transition-all"
-                                >
-                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                                </Button>
-                            ) : (
-                                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 text-gray-500 hover:bg-gray-200 dark:hover:bg-[#2d2e30] mb-0.5">
-                                    <Mic className="w-5 h-5" />
-                                </Button>
-                            )}
+                                <div className="flex items-center gap-1 pb-1 pr-1">
+                                    {inputText.trim() ? (
+                                        <Button
+                                            onClick={handleSendMessage}
+                                            disabled={isLoading}
+                                            size="icon"
+                                            className="rounded-xl h-10 w-10 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25 transition-all duration-300"
+                                        >
+                                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                        </Button>
+                                    ) : (
+                                        <Button variant="ghost" size="icon" className="rounded-xl h-10 w-10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                                            <Mic className="w-5 h-5" />
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <div className="text-center mt-2">
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className="text-center mt-3">
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
                                 {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR. LÜTFEN ÖNEMLİ BİLGİLERİ DOĞRULAYIN.')}
                             </p>
                         </div>
