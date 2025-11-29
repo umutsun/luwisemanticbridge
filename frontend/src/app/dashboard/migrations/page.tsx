@@ -27,7 +27,9 @@ import {
   Trash2,
   MoreHorizontal,
   Filter,
-  Plus
+  Plus,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import {
   Dialog,
@@ -155,6 +157,10 @@ export default function EmbeddingsManagerPage() {
   const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
   const [isDeletingSkipped, setIsDeletingSkipped] = useState(false);
   const [isReembedding, setIsReembedding] = useState(false);
+  // Skipped records pagination
+  const [skippedPage, setSkippedPage] = useState(1);
+  const [skippedTotalCount, setSkippedTotalCount] = useState(0);
+  const SKIPPED_PAGE_SIZE = 100;
   const { toast } = useToast();
 
   // Settings state
@@ -410,21 +416,25 @@ export default function EmbeddingsManagerPage() {
     }
   }, [connectToProgressStream]);
 
-  // Fetch skipped records for a table
-  const fetchSkippedRecords = useCallback(async (tableName: string) => {
+  // Fetch skipped records for a table with pagination
+  const fetchSkippedRecords = useCallback(async (tableName: string, page: number = 1) => {
     setIsLoadingSkipped(true);
-    setSelectedSkippedIds(new Set());
+    if (page === 1) {
+      setSelectedSkippedIds(new Set());
+    }
     try {
       const response = await fetchWithAuth(
-        `${config.api.baseUrl}/api/v2/migration/skipped?table=${encodeURIComponent(tableName)}`
+        `${config.api.baseUrl}/api/v2/migration/skipped?table=${encodeURIComponent(tableName)}&page=${page}&limit=${SKIPPED_PAGE_SIZE}`
       );
       if (response.ok) {
         const data = await response.json();
         console.log('Skipped records received:', data);
         setSkippedRecords(data.records || []);
+        setSkippedTotalCount(data.total || data.records?.length || 0);
+        setSkippedPage(page);
         setSelectedTableForSkipped(tableName);
 
-        // Pre-select all records by default
+        // Pre-select all records on current page
         const allIds = new Set((data.records || []).map((r: any) => r.id));
         setSelectedSkippedIds(allIds);
 
@@ -1774,16 +1784,46 @@ export default function EmbeddingsManagerPage() {
             </div>
           )}
 
-          {/* Footer with actions */}
-          {skippedRecords.length > 0 && (
+          {/* Footer with pagination and actions */}
+          {(skippedRecords.length > 0 || skippedTotalCount > 0) && (
             <div className="px-6 py-3 border-t flex-shrink-0 flex items-center justify-between">
+              {/* Left: Count info */}
               <span className="text-xs text-muted-foreground">
                 {selectedSkippedIds.size > 0 ? (
-                  <span className="font-medium">{selectedSkippedIds.size}/{skippedRecords.length}</span>
+                  <span className="font-medium">{selectedSkippedIds.size} selected</span>
                 ) : (
-                  <span>{skippedRecords.length}</span>
+                  <span>{skippedTotalCount > SKIPPED_PAGE_SIZE ? `${skippedTotalCount.toLocaleString()} total` : `${skippedRecords.length}`}</span>
                 )}
               </span>
+
+              {/* Center: Pagination */}
+              {skippedTotalCount > SKIPPED_PAGE_SIZE && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => selectedTableForSkipped && fetchSkippedRecords(selectedTableForSkipped, skippedPage - 1)}
+                    disabled={skippedPage <= 1 || isLoadingSkipped}
+                    className="h-7 w-7 p-0"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground min-w-[80px] text-center">
+                    {skippedPage} / {Math.ceil(skippedTotalCount / SKIPPED_PAGE_SIZE)}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => selectedTableForSkipped && fetchSkippedRecords(selectedTableForSkipped, skippedPage + 1)}
+                    disabled={skippedPage >= Math.ceil(skippedTotalCount / SKIPPED_PAGE_SIZE) || isLoadingSkipped}
+                    className="h-7 w-7 p-0"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Right: Actions */}
               {selectedSkippedIds.size > 0 && (
                 <div className="flex items-center gap-1">
                   <Button

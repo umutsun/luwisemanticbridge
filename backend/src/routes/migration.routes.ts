@@ -512,9 +512,27 @@ router.get('/history', async (req: Request, res: Response) => {
 // Get skipped records
 router.get('/skipped', async (req: Request, res: Response) => {
   try {
-    const { table } = req.query;
+    const { table, page = '1', limit = '100' } = req.query;
     const pools = await initializePools();
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit as string) || 100));
+    const offset = (pageNum - 1) * limitNum;
 
+    // Build WHERE clause
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (table) {
+      whereClause = ` WHERE LOWER(source_table) = LOWER($1)`;
+      params.push(table);
+    }
+
+    // Get total count first
+    const countQuery = `SELECT COUNT(*) FROM skipped_embeddings${whereClause}`;
+    const countResult = await pools.targetPool.query(countQuery, params);
+    const total = parseInt(countResult.rows[0].count);
+
+    // Get paginated records
     let query = `
       SELECT
         id,
@@ -528,21 +546,19 @@ router.get('/skipped', async (req: Request, res: Response) => {
         created_at,
         updated_at
       FROM skipped_embeddings
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
-    const params: any[] = [];
-
-    if (table) {
-      query += ` WHERE LOWER(source_table) = LOWER($1)`;
-      params.push(table);
-    }
-
-    query += ` ORDER BY created_at DESC`;
-
-    const result = await pools.targetPool.query(query, params);
+    const result = await pools.targetPool.query(query, [...params, limitNum, offset]);
 
     res.json({
       success: true,
+      total: total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
       count: result.rows.length,
       records: result.rows
     });
@@ -780,6 +796,24 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         const tableLower = table.toLowerCase();
 
+        // Helper: Case-insensitive column value lookup (handles Soru, SORU, soru, etc.)
+        const getColumnValue = (row: any, keys: string[]): string | null => {
+          // Get all row keys for case-insensitive matching
+          const rowKeys = Object.keys(row);
+          for (const searchKey of keys) {
+            // Direct match first
+            if (row[searchKey] && String(row[searchKey]).trim().length > 0) {
+              return String(row[searchKey]);
+            }
+            // Case-insensitive match
+            const matchedKey = rowKeys.find(k => k.toLowerCase() === searchKey.toLowerCase());
+            if (matchedKey && row[matchedKey] && String(row[matchedKey]).trim().length > 0) {
+              return String(row[matchedKey]);
+            }
+          }
+          return null;
+        };
+
         // Auto-detect content columns based on common patterns
         // Priority order for content: script_text, metin, icerik, content, text, cevap, description, body
         const contentKeys = ['script_text', 'metin', 'icerik', 'content', 'text', 'cevap', 'description', 'body', 'aciklama'];
@@ -788,32 +822,25 @@ router.post('/generate', async (req: Request, res: Response) => {
         const answerKeys = ['cevap', 'answer', 'a'];
 
         // Check if this is a Q&A table (has both question and answer columns)
-        const hasQuestion = questionKeys.some(key => row[key] && String(row[key]).trim().length > 0);
-        const hasAnswer = answerKeys.some(key => row[key] && String(row[key]).trim().length > 0);
+        const questionValue = getColumnValue(row, questionKeys);
+        const answerValue = getColumnValue(row, answerKeys);
+        const hasQuestion = !!questionValue;
+        const hasAnswer = !!answerValue;
 
         if (hasQuestion && hasAnswer) {
-          // Q&A format
-          const question = questionKeys.map(key => row[key]).find(val => val && String(val).trim().length > 0) || '';
-          const answer = answerKeys.map(key => row[key]).find(val => val && String(val).trim().length > 0) || '';
-          content = `Soru: ${question}\n\nCevap: ${answer}`;
-          title = String(question).substring(0, 255);
+          // Q&A format - use pre-extracted values
+          content = `Soru: ${questionValue}\n\nCevap: ${answerValue}`;
+          title = questionValue!.substring(0, 255);
           sourceType = 'qa';
         } else {
           // Regular document format
-          // Find first non-empty content field
-          for (const key of contentKeys) {
-            if (row[key] && String(row[key]).trim().length > 0) {
-              content = String(row[key]);
-              break;
-            }
-          }
+          // Find first non-empty content field (case-insensitive)
+          content = getColumnValue(row, contentKeys) || '';
 
-          // Find first non-empty title field
-          for (const key of titleKeys) {
-            if (row[key] && String(row[key]).trim().length > 0) {
-              title = String(row[key]).substring(0, 255);
-              break;
-            }
+          // Find first non-empty title field (case-insensitive)
+          const titleValue = getColumnValue(row, titleKeys);
+          if (titleValue) {
+            title = titleValue.substring(0, 255);
           }
 
           // Fallback title
