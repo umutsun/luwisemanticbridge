@@ -910,13 +910,74 @@ export default function EmbeddingsManagerPage() {
     });
   };
 
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
   const handleBulkDelete = async () => {
-    console.log('Bulk delete for tables:', Array.from(selectedTableRows));
-    toast({
-      title: 'Not Implemented',
-      description: 'Bulk delete functionality will be added soon',
-      variant: 'default'
-    });
+    const tablesToDelete = Array.from(selectedTableRows);
+    console.log('Bulk delete for tables:', tablesToDelete);
+
+    if (tablesToDelete.length === 0) {
+      toast({
+        title: 'No Tables Selected',
+        description: 'Please select at least one table to delete',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Delete embeddings for each selected table
+      for (const table of tablesToDelete) {
+        try {
+          const response = await fetchWithAuth(
+            `${config.api.baseUrl}/api/v2/migration/clear/${encodeURIComponent(table)}`,
+            { method: 'DELETE' }
+          );
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error(`Failed to delete ${table}:`, await response.text());
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`Error deleting ${table}:`, error);
+        }
+      }
+
+      // Show result
+      if (successCount > 0) {
+        toast({
+          title: 'Deleted Successfully',
+          description: `${successCount} table(s) cleared${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+        });
+      } else if (errorCount > 0) {
+        toast({
+          title: 'Delete Failed',
+          description: `Failed to delete ${errorCount} table(s)`,
+          variant: 'destructive'
+        });
+      }
+
+      // Clear selection and refresh
+      setSelectedTableRows(new Set());
+      fetchAvailableTables();
+
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      toast({
+        title: 'Error',
+        description: 'An error occurred during bulk delete',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsBulkDeleting(false);
+    }
   };
 
   const handlePreviewTable = (table: TableInfo) => {
@@ -1552,15 +1613,20 @@ export default function EmbeddingsManagerPage() {
                       </Button>
                       <ConfirmTooltip
                         onConfirm={handleBulkDelete}
-                        title="Seçili Tabloları Sil"
-                        description={`${selectedTableRows.size} tablo(ları) silmek istediğinize emin misiniz?`}
+                        title="Seçili Tabloların Embeddinglerini Sil"
+                        description={`${selectedTableRows.size} tablo için tüm embedding kayıtlarını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`}
                       >
                         <Button
                           size="sm"
                           variant="ghost"
                           className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                          disabled={isBulkDeleting}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {isBulkDeleting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </Button>
                       </ConfirmTooltip>
                     </div>
