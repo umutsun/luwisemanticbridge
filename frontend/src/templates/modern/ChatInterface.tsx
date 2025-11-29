@@ -1,16 +1,13 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Skeleton } from '@/components/ui/skeleton';
-import config, { getEndpoint } from '@/config/api.config';
+import { getEndpoint } from '@/config/api.config';
 import {
     Send,
     Bot,
@@ -20,14 +17,25 @@ import {
     Plus,
     LayoutDashboard,
     Sparkles,
-    Zap
+    Zap,
+    ChevronDown,
+    ChevronUp,
+    Edit3,
+    Check,
+    X
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/hooks/useLanguage';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
-import { MessageSkeleton } from '@/components/chat/message-skeleton';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -80,21 +88,6 @@ const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: s
         .trim();
     const translationKey = `chat.source.table.${sourceTable.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     return t?.(translationKey, tableName) || tableName;
-};
-
-const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
-    if (isBoosted) {
-        return 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30';
-    }
-    const colors = [
-        'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-        'bg-green-500/20 text-green-300 border border-green-500/30',
-        'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-        'bg-orange-500/20 text-orange-300 border border-orange-500/30',
-        'bg-pink-500/20 text-pink-300 border border-pink-500/30'
-    ];
-    const index = keyword.length % colors.length;
-    return colors[index];
 };
 
 export default function ChatInterface() {
@@ -183,7 +176,49 @@ export default function ChatInterface() {
         tone: 'professional'
     });
 
+    // Profile update state
+    const [showProfileDialog, setShowProfileDialog] = useState(false);
+    const [profileForm, setProfileForm] = useState({ name: '', email: '' });
+    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+    const [profileError, setProfileError] = useState('');
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Profile update handler
+    const handleProfileUpdate = async () => {
+        if (!profileForm.name.trim()) {
+            setProfileError(t('profile.nameRequired', 'İsim gereklidir'));
+            return;
+        }
+        setIsUpdatingProfile(true);
+        setProfileError('');
+        try {
+            const response = await fetch('/api/v2/users/me', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: profileForm.name })
+            });
+            if (!response.ok) {
+                throw new Error(t('profile.updateFailed', 'Profil güncellenemedi'));
+            }
+            setShowProfileDialog(false);
+            window.location.reload();
+        } catch (error) {
+            setProfileError(error instanceof Error ? error.message : t('profile.updateFailed', 'Profil güncellenemedi'));
+        } finally {
+            setIsUpdatingProfile(false);
+        }
+    };
+
+    // Open profile dialog
+    const openProfileDialog = () => {
+        setProfileForm({ name: user?.name || '', email: user?.email || '' });
+        setProfileError('');
+        setShowProfileDialog(true);
+    };
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const scrollToBottom = () => {
@@ -605,19 +640,22 @@ export default function ChatInterface() {
                                         <User className="w-5 h-5" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-slate-200 min-w-[180px]">
-                                    <div className="px-3 py-2 border-b border-slate-800">
+                                <DropdownMenuContent align="end" className="bg-slate-900/95 backdrop-blur-xl border-slate-700/50 text-slate-200 min-w-[200px] shadow-2xl">
+                                    <div className="px-3 py-2.5 border-b border-slate-700/50">
                                         <p className="text-sm font-medium text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
                                         <p className="text-xs text-slate-400">{user?.email}</p>
                                     </div>
+                                    <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer" onClick={openProfileDialog}>
+                                        <Edit3 className="w-4 h-4 mr-2 text-violet-400" /> {t('profile.edit', 'Profili Düzenle')}
+                                    </DropdownMenuItem>
                                     {user && ['admin', 'manager'].includes(user.role) && (
-                                        <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer">
+                                        <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer">
                                             <Link href="/dashboard" className="flex items-center w-full">
-                                                <LayoutDashboard className="w-4 h-4 mr-2" /> {t('nav.dashboard', 'Yönetim Paneli')}
+                                                <LayoutDashboard className="w-4 h-4 mr-2 text-indigo-400" /> {t('nav.dashboard', 'Yönetim Paneli')}
                                             </Link>
                                         </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={logout}>
+                                    <DropdownMenuItem className="focus:bg-red-500/20 focus:text-white cursor-pointer" onClick={logout}>
                                         <LogOut className="w-4 h-4 mr-2 text-red-400" /> {t('nav.logout', 'Çıkış')}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -729,56 +767,59 @@ export default function ChatInterface() {
                                                                             <div
                                                                                 key={idx}
                                                                                 onClick={() => handleSourceClick(source)}
-                                                                                className="group flex items-start gap-3 p-3 rounded-lg bg-black/20 hover:bg-violet-500/10 border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
+                                                                                className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-slate-800/40 to-slate-800/20 hover:from-violet-500/15 hover:to-indigo-500/10 border border-white/5 hover:border-violet-500/30 backdrop-blur-sm transition-all duration-300 cursor-pointer overflow-hidden"
                                                                             >
-                                                                                <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded bg-slate-800 text-xs font-medium text-slate-400 group-hover:bg-violet-500/20 group-hover:text-violet-300 transition-colors">
+                                                                                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500/30 to-indigo-500/30 text-xs font-bold text-violet-300 group-hover:from-violet-500/50 group-hover:to-indigo-500/50 group-hover:text-white transition-all shadow-lg shadow-violet-900/20">
                                                                                     {idx + 1}
                                                                                 </div>
-                                                                                <div className="min-w-0 flex-1">
-                                                                                    <p className="text-sm font-medium text-slate-300 group-hover:text-violet-200 truncate transition-colors">
+                                                                                <div className="min-w-0 flex-1 overflow-hidden">
+                                                                                    <p className="text-sm font-medium text-slate-200 group-hover:text-violet-200 truncate transition-colors">
                                                                                         {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                                     </p>
-                                                                                    <div className="flex items-center gap-2 mt-1">
-                                                                                        <div className="h-1 w-16 bg-slate-800 rounded-full overflow-hidden">
-                                                                                            <div className="h-full bg-violet-500" style={{ width: `${Math.min(100, (source.score || 0))}%` }}></div>
+                                                                                    <div className="flex items-center gap-2 mt-1.5">
+                                                                                        <div className="h-1.5 w-20 bg-slate-700/50 rounded-full overflow-hidden">
+                                                                                            <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (source.score || 0))}%` }}></div>
                                                                                         </div>
-                                                                                        <span className="text-[10px] text-slate-500">{Math.round(source.score || 0)}% {t('chat.match', 'Eşleşme')}</span>
+                                                                                        <span className="text-[10px] font-medium text-slate-400 group-hover:text-violet-300 transition-colors">{Math.round(source.score || 0)}%</span>
                                                                                     </div>
                                                                                 </div>
+                                                                                <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-violet-400 -rotate-90 flex-shrink-0 transition-colors" />
                                                                             </div>
                                                                         ))}
-                                                                        <div className="flex items-center gap-2 pt-2">
-                                                                            {hasMore && (
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="sm"
-                                                                                    className="text-xs text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"
-                                                                                    onClick={() => {
-                                                                                        setVisibleSourcesCount(prev => ({
-                                                                                            ...prev,
-                                                                                            [message.id]: Math.min(visibleCount + 5, sortedSources.length)
-                                                                                        }));
-                                                                                    }}
-                                                                                >
-                                                                                    {t('chat.showMore', '{{count}} daha göster', { count: Math.min(5, sortedSources.length - visibleCount) })}
-                                                                                </Button>
-                                                                            )}
-                                                                            {canShowLess && (
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="sm"
-                                                                                    className="text-xs text-slate-400 hover:text-slate-300 hover:bg-slate-500/10"
-                                                                                    onClick={() => {
-                                                                                        setVisibleSourcesCount(prev => ({
-                                                                                            ...prev,
-                                                                                            [message.id]: initialCount
-                                                                                        }));
-                                                                                    }}
-                                                                                >
-                                                                                    {t('chat.showLess', 'Daha az göster')}
-                                                                                </Button>
-                                                                            )}
-                                                                        </div>
+                                                                        {/* Show more/less arrow buttons */}
+                                                        {(hasMore || canShowLess) && (
+                                                            <div className="flex items-center justify-center gap-2 pt-3">
+                                                                {hasMore && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setVisibleSourcesCount(prev => ({
+                                                                                ...prev,
+                                                                                [message.id]: Math.min(visibleCount + 5, sortedSources.length)
+                                                                            }));
+                                                                        }}
+                                                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 hover:border-violet-500/40 transition-all duration-300"
+                                                                        title={t('chat.showMore', '{{count}} daha göster', { count: Math.min(5, sortedSources.length - visibleCount) })}
+                                                                    >
+                                                                        <span className="text-[10px] font-medium text-violet-400 group-hover:text-violet-300">+{Math.min(5, sortedSources.length - visibleCount)}</span>
+                                                                        <ChevronDown className="w-3.5 h-3.5 text-violet-400 group-hover:text-violet-300 group-hover:translate-y-0.5 transition-transform" />
+                                                                    </button>
+                                                                )}
+                                                                {canShowLess && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setVisibleSourcesCount(prev => ({
+                                                                                ...prev,
+                                                                                [message.id]: initialCount
+                                                                            }));
+                                                                        }}
+                                                                        className="group flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/20 hover:border-slate-600/40 transition-all duration-300"
+                                                                        title={t('chat.showLess', 'Daha az göster')}
+                                                                    >
+                                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-300 group-hover:-translate-y-0.5 transition-transform" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                                     </>
                                                                 );
                                                             })()}
@@ -843,6 +884,67 @@ export default function ChatInterface() {
                         </div>
                     </div>
                 </div>
+
+                {/* Profile Update Dialog */}
+                <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
+                    <DialogContent className="bg-slate-900/95 backdrop-blur-xl border-slate-700/50 text-slate-200 shadow-2xl max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-lg font-semibold text-white flex items-center gap-2">
+                                <div className="p-2 rounded-lg bg-violet-500/20">
+                                    <Edit3 className="w-4 h-4 text-violet-400" />
+                                </div>
+                                {t('profile.editTitle', 'Profili Düzenle')}
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-2">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-300">{t('profile.name', 'Ad Soyad')}</label>
+                                <Input
+                                    value={profileForm.name}
+                                    onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder={t('profile.namePlaceholder', 'Adınızı girin')}
+                                    className="bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-violet-500/50 focus:ring-violet-500/20"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-300">{t('profile.email', 'E-posta')}</label>
+                                <Input
+                                    value={profileForm.email}
+                                    disabled
+                                    className="bg-slate-800/30 border-slate-700/30 text-slate-500 cursor-not-allowed"
+                                />
+                                <p className="text-[10px] text-slate-500">{t('profile.emailHint', 'E-posta değiştirilemez')}</p>
+                            </div>
+                            {profileError && (
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                                    <X className="w-4 h-4 text-red-400 flex-shrink-0" />
+                                    <p className="text-sm text-red-400">{profileError}</p>
+                                </div>
+                            )}
+                            <div className="flex gap-3 pt-2">
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => setShowProfileDialog(false)}
+                                    className="flex-1 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 border border-slate-700/50"
+                                >
+                                    {t('common.cancel', 'İptal')}
+                                </Button>
+                                <Button
+                                    onClick={handleProfileUpdate}
+                                    disabled={isUpdatingProfile}
+                                    className="flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-900/30"
+                                >
+                                    {isUpdatingProfile ? (
+                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                    ) : (
+                                        <Check className="w-4 h-4 mr-2" />
+                                    )}
+                                    {t('common.save', 'Kaydet')}
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </ProtectedRoute>
     );
