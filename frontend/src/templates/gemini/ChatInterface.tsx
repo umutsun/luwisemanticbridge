@@ -578,15 +578,7 @@ export default function ChatInterface() {
                                                 <div
                                                     key={i}
                                                     onClick={() => setInputText(q)}
-                                                    className="group relative p-4 rounded-2xl cursor-pointer transition-all duration-300
-                                                        bg-white/60 dark:bg-white/5
-                                                        backdrop-blur-xl backdrop-saturate-150
-                                                        border border-white/50 dark:border-white/10
-                                                        hover:bg-white/80 dark:hover:bg-white/10
-                                                        hover:border-blue-200/50 dark:hover:border-blue-500/30
-                                                        hover:shadow-xl hover:shadow-blue-500/10
-                                                        hover:-translate-y-0.5 hover:scale-[1.02]
-                                                        active:scale-[0.98]"
+                                                    className="group relative p-4 rounded-2xl cursor-pointer transition-all duration-300 bg-white/60 dark:bg-white/5 backdrop-blur-xl backdrop-saturate-150 border border-white/50 dark:border-white/10 hover:bg-white/80 dark:hover:bg-white/10 hover:border-blue-200/50 dark:hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-0.5 hover:scale-[1.02] active:scale-[0.98]"
                                                 >
                                                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white leading-relaxed">
                                                         {q}
