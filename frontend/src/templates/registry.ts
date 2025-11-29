@@ -35,6 +35,15 @@ export const chatTemplates: Record<string, TemplateConfig> = {
     config: () => import('./modern/config.json')
   },
 
+  'gemini': {
+    id: 'gemini',
+    name: 'Gemini Style',
+    description: 'Clean, minimal chat interface inspired by Google Gemini',
+    version: '1.0.0',
+    ChatInterface: () => import('./gemini/ChatInterface'),
+    config: () => import('./gemini/config.json')
+  },
+
   // Example: Add custom templates here
   // 'custom1': {
   //   id: 'custom1',
