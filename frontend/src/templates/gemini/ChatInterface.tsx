@@ -65,7 +65,8 @@ export default function ChatInterface() {
         title: 'Gemini',
         activeChatModel: 'Gemini 1.5 Pro',
         enableSuggestions: true,
-        placeholder: 'Enter a prompt here'
+        placeholder: 'Enter a prompt here',
+        welcomeMessage: ''
     });
     const [settingsLoaded, setSettingsLoaded] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -154,8 +155,9 @@ export default function ChatInterface() {
                 ...prev,
                 ...chatbotData,
                 title: chatbotData.title || 'Gemini',
-                placeholder: chatbotData.placeholder || 'Enter a prompt here',
-                activeChatModel: settingsData.llmSettings?.activeChatModel || 'google/gemini-1.5-pro'
+                placeholder: chatbotData.placeholder || t('chat.input.placeholder', 'Enter a prompt here'),
+                activeChatModel: settingsData.llmSettings?.activeChatModel || 'google/gemini-1.5-pro',
+                welcomeMessage: chatbotData.welcomeMessage || t('chatInterface.welcomeMessage', 'How can I help you today?')
             }));
 
             setRagSettings({
