@@ -811,6 +811,9 @@ router.post('/generate', async (req: Request, res: Response) => {
       message: `Starting migration for ${tables.length} table(s): ${tables.join(', ')}`,
       tokenUsage: globalTokenUsage
     })}\n\n`);
+    if (typeof (res as any).flush === 'function') {
+      (res as any).flush();
+    }
 
     for (const row of allPending) {
       try {
@@ -1012,6 +1015,10 @@ router.post('/generate', async (req: Request, res: Response) => {
         };
 
         res.write(`data: ${JSON.stringify(progress)}\n\n`);
+        // Ensure data is flushed immediately for real-time updates
+        if (typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
       } catch (error) {
         console.error('Embedding error:', error);
         processed++;
@@ -1028,6 +1035,9 @@ router.post('/generate', async (req: Request, res: Response) => {
       completedTables: tables,
       tokenUsage: globalTokenUsage
     })}\n\n`);
+    if (typeof (res as any).flush === 'function') {
+      (res as any).flush();
+    }
 
     res.end();
   } catch (error) {
