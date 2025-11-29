@@ -60,13 +60,14 @@ export default function ChatInterface() {
     const { t } = useTranslation();
     useLanguage();
 
-    // State
+    // State - NO hardcoded defaults, will load from database
     const [chatbotSettings, setChatbotSettings] = useState<any>({
-        title: 'Gemini',
-        activeChatModel: 'Gemini 1.5 Pro',
+        title: '',
+        activeChatModel: '',
         enableSuggestions: true,
-        placeholder: 'Enter a prompt here',
-        welcomeMessage: ''
+        placeholder: '',
+        welcomeMessage: '',
+        greeting: ''
     });
     const [settingsLoaded, setSettingsLoaded] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -154,10 +155,11 @@ export default function ChatInterface() {
             setChatbotSettings(prev => ({
                 ...prev,
                 ...chatbotData,
-                title: chatbotData.title || 'Gemini',
-                placeholder: chatbotData.placeholder || t('chat.input.placeholder', 'Enter a prompt here'),
-                activeChatModel: settingsData.llmSettings?.activeChatModel || 'google/gemini-1.5-pro',
-                welcomeMessage: chatbotData.welcomeMessage || t('chatInterface.welcomeMessage', 'How can I help you today?')
+                title: chatbotData.title || t('chat.title', 'AI Asistan'),
+                placeholder: chatbotData.placeholder || t('chat.input.placeholder', 'Sorunuzu yazın...'),
+                activeChatModel: settingsData.llmSettings?.activeChatModel || '',
+                welcomeMessage: chatbotData.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?'),
+                greeting: chatbotData.greeting || t('chat.greeting', 'Merhaba')
             }));
 
             setRagSettings({
@@ -178,12 +180,8 @@ export default function ChatInterface() {
                 tone: activePromptData.tone
             });
 
-            setSuggestedQuestions(suggestionsData.suggestions || [
-                "Explain quantum computing in simple terms",
-                "Write a poem about artificial intelligence",
-                "How do I make a sourdough starter?",
-                "Plan a 3-day trip to Istanbul"
-            ]);
+            // Use suggestions from API or empty array (no hardcoded suggestions)
+            setSuggestedQuestions(suggestionsData.suggestions || []);
 
             setSettingsLoaded(true);
         }).catch(err => {
@@ -416,16 +414,16 @@ export default function ChatInterface() {
                                     <div className="space-y-2">
                                         <h1 className="text-5xl md:text-6xl font-medium tracking-tighter">
                                             <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 bg-clip-text text-transparent">
-                                                Hello, {user?.name?.split(' ')[0] || 'Human'}
+                                                {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                             </span>
                                         </h1>
                                         <p className="text-2xl md:text-3xl text-gray-400 dark:text-gray-500 font-medium">
-                                            How can I help you today?
+                                            {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                         </p>
                                     </div>
 
-                                    {/* Suggestions Cards */}
-                                    {showSuggestions && (
+                                    {/* Suggestions Cards - Only show if suggestions exist */}
+                                    {showSuggestions && suggestedQuestions.length > 0 && (
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
                                             {suggestedQuestions.slice(0, 4).map((q, i) => (
                                                 <div
