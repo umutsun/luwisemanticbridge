@@ -700,10 +700,10 @@ export default function ChatInterface() {
                                                     <div className="mt-6 pt-4 border-t border-white/10">
                                                         <div className="flex items-center gap-2 mb-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
                                                             <Sparkles className="w-3 h-3 text-violet-400" />
-                                                            Sources & Citations
+                                                            {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')}
                                                         </div>
-                                                        <div className="grid gap-2">
-                                                            {message.sources.slice(0, 3).map((source, idx) => (
+                                                        <div className="grid gap-2 max-h-[400px] overflow-y-auto pr-2">
+                                                            {message.sources.slice(0, ragSettings.minResults).map((source, idx) => (
                                                                 <div
                                                                     key={idx}
                                                                     onClick={() => handleSourceClick(source)}
@@ -712,15 +712,15 @@ export default function ChatInterface() {
                                                                     <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded bg-slate-800 text-xs font-medium text-slate-400 group-hover:bg-violet-500/20 group-hover:text-violet-300 transition-colors">
                                                                         {idx + 1}
                                                                     </div>
-                                                                    <div className="min-w-0">
+                                                                    <div className="min-w-0 flex-1">
                                                                         <p className="text-sm font-medium text-slate-300 group-hover:text-violet-200 truncate transition-colors">
-                                                                            {source.title || 'Untitled Source'}
+                                                                            {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                         </p>
                                                                         <div className="flex items-center gap-2 mt-1">
                                                                             <div className="h-1 w-16 bg-slate-800 rounded-full overflow-hidden">
                                                                                 <div className="h-full bg-violet-500" style={{ width: `${Math.min(100, (source.score || 0))}%` }}></div>
                                                                             </div>
-                                                                            <span className="text-[10px] text-slate-500">{Math.round(source.score || 0)}% Match</span>
+                                                                            <span className="text-[10px] text-slate-500">{Math.round(source.score || 0)}% {t('chat.match', 'Eşleşme')}</span>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -762,7 +762,7 @@ export default function ChatInterface() {
                                     value={inputText}
                                     onChange={(e) => setInputText(e.target.value)}
                                     onKeyDown={handleKeyPress}
-                                    placeholder={chatbotSettings.placeholder || "Ask a question..."}
+                                    placeholder={chatbotSettings.placeholder || t('chat.placeholder', 'Sorunuzu yazın...')}
                                     className="min-h-[50px] max-h-[150px] w-full bg-transparent border-0 focus-visible:ring-0 resize-none py-3 px-4 text-slate-200 placeholder:text-slate-500"
                                     disabled={isLoading}
                                 />

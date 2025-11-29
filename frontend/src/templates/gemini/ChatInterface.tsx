@@ -625,13 +625,13 @@ export default function ChatInterface() {
                                                     <div className="flex items-center justify-between mb-3">
                                                         <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                                             <Sparkles className="w-3 h-3" />
-                                                            Sources & Citations ({msg.sources.length})
+                                                            {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')} ({msg.sources.length})
                                                         </div>
                                                     </div>
                                                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                                                         {(() => {
                                                             const sortedSources = [...msg.sources].sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
-                                                            const initialCount = 3;
+                                                            const initialCount = ragSettings.minResults;
                                                             const visibleCount = visibleSourcesCount[msg.id] || initialCount;
                                                             const visibleSources = sortedSources.slice(0, visibleCount);
                                                             const hasMore = sortedSources.length > visibleCount;
@@ -664,7 +664,7 @@ export default function ChatInterface() {
                                                                                                     />
                                                                                                 </div>
                                                                                                 <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                                                                                                    {Math.round(source.score)}% Match
+                                                                                                    {Math.round(source.score)}% {t('chat.match', 'Eşleşme')}
                                                                                                 </span>
                                                                                             </div>
                                                                                         )}
@@ -696,7 +696,7 @@ export default function ChatInterface() {
                                                                                     }));
                                                                                 }}
                                                                             >
-                                                                                Show {Math.min(5, sortedSources.length - visibleCount)} more
+                                                                                {t('chat.showMore', '{{count}} daha göster', { count: Math.min(5, sortedSources.length - visibleCount) })}
                                                                             </Button>
                                                                         )}
                                                                         {canShowLess && (
@@ -711,12 +711,12 @@ export default function ChatInterface() {
                                                                                     }));
                                                                                 }}
                                                                             >
-                                                                                Show less
+                                                                                {t('chat.showLess', 'Daha az göster')}
                                                                             </Button>
                                                                         )}
                                                                         {!hasMore && sortedSources.length > initialCount && (
                                                                             <span className="text-xs text-gray-500">
-                                                                                Showing all {sortedSources.length} sources
+                                                                                {t('chat.showingAllSources', 'Tüm {{count}} kaynak gösteriliyor', { count: sortedSources.length })}
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -800,7 +800,7 @@ export default function ChatInterface() {
                         </div>
                         <div className="text-center mt-2">
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {t('chat.disclaimer', 'AI CAN MAKE MISTAKES. PLEASE VERIFY IMPORTANT INFORMATION.')}
+                                {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR. LÜTFEN ÖNEMLİ BİLGİLERİ DOĞRULAYIN.')}
                             </p>
                         </div>
                     </div>
