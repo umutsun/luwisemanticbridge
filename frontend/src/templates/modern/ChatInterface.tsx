@@ -16,18 +16,9 @@ import {
     Bot,
     User,
     Loader2,
-    RefreshCw,
-    Brain,
-    ChevronRight,
-    ExternalLink,
-    ChevronDown,
     LogOut,
-    UserCircle,
-    Cpu,
     Plus,
-    Settings,
     LayoutDashboard,
-    MessageSquare,
     Sparkles,
     Zap
 } from 'lucide-react';
@@ -561,6 +552,22 @@ export default function ChatInterface() {
     return (
         <ProtectedRoute>
             <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-sans selection:bg-violet-500/30">
+                {/* Custom scrollbar styles */}
+                <style>{`
+                    .custom-scrollbar::-webkit-scrollbar {
+                        width: 6px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: rgba(139, 92, 246, 0.3);
+                        border-radius: 3px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: rgba(139, 92, 246, 0.5);
+                    }
+                `}</style>
                 {/* Modern Glass Header */}
                 <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/5">
                     <div className="max-w-6xl mx-auto w-full px-4 py-2 flex items-center justify-between">
@@ -577,48 +584,51 @@ export default function ChatInterface() {
                             </div>
                             <div>
                                 <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-                                    {settingsLoaded ? chatbotSettings.title : 'AI Assistant'}
+                                    {settingsLoaded ? chatbotSettings.title : t('chat.title', 'AI Asistan')}
                                 </h1>
-                                <div className="flex items-center gap-2">
-                                    <span className="flex w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                                    <span className="text-xs text-slate-400 font-medium tracking-wide">
-                                        {chatbotSettings.activeChatModel ? chatbotSettings.activeChatModel.split('/').pop() : 'Ready'}
-                                    </span>
-                                </div>
+                                <span className="text-xs text-slate-400 font-medium tracking-wide">
+                                    {chatbotSettings.activeChatModel ? chatbotSettings.activeChatModel.split('/').pop() : t('chat.ready', 'Hazır')}
+                                </span>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3">
-                            <Button variant="ghost" size="icon" onClick={clearChat} className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full" title="New Chat">
+                        <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="icon" onClick={clearChat} className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full" title={t('chat.newChat', 'Yeni Sohbet')}>
                                 <Plus className="w-5 h-5" />
                             </Button>
 
-                            {user && ['admin', 'manager'].includes(user.role) && (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full">
-                                            <Settings className="w-5 h-5" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-slate-200">
+                            <ThemeToggle />
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full">
+                                        <User className="w-5 h-5" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-slate-200 min-w-[180px]">
+                                    <div className="px-3 py-2 border-b border-slate-800">
+                                        <p className="text-sm font-medium text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
+                                        <p className="text-xs text-slate-400">{user?.email}</p>
+                                    </div>
+                                    {user && ['admin', 'manager'].includes(user.role) && (
                                         <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer">
                                             <Link href="/dashboard" className="flex items-center w-full">
                                                 <LayoutDashboard className="w-4 h-4 mr-2" /> {t('nav.dashboard', 'Yönetim Paneli')}
                                             </Link>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={logout}>
-                                            <LogOut className="w-4 h-4 mr-2 text-red-400" /> {t('nav.logout', 'Çıkış')}
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            )}
+                                    )}
+                                    <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={logout}>
+                                        <LogOut className="w-4 h-4 mr-2 text-red-400" /> {t('nav.logout', 'Çıkış')}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </header>
 
                 {/* Main Chat Area */}
                 <div className="pt-16 pb-32 max-w-4xl mx-auto w-full px-4">
-                    <ScrollArea className="h-[calc(100vh-12rem)] pr-4 overflow-x-hidden">
+                    <ScrollArea className="h-[calc(100vh-12rem)] pr-4 overflow-x-hidden custom-scrollbar">
                         <div className="space-y-6 py-2">
                             {/* Welcome Message */}
                             {isClient && showSuggestions && messages.length === 0 && (
@@ -698,33 +708,80 @@ export default function ChatInterface() {
                                                 {/* Sources Section */}
                                                 {message.sources && message.sources.length > 0 && (
                                                     <div className="mt-6 pt-4 border-t border-white/10">
-                                                        <div className="flex items-center gap-2 mb-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                                            <Sparkles className="w-3 h-3 text-violet-400" />
-                                                            {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')}
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div className="flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                                                                <Sparkles className="w-3 h-3 text-violet-400" />
+                                                                {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')} ({message.sources.length})
+                                                            </div>
                                                         </div>
-                                                        <div className="grid gap-2 max-h-[400px] overflow-y-auto pr-2">
-                                                            {message.sources.slice(0, ragSettings.minResults).map((source, idx) => (
-                                                                <div
-                                                                    key={idx}
-                                                                    onClick={() => handleSourceClick(source)}
-                                                                    className="group flex items-start gap-3 p-3 rounded-lg bg-black/20 hover:bg-violet-500/10 border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
-                                                                >
-                                                                    <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded bg-slate-800 text-xs font-medium text-slate-400 group-hover:bg-violet-500/20 group-hover:text-violet-300 transition-colors">
-                                                                        {idx + 1}
-                                                                    </div>
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <p className="text-sm font-medium text-slate-300 group-hover:text-violet-200 truncate transition-colors">
-                                                                            {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
-                                                                        </p>
-                                                                        <div className="flex items-center gap-2 mt-1">
-                                                                            <div className="h-1 w-16 bg-slate-800 rounded-full overflow-hidden">
-                                                                                <div className="h-full bg-violet-500" style={{ width: `${Math.min(100, (source.score || 0))}%` }}></div>
+                                                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                                            {(() => {
+                                                                const sortedSources = [...message.sources].sort((a, b) => (b.score || 0) - (a.score || 0));
+                                                                const initialCount = ragSettings.minResults;
+                                                                const visibleCount = visibleSourcesCount[message.id] || initialCount;
+                                                                const visibleSources = sortedSources.slice(0, visibleCount);
+                                                                const hasMore = sortedSources.length > visibleCount;
+                                                                const canShowLess = visibleCount > initialCount;
+
+                                                                return (
+                                                                    <>
+                                                                        {visibleSources.map((source, idx) => (
+                                                                            <div
+                                                                                key={idx}
+                                                                                onClick={() => handleSourceClick(source)}
+                                                                                className="group flex items-start gap-3 p-3 rounded-lg bg-black/20 hover:bg-violet-500/10 border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
+                                                                            >
+                                                                                <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded bg-slate-800 text-xs font-medium text-slate-400 group-hover:bg-violet-500/20 group-hover:text-violet-300 transition-colors">
+                                                                                    {idx + 1}
+                                                                                </div>
+                                                                                <div className="min-w-0 flex-1">
+                                                                                    <p className="text-sm font-medium text-slate-300 group-hover:text-violet-200 truncate transition-colors">
+                                                                                        {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
+                                                                                    </p>
+                                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                                        <div className="h-1 w-16 bg-slate-800 rounded-full overflow-hidden">
+                                                                                            <div className="h-full bg-violet-500" style={{ width: `${Math.min(100, (source.score || 0))}%` }}></div>
+                                                                                        </div>
+                                                                                        <span className="text-[10px] text-slate-500">{Math.round(source.score || 0)}% {t('chat.match', 'Eşleşme')}</span>
+                                                                                    </div>
+                                                                                </div>
                                                                             </div>
-                                                                            <span className="text-[10px] text-slate-500">{Math.round(source.score || 0)}% {t('chat.match', 'Eşleşme')}</span>
+                                                                        ))}
+                                                                        <div className="flex items-center gap-2 pt-2">
+                                                                            {hasMore && (
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="sm"
+                                                                                    className="text-xs text-violet-400 hover:text-violet-300 hover:bg-violet-500/10"
+                                                                                    onClick={() => {
+                                                                                        setVisibleSourcesCount(prev => ({
+                                                                                            ...prev,
+                                                                                            [message.id]: Math.min(visibleCount + 5, sortedSources.length)
+                                                                                        }));
+                                                                                    }}
+                                                                                >
+                                                                                    {t('chat.showMore', '{{count}} daha göster', { count: Math.min(5, sortedSources.length - visibleCount) })}
+                                                                                </Button>
+                                                                            )}
+                                                                            {canShowLess && (
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="sm"
+                                                                                    className="text-xs text-slate-400 hover:text-slate-300 hover:bg-slate-500/10"
+                                                                                    onClick={() => {
+                                                                                        setVisibleSourcesCount(prev => ({
+                                                                                            ...prev,
+                                                                                            [message.id]: initialCount
+                                                                                        }));
+                                                                                    }}
+                                                                                >
+                                                                                    {t('chat.showLess', 'Daha az göster')}
+                                                                                </Button>
+                                                                            )}
                                                                         </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                                                                    </>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </div>
                                                 )}
