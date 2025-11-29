@@ -966,21 +966,37 @@ export class RAGChatService {
 
   /**
    * Generate dynamic question based on title, excerpt and category without LLM
+   * IMPORTANT: Questions must include the TOPIC from title to be meaningful standalone
    */
   private generateDynamicQuestion(title: string, excerpt: string, category: string): string {
     // Detect language
     const isTurkish = /[çğıöşüÇĞİÖŞÜ]/.test(excerpt) ||
       /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
 
-    // Extract keywords from title and excerpt
-    const titleWords = title.toLowerCase().split(' ').filter(w => w.length > 3);
-    const excerptWords = excerpt.toLowerCase().split(' ').filter(w => w.length > 4);
+    // Extract main topic from title (first 3-5 meaningful words)
+    const extractTopic = (text: string): string => {
+      // Remove common prefixes and clean up
+      let topic = text
+        .replace(/^(prof\.?\s*dr\.?|dr\.?|doç\.?|yrd\.?\s*doç\.?)\s*/gi, '')
+        .replace(/\s*[-–:]\s*.{0,20}$/, '') // Remove trailing subtitles
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    // Smarter question generation based on content keywords
+      // Get first meaningful part (up to 40 chars, break at word boundary)
+      if (topic.length > 45) {
+        const truncated = topic.substring(0, 45);
+        const lastSpace = truncated.lastIndexOf(' ');
+        topic = lastSpace > 20 ? truncated.substring(0, lastSpace) : truncated;
+      }
+
+      return topic || 'bu konu';
+    };
+
+    const topic = extractTopic(title);
     let smartQuestion = '';
 
     if (isTurkish) {
-      // Extract key tax/legal terms to create contextual questions
+      // Extract key terms to create contextual questions WITH topic included
       const hasStopaj = /stopaj|tevkifat/i.test(excerpt);
       const hasKDV = /kdv|katma değer/i.test(excerpt);
       const hasGelir = /gelir vergisi/i.test(excerpt);
@@ -988,31 +1004,46 @@ export class RAGChatService {
       const hasMuafiyet = /muafiyet|istisna/i.test(excerpt);
       const hasOran = /oran|yüzde|%/i.test(excerpt);
       const hasSure = /süre|tarih|son gün/i.test(excerpt);
+      const hasBasvuru = /başvuru|kayıt|müracaat/i.test(excerpt);
+      const hasAsi = /aşı|aşılama|bağışıklık/i.test(excerpt) || /aşı/i.test(title);
+      const hasSaglik = /sağlık|hastane|tedavi|hastalık/i.test(excerpt) || /sağlık|hastane/i.test(title);
 
-      if (hasStopaj && hasOran) {
-        smartQuestion = 'Stopaj oranları hangi durumlarda değişir?';
+      // Generate questions that INCLUDE the topic for context
+      if (hasAsi && hasBasvuru) {
+        smartQuestion = `${topic} için başvuru süreci ve gerekli belgeler nelerdir?`;
+      } else if (hasAsi && hasSure) {
+        smartQuestion = `${topic} ne zaman ve hangi aralıklarla yapılmalı?`;
+      } else if (hasAsi) {
+        smartQuestion = `${topic} kimlere uygulanmalı ve nelere dikkat edilmeli?`;
+      } else if (hasSaglik && hasBasvuru) {
+        smartQuestion = `${topic} için başvuru şartları ve süreci nasıl işliyor?`;
+      } else if (hasStopaj && hasOran) {
+        smartQuestion = `${topic} kapsamında stopaj oranları nedir?`;
       } else if (hasStopaj) {
-        smartQuestion = 'Bu stopaj uygulaması kimler için geçerlidir?';
+        smartQuestion = `${topic} ile ilgili stopaj uygulaması kimleri kapsıyor?`;
       } else if (hasKDV && hasOran) {
-        smartQuestion = 'KDV oranı bu işlem için ne kadardır?';
+        smartQuestion = `${topic} için KDV oranı ne kadardır?`;
       } else if (hasBeyanname && hasSure) {
-        smartQuestion = 'Beyanname verme süreleri ne zaman doluyor?';
+        smartQuestion = `${topic} için beyanname süreleri nedir?`;
       } else if (hasMuafiyet) {
-        smartQuestion = 'Muafiyetten kimler yararlanabilir?';
+        smartQuestion = `${topic} kapsamında muafiyetten kimler yararlanabilir?`;
       } else if (hasGelir) {
-        smartQuestion = 'Gelir vergisi matrahı nasıl hesaplanır?';
-      } else if (title.length > 10 && title.length < 100) {
-        // Use title-based questions
-        smartQuestion = `${title.substring(0, 60)} hakkında detaylar neler?`;
+        smartQuestion = `${topic} için gelir vergisi nasıl hesaplanır?`;
+      } else if (hasOran) {
+        smartQuestion = `${topic} için geçerli oranlar ve şartlar nelerdir?`;
+      } else if (hasBasvuru) {
+        smartQuestion = `${topic} için başvuru nasıl yapılır?`;
+      } else if (hasSure) {
+        smartQuestion = `${topic} için süreler ve tarihler nelerdir?`;
       } else {
-        smartQuestion = 'Bu düzenleme hangi durumları kapsıyor?';
+        // Default: use topic directly in question
+        smartQuestion = `${topic} hakkında detaylı bilgi verir misiniz?`;
       }
     } else {
-      // English fallback
-      smartQuestion = `What are the key requirements for ${title.substring(0, 40)}?`;
+      // English with topic
+      smartQuestion = `What are the key details about ${topic}?`;
     }
 
-    // Return the contextually generated question
     return smartQuestion;
   }
 
