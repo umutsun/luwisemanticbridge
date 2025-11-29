@@ -79,7 +79,7 @@ interface Message {
     };
 }
 
-const getSourceTableName = (sourceTable?: string, t?: (key: string) => string) => {
+const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: string) => string) => {
     if (!sourceTable) return t ? t('chat.source.default') : 'Default';
     const tableName = sourceTable
         .replace(/_/g, ' ')
@@ -562,8 +562,8 @@ export default function ChatInterface() {
         <ProtectedRoute>
             <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-sans selection:bg-violet-500/30">
                 {/* Modern Glass Header */}
-                <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/50 backdrop-blur-xl border-b border-white/5">
-                    <div className="max-w-6xl mx-auto w-full px-4 py-4 flex items-center justify-between">
+                <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/5">
+                    <div className="max-w-6xl mx-auto w-full px-4 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="relative group cursor-pointer">
                                 <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-full opacity-75 group-hover:opacity-100 blur transition duration-200"></div>
@@ -603,11 +603,11 @@ export default function ChatInterface() {
                                     <DropdownMenuContent align="end" className="bg-slate-900 border-slate-800 text-slate-200">
                                         <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer">
                                             <Link href="/dashboard" className="flex items-center w-full">
-                                                <LayoutDashboard className="w-4 h-4 mr-2" /> Dashboard
+                                                <LayoutDashboard className="w-4 h-4 mr-2" /> {t('nav.dashboard', 'Yönetim Paneli')}
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem className="focus:bg-slate-800 focus:text-white cursor-pointer" onClick={logout}>
-                                            <LogOut className="w-4 h-4 mr-2 text-red-400" /> Logout
+                                            <LogOut className="w-4 h-4 mr-2 text-red-400" /> {t('nav.logout', 'Çıkış')}
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -617,20 +617,20 @@ export default function ChatInterface() {
                 </header>
 
                 {/* Main Chat Area */}
-                <div className="pt-24 pb-40 max-w-4xl mx-auto w-full px-4">
-                    <ScrollArea className="h-[calc(100vh-16rem)] pr-4">
-                        <div className="space-y-8 py-4">
+                <div className="pt-16 pb-32 max-w-4xl mx-auto w-full px-4">
+                    <ScrollArea className="h-[calc(100vh-12rem)] pr-4 overflow-x-hidden">
+                        <div className="space-y-6 py-2">
                             {/* Welcome Message */}
                             {isClient && showSuggestions && messages.length === 0 && (
-                                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-12">
-                                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-white/5 mb-6 shadow-2xl shadow-violet-500/10">
-                                        <Bot className="w-8 h-8 text-violet-400" />
+                                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-6">
+                                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-white/5 mb-4 shadow-2xl shadow-violet-500/10">
+                                        <Bot className="w-7 h-7 text-violet-400" />
                                     </div>
-                                    <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">
-                                        {chatbotSettings.welcomeMessage || "How can I help you today?"}
+                                    <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
+                                        {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                     </h2>
-                                    <p className="text-slate-400 max-w-md mx-auto">
-                                        I'm your advanced AI assistant. Ask me anything about your documents or general questions.
+                                    <p className="text-slate-400 max-w-md mx-auto text-sm">
+                                        {t('chat.welcomeDescription', 'Belgeleriniz veya genel sorularınız hakkında her şeyi sorabilirsiniz.')}
                                     </p>
                                 </motion.div>
                             )}
@@ -781,7 +781,7 @@ export default function ChatInterface() {
                         </div>
                         <div className="text-center mt-3">
                             <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">
-                                AI can make mistakes. Please verify important information.
+                                {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR. LÜTFEN ÖNEMLİ BİLGİLERİ DOĞRULAYIN.')}
                             </p>
                         </div>
                     </div>
