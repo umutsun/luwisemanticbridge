@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,20 +13,18 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
 import {
   Bot,
   Settings,
   Save,
   RefreshCw,
   MessageSquare,
-  Brain,
-  Key,
   CheckCircle,
   AlertCircle,
-  Zap
+  Palette,
+  Trash2,
+  Plus
 } from 'lucide-react';
-import { getLLMSettings } from '@/lib/api/settings';
 
 interface ChatbotSettings {
   title: string;
@@ -414,29 +412,14 @@ export default function ChatbotSettingsPage() {
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-12 gap-2">
-                    <div className="col-span-2">
-                      <Input
-                        value={suggestion.icon}
-                        onChange={(e) => updateSuggestion(index, 'icon', e.target.value)}
-                        placeholder="📚"
-                        className="text-center"
-                      />
-                    </div>
-                    <div className="col-span-4">
-                      <Input
-                        value={suggestion.title}
-                        onChange={(e) => updateSuggestion(index, 'title', e.target.value)}
-                        placeholder={t('prompts.suggestions.suggestion')}
-                      />
-                    </div>
-                    <div className="col-span-6">
-                      <Input
-                        value={suggestion.description}
-                        onChange={(e) => updateSuggestion(index, 'description', e.target.value)}
-                        placeholder={t('documents.table.name')}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Textarea
+                      value={suggestion.title}
+                      onChange={(e) => updateSuggestion(index, 'title', e.target.value)}
+                      placeholder={t('prompts.suggestions.suggestionPlaceholder', 'Öneri sorusunu yazın...')}
+                      rows={2}
+                      className="resize-none"
+                    />
                   </div>
                 </div>
               ))}
