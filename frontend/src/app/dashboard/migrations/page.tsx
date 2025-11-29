@@ -146,6 +146,7 @@ export default function EmbeddingsManagerPage() {
   const [totalTokensUsed, setTotalTokensUsed] = useState<number>(0);
   const [embeddingProvider, setEmbeddingProvider] = useState<string>('openai');
   const [embeddingModel, setEmbeddingModel] = useState<string>('text-embedding-ada-002');
+  const [embeddingDimension, setEmbeddingDimension] = useState<number>(1536);
   const [showSkippedModal, setShowSkippedModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewOffset, setPreviewOffset] = useState(0);
@@ -228,12 +229,15 @@ export default function EmbeddingsManagerPage() {
           setTotalTokensUsed(data.tokenUsage.total_tokens || 0);
         }
 
-        // Set embedding provider and model from API response
+        // Set embedding provider, model and dimension from API response
         if (data.embeddingProvider) {
           setEmbeddingProvider(data.embeddingProvider);
         }
         if (data.embeddingModel) {
           setEmbeddingModel(data.embeddingModel);
+        }
+        if (data.embeddingDimension) {
+          setEmbeddingDimension(data.embeddingDimension);
         }
 
         if (!data.tables || data.tables.length === 0) {
@@ -1198,9 +1202,14 @@ export default function EmbeddingsManagerPage() {
                 <div className="p-3 bg-gray-50 dark:bg-gray-950/50 border border-gray-200 dark:border-gray-800 rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 dark:text-gray-400">Model:</span>
-                    <span className="text-xs font-mono font-medium text-gray-900 dark:text-gray-100">
-                      {embeddingProvider}/{embeddingModel}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-medium text-gray-900 dark:text-gray-100">
+                        {embeddingProvider}/{embeddingModel}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                        {embeddingDimension}d
+                      </Badge>
+                    </div>
                   </div>
                 </div>
 
@@ -1373,8 +1382,7 @@ export default function EmbeddingsManagerPage() {
                         </TableHead>
                         <TableHead className="w-64">Table Name</TableHead>
                         <TableHead className="w-24">Status</TableHead>
-                        <TableHead className="w-28">Total</TableHead>
-                        <TableHead className="w-44">Progress</TableHead>
+                        <TableHead className="w-48">Progress</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1452,9 +1460,6 @@ export default function EmbeddingsManagerPage() {
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
-
-                          {/* Total column */}
-                          <TableCell className="text-sm font-mono">{table.totalRecords.toLocaleString()}</TableCell>
 
                           {/* Combined Progress column: embedded/total + progress bar + skipped */}
                           <TableCell>

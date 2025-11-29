@@ -248,6 +248,19 @@ router.get('/stats', async (req: Request, res: Response) => {
       console.log('Could not fetch token usage:', tokenError.message);
     }
 
+    // Map embedding model to dimension
+    const getEmbeddingDimension = (model: string): number => {
+      const dimensionMap: Record<string, number> = {
+        'text-embedding-3-small': 1536,
+        'text-embedding-3-large': 3072,
+        'text-embedding-ada-002': 1536,
+        'text-embedding-004': 768, // Google
+      };
+      return dimensionMap[model] || 1536; // Default to 1536
+    };
+
+    const embeddingDimension = getEmbeddingDimension(embeddingModel);
+
     const stats = {
       totalRecords: 0,
       embeddedRecords: 0,
@@ -259,7 +272,8 @@ router.get('/stats', async (req: Request, res: Response) => {
         estimated_cost: estimatedCost
       },
       embeddingProvider,
-      embeddingModel
+      embeddingModel,
+      embeddingDimension
     };
 
     for (const table of tables) {
