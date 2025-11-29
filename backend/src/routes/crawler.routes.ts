@@ -183,15 +183,23 @@ router.get('/crawler-directories', async (req: Request, res: Response) => {
       }
     }
 
-    // Convert to array and add metadata
-    const directories = Array.from(crawlerDirsSet).map(name => ({
-      id: name,
-      name: name,
-      displayName: name.replace(/_crawler$/, '').replace(/_/g, ' ').toUpperCase(),
-      itemCount: crawlerStats[name]?.count || 0,
-      lastCrawled: crawlerStats[name]?.lastCrawled || null,
-      type: 'crawler'
-    }));
+    // Convert to array and add metadata (including script check)
+    const crawlersDir = path.join(__dirname, '../../python-services/crawlers');
+    const directories = Array.from(crawlerDirsSet).map(name => {
+      // Check if script file exists for this crawler
+      const scriptPath = path.join(crawlersDir, `${name}.py`);
+      const scriptAttached = fs.existsSync(scriptPath);
+
+      return {
+        id: name,
+        name: name,
+        displayName: name.replace(/_crawler$/, '').replace(/_/g, ' ').toUpperCase(),
+        itemCount: crawlerStats[name]?.count || 0,
+        lastCrawled: crawlerStats[name]?.lastCrawled || null,
+        type: 'crawler',
+        scriptAttached
+      };
+    });
 
     // Get running crawlers and clean up stale entries
     const runningKeys = await crawl4aiRedis.keys('crawler_running:*');
