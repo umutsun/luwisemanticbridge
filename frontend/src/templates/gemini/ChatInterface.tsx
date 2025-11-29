@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { getEndpoint } from '@/config/api.config';
 import {
     Send,
@@ -26,7 +28,8 @@ import {
     ThumbsUp,
     ThumbsDown,
     Copy,
-    RefreshCw
+    RefreshCw,
+    Check
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
@@ -38,7 +41,14 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 // Interfaces
 interface Message {
@@ -94,6 +104,15 @@ export default function ChatInterface() {
         maxTokens: 2048,
         tone: 'professional'
     });
+
+    // Profile update state
+    const [showProfileDialog, setShowProfileDialog] = useState(false);
+    const [profileForm, setProfileForm] = useState({
+        name: '',
+        email: ''
+    });
+    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+    const [profileUpdateError, setProfileUpdateError] = useState('');
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -341,45 +360,85 @@ export default function ChatInterface() {
         setConversationId(undefined); // Reset conversation for new session
     };
 
+    // Profile dialog handlers
+    const openProfileDialog = () => {
+        setProfileForm({
+            name: user?.name || '',
+            email: user?.email || ''
+        });
+        setProfileUpdateError('');
+        setShowProfileDialog(true);
+    };
+
+    const handleProfileUpdate = async () => {
+        if (!profileForm.name.trim()) {
+            setProfileUpdateError(t('profile.nameRequired', 'Name is required'));
+            return;
+        }
+
+        setIsUpdatingProfile(true);
+        setProfileUpdateError('');
+
+        try {
+            const response = await fetch('/api/v2/auth/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: profileForm.name
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update profile');
+            }
+
+            // Refresh the page to get updated user info
+            window.location.reload();
+        } catch {
+            setProfileUpdateError(t('profile.updateError', 'Failed to update profile'));
+        } finally {
+            setIsUpdatingProfile(false);
+        }
+    };
+
     return (
         <ProtectedRoute>
             <div className="flex flex-col h-screen bg-[#fff] dark:bg-[#131314] text-[#1f1f1f] dark:text-[#e3e3e3] font-sans transition-colors duration-300">
 
-                {/* Top Bar */}
-                <header className="flex items-center justify-between px-6 py-3 sticky top-0 z-50 bg-[#fff]/90 dark:bg-[#131314]/90 backdrop-blur-sm">
+                {/* Minimal Top Bar */}
+                <header className="flex items-center justify-between px-4 py-2 sticky top-0 z-50 bg-[#fff]/80 dark:bg-[#131314]/80 backdrop-blur-md">
                     <div className="flex items-center gap-2 cursor-pointer" onClick={clearChat}>
-                        <span className="text-xl font-medium tracking-tight bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 bg-clip-text text-transparent">
-                            {chatbotSettings.title}
-                        </span>
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                            {chatbotSettings.activeChatModel?.split('/').pop() || 'AI'}
+                        <span className="text-lg font-medium tracking-tight text-gray-800 dark:text-gray-200">
+                            {chatbotSettings.title || t('chat.title', 'AI')}
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                         <ThemeToggle />
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 hover:ring-gray-200 dark:hover:ring-gray-700 transition-all">
-                                    <AvatarFallback className="bg-purple-600 text-white text-xs">
-                                        {user?.name?.charAt(0) || 'U'}
+                                    <AvatarImage src={user?.avatar} />
+                                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-blue-500 text-white text-xs font-medium">
+                                        {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                                     </AvatarFallback>
                                 </Avatar>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                                <div className="px-2 py-1.5 text-sm font-medium border-b">
-                                    <div>{user?.name || 'User'}</div>
-                                    <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
+                                <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+                                    <div className="font-medium text-sm">{user?.name || 'User'}</div>
+                                    <div className="text-xs text-gray-500 truncate">{user?.email}</div>
                                 </div>
-                                <Link href="/profile">
-                                    <DropdownMenuItem className="cursor-pointer">
-                                        <User className="w-4 h-4 mr-2" />
-                                        Profile
-                                    </DropdownMenuItem>
-                                </Link>
+                                <DropdownMenuItem onClick={openProfileDialog} className="cursor-pointer">
+                                    <User className="w-4 h-4 mr-2" />
+                                    {t('profile.edit', 'Edit Profile')}
+                                </DropdownMenuItem>
                                 {user?.role === 'admin' && (
                                     <>
+                                        <DropdownMenuSeparator />
                                         <Link href="/dashboard">
                                             <DropdownMenuItem className="cursor-pointer">
                                                 <LayoutDashboard className="w-4 h-4 mr-2" />
@@ -394,18 +453,96 @@ export default function ChatInterface() {
                                         </Link>
                                     </>
                                 )}
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={logout} className="cursor-pointer text-red-600 focus:text-red-600">
                                     <LogOut className="w-4 h-4 mr-2" />
-                                    Logout
+                                    {t('auth.logout', 'Logout')}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
                 </header>
 
+                {/* Profile Update Dialog */}
+                <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>{t('profile.edit', 'Edit Profile')}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            <div className="flex justify-center">
+                                <Avatar className="w-20 h-20">
+                                    <AvatarImage src={user?.avatar} />
+                                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-blue-500 text-white text-2xl font-medium">
+                                        {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="name">{t('profile.name', 'Name')}</Label>
+                                <Input
+                                    id="name"
+                                    value={profileForm.name}
+                                    onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                                    placeholder={t('profile.namePlaceholder', 'Enter your name')}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="email">{t('profile.email', 'Email')}</Label>
+                                <Input
+                                    id="email"
+                                    value={profileForm.email}
+                                    disabled
+                                    className="bg-gray-50 dark:bg-gray-800"
+                                />
+                                <p className="text-xs text-gray-500">{t('profile.emailNote', 'Email cannot be changed')}</p>
+                            </div>
+                            {profileUpdateError && (
+                                <p className="text-sm text-red-500">{profileUpdateError}</p>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setShowProfileDialog(false)}>
+                                {t('common.cancel', 'Cancel')}
+                            </Button>
+                            <Button onClick={handleProfileUpdate} disabled={isUpdatingProfile}>
+                                {isUpdatingProfile ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Check className="w-4 h-4 mr-2" />
+                                )}
+                                {t('common.save', 'Save')}
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Custom Scrollbar Styles */}
+                <style jsx global>{`
+                    .custom-scrollbar::-webkit-scrollbar {
+                        width: 6px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: rgba(156, 163, 175, 0.3);
+                        border-radius: 3px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: rgba(156, 163, 175, 0.5);
+                    }
+                    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: rgba(75, 85, 99, 0.4);
+                    }
+                    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: rgba(75, 85, 99, 0.6);
+                    }
+                `}</style>
+
                 {/* Main Content */}
                 <main className="flex-1 overflow-hidden relative flex flex-col">
-                    <ScrollArea className="flex-1 h-full px-4 md:px-0" style={{ height: 'calc(100vh - 180px)' }}>
+                    <ScrollArea className="flex-1 h-full px-4 md:px-0 custom-scrollbar" style={{ height: 'calc(100vh - 180px)' }}>
                         <div className="max-w-3xl mx-auto w-full py-8 pb-40">
 
                             {/* Welcome Screen */}
@@ -589,29 +726,32 @@ export default function ChatInterface() {
 
                                             {/* Assistant Actions */}
                                             {msg.role === 'assistant' && !msg.isStreaming && (
-                                                <div className="flex items-center gap-2 mt-4 ml-1">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-500">
-                                                        <ThumbsUp className="w-4 h-4" />
+                                                <div className="flex items-center gap-1 mt-3">
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                                        <ThumbsUp className="w-3.5 h-3.5" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-500">
-                                                        <ThumbsDown className="w-4 h-4" />
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                                        <ThumbsDown className="w-3.5 h-3.5" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-500">
-                                                        <Copy className="w-4 h-4" />
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                                        <Copy className="w-3.5 h-3.5" />
                                                     </Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-500">
-                                                        <RefreshCw className="w-4 h-4" />
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                                        <RefreshCw className="w-3.5 h-3.5" />
                                                     </Button>
                                                 </div>
                                             )}
                                         </div>
 
-                                        {/* User Icon (Hidden for cleaner look, or optional) */}
-                                        {/* {msg.role === 'user' && (
-                      <Avatar className="w-8 h-8 mt-1">
-                        <AvatarFallback>U</AvatarFallback>
-                      </Avatar>
-                    )} */}
+                                        {/* User Avatar */}
+                                        {msg.role === 'user' && (
+                                            <Avatar className="w-7 h-7 mt-1 flex-shrink-0">
+                                                <AvatarImage src={user?.avatar} />
+                                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white text-xs">
+                                                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                        )}
                                     </div>
                                 ))}
                                 <div ref={messagesEndRef} />

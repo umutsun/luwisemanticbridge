@@ -8,8 +8,18 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
 from loguru import logger
-import whisper
-import torch
+
+# Optional imports - whisper may not be installed on all systems
+try:
+    import whisper
+    import torch
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
+    whisper = None
+    torch = None
+    logger.warning("Whisper/torch packages not available. Local mode will not work.")
+
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
@@ -48,7 +58,7 @@ class WhisperService:
         self.api_key = api_key
         self.initial_prompt = initial_prompt
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if (WHISPER_AVAILABLE and torch.cuda.is_available()) else "cpu"
 
         if mode == "api":
             if not OPENAI_AVAILABLE:
@@ -235,7 +245,8 @@ class WhisperService:
             "model_name": self.model_name,
             "device": self.device,
             "loaded": self.model is not None,
-            "cuda_available": torch.cuda.is_available()
+            "cuda_available": WHISPER_AVAILABLE and torch.cuda.is_available(),
+            "whisper_available": WHISPER_AVAILABLE
         }
 
 
