@@ -104,6 +104,7 @@ export default function ChatInterface() {
         activeChatModel: string;
         enableSuggestions: boolean;
         welcomeMessage?: string;
+        greeting?: string;
     }>({
         title: '',
         subtitle: '',
@@ -112,7 +113,8 @@ export default function ChatInterface() {
         primaryColor: '',
         activeChatModel: '',
         enableSuggestions: true,
-        welcomeMessage: ''
+        welcomeMessage: '',
+        greeting: ''
     });
     const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -313,7 +315,9 @@ export default function ChatInterface() {
                     placeholder: chatbotData.placeholder || '',
                     primaryColor: chatbotData.primaryColor || '',
                     activeChatModel: settingsData.llmSettings?.activeChatModel || '',
-                    enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true
+                    enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
+                    welcomeMessage: chatbotData.welcomeMessage || '',
+                    greeting: chatbotData.greeting || ''
                 };
 
                 const rag = {
@@ -606,25 +610,10 @@ export default function ChatInterface() {
                 {/* Modern Glass Header */}
                 <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/5">
                     <div className="max-w-6xl mx-auto w-full px-4 py-2 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="relative group cursor-pointer">
-                                <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-full opacity-75 group-hover:opacity-100 blur transition duration-200"></div>
-                                <div className="relative flex items-center justify-center w-10 h-10 bg-slate-950 rounded-full border border-white/10">
-                                    {settingsLoaded && chatbotSettings.logoUrl ? (
-                                        <img src={chatbotSettings.logoUrl} alt="Logo" className="w-6 h-6 object-contain" />
-                                    ) : (
-                                        <Sparkles className="w-5 h-5 text-violet-400" />
-                                    )}
-                                </div>
-                            </div>
-                            <div>
-                                <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-                                    {settingsLoaded ? chatbotSettings.title : t('chat.title', 'AI Asistan')}
-                                </h1>
-                                <span className="text-xs text-slate-400 font-medium tracking-wide">
-                                    {chatbotSettings.activeChatModel ? chatbotSettings.activeChatModel.split('/').pop() : t('chat.ready', 'Hazır')}
-                                </span>
-                            </div>
+                        <div className="flex items-center gap-3 cursor-pointer group" onClick={clearChat}>
+                            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                                {settingsLoaded ? chatbotSettings.title : t('chat.title', 'AI Asistan')}
+                            </h1>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -671,14 +660,13 @@ export default function ChatInterface() {
                             {/* Welcome Message */}
                             {isClient && showSuggestions && messages.length === 0 && (
                                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-6">
-                                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-white/5 mb-4 shadow-2xl shadow-violet-500/10">
-                                        <Bot className="w-7 h-7 text-violet-400" />
-                                    </div>
-                                    <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
-                                        {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
+                                    <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-3">
+                                        <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                                            {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
+                                        </span>
                                     </h2>
                                     <p className="text-slate-400 max-w-md mx-auto text-sm">
-                                        {t('chat.welcomeDescription', 'Belgeleriniz veya genel sorularınız hakkında her şeyi sorabilirsiniz.')}
+                                        {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                     </p>
                                 </motion.div>
                             )}
@@ -828,12 +816,14 @@ export default function ChatInterface() {
                                                 )}
                                             </div>
 
-                                            <div className="flex justify-end mt-2 px-1">
-                                                <span className="text-[10px] font-medium text-slate-500">
-                                                    {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                    {message.responseTime && ` • ${(message.responseTime / 1000).toFixed(1)}s`}
-                                                </span>
-                                            </div>
+                                            {message.role === 'assistant' && (
+                                                <div className="flex justify-start mt-2 px-1">
+                                                    <span className="text-[10px] font-medium text-slate-500">
+                                                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {message.responseTime && ` • ${(message.responseTime / 1000).toFixed(1)}s`}
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {message.role === 'user' && (

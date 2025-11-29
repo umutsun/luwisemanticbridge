@@ -126,6 +126,7 @@ export default function ChatInterface() {
     activeChatModel: string;
     enableSuggestions: boolean;
     welcomeMessage?: string;
+    greeting?: string;
   }>({
     title: '',
     subtitle: '',
@@ -134,7 +135,8 @@ export default function ChatInterface() {
     primaryColor: '',
     activeChatModel: '',
     enableSuggestions: true, // Default to true, will be overridden by DB
-    welcomeMessage: ''
+    welcomeMessage: '',
+    greeting: ''
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -335,7 +337,9 @@ export default function ChatInterface() {
           placeholder: chatbotData.placeholder || '',  // NO fallback
           primaryColor: chatbotData.primaryColor || '',  // NO fallback
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',  // NO fallback - must be configured
-          enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true
+          enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
+          welcomeMessage: chatbotData.welcomeMessage || '',
+          greeting: chatbotData.greeting || ''
         };
 
         // Extract RAG settings
