@@ -519,6 +519,52 @@ export default function EmbeddingsManagerPage() {
     }
   }, [selectedSkippedIds, skippedRecords.length, toast, fetchAvailableTables]);
 
+  // Delete ALL skipped records for the current table
+  const deleteAllSkippedRecords = useCallback(async () => {
+    if (!selectedTableForSkipped) return;
+
+    if (!confirm(`Delete ALL ${skippedTotalCount.toLocaleString()} skipped records for "${selectedTableForSkipped}"?`)) {
+      return;
+    }
+
+    setIsDeletingSkipped(true);
+    try {
+      const response = await fetchWithAuth(
+        `${config.api.baseUrl}/api/v2/migration/skipped?table=${encodeURIComponent(selectedTableForSkipped)}&all=true`,
+        { method: 'DELETE' }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: "Success",
+          description: data.message || `Deleted all skipped records`,
+        });
+
+        setSkippedRecords([]);
+        setSkippedTotalCount(0);
+        setSelectedSkippedIds(new Set());
+        setShowSkippedModal(false);
+        fetchAvailableTables();
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to delete skipped records",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting all skipped records:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete skipped records",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingSkipped(false);
+    }
+  }, [selectedTableForSkipped, skippedTotalCount, toast, fetchAvailableTables]);
+
   // Re-embed selected skipped records
   const reembedSkippedRecords = useCallback(async () => {
     if (selectedSkippedIds.size === 0 || !selectedTableForSkipped) {
@@ -1824,38 +1870,58 @@ export default function EmbeddingsManagerPage() {
               )}
 
               {/* Right: Actions */}
-              {selectedSkippedIds.size > 0 && (
-                <div className="flex items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={reembedSkippedRecords}
-                    disabled={isReembedding}
-                    className="h-7 w-7 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600"
-                    title="Re-embed selected"
-                  >
-                    {isReembedding ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Play className="w-4 h-4" />
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={deleteSkippedRecords}
-                    disabled={isDeletingSkipped}
-                    className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
-                    title="Delete selected"
-                  >
-                    {isDeletingSkipped ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="w-4 h-4" />
-                    )}
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-1">
+                {/* Delete All button - always visible */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={deleteAllSkippedRecords}
+                  disabled={isDeletingSkipped || skippedTotalCount === 0}
+                  className="h-7 px-2 text-xs hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                  title={`Delete all ${skippedTotalCount.toLocaleString()} records`}
+                >
+                  {isDeletingSkipped ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="w-3 h-3 mr-1" />
+                  )}
+                  Delete All
+                </Button>
+                {/* Selected actions */}
+                {selectedSkippedIds.size > 0 && (
+                  <>
+                    <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={reembedSkippedRecords}
+                      disabled={isReembedding}
+                      className="h-7 w-7 p-0 hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600"
+                      title="Re-embed selected"
+                    >
+                      {isReembedding ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={deleteSkippedRecords}
+                      disabled={isDeletingSkipped}
+                      className="h-7 w-7 p-0 hover:bg-red-100 dark:hover:bg-red-900/20 text-red-600"
+                      title="Delete selected"
+                    >
+                      {isDeletingSkipped ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
