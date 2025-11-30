@@ -508,25 +508,33 @@ export class DocumentTransformService {
               `SELECT COUNT(*) as count FROM ${finalTableName}`
             );
             const actualRowCount = parseInt(verifyResult.rows[0].count, 10);
-            const expectedRowCount = parsedData.length;
+            const totalRowsInCSV = parsedData.length;
+            const expectedRowCount = result.rowsInserted; // Use actual inserted count, not CSV total (some rows may be skipped due to errors)
 
-            console.log(`[DocumentTransform] Verification: Expected ${expectedRowCount}, Found ${actualRowCount}`);
+            console.log(`[DocumentTransform] Verification: CSV rows=${totalRowsInCSV}, Inserted=${result.rowsInserted}, Failed=${result.rowsFailed}, Table count=${actualRowCount}`);
 
-            // Check if counts match
-            if (actualRowCount !== expectedRowCount) {
+            // Check if actual count matches inserted count (allow for some tolerance due to skip/resume scenarios)
+            // Note: We no longer require strict match with CSV total since some rows may be skipped due to data errors
+            if (actualRowCount < expectedRowCount) {
               throw new Error(
-                `Verification failed: Expected ${expectedRowCount} rows but found ${actualRowCount} rows in table ${finalTableName}`
+                `Verification failed: Expected at least ${expectedRowCount} rows but found ${actualRowCount} rows in table ${finalTableName}`
               );
             }
 
+            // Log warning if some rows were skipped
+            if (result.rowsFailed > 0) {
+              console.warn(`[DocumentTransform] Warning: ${result.rowsFailed} rows were skipped due to errors`);
+            }
+
             // Verification passed!
-            console.log(`[DocumentTransform]  Verification passed: ${actualRowCount} rows confirmed`);
+            console.log(`[DocumentTransform] ✓ Verification passed: ${actualRowCount} rows confirmed (${result.rowsFailed} rows skipped)`);
 
             await this.updateDocumentStatus(documentId, 'completed', 100, {
               targetTableName: finalTableName,
               sourceDbId,
               transformedAt: new Date(),
               lastTransformRowCount: actualRowCount,
+              rowsSkipped: result.rowsFailed,
               columnCount: analysis.fieldTypes.length,
             });
 
@@ -534,7 +542,8 @@ export class DocumentTransformService {
               status: 'completed',
               progress: 100,
               rowsProcessed: actualRowCount, // Use verified count
-              totalRows: expectedRowCount,
+              totalRows: totalRowsInCSV,
+              rowsSkipped: result.rowsFailed,
             });
 
             console.log(`[DocumentTransform] Document ${documentId} transformed and verified successfully`);
