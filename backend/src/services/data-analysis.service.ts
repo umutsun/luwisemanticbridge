@@ -198,6 +198,31 @@ export class DataAnalysisService {
   }
 
   /**
+   * Check if a string value is a valid date format (not just a number that Date.parse accepts)
+   */
+  private isValidDateString(value: string): boolean {
+    if (!value || typeof value !== 'string') return false;
+
+    const trimmed = value.trim();
+
+    // Reject pure numbers - Date.parse("2008") returns valid timestamp but it's not a date
+    if (/^\d+$/.test(trimmed)) return false;
+
+    // Only match actual date formats, not plain numbers
+    // Common formats: YYYY-MM-DD, DD.MM.YYYY, DD/MM/YYYY, YYYY/MM/DD, ISO dates
+    const datePatterns = [
+      /^\d{4}-\d{2}-\d{2}$/,                    // YYYY-MM-DD
+      /^\d{2}\.\d{2}\.\d{4}$/,                  // DD.MM.YYYY (Turkish)
+      /^\d{2}\/\d{2}\/\d{4}$/,                  // DD/MM/YYYY or MM/DD/YYYY
+      /^\d{4}\/\d{2}\/\d{2}$/,                  // YYYY/MM/DD
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,  // ISO 8601
+      /^\d{2}-\d{2}-\d{4}$/,                    // DD-MM-YYYY
+    ];
+
+    return datePatterns.some(pattern => pattern.test(trimmed));
+  }
+
+  /**
    * Detect field data type
    */
   private detectFieldType(values: any[]): string {
@@ -205,7 +230,7 @@ export class DataAnalysisService {
 
     const sample = values.slice(0, 100);
 
-    // Check if all are numbers
+    // Check if all are numbers (native type)
     if (sample.every((v) => typeof v === 'number')) {
       return sample.every((v) => Number.isInteger(v)) ? 'integer' : 'float';
     }
@@ -215,15 +240,25 @@ export class DataAnalysisService {
       return 'boolean';
     }
 
-    // Check if date-like strings
-    if (
-      sample.every((v) => typeof v === 'string' && !isNaN(Date.parse(v)))
-    ) {
-      return 'date';
-    }
-
     // Check if all are strings
     if (sample.every((v) => typeof v === 'string')) {
+      // Check if numeric strings (e.g., "1001", "2008")
+      // These should be INTEGER, not TIMESTAMP
+      if (sample.every((v) => /^\d+$/.test(v.trim()))) {
+        return 'integer';
+      }
+
+      // Check if float strings (e.g., "3.14", "100.50")
+      if (sample.every((v) => /^-?\d+\.?\d*$/.test(v.trim()) && v.includes('.'))) {
+        return 'float';
+      }
+
+      // Check if date-like strings using strict pattern matching
+      // IMPORTANT: Only use pattern matching, not Date.parse which accepts numbers as years
+      if (sample.every((v) => this.isValidDateString(v))) {
+        return 'date';
+      }
+
       const maxLength = Math.max(...sample.map((v) => v.length));
       if (maxLength < 255) return 'string';
       return 'text';

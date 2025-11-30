@@ -129,7 +129,7 @@ export class ContextualDocumentProcessorService {
             charsPerPage: pdfAnalysis.charsPerPage
           };
 
-          console.log(` PDF Analysis: ${filename}`, {
+          console.log(` PDF Analysis: ${originalName}`, {
             pages: pdfAnalysis.numPages,
             chars: pdfAnalysis.textLength,
             charsPerPage: pdfAnalysis.charsPerPage,
@@ -770,7 +770,7 @@ export class ContextualDocumentProcessorService {
       await client.query(`
         CREATE TABLE IF NOT EXISTS embedding_model_usage (
           id SERIAL PRIMARY KEY,
-          model_name VARCHAR(100) PRIMARY KEY,
+          model_name VARCHAR(100) UNIQUE NOT NULL,
           total_tokens_used BIGINT DEFAULT 0,
           total_embeddings INTEGER DEFAULT 0,
           avg_tokens_per_embedding DECIMAL(10,2) DEFAULT 0,
@@ -819,29 +819,25 @@ export class ContextualDocumentProcessorService {
       await client.query(
         `UPDATE documents
          SET metadata = jsonb_set(
-           COALESCE(metadata, '{}')::jsonb,
-           '{embeddings}',
-           'true'
-         ),
-         metadata = jsonb_set(
-           COALESCE(metadata, '{}')::jsonb,
-           '{chunks}',
-           $2::jsonb
-         ),
-         metadata = jsonb_set(
-           COALESCE(metadata, '{}')::jsonb,
-           '{embedding_model}',
-           '$3'
-         ),
-         metadata = jsonb_set(
-           COALESCE(metadata, '{}')::jsonb,
-           '{total_tokens_used}',
-           '$4'
-         ),
-         metadata = jsonb_set(
-           COALESCE(metadata, '{}')::jsonb,
+           jsonb_set(
+             jsonb_set(
+               jsonb_set(
+                 jsonb_set(
+                   COALESCE(metadata, '{}')::jsonb,
+                   '{embeddings}',
+                   'true'::jsonb
+                 ),
+                 '{chunks}',
+                 $2::text::jsonb
+               ),
+               '{embedding_model}',
+               to_jsonb($3::text)
+             ),
+             '{total_tokens_used}',
+             to_jsonb($4::integer)
+           ),
            '{document_type}',
-           '$5'
+           to_jsonb($5::text)
          )
          WHERE id = $1`,
         [documentId, chunks.length, modelName, totalTokensUsed, documentType]

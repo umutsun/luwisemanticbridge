@@ -259,8 +259,14 @@ export class TableCreationService {
         try {
           await client.query('BEGIN');
 
-          for (const row of batch) {
+          for (let rowIdx = 0; rowIdx < batch.length; rowIdx++) {
+            const row = batch[rowIdx];
+            const savepointName = `sp_row_${rowIdx}`;
+
             try {
+              // Create savepoint before each row to handle errors gracefully
+              await client.query(`SAVEPOINT ${savepointName}`);
+
               // Build INSERT statement
               const values: any[] = [];
               const placeholders: string[] = [];
@@ -313,10 +319,14 @@ export class TableCreationService {
               `;
 
               await client.query(insertSQL, values);
+              // Release savepoint on success
+              await client.query(`RELEASE SAVEPOINT ${savepointName}`);
               rowsInserted++;
             } catch (rowError) {
+              // Rollback to savepoint on error - this keeps the transaction alive
+              await client.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
               rowsFailed++;
-              const errMsg = `Row ${i + batch.indexOf(row)}: ${(rowError as Error).message}`;
+              const errMsg = `Row ${i + rowIdx}: ${(rowError as Error).message}`;
               errors.push(errMsg);
               console.error(`[TableCreation] ${errMsg}`);
             }
