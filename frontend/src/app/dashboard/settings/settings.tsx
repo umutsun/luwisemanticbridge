@@ -1936,8 +1936,8 @@ function RAGSettings() {
     parallelLLMBatchSize: 100,      // Batch size for embeddings
     chunkOverlap: 200,              // 200 chars overlap between chunks
     chunkSize: 1000,                // 1000 chars per chunk
-    enableHybridSearch: false,      // Semantic search only by default
-    enableKeywordBoost: false,      // No keyword boost by default
+    enableHybridSearch: true,       // Combine semantic + keyword search
+    enableKeywordBoost: true,       // Boost keyword matches
     enableUnifiedEmbeddings: true,  // Include database content
     enableMessageEmbeddings: false, // Don't include chat history
     enableDocumentEmbeddings: false,// Don't include uploaded docs
