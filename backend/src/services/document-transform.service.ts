@@ -64,12 +64,13 @@ export interface TransformOptions {
   tableName?: string;
   batchSize?: number;
   createNewTable?: boolean;
+  enableEmbedding?: boolean;
 }
 
 export interface TransformProgress {
   jobId: string;
   documentId: number;
-  status: 'pending' | 'analyzing' | 'creating_table' | 'inserting_data' | 'completed' | 'failed';
+  status: 'pending' | 'analyzing' | 'creating_table' | 'inserting_data' | 'embedding' | 'completed' | 'failed';
   progress: number;
   rowsProcessed: number;
   totalRows: number;
@@ -77,6 +78,12 @@ export interface TransformProgress {
   errors: string[];
   startedAt: Date;
   completedAt?: Date;
+  // Embedding progress
+  embeddingEnabled?: boolean;
+  embeddingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  embeddingProgress?: number;
+  chunksProcessed?: number;
+  totalChunks?: number;
 }
 
 export class DocumentTransformService {
@@ -354,7 +361,7 @@ export class DocumentTransformService {
     jobId: string,
     options: TransformOptions
   ): Promise<void> {
-    const { documentIds, sourceDbId, tableName, batchSize = 100, createNewTable = true } = options;
+    const { documentIds, sourceDbId, tableName, batchSize = 100, createNewTable = true, enableEmbedding = false } = options;
 
     for (const documentId of documentIds) {
       try {
@@ -529,6 +536,38 @@ export class DocumentTransformService {
             // Verification passed!
             console.log(`[DocumentTransform] ✓ Verification passed: ${actualRowCount} rows confirmed (${result.rowsFailed} rows skipped)`);
 
+            // Handle embedding if enabled
+            if (enableEmbedding) {
+              console.log(`[DocumentTransform] Embedding enabled, starting embedding process for document ${documentId}`);
+
+              await this.updateTransformProgress(jobId, documentId, {
+                status: 'embedding',
+                progress: 85,
+                embeddingEnabled: true,
+                embeddingStatus: 'processing',
+                embeddingProgress: 0,
+              });
+
+              try {
+                // Create embeddings for the document
+                await this.createDocumentEmbeddings(documentId, doc, parsedData, jobId);
+
+                await this.updateTransformProgress(jobId, documentId, {
+                  embeddingStatus: 'completed',
+                  embeddingProgress: 100,
+                });
+
+                console.log(`[DocumentTransform] ✓ Embedding completed for document ${documentId}`);
+              } catch (embeddingError) {
+                console.error(`[DocumentTransform] Embedding failed for document ${documentId}:`, embeddingError);
+                await this.updateTransformProgress(jobId, documentId, {
+                  embeddingStatus: 'failed',
+                  errors: [(embeddingError as Error).message],
+                });
+                // Continue with transform completion even if embedding fails
+              }
+            }
+
             await this.updateDocumentStatus(documentId, 'completed', 100, {
               targetTableName: finalTableName,
               sourceDbId,
@@ -536,6 +575,7 @@ export class DocumentTransformService {
               lastTransformRowCount: actualRowCount,
               rowsSkipped: result.rowsFailed,
               columnCount: analysis.fieldTypes.length,
+              embeddingEnabled: enableEmbedding,
             });
 
             await this.updateTransformProgress(jobId, documentId, {
@@ -544,9 +584,10 @@ export class DocumentTransformService {
               rowsProcessed: actualRowCount, // Use verified count
               totalRows: totalRowsInCSV,
               rowsSkipped: result.rowsFailed,
+              embeddingEnabled: enableEmbedding,
             });
 
-            console.log(`[DocumentTransform] Document ${documentId} transformed and verified successfully`);
+            console.log(`[DocumentTransform] Document ${documentId} transformed and verified successfully${enableEmbedding ? ' with embeddings' : ''}`);
           } else {
             throw new Error(`Table creation failed: ${result.errors.join(', ')}`);
           }
@@ -809,6 +850,110 @@ export class DocumentTransformService {
       .replace(/[^a-z0-9_]/gi, '_') // Replace special chars with underscore
       .toLowerCase()
       .substring(0, 63); // PostgreSQL table name limit
+  }
+
+  /**
+   * Create embeddings for document data and store in document_embeddings table
+   */
+  private async createDocumentEmbeddings(
+    documentId: number,
+    doc: any,
+    parsedData: any[],
+    jobId: string
+  ): Promise<void> {
+    console.log(`[DocumentTransform] Creating embeddings for document ${documentId}`);
+
+    // Import EmbeddingService dynamically to avoid circular dependency
+    const { EmbeddingService } = await import('./embedding.service');
+    const embeddingService = new EmbeddingService(this.pool);
+
+    // Combine all row data into text chunks for embedding
+    const chunks: string[] = [];
+    const chunkSize = 10; // Process 10 rows per chunk
+
+    for (let i = 0; i < parsedData.length; i += chunkSize) {
+      const rowBatch = parsedData.slice(i, Math.min(i + chunkSize, parsedData.length));
+      const chunkText = rowBatch.map(row => {
+        return Object.entries(row)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ');
+      }).join('\n');
+
+      chunks.push(chunkText);
+    }
+
+    console.log(`[DocumentTransform] Created ${chunks.length} chunks for embedding`);
+
+    // Update progress
+    await this.updateTransformProgress(jobId, documentId, {
+      totalChunks: chunks.length,
+      chunksProcessed: 0,
+    });
+
+    // Process chunks in batches
+    const batchSize = 5;
+    let processedChunks = 0;
+
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batchChunks = chunks.slice(i, Math.min(i + batchSize, chunks.length));
+
+      for (const chunk of batchChunks) {
+        try {
+          // Generate embedding
+          const embedding = await embeddingService.generateEmbedding(chunk);
+
+          // Store in document_embeddings table
+          await this.pool.query(
+            `INSERT INTO document_embeddings (document_id, chunk_text, chunk_index, embedding, metadata, created_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [
+              documentId,
+              chunk.substring(0, 10000), // Limit chunk text size
+              processedChunks,
+              JSON.stringify(embedding),
+              JSON.stringify({
+                source: 'csv_transform',
+                filename: doc.filename || doc.title,
+                rowStart: processedChunks * chunkSize,
+                rowEnd: Math.min((processedChunks + 1) * chunkSize, parsedData.length),
+              }),
+            ]
+          );
+
+          processedChunks++;
+        } catch (error) {
+          console.error(`[DocumentTransform] Failed to embed chunk ${processedChunks}:`, error);
+          // Continue with other chunks
+          processedChunks++;
+        }
+      }
+
+      // Update progress
+      const embeddingProgress = Math.round((processedChunks / chunks.length) * 100);
+      await this.updateTransformProgress(jobId, documentId, {
+        embeddingProgress,
+        chunksProcessed: processedChunks,
+      });
+    }
+
+    // Update document metadata with embedding info
+    await this.pool.query(
+      `UPDATE documents
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [
+        JSON.stringify({
+          embeddings: true,
+          embeddingChunks: chunks.length,
+          embeddingModel: 'default',
+          embeddedAt: new Date().toISOString(),
+        }),
+        documentId,
+      ]
+    );
+
+    console.log(`[DocumentTransform] ✓ Created ${processedChunks} embeddings for document ${documentId}`);
   }
 }
 

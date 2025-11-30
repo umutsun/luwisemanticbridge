@@ -79,6 +79,12 @@ type TransformProgress {
   errors: [String!]!
   startedAt: DateTime!
   completedAt: DateTime
+  # Embedding progress
+  embeddingEnabled: Boolean
+  embeddingStatus: String
+  embeddingProgress: Int
+  chunksProcessed: Int
+  totalChunks: Int
 }
 
 type TransformResult {
@@ -145,6 +151,7 @@ extend type Mutation {
     tableName: String
     batchSize: Int
     createNewTable: Boolean
+    enableEmbedding: Boolean
   ): TransformResult!
 
   # Delete transform document

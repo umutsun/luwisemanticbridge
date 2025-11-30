@@ -240,12 +240,14 @@ export const documentTransformResolvers = {
         tableName,
         batchSize = 100,
         createNewTable = true,
+        enableEmbedding = false,
       }: {
         documentIds: string[];
         sourceDbId: string;
         tableName?: string;
         batchSize?: number;
         createNewTable?: boolean;
+        enableEmbedding?: boolean;
       },
       context: GraphQLContext
     ) => {
@@ -260,6 +262,7 @@ export const documentTransformResolvers = {
           tableName,
           batchSize,
           createNewTable,
+          enableEmbedding,
         });
 
         return {

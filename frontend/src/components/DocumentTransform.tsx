@@ -60,12 +60,14 @@ const TRANSFORM_DOCUMENTS = gql`
     $sourceDbId: String!
     $tableName: String
     $batchSize: Int
+    $enableEmbedding: Boolean
   ) {
     transformDocumentsToSourceDb(
       documentIds: $documentIds
       sourceDbId: $sourceDbId
       tableName: $tableName
       batchSize: $batchSize
+      enableEmbedding: $enableEmbedding
     ) {
       jobId
       message
@@ -84,6 +86,11 @@ const GET_TRANSFORM_PROGRESS = gql`
       rowsProcessed
       totalRows
       errors
+      embeddingEnabled
+      embeddingStatus
+      embeddingProgress
+      chunksProcessed
+      totalChunks
     }
   }
 `;
@@ -123,6 +130,7 @@ export const DocumentTransform: React.FC = () => {
   const [previewDocId, setPreviewDocId] = useState<string | null>(null);
   const [transformJobId, setTransformJobId] = useState<string | null>(null);
   const [customTableName, setCustomTableName] = useState<string>('');
+  const [enableEmbedding, setEnableEmbedding] = useState<boolean>(false);
 
   // Fetch documents list
   const { data: documentsData, loading: documentsLoading, refetch: refetchDocuments } = useQuery(
@@ -181,6 +189,7 @@ export const DocumentTransform: React.FC = () => {
         sourceDbId: 'source_database',
         tableName,
         batchSize: 100,
+        enableEmbedding,
       },
     });
   };
@@ -260,11 +269,21 @@ export const DocumentTransform: React.FC = () => {
             value={customTableName}
             onChange={(e) => setCustomTableName(e.target.value)}
           />
+          <label className="embed-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '16px' }}>
+            <input
+              type="checkbox"
+              checked={enableEmbedding}
+              onChange={(e) => setEnableEmbedding(e.target.checked)}
+              style={{ width: '18px', height: '18px' }}
+            />
+            <span>Enable Embeddings</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>(Store in document_embeddings)</span>
+          </label>
           <button
             onClick={handleTransform}
             disabled={selectedDocuments.length === 0 || transforming}
           >
-            {transforming ? 'Transforming...' : `Transform ${selectedDocuments.length} Document(s)`}
+            {transforming ? 'Transforming...' : `Transform ${selectedDocuments.length} Document(s)${enableEmbedding ? ' + Embed' : ''}`}
           </button>
         </div>
       </div>
@@ -342,13 +361,43 @@ export const DocumentTransform: React.FC = () => {
             <div key={p.documentId} className="progress-item">
               <p><strong>Document:</strong> {p.documentId}</p>
               <p><strong>Status:</strong> {p.status}</p>
-              <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${p.progress}%` }} />
-                <span className="progress-text">
-                  {p.rowsProcessed} / {p.totalRows} rows ({p.progress}%)
-                </span>
+
+              {/* Table Transform Progress */}
+              <div className="progress-section">
+                <p style={{ fontSize: '12px', color: '#666' }}>Table Transform:</p>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${p.progress}%` }} />
+                  <span className="progress-text">
+                    {p.rowsProcessed} / {p.totalRows} rows ({p.progress}%)
+                  </span>
+                </div>
               </div>
-              {p.errors.length > 0 && (
+
+              {/* Embedding Progress (if enabled) */}
+              {p.embeddingEnabled && (
+                <div className="progress-section" style={{ marginTop: '8px' }}>
+                  <p style={{ fontSize: '12px', color: '#666' }}>
+                    Embedding: <span style={{
+                      color: p.embeddingStatus === 'completed' ? 'green' :
+                             p.embeddingStatus === 'failed' ? 'red' : 'orange'
+                    }}>{p.embeddingStatus || 'pending'}</span>
+                  </p>
+                  <div className="progress-bar" style={{ backgroundColor: '#e0e0e0' }}>
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${p.embeddingProgress || 0}%`,
+                        backgroundColor: p.embeddingStatus === 'failed' ? '#f44336' : '#4caf50'
+                      }}
+                    />
+                    <span className="progress-text">
+                      {p.chunksProcessed || 0} / {p.totalChunks || 0} chunks ({p.embeddingProgress || 0}%)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {p.errors && p.errors.length > 0 && (
                 <div className="errors">
                   {p.errors.map((err: string, idx: number) => (
                     <p key={idx} className="error">{err}</p>
