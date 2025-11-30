@@ -19,11 +19,11 @@ REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 1))
 
-# Proxy config - Decodo TR Mobile
-PROXY_HOST = os.getenv('SAHIBINDEN_PROXY_HOST', 'tr.decodo.com')
-PROXY_PORT = os.getenv('SAHIBINDEN_PROXY_PORT', '10001')
-PROXY_USER = os.getenv('SAHIBINDEN_PROXY_USER', 'spzuzgfw2v')
-PROXY_PASS = os.getenv('SAHIBINDEN_PROXY_PASS', 'xoo40_vCaFnS3moi1Q')
+# Proxy config - TR Mobile Proxy
+PROXY_HOST = os.getenv('SAHIBINDEN_PROXY_HOST', '51.77.190.247')
+PROXY_PORT = os.getenv('SAHIBINDEN_PROXY_PORT', '5959')
+PROXY_USER = os.getenv('SAHIBINDEN_PROXY_USER', 'pcMVhFMABB-mob-tr')
+PROXY_PASS = os.getenv('SAHIBINDEN_PROXY_PASS', 'PC_07qMzFOzrqvngMuXW')
 
 # Cookies file
 COOKIES_FILE = os.path.join(os.path.dirname(__file__), 'sahibinden_cookies.json')

@@ -1008,11 +1008,10 @@ export class SemanticSearchService {
 
       console.log('[SemanticSearch] Searching with enabled types:', enabledTypes, {
         enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
-        unifiedRecordTypesCount: this.unifiedRecordTypes.length
+        unifiedRecordTypesCount: this.unifiedRecordTypes.length,
+        enableDocumentEmbeddings: this.enableDocumentEmbeddings,
+        enableScrapeEmbeddings: this.enableScrapeEmbeddings
       });
-
-      // Build type filter clause
-      const typeFilterPlaceholders = enabledTypes.map((_, index) => `$${index + 6}`).join(', ');
 
       // Build CASE statement for priority boost - only for unified record types
       const unifiedTypesSQL = this.unifiedRecordTypes.length > 0
@@ -1021,22 +1020,89 @@ export class SemanticSearchService {
 
       // OPTIMIZED QUERY: Uses CTE to calculate distance once, leverages DiskANN index
       // Performance improvement: 10-100x faster on large datasets
-      // Checks multiple metadata fields: 'table', '_sourceTable', 'source_table', and source_table column
+      // Searches across: unified_embeddings, document_embeddings, and scrape_embeddings tables
+
+      // Build dynamic UNION query based on enabled sources
+      const unionParts: string[] = [];
+
+      // Always include unified_embeddings if enabled types exist for it
+      const unifiedEnabledTypes = enabledTypes.filter(t =>
+        !['document_embeddings', 'scrape_embeddings', 'message_embeddings'].includes(t)
+      );
+
+      if (this.enableUnifiedEmbeddings && (unifiedEnabledTypes.length > 0 || enabledTypes.includes('message_embeddings'))) {
+        const allUnifiedTypes = [...unifiedEnabledTypes];
+        if (enabledTypes.includes('message_embeddings')) {
+          allUnifiedTypes.push('message_embeddings');
+        }
+
+        if (allUnifiedTypes.length > 0) {
+          const unifiedTypePlaceholders = allUnifiedTypes.map(t => `'${t}'`).join(', ');
+          unionParts.push(`
+            SELECT
+              ue.id,
+              ue.metadata,
+              ue.content,
+              ue.source_id::text,
+              ue.embedding <=> $1::vector AS distance,
+              1 - (ue.embedding <=> $1::vector) AS similarity_score,
+              COALESCE(ue.metadata->>'table', ue.metadata->>'_sourceTable', ue.metadata->>'source_table', ue.source_table) AS record_type
+            FROM unified_embeddings ue
+            WHERE ue.embedding IS NOT NULL
+              AND COALESCE(ue.metadata->>'table', ue.metadata->>'_sourceTable', ue.metadata->>'source_table', ue.source_table) IN (${unifiedTypePlaceholders})
+          `);
+        }
+      }
+
+      // Include document_embeddings if enabled
+      if (this.enableDocumentEmbeddings && enabledTypes.includes('document_embeddings')) {
+        unionParts.push(`
+          SELECT
+            de.id,
+            de.metadata,
+            de.chunk_text AS content,
+            de.document_id::text AS source_id,
+            de.embedding <=> $1::vector AS distance,
+            1 - (de.embedding <=> $1::vector) AS similarity_score,
+            'document_embeddings' AS record_type
+          FROM document_embeddings de
+          WHERE de.embedding IS NOT NULL
+        `);
+        console.log('[SemanticSearch] Including document_embeddings in search');
+      }
+
+      // Include scrape_embeddings if enabled
+      if (this.enableScrapeEmbeddings && enabledTypes.includes('scrape_embeddings')) {
+        unionParts.push(`
+          SELECT
+            se.id,
+            COALESCE(se.metadata, '{}'::jsonb) AS metadata,
+            COALESCE(se.content, se.processed_content, se.original_content, '') AS content,
+            se.id::text AS source_id,
+            se.embedding <=> $1::vector AS distance,
+            1 - (se.embedding <=> $1::vector) AS similarity_score,
+            'scrape_embeddings' AS record_type
+          FROM scrape_embeddings se
+          WHERE se.embedding IS NOT NULL
+        `);
+        console.log('[SemanticSearch] Including scrape_embeddings in search');
+      }
+
+      // If no sources are enabled, return empty
+      if (unionParts.length === 0) {
+        console.log('[SemanticSearch] No embedding sources enabled');
+        return [];
+      }
+
+      const combinedQuery = unionParts.join(' UNION ALL ');
+
       const searchQuery = `
         WITH ranked_results AS (
-          SELECT
-            ue.id,
-            ue.metadata,
-            ue.content,
-            ue.source_id,
-            ue.embedding <=> $1::vector AS distance,
-            1 - (ue.embedding <=> $1::vector) AS similarity_score,
-            COALESCE(ue.metadata->>'table', ue.metadata->>'_sourceTable', ue.metadata->>'source_table', ue.source_table) AS record_type
-          FROM unified_embeddings ue
-          WHERE ue.embedding IS NOT NULL
-            AND COALESCE(ue.metadata->>'table', ue.metadata->>'_sourceTable', ue.metadata->>'source_table', ue.source_table) IN (${typeFilterPlaceholders})
-          ORDER BY ue.embedding <=> $1::vector  -- Uses DiskANN index efficiently
-          LIMIT $4 * 2  -- Fetch 2x results for post-filtering
+          SELECT * FROM (
+            ${combinedQuery}
+          ) combined
+          ORDER BY distance
+          LIMIT $4 * 2
         )
         SELECT
           rr.id::text as id,
@@ -1069,7 +1135,7 @@ export class SemanticSearchService {
             ELSE 0
           END as final_score
         FROM ranked_results rr
-        WHERE rr.similarity_score >= $2  -- Apply threshold after index search
+        WHERE rr.similarity_score >= $2
         ORDER BY final_score DESC
         LIMIT $4
       `;
@@ -1081,8 +1147,7 @@ export class SemanticSearchService {
         this.similarityThreshold,
         keywordPattern,
         effectiveLimit,
-        this.enableKeywordBoost,
-        ...enabledTypes
+        this.enableKeywordBoost
       ]);
       console.timeEnd(queryId);
 
