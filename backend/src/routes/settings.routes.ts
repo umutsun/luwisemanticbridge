@@ -70,14 +70,15 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     const { category } = req.query;
 
     if (!category) {
-      // Return minimal full config if no category - include active models, app description, and database settings
+      // Return minimal full config if no category - include active models, app description, and all database settings
       const result = await lsembPool.query(
         `SELECT key, value FROM settings
-         WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         ['app.name', 'app.description', 'app.version', 'app.locale', 'llmSettings.activeChatModel', 'llmSettings.activeEmbeddingModel',
-         'database.host', 'database.port', 'database.name']
+         'database.host', 'database.port', 'database.name', 'database.user', 'database.password', 'database.ssl']
       );
 
+      // Start with environment-based defaults for database
       const config: any = {
         app: {
           name: 'Mali Müşavir Asistanı',
@@ -89,16 +90,27 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
           activeEmbeddingModel: null
         },
         database: {
-          host: null,
-          port: null,
-          name: null
+          host: process.env.POSTGRES_HOST || 'localhost',
+          port: parseInt(process.env.POSTGRES_PORT || '5432'),
+          name: process.env.POSTGRES_DB || 'lsemb',
+          user: process.env.POSTGRES_USER || 'postgres',
+          password: '',
+          ssl: false
         }
       };
 
+      // Override defaults with values from database
       result.rows.forEach(row => {
         const [section, key] = row.key.split('.');
         if (!config[section]) config[section] = {};
-        config[section][key] = row.value;
+        // Parse numeric values for database settings
+        if (section === 'database' && key === 'port') {
+          config[section][key] = parseInt(row.value) || 5432;
+        } else if (section === 'database' && key === 'ssl') {
+          config[section][key] = row.value === 'true' || row.value === true;
+        } else {
+          config[section][key] = row.value;
+        }
       });
 
       return res.json(config);
