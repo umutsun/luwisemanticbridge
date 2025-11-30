@@ -490,7 +490,7 @@ export class DocumentTransformService {
               importData: true,
               batchSize,
               jobId, // Pass jobId for real-time progress
-              action: 'AUTO', // Smart mode: auto-detect what to do
+              action: 'DROP', // Always drop and recreate to ensure correct column types
             }
           );
 
