@@ -70,7 +70,9 @@ i18n
 
     interpolation: {
       escapeValue: false, // not needed for react!!
-      formatSeparator: ','
+      formatSeparator: ',',
+      prefix: '{',
+      suffix: '}'
     },
 
     react: {

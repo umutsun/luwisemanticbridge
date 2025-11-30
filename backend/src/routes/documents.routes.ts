@@ -1714,8 +1714,47 @@ router.get('/table-creation/progress/:jobId', authenticateToken, async (req: Aut
       return res.status(503).json({ error: 'Redis not available' });
     }
 
-    const progressKey = `table_creation:${jobId}`;
-    const progressData = await redis.get(progressKey);
+    // Try table_creation key first (used by TableCreationService)
+    let progressKey = `table_creation:${jobId}`;
+    let progressData = await redis.get(progressKey);
+
+    // If not found, try transform_progress pattern (used by DocumentTransformService)
+    if (!progressData) {
+      const transformKeys = await redis.keys(`transform_progress:${jobId}:*`);
+      if (transformKeys && transformKeys.length > 0) {
+        // Aggregate progress from all documents in the transform job
+        const allProgress: any[] = [];
+        for (const key of transformKeys) {
+          const data = await redis.get(key);
+          if (data) {
+            allProgress.push(JSON.parse(data));
+          }
+        }
+
+        if (allProgress.length > 0) {
+          // Calculate aggregated progress
+          const totalProgress = allProgress.reduce((sum, p) => sum + (p.progress || 0), 0);
+          const avgProgress = totalProgress / allProgress.length;
+          const totalRows = allProgress.reduce((sum, p) => sum + (p.totalRows || 0), 0);
+          const rowsInserted = allProgress.reduce((sum, p) => sum + (p.rowsProcessed || 0), 0);
+          const anyFailed = allProgress.some(p => p.status === 'failed');
+          const allCompleted = allProgress.every(p => p.status === 'completed');
+
+          const aggregatedProgress = {
+            jobId,
+            status: anyFailed ? 'FAILED' : allCompleted ? 'COMPLETED' : 'INSERTING_DATA',
+            progress: Math.round(avgProgress),
+            totalRows,
+            rowsInserted,
+            currentBatch: 1,
+            totalBatches: allProgress.length,
+            startedAt: allProgress[0]?.startedAt || new Date().toISOString(),
+          };
+
+          return res.json({ progress: aggregatedProgress });
+        }
+      }
+    }
 
     if (!progressData) {
       return res.status(404).json({ error: 'Progress data not found' });
