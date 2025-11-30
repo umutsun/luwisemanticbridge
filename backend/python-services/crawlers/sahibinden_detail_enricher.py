@@ -135,6 +135,88 @@ class SahibindenDetailEnricher:
 
         await asyncio.sleep(2)
 
+        # === TRY TO EXTRACT JAVASCRIPT DATA FIRST (most complete) ===
+        try:
+            js_data = await page.evaluate('''() => {
+                // Sahibinden stores classified data in various window objects
+                const result = {};
+
+                // Try classifiedUserInfo
+                if (window.classifiedUserInfo) {
+                    Object.assign(result, window.classifiedUserInfo);
+                }
+
+                // Try classifiedDetailInfo
+                if (window.classifiedDetailInfo) {
+                    Object.assign(result, window.classifiedDetailInfo);
+                }
+
+                // Try dataLayer (Google Analytics layer often has structured data)
+                if (window.dataLayer && window.dataLayer.length > 0) {
+                    for (const item of window.dataLayer) {
+                        if (item.classifiedId || item.category || item.price) {
+                            Object.assign(result, item);
+                        }
+                    }
+                }
+
+                // Try to find JSON-LD structured data
+                const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+                for (const script of jsonLdScripts) {
+                    try {
+                        const jsonData = JSON.parse(script.textContent);
+                        if (jsonData['@type'] === 'RealEstateListing' || jsonData['@type'] === 'Product') {
+                            result.jsonLd = jsonData;
+                        }
+                    } catch (e) {}
+                }
+
+                // Try to find inline script with classified data
+                const scripts = document.querySelectorAll('script:not([src])');
+                for (const script of scripts) {
+                    const text = script.textContent;
+                    // Look for classifiedId patterns
+                    const classifiedIdMatch = text.match(/classifiedId['"\\s:]+['"]?(\\d+)['"]?/);
+                    if (classifiedIdMatch) {
+                        result.classifiedId = classifiedIdMatch[1];
+                    }
+                    // Look for latitude/longitude
+                    const latMatch = text.match(/["']?latitude["']?\\s*[:=]\\s*([\\d.]+)/);
+                    const lngMatch = text.match(/["']?longitude["']?\\s*[:=]\\s*([\\d.]+)/);
+                    if (latMatch) result.latitude = parseFloat(latMatch[1]);
+                    if (lngMatch) result.longitude = parseFloat(lngMatch[1]);
+
+                    // Look for price
+                    const priceMatch = text.match(/["']?price["']?\\s*[:=]\\s*([\\d.]+)/);
+                    if (priceMatch) result.priceFromJs = parseFloat(priceMatch[1]);
+
+                    // Look for area/m2
+                    const areaMatch = text.match(/["']?(?:area|m2|metrekare)["']?\\s*[:=]\\s*([\\d.]+)/i);
+                    if (areaMatch) result.areaFromJs = parseFloat(areaMatch[1]);
+                }
+
+                return Object.keys(result).length > 0 ? result : null;
+            }''')
+
+            if js_data:
+                print(f"  [+] Extracted {len(js_data)} fields from JavaScript")
+                # Map JS data to our schema
+                if js_data.get('latitude') and js_data.get('longitude'):
+                    lat, lng = js_data['latitude'], js_data['longitude']
+                    if 35 < lat < 43 and 25 < lng < 46:
+                        data['latitude'] = lat
+                        data['longitude'] = lng
+                if js_data.get('priceFromJs'):
+                    data['price_js'] = js_data['priceFromJs']
+                if js_data.get('areaFromJs'):
+                    data['area_js'] = js_data['areaFromJs']
+                if js_data.get('classifiedId'):
+                    data['listing_id_verified'] = js_data['classifiedId']
+                # Store raw JS data for reference
+                data['_js_data'] = js_data
+        except Exception as e:
+            print(f"  [!] JavaScript extraction error: {e}")
+
         # === PRICE ===
         try:
             price_el = await page.query_selector('div.classifiedInfo h3')
@@ -296,17 +378,55 @@ class SahibindenDetailEnricher:
         except Exception as e:
             print(f"  [!] Seller info extraction error: {e}")
 
-        # === COORDINATES (from map if available) ===
+        # === COORDINATES (from map/scripts) ===
         try:
-            # Try to get coordinates from page scripts or map element
-            map_el = await page.query_selector('div#gmap, div.map-wrapper')
+            # Method 1: Try data attributes on map element
+            map_el = await page.query_selector('div#gmap, div.map-wrapper, div[data-lat], div[data-lng]')
             if map_el:
-                # Coordinates are often in data attributes or script
                 lat = await map_el.get_attribute('data-lat')
                 lng = await map_el.get_attribute('data-lng')
                 if lat and lng:
                     data['latitude'] = float(lat)
                     data['longitude'] = float(lng)
+
+            # Method 2: Extract from JavaScript in page
+            if 'latitude' not in data:
+                coords_script = await page.evaluate('''() => {
+                    // Try window variables
+                    if (window.lat && window.lng) {
+                        return {lat: window.lat, lng: window.lng};
+                    }
+                    if (window.classifiedLat && window.classifiedLng) {
+                        return {lat: window.classifiedLat, lng: window.classifiedLng};
+                    }
+                    // Search in page content for coordinate patterns
+                    const html = document.documentElement.innerHTML;
+                    // Pattern: "lat":38.xxx,"lng":27.xxx or lat:38.xxx,lng:27.xxx
+                    const latMatch = html.match(/"?lat"?\\s*[:=]\\s*([\\d.]+)/i);
+                    const lngMatch = html.match(/"?lng"?\\s*[:=]\\s*([\\d.]+)/i);
+                    if (latMatch && lngMatch) {
+                        return {lat: parseFloat(latMatch[1]), lng: parseFloat(lngMatch[1])};
+                    }
+                    // Pattern: LatLng(38.xxx, 27.xxx)
+                    const latlngMatch = html.match(/LatLng\\s*\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)/);
+                    if (latlngMatch) {
+                        return {lat: parseFloat(latlngMatch[1]), lng: parseFloat(latlngMatch[2])};
+                    }
+                    // Pattern in Google Maps URL
+                    const gmapMatch = html.match(/maps.*?[@?]([\\d.]+),([\\d.]+)/);
+                    if (gmapMatch) {
+                        return {lat: parseFloat(gmapMatch[1]), lng: parseFloat(gmapMatch[2])};
+                    }
+                    return null;
+                }''')
+                if coords_script and coords_script.get('lat') and coords_script.get('lng'):
+                    lat_val = coords_script['lat']
+                    lng_val = coords_script['lng']
+                    # Validate coordinates are in Turkey range (roughly 36-42 lat, 26-45 lng)
+                    if 35 < lat_val < 43 and 25 < lng_val < 46:
+                        data['latitude'] = lat_val
+                        data['longitude'] = lng_val
+                        print(f"  [+] Found coordinates: {lat_val}, {lng_val}")
         except Exception as e:
             print(f"  [!] Coordinates extraction error: {e}")
 

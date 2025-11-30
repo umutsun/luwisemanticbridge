@@ -1,8 +1,49 @@
 import { Router, Request, Response } from 'express';
-import { pgPool, redis } from '../server';
+import { pgPool, redis, lsembPool } from '../server';
 import { getDatabaseSettings, getSettingsBasedPool } from '../config/database.config';
 
 const router = Router();
+
+// Helper function to get embedding dimension from model name
+const getEmbeddingDimension = (model: string): number => {
+  const dimensionMap: Record<string, number> = {
+    'text-embedding-3-small': 1536,
+    'text-embedding-3-large': 3072,
+    'text-embedding-ada-002': 1536,
+    'text-embedding-004': 768, // Google
+  };
+  return dimensionMap[model] || 1536; // Default to 1536
+};
+
+// Helper function to get current embedding settings
+const getEmbeddingSettings = async (): Promise<{ provider: string; model: string; dimension: number }> => {
+  try {
+    const pool = lsembPool || pgPool;
+    const settingsResult = await pool.query(`
+      SELECT key, value FROM settings
+      WHERE key IN ('llmSettings.embeddingProvider', 'llmSettings.activeEmbeddingModel')
+    `);
+
+    let provider = 'openai';
+    let model = 'text-embedding-ada-002';
+
+    settingsResult.rows.forEach((row: any) => {
+      if (row.key === 'llmSettings.embeddingProvider') {
+        provider = row.value;
+      } else if (row.key === 'llmSettings.activeEmbeddingModel') {
+        // Extract model from format like "google/text-embedding-004"
+        const parts = row.value.split('/');
+        model = parts.length === 2 ? parts[1] : row.value;
+      }
+    });
+
+    const dimension = getEmbeddingDimension(model);
+    return { provider, model, dimension };
+  } catch (error) {
+    console.error('Error getting embedding settings:', error);
+    return { provider: 'openai', model: 'text-embedding-ada-002', dimension: 1536 };
+  }
+};
 
 // Get embedding progress
 router.get('/progress', async (req: Request, res: Response) => {
@@ -768,6 +809,9 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
     // Get actual progress from database and Redis
     const getActualProgress = async () => {
       try {
+        // Get embedding settings for display
+        const embeddingInfo = await getEmbeddingSettings();
+
         // First check Redis for migration progress (check both keys for compatibility)
         let redisProgress = await redis.get('embedding:progress');
 
@@ -856,7 +900,10 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
               newlyEmbedded: progressData.newlyEmbedded || 0,
               currentBatch: progressData.currentBatch || 0,
               totalBatches: progressData.totalBatches || 0,
-              processingSpeed
+              processingSpeed,
+              embeddingProvider: embeddingInfo.provider,
+              embeddingModel: embeddingInfo.model,
+              embeddingDimension: embeddingInfo.dimension
             };
           }
         }
@@ -985,19 +1032,23 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
           newlyEmbedded: Math.max(0, newlyEmbedded),
           currentBatch: Math.ceil(actualEmbeddedCount / 50) || 1, // Assuming 50 records per batch
           totalBatches: Math.ceil(totalRecords / 50) || 1,
-          processingSpeed
+          processingSpeed,
+          embeddingProvider: embeddingInfo.provider,
+          embeddingModel: embeddingInfo.model,
+          embeddingDimension: embeddingInfo.dimension
         };
       } catch (error) {
         console.error('Error getting actual progress:', error);
         return null;
       }
     };
-    
+
     // Send initial progress
     const initialProgress = await getActualProgress();
 
     if (!initialProgress) {
-      // No active process, send idle status
+      // No active process, send idle status with embedding info
+      const embeddingInfo = await getEmbeddingSettings();
       const idleProgress = {
         status: 'idle',
         current: 0,
@@ -1014,7 +1065,10 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
         pendingCount: 0,
         successCount: 0,
         errorCount: 0,
-        newlyEmbedded: 0
+        newlyEmbedded: 0,
+        embeddingProvider: embeddingInfo.provider,
+        embeddingModel: embeddingInfo.model,
+        embeddingDimension: embeddingInfo.dimension
       };
 
       res.write(`data: ${JSON.stringify(idleProgress)}\n\n`);
