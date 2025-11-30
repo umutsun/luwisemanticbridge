@@ -127,7 +127,12 @@ class SahibindenDetailEnricher:
         """Extract all available data from detail page"""
         data = {}
 
-        # Wait for content to load
+        # Wait for content to load and try to wait for key element
+        try:
+            await page.wait_for_selector('div.classifiedInfo, ul.classifiedInfoList', timeout=10000)
+        except:
+            print("  [!] Could not find main content elements, trying anyway...")
+
         await asyncio.sleep(2)
 
         # === PRICE ===
@@ -338,30 +343,43 @@ class SahibindenDetailEnricher:
 
         try:
             try:
-                await page.goto(url, wait_until='networkidle', timeout=60000)
+                await page.goto(url, wait_until='domcontentloaded', timeout=90000)
             except Exception as e:
                 print(f"  [-] Page load error: {e}")
                 return None
 
-            await asyncio.sleep(3)
-            title = await page.title()
+            # Wait a bit for dynamic content
+            await asyncio.sleep(5)
 
-            # Check for block page
-            if title == '' or 'Olağandışı' in title:
-                body_text = await page.inner_text('body')
-                if 'Olağandışı' in body_text:
-                    print(f"  [!] BLOCKED by Sahibinden!")
-                    return None
+            try:
+                title = await page.title()
+            except:
+                title = ""
+
+            # Check for block page with safer approach
+            try:
+                if title == '' or 'Olağandışı' in title:
+                    body_el = await page.query_selector('body')
+                    if body_el:
+                        body_text = await body_el.inner_text()
+                        if 'Olağandışı' in body_text:
+                            print(f"  [!] BLOCKED by Sahibinden!")
+                            return None
+            except Exception as e:
+                print(f"  [!] Block check error: {e}")
 
             # Cloudflare check
-            if 'Bir dakika' in title or 'moment' in title.lower():
+            if title and ('Bir dakika' in title or 'moment' in title.lower()):
                 print(f"  [CF] Cloudflare detected, waiting...")
                 if not await self.wait_for_cloudflare(page):
                     print(f"  [!] Cloudflare challenge failed!")
                     return None
+                try:
+                    title = await page.title()
+                except:
+                    title = "Unknown"
 
-            title = await page.title()
-            print(f"  [+] Loaded: {title[:50]}...")
+            print(f"  [+] Loaded: {title[:50] if title else 'No title'}...")
 
             # Scroll to load lazy content
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
