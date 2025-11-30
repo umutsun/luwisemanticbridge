@@ -908,7 +908,7 @@ export default function DocumentManagerPage() {
 
         if (filename) {
           const token = localStorage.getItem('token');
-          const response = await fetch(`http://localhost:8083/api/v2/documents/preview/${filename}`, {
+          const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/preview/${filename}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
