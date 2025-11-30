@@ -239,11 +239,26 @@ export class DocumentTransformService {
       console.log(`[DocumentTransform] Parsed data: ${parsedData.length} rows, ${columnHeaders.length} columns`);
       console.log(`[DocumentTransform] Returning ${sampleRows.length} sample rows for preview`);
 
-      // Simple field type detection
+      // Simple field type detection with improved date detection
+      const isValidDateString = (v: any): boolean => {
+        if (!v || typeof v !== 'string') return false;
+        // Only match actual date formats, not plain numbers
+        // Common formats: YYYY-MM-DD, DD.MM.YYYY, DD/MM/YYYY, YYYY/MM/DD, ISO dates
+        const datePatterns = [
+          /^\d{4}-\d{2}-\d{2}$/,                    // YYYY-MM-DD
+          /^\d{2}\.\d{2}\.\d{4}$/,                  // DD.MM.YYYY
+          /^\d{2}\/\d{2}\/\d{4}$/,                  // DD/MM/YYYY or MM/DD/YYYY
+          /^\d{4}\/\d{2}\/\d{2}$/,                  // YYYY/MM/DD
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/,  // ISO 8601
+        ];
+        return datePatterns.some(pattern => pattern.test(v.trim()));
+      };
+
       const fieldTypes = columnHeaders.map((header: string) => {
         const values = sampleRows.map((row: any) => row[header]).filter((v: any) => v !== null && v !== undefined && v !== '');
         const isNumeric = values.length > 0 && values.every((v: any) => !isNaN(Number(v)));
-        const isDate = values.length > 0 && values.every((v: any) => !isNaN(Date.parse(v)));
+        // Only check for date if not numeric - pure numbers should never be dates
+        const isDate = !isNumeric && values.length > 0 && values.every((v: any) => isValidDateString(v));
 
         return {
           field: header,
