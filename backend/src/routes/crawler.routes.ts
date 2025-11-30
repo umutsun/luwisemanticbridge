@@ -1044,9 +1044,13 @@ router.patch('/crawler-directories/:crawlerName/rename', async (req: Request, re
 
     if (keys.length === 0) {
       console.warn('⚠️ No keys found for crawler:', crawlerName);
-      return res.status(404).json({
-        success: false,
-        error: 'Crawler directory not found'
+      // Still allow rename even if no data exists yet - directory might be newly created
+      return res.json({
+        success: true,
+        message: 'Crawler directory renamed (no data to migrate)',
+        oldName: crawlerName,
+        newName,
+        renamedCount: 0
       });
     }
 

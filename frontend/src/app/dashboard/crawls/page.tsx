@@ -2178,25 +2178,21 @@ export default function CrawlerDataPage() {
                                             setEditingDirectoryName('');
                                           }
                                         }}
+                                        onBlur={() => {
+                                          // Save on blur (clicking outside)
+                                          if (editingDirectoryName.trim()) {
+                                            handleRenameDirectory(directory, editingDirectoryName);
+                                          }
+                                        }}
                                       />
                                       <Button
                                         size="sm"
                                         variant="ghost"
                                         className="h-6 w-6 p-0 hover:bg-green-100 dark:hover:bg-green-900/30"
                                         onClick={() => handleRenameDirectory(directory, editingDirectoryName)}
+                                        title="Save (Enter)"
                                       >
                                         <Check className="w-3 h-3 text-green-600" />
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-6 w-6 p-0 hover:bg-red-100 dark:hover:bg-red-900/30"
-                                        onClick={() => {
-                                          setEditingDirectoryId(null);
-                                          setEditingDirectoryName('');
-                                        }}
-                                      >
-                                        <X className="w-3 h-3 text-red-600" />
                                       </Button>
                                     </div>
                                   ) : (
