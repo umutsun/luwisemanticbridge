@@ -557,10 +557,25 @@ export class RAGChatService {
         console.log(`  Source ${idx + 1}: title="${source.title?.substring(0, 30)}...", content length=${source.content?.length || 0}, excerpt length=${source.excerpt?.length || 0}`);
       });
 
+      // 8. Generate contextual follow-up questions (async, don't block response)
+      let followUpQuestions: string[] = [];
+      try {
+        followUpQuestions = await this.generateContextualFollowUps(
+          message,
+          response.content,
+          formattedSources,
+          options.language || 'tr'
+        );
+      } catch (followUpError) {
+        console.error('[FOLLOW-UP] Failed to generate follow-up questions:', followUpError);
+        // Continue without follow-up questions
+      }
+
       return {
         response: response.content,
         sources: formattedSources,
         relatedTopics: relatedTopics,
+        followUpQuestions: followUpQuestions,
         conversationId: convId,
         provider: response.provider,
         model: response.model || response.provider,
@@ -1067,6 +1082,127 @@ export class RAGChatService {
     }
 
     return smartQuestion;
+  }
+
+
+  /**
+   * Generate contextual follow-up questions based on conversation context
+   * These questions are SELF-CONTAINED and build on what was just discussed
+   */
+  async generateContextualFollowUps(
+    userQuestion: string,
+    aiResponse: string,
+    sources: any[],
+    language: string = 'tr'
+  ): Promise<string[]> {
+    try {
+      console.log('[FOLLOW-UP] Generating contextual follow-up questions...');
+
+      // Extract topics from sources for context
+      const sourceTopics = sources.slice(0, 3)
+        .map(s => s.title || '')
+        .filter(t => t.length > 0)
+        .join(', ');
+
+      // Truncate AI response to key points (first 600 chars)
+      const responseSummary = aiResponse.substring(0, 600).replace(/\n+/g, ' ').trim();
+
+      const llmManager = LLMManager.getInstance();
+
+      const prompt = language === 'en'
+        ? `Based on this Q&A, generate 3 follow-up questions the user might ask next.
+
+USER'S QUESTION: ${userQuestion}
+
+AI'S RESPONSE (summary): ${responseSummary}
+
+RELATED TOPICS: ${sourceTopics}
+
+RULES:
+1. Questions must be SELF-CONTAINED - include the specific topic so they make sense without context
+2. Questions should DIG DEEPER into what was discussed - not ask about unrelated topics
+3. Questions should be SPECIFIC and ACTIONABLE
+4. NO vague questions like "tell me more" or "what else?"
+5. Each question should explore a DIFFERENT aspect of the topic
+
+Return ONLY a JSON array with exactly 3 questions. Example format:
+["What are the specific deadlines for corporate tax filings?", "How does the 50% rate apply to foreign income?", "What documents are required for the tax exemption application?"]`
+        : `Bu soru-cevap etkileşimine göre kullanıcının sorması muhtemel 3 takip sorusu üret.
+
+KULLANICININ SORUSU: ${userQuestion}
+
+YAPAY ZEKANIN YANITI (özet): ${responseSummary}
+
+İLGİLİ KONULAR: ${sourceTopics}
+
+KURALLAR:
+1. Sorular KENDİ BAŞINA ANLAMLI olmalı - konuyu içermeli, bağlam olmadan da anlaşılmalı
+2. Sorular konuşulan konuyu DERİNLEŞTİRMELİ - alakasız konulara geçmemeli
+3. Sorular SPESIFIK ve UYGULANABİLİR olmalı
+4. "Daha fazla bilgi verir misiniz?" gibi MUĞLAK sorular YASAK
+5. Her soru konunun FARKLI bir yönünü keşfetmeli
+
+SADECE 3 soruluk bir JSON dizisi döndür. Örnek format:
+["Kurumlar vergisi beyanname süreleri nelerdir?", "Yurt dışı gelirler için %50 oranı nasıl uygulanır?", "Vergi muafiyeti başvurusu için hangi belgeler gerekli?"]`;
+
+      const response = await llmManager.generateChatResponse(prompt, {
+        temperature: 0.7,
+        maxTokens: 500,
+        systemPrompt: 'You are a helpful assistant that generates follow-up questions. Return ONLY valid JSON array, no other text.'
+      });
+
+      // Parse JSON from response
+      try {
+        // Try to extract JSON array from response
+        const content = response.content || '';
+        const jsonMatch = content.match(/\[[\s\S]*?\]/);
+        if (jsonMatch) {
+          const questions = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(questions) && questions.length > 0) {
+            console.log(`[FOLLOW-UP] Generated ${questions.length} contextual questions`);
+            return questions.slice(0, 4); // Max 4 questions
+          }
+        }
+      } catch (parseError) {
+        console.error('[FOLLOW-UP] Failed to parse JSON:', parseError);
+      }
+
+      // Fallback: Generate simple contextual questions if LLM fails
+      console.log('[FOLLOW-UP] Using fallback question generation');
+      return this.generateFallbackFollowUps(userQuestion, sources, language);
+
+    } catch (error) {
+      console.error('[FOLLOW-UP] Error generating follow-up questions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fallback follow-up question generation (non-LLM)
+   */
+  private generateFallbackFollowUps(userQuestion: string, sources: any[], language: string): string[] {
+    const questions: string[] = [];
+
+    // Extract main topic from user question (first 50 chars)
+    const topic = userQuestion.substring(0, 50).replace(/\?$/, '').trim();
+
+    if (language === 'tr') {
+      if (topic.includes('vergi') || topic.includes('oran')) {
+        questions.push(`${topic} için muafiyet şartları nelerdir?`);
+        questions.push(`${topic} ile ilgili beyanname süreleri nedir?`);
+      } else if (topic.includes('başvuru') || topic.includes('kayıt')) {
+        questions.push(`${topic} için gerekli belgeler nelerdir?`);
+        questions.push(`${topic} süreci ne kadar sürer?`);
+      } else {
+        questions.push(`${topic} hakkında yasal düzenlemeler nelerdir?`);
+        questions.push(`${topic} için önemli tarihler nedir?`);
+      }
+    } else {
+      questions.push(`What are the requirements for ${topic}?`);
+      questions.push(`What are the deadlines related to ${topic}?`);
+    }
+
+    return questions.slice(0, 3);
   }
 
 

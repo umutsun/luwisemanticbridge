@@ -52,6 +52,7 @@ interface Message {
     content: string;
     timestamp: Date;
     sources?: any[];
+    followUpQuestions?: string[];
     isTyping?: boolean;
     isFromSource?: boolean;
     isStreaming?: boolean;
@@ -320,13 +321,14 @@ export default function ChatInterface() {
                     console.error('Failed to get final data:', e);
                 }
 
-                // Finalize message with sources
+                // Finalize message with sources and follow-up questions
                 setMessages(prev => prev.map(msg =>
                     msg.id === messageId ? {
                         ...msg,
                         content: accumulatedContent || finalData.response || msg.content,
                         isStreaming: false,
                         sources: finalData.sources,
+                        followUpQuestions: finalData.followUpQuestions,
                         responseTime: msg.startTime ? Date.now() - msg.startTime : undefined
                     } : msg
                 ));
@@ -729,6 +731,24 @@ export default function ChatInterface() {
                                                     <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-gray-100 dark:hover:bg-[#2d2e30] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                                                         <RefreshCw className="w-3.5 h-3.5" />
                                                     </Button>
+                                                </div>
+                                            )}
+
+                                            {/* Contextual Follow-up Questions */}
+                                            {msg.role === 'assistant' && !msg.isStreaming && msg.followUpQuestions && msg.followUpQuestions.length > 0 && idx === messages.length - 1 && (
+                                                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700/50">
+                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{t('chat.followUp', 'İlgili sorular')}</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {msg.followUpQuestions.map((question, qIdx) => (
+                                                            <button
+                                                                key={qIdx}
+                                                                onClick={() => setInputText(question)}
+                                                                className="text-left text-sm px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                                            >
+                                                                {question}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
