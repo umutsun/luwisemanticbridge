@@ -3218,31 +3218,51 @@ export default function CrawlerDataPage() {
             <div className="absolute inset-0 shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.8),0_-8px_32px_0_rgba(0,0,0,0.12)] dark:shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.05),0_-8px_32px_0_rgba(0,0,0,0.4)] border-t border-slate-300/50 dark:border-slate-700/50" />
 
             <div className="flex items-center justify-between relative z-10">
-              <div className="flex flex-col gap-1 flex-1 min-w-0">
-                <div className="text-[10px] text-slate-600 dark:text-slate-400 truncate" title={editingItem?.data?.url}>
-                  {editingItem?.data?.url || editingItem?.key || ''}
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                {/* URL Row - Bigger, Copyable */}
+                <div className="flex items-center gap-2">
+                  <a href={editingItem?.data?.url || editingItem?.key || '#'} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate max-w-[400px]" title={editingItem?.data?.url}>
+                    {editingItem?.data?.url || editingItem?.key || ''}
+                  </a>
+                  <button onClick={() => navigator.clipboard.writeText(editingItem?.data?.url || editingItem?.key || '')} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="Copy URL">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                  </button>
                 </div>
                 {editingItem?.data && (
-                  <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Dates without labels */}
                     {editingItem.data.publish_date && (
-                      <span className="text-slate-500 dark:text-slate-500">
-                        Published: {new Date(editingItem.data.publish_date).toLocaleDateString()}
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {new Date(editingItem.data.publish_date).toLocaleDateString()}
                       </span>
                     )}
                     {editingItem.data.modified_date && (
-                      <span className="text-slate-500 dark:text-slate-500">
-                        • Modified: {new Date(editingItem.data.modified_date).toLocaleDateString()}
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        • {new Date(editingItem.data.modified_date).toLocaleDateString()}
                       </span>
                     )}
+                    {/* Categories as pills */}
                     {editingItem.data.categories && editingItem.data.categories.length > 0 && (
-                      <span className="text-blue-600 dark:text-blue-400">
-                        • Categories: {editingItem.data.categories.join(', ')}
-                      </span>
+                      <div className="flex items-center gap-1 ml-2">
+                        {editingItem.data.categories.map((cat: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
                     )}
+                    {/* Tags as pills */}
                     {editingItem.data.tags && editingItem.data.tags.length > 0 && (
-                      <span className="text-green-600 dark:text-green-400">
-                        • Tags: {editingItem.data.tags.slice(0, 3).join(', ')}{editingItem.data.tags.length > 3 ? '...' : ''}
-                      </span>
+                      <div className="flex items-center gap-1 ml-1">
+                        {editingItem.data.tags.slice(0, 5).map((tag: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300">
+                            {tag}
+                          </span>
+                        ))}
+                        {editingItem.data.tags.length > 5 && (
+                          <span className="text-[10px] text-slate-500">+{editingItem.data.tags.length - 5}</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
