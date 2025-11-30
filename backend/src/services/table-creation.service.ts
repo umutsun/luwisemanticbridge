@@ -229,6 +229,17 @@ export class TableCreationService {
 
       console.log(`[TableCreation] Insert columns (${columnNames.length}):`, columnNames);
 
+      // Debug: Log column mapping info for first row
+      if (data.length > 0) {
+        const firstRow = data[0];
+        const rowKeys = Object.keys(firstRow);
+        console.log(`[TableCreation] First row keys from CSV (${rowKeys.length}):`, rowKeys);
+        console.log(`[TableCreation] Column mapping info:`, dataColumns.map(c => ({
+          name: c.name,
+          originalFieldName: c.originalFieldName || 'N/A'
+        })));
+      }
+
       // Process in batches
       for (let i = 0; i < data.length; i += batchSize) {
         // Check if job was paused
@@ -254,16 +265,37 @@ export class TableCreationService {
               const values: any[] = [];
               const placeholders: string[] = [];
 
-              columnNames.forEach((colName, idx) => {
-                // Try to find matching field in data (case-insensitive)
-                const dataKey = Object.keys(row).find(
-                  k => k.toLowerCase() === colName.toLowerCase()
-                );
+              dataColumns.forEach((column, idx) => {
+                const colName = column.name;
+                // Use originalFieldName if available, fallback to column name for case-insensitive match
+                const originalFieldName = column.originalFieldName;
+
+                let dataKey: string | undefined;
+
+                if (originalFieldName) {
+                  // Direct match using original CSV header name
+                  dataKey = Object.keys(row).find(k => k === originalFieldName);
+                }
+
+                if (!dataKey) {
+                  // Fallback: case-insensitive match on column name
+                  dataKey = Object.keys(row).find(
+                    k => k.toLowerCase() === colName.toLowerCase()
+                  );
+                }
+
+                if (!dataKey) {
+                  // Fallback 2: normalize and compare (handle spaces/special chars)
+                  const normalizedColName = colName.replace(/_/g, ' ').toLowerCase();
+                  dataKey = Object.keys(row).find(
+                    k => k.toLowerCase() === normalizedColName ||
+                         k.replace(/[^a-z0-9]/gi, '_').toLowerCase() === colName
+                  );
+                }
 
                 if (dataKey !== undefined) {
                   // Get column type for date conversion
-                  const column = dataColumns.find(c => c.name === colName);
-                  const columnType = column?.type || 'TEXT';
+                  const columnType = column.type || 'TEXT';
 
                   // Convert Turkish dates to PostgreSQL format
                   const convertedValue = this.convertDateFormat(row[dataKey], columnType);

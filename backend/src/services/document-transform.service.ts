@@ -443,8 +443,10 @@ export class DocumentTransformService {
               isUnique: true,
             },
             // Map CSV columns (none should be primary key)
+            // Store originalFieldName for mapping CSV data to table columns
             ...analysis.fieldTypes.map((field: any) => ({
               name: field.fieldName.replace(/[^a-z0-9_]/gi, '_').toLowerCase(),
+              originalFieldName: field.fieldName, // Keep original CSV header name for data mapping
               type: field.suggestedSQLType,
               nullable: field.nullable,
               isPrimaryKey: false, // Never use CSV columns as primary key
