@@ -1142,12 +1142,23 @@ export class SemanticSearchService {
 
       console.time(queryId);
       queryTimerStarted = true;
+
+      // Hybrid search combines semantic + keyword boost
+      // If hybrid search is disabled, don't apply keyword boost even if it's enabled
+      const useKeywordBoost = this.enableHybridSearch && this.enableKeywordBoost;
+
+      console.log('[SemanticSearch] Search mode:', {
+        enableHybridSearch: this.enableHybridSearch,
+        enableKeywordBoost: this.enableKeywordBoost,
+        actualKeywordBoost: useKeywordBoost
+      });
+
       const result = await lsembPool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
         this.similarityThreshold,
         keywordPattern,
         effectiveLimit,
-        this.enableKeywordBoost
+        useKeywordBoost
       ]);
       console.timeEnd(queryId);
 
@@ -1216,17 +1227,24 @@ export class SemanticSearchService {
         console.timeEnd(queryId);
       }
       console.error('[SemanticSearch] Semantic search error:', error);
-      console.log(' DEBUG: Falling back to keyword search...');
-      const keywordResults = await this.keywordSearch(query, limit);
-      console.log(` DEBUG: Keyword search returned ${keywordResults.length} results`);
-      if (keywordResults.length > 0) {
-        console.log(` DEBUG: First keyword result:`, {
-          title: keywordResults[0].title,
-          score: keywordResults[0].score,
-          source_table: keywordResults[0].source_table
-        });
+
+      // Only fall back to keyword search if hybrid search is enabled
+      if (this.enableHybridSearch) {
+        console.log('[SemanticSearch] Hybrid search enabled, falling back to keyword search...');
+        const keywordResults = await this.keywordSearch(query, limit);
+        console.log(`[SemanticSearch] Keyword search returned ${keywordResults.length} results`);
+        if (keywordResults.length > 0) {
+          console.log(`[SemanticSearch] First keyword result:`, {
+            title: keywordResults[0].title,
+            score: keywordResults[0].score,
+            source_table: keywordResults[0].source_table
+          });
+        }
+        return keywordResults;
+      } else {
+        console.log('[SemanticSearch] Hybrid search disabled, no keyword fallback');
+        return [];
       }
-      return keywordResults;
     }
   }
 
