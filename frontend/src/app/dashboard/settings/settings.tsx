@@ -2517,18 +2517,12 @@ function RAGSettings() {
   }, [loadSettings]);
 
   const saveAllSettings = async () => {
-    console.log('🔘 [RAG SETTINGS] Save button clicked!');
-    console.log('📊 [RAG SETTINGS] Current tempChatbotConfig:', tempChatbotConfig);
-    console.log('📊 [RAG SETTINGS] Current tempRAGConfig:', tempRAGConfig);
-    console.log('📊 [RAG SETTINGS] enableHybridSearch value:', tempRAGConfig?.ragSettings?.enableHybridSearch);
+    console.log('[RAG Settings] Saving...');
     setSaving(true);
     try {
-      console.log('\n💾 [RAG SETTINGS SAVE] Starting save process...');
-
       // Save RAG settings
-      console.log('📤 [RAG SETTINGS SAVE] Sending to updateSettingsCategory:', JSON.stringify(tempRAGConfig, null, 2));
       await updateSettingsCategory('rag', tempRAGConfig);
-      console.log('✅ [RAG SETTINGS SAVE] RAG settings saved');
+      console.log('[RAG Settings] Saved successfully');
 
       // Save chatbot settings using the correct endpoint
       // Note: maxResults/minResults are in RAG settings, not chatbot settings
@@ -2607,16 +2601,13 @@ function RAGSettings() {
   };
 
   const updateRAGSetting = (key: string, value: any) => {
-    console.log(`📝 [RAG SETTINGS] Updating RAG setting: ${key} =`, value);
-    const newConfig = {
+    setTempRAGConfig({
       ...tempRAGConfig,
       ragSettings: {
         ...tempRAGConfig.ragSettings,
         [key]: value
       }
-    };
-    console.log(`📝 [RAG SETTINGS] New tempRAGConfig.ragSettings.enableHybridSearch:`, newConfig.ragSettings?.enableHybridSearch);
-    setTempRAGConfig(newConfig);
+    });
   };
 
   const updateChatbotSetting = (key: string, value: any) => {
@@ -2755,12 +2746,17 @@ function RAGSettings() {
                   <Switch
                     checked={tempRAGConfig?.ragSettings?.enableHybridSearch ?? ragConfig?.ragSettings?.enableHybridSearch ?? true}
                     onCheckedChange={(checked) => {
-                      updateRAGSetting('enableHybridSearch', checked);
-                      // When hybrid search is enabled, ensure semantic search is also enabled
-                      if (checked) {
-                        updateRAGSetting('enableSemanticSearch', true);
-                        updateRAGSetting('enableKeywordBoost', true);
-                      }
+                      // FIX: Update all related settings in a single state update to prevent race conditions
+                      setTempRAGConfig(prev => ({
+                        ...prev,
+                        ragSettings: {
+                          ...prev?.ragSettings,
+                          enableHybridSearch: checked,
+                          // When hybrid search is enabled, ensure semantic search and keyword boost are also enabled
+                          ...(checked ? { enableSemanticSearch: true, enableKeywordBoost: true } : {})
+                        }
+                      }));
+                      console.log(`📝 [RAG SETTINGS] Hybrid search toggled to: ${checked}`);
                     }}
                   />
                 </div>

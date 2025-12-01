@@ -416,9 +416,7 @@ export class SemanticSearchService {
             break;
           }
           case 'ragSettings.enableHybridSearch': {
-            console.log('[SemanticSearch] Raw enableHybridSearch value from DB:', value, 'type:', typeof value);
             const parsed = this.parseBooleanSetting(value);
-            console.log('[SemanticSearch] Parsed enableHybridSearch:', parsed);
             if (parsed !== undefined) {
               this.enableHybridSearch = parsed;
             }
