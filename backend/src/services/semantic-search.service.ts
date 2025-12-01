@@ -42,6 +42,12 @@ export class SemanticSearchService {
   private lastRAGSettingsRefresh: number = 0;
   private lastEmbeddingSettingsRefresh: number = 0;
 
+  // Data source priorities (0-10 scale from frontend)
+  private databasePriority: number = 8; // Database content (unified_embeddings tables)
+  private documentsPriority: number = 5; // Document embeddings (PDFs, Word docs)
+  private chatPriority: number = 3; // Chat message embeddings
+  private webPriority: number = 4; // Web scrape embeddings
+
   // Source table weights for search prioritization (DYNAMIC - no hardcoded tables)
   private sourceTableWeights: Record<string, number> = {};
   private lastWeightsRefresh: number = 0;
@@ -52,6 +58,13 @@ export class SemanticSearchService {
     console.log('[SemanticSearch] Force refreshing RAG settings...');
     this.lastRAGSettingsRefresh = 0; // Force refresh
     await this.loadRAGSettings();
+  }
+
+  // Add refresh method for source table weights
+  async refreshSourceTableWeightsNow(): Promise<void> {
+    console.log('[SemanticSearch] Force refreshing source table weights...');
+    this.lastWeightsRefresh = 0; // Force refresh
+    await this.loadSourceTableWeights();
   }
 
   /**
@@ -348,7 +361,7 @@ export class SemanticSearchService {
 
       const result = await lsembPool.query(
         `SELECT key, value FROM settings WHERE key IN (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         )`,
         [
           'ragSettings.similarityThreshold',
@@ -366,7 +379,11 @@ export class SemanticSearchService {
           'ragSettings.enableDocumentEmbeddings',
           'ragSettings.enableScrapeEmbeddings',
           'ragSettings.enableUnifiedEmbeddings',
-          'ragSettings.unifiedEmbeddingsPriority'
+          'ragSettings.unifiedEmbeddingsPriority',
+          'ragSettings.databasePriority',
+          'ragSettings.documentsPriority',
+          'ragSettings.chatPriority',
+          'ragSettings.webPriority'
         ]
       );
 
@@ -461,6 +478,34 @@ export class SemanticSearchService {
             }
             break;
           }
+          case 'ragSettings.databasePriority': {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+              this.databasePriority = parsed;
+            }
+            break;
+          }
+          case 'ragSettings.documentsPriority': {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+              this.documentsPriority = parsed;
+            }
+            break;
+          }
+          case 'ragSettings.chatPriority': {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+              this.chatPriority = parsed;
+            }
+            break;
+          }
+          case 'ragSettings.webPriority': {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 10) {
+              this.webPriority = parsed;
+            }
+            break;
+          }
           default:
             break;
         }
@@ -480,7 +525,11 @@ export class SemanticSearchService {
         enableDocumentEmbeddings: this.enableDocumentEmbeddings,
         enableScrapeEmbeddings: this.enableScrapeEmbeddings,
         enableUnifiedEmbeddings: this.enableUnifiedEmbeddings,
-        unifiedEmbeddingsPriority: this.unifiedEmbeddingsPriority
+        unifiedEmbeddingsPriority: this.unifiedEmbeddingsPriority,
+        databasePriority: this.databasePriority,
+        documentsPriority: this.documentsPriority,
+        chatPriority: this.chatPriority,
+        webPriority: this.webPriority
       });
     } catch (error) {
       console.warn('[SemanticSearch] Failed to load RAG settings from database, using defaults:', error);
@@ -1174,16 +1223,21 @@ export class SemanticSearchService {
         const sourceTable = row.source_table || row.record_type;
         const tableWeight = this.sourceTableWeights[sourceTable] ?? 1.0;
 
+        // Get data source priority based on record type (0-10 scale, normalized to 0-1)
+        const dataSourcePriority = this.getDataSourcePriority(sourceTable);
+
         // Calculate scores
         // similarity_score is the pure semantic similarity (0-1 range)
         // keyword_boost and priority_boost are additional signals (0-1 range each)
         // tableWeight is the user-configured weight for this source table (0-1 range)
+        // dataSourcePriority is the category-level priority (database, documents, chat, web)
         const pureSimilarity = parseFloat(row.similarity_score);
         const keywordBoost = parseFloat(row.keyword_boost || 0);
         const priorityBoost = parseFloat(row.priority_boost || 0);
 
-        // Apply table weight to similarity score
-        const weightedSimilarity = pureSimilarity * tableWeight;
+        // Apply table weight AND data source priority to similarity score
+        // Data source priority is normalized from 0-10 to 0-1 range
+        const weightedSimilarity = pureSimilarity * tableWeight * dataSourcePriority;
 
         // Display score: Use weighted semantic similarity as the main score (0-100)
         // This gives users honest feedback about relevance with table prioritization
@@ -1200,6 +1254,7 @@ export class SemanticSearchService {
           _debug: {
             pureSimilarity: Math.round(pureSimilarity * 100),
             tableWeight: tableWeight,
+            dataSourcePriority: dataSourcePriority,
             weightedSimilarity: displayScore,
             keywordBoost: Math.round(keywordBoost * 100),
             priorityBoost: Math.round(priorityBoost * 100),
@@ -1422,6 +1477,34 @@ export class SemanticSearchService {
       default:
         return sourceTable.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
+  }
+
+  /**
+   * Get data source priority (0-1 range) based on record type
+   * Maps record types to their data source category and applies priority
+   */
+  private getDataSourcePriority(sourceTable: string): number {
+    // Normalize the source table name
+    const normalizedTable = (sourceTable || '').toLowerCase();
+
+    // Document embeddings (PDFs, Word docs, etc.)
+    if (normalizedTable === 'document_embeddings' || normalizedTable.includes('document')) {
+      // documentsPriority is 0-10, normalize to 0.1-1.0 (never completely zero to avoid multiplication issues)
+      return Math.max(0.1, this.documentsPriority / 10);
+    }
+
+    // Web scrape embeddings
+    if (normalizedTable === 'scrape_embeddings' || normalizedTable.includes('scrape') || normalizedTable.includes('web')) {
+      return Math.max(0.1, this.webPriority / 10);
+    }
+
+    // Chat/message embeddings
+    if (normalizedTable === 'message_embeddings' || normalizedTable.includes('message') || normalizedTable.includes('chat')) {
+      return Math.max(0.1, this.chatPriority / 10);
+    }
+
+    // Everything else is database content (unified_embeddings, sorucevap, makaleler, ozelgeler, etc.)
+    return Math.max(0.1, this.databasePriority / 10);
   }
 
   async getSampleDocuments(limit: number = 5) {

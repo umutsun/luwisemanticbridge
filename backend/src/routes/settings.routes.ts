@@ -662,6 +662,13 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
       console.log(` [Settings] LLM Manager reloaded`);
     }
 
+    // CRITICAL: Reload Semantic Search settings for RAG changes
+    if (categoryName === 'rag') {
+      const { semanticSearch } = await import('../services/semantic-search.service');
+      await semanticSearch.refreshRAGSettingsNow();
+      console.log(` [Settings] Semantic Search RAG settings reloaded`);
+    }
+
     console.log(` [Settings] ${categoryName}: ${updates.length} keys updated`);
 
     res.json({

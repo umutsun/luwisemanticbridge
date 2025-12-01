@@ -246,6 +246,11 @@ router.put('/api/v2/search/source-table-weights', async (req: Request, res: Resp
       ['search.sourceTableWeights', JSON.stringify(weights), 'search']
     );
 
+    // CRITICAL: Reload semantic search source table weights
+    const { semanticSearch } = await import('../services/semantic-search.service');
+    await semanticSearch.refreshSourceTableWeightsNow();
+    console.log('✅ [Settings] Semantic Search source table weights reloaded');
+
     res.json({
       success: true,
       message: 'Source table weights updated successfully',
