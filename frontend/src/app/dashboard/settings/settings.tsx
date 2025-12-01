@@ -2520,11 +2520,13 @@ function RAGSettings() {
     console.log('🔘 [RAG SETTINGS] Save button clicked!');
     console.log('📊 [RAG SETTINGS] Current tempChatbotConfig:', tempChatbotConfig);
     console.log('📊 [RAG SETTINGS] Current tempRAGConfig:', tempRAGConfig);
+    console.log('📊 [RAG SETTINGS] enableHybridSearch value:', tempRAGConfig?.ragSettings?.enableHybridSearch);
     setSaving(true);
     try {
       console.log('\n💾 [RAG SETTINGS SAVE] Starting save process...');
 
       // Save RAG settings
+      console.log('📤 [RAG SETTINGS SAVE] Sending to updateSettingsCategory:', JSON.stringify(tempRAGConfig, null, 2));
       await updateSettingsCategory('rag', tempRAGConfig);
       console.log('✅ [RAG SETTINGS SAVE] RAG settings saved');
 
@@ -2605,13 +2607,16 @@ function RAGSettings() {
   };
 
   const updateRAGSetting = (key: string, value: any) => {
-    setTempRAGConfig({
+    console.log(`📝 [RAG SETTINGS] Updating RAG setting: ${key} =`, value);
+    const newConfig = {
       ...tempRAGConfig,
       ragSettings: {
         ...tempRAGConfig.ragSettings,
         [key]: value
       }
-    });
+    };
+    console.log(`📝 [RAG SETTINGS] New tempRAGConfig.ragSettings.enableHybridSearch:`, newConfig.ragSettings?.enableHybridSearch);
+    setTempRAGConfig(newConfig);
   };
 
   const updateChatbotSetting = (key: string, value: any) => {
