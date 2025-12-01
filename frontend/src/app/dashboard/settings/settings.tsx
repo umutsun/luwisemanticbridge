@@ -2220,17 +2220,22 @@ function QuestionPatternsEditor({
 
       {/* Edit Dialog */}
       <Dialog open={!!editingPattern} onOpenChange={(open) => !open && setEditingPattern(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{isAddingNew ? 'Add New Pattern' : 'Edit Pattern'}</DialogTitle>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="px-6 py-4 border-b bg-muted/50">
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-primary" />
+              {isAddingNew ? 'Add New Pattern' : `Edit Pattern: ${editingPattern?.name}`}
+            </DialogTitle>
           </DialogHeader>
-          {editingPattern && (
-            <PatternEditForm
-              pattern={editingPattern}
-              onSave={handleSavePattern}
-              onCancel={() => setEditingPattern(null)}
-            />
-          )}
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            {editingPattern && (
+              <PatternEditForm
+                pattern={editingPattern}
+                onSave={handleSavePattern}
+                onCancel={() => setEditingPattern(null)}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
