@@ -1263,8 +1263,12 @@ export class SemanticSearchService {
         // Combined score: Include all signals for ranking (but don't display)
         const combinedScore = Math.min((weightedSimilarity + keywordBoost + priorityBoost) * 100, 100);
 
+        // Format title and excerpt from metadata for better display
+        const formatted = this.formatSearchContent(row);
+
         return {
           ...row,
+          title: formatted.title, // Human-readable title from metadata
           score: displayScore, // Display weighted semantic similarity
           similarity_score: weightedSimilarity, // Keep weighted 0-1 value
           relevanceScore: combinedScore, // Combined score for ranking
@@ -1277,8 +1281,8 @@ export class SemanticSearchService {
             priorityBoost: Math.round(priorityBoost * 100),
             combined: Math.round(combinedScore)
           },
-          content: smartExcerpt,
-          excerpt: smartExcerpt,
+          content: formatted.excerpt, // Human-readable content from metadata
+          excerpt: formatted.excerpt, // Human-readable excerpt from metadata
           keywords: keywords,
           sourceType: this.getSourceDisplayName(row.source_table || row.record_type)
         };
@@ -1522,6 +1526,140 @@ export class SemanticSearchService {
 
     // Everything else is database content (unified_embeddings, sorucevap, makaleler, ozelgeler, etc.)
     return Math.max(0.1, this.databasePriority / 10);
+  }
+
+  /**
+   * Extract human-readable title and excerpt from metadata and content
+   * Transforms raw "key: value" format into natural language display
+   */
+  private formatSearchContent(row: any): { title: string; excerpt: string } {
+    const metadata = row.metadata || {};
+    const sourceTable = (row.source_table || row.record_type || '').toLowerCase();
+
+    let title = '';
+    let excerpt = '';
+
+    // Source-specific formatting
+    if (sourceTable === 'maddeler') {
+      // Maddeler table - use orijinal_metin and madde info
+      const maddeNo = metadata.madde_numarasi || '';
+      const mevzuatId = metadata.mevzuat_id || '';
+      const orijinalMetin = metadata.orijinal_metin || '';
+      const ozet = metadata.ozet || '';
+
+      title = maddeNo ? `Madde ${maddeNo}` : (ozet || 'Madde');
+      if (mevzuatId) title += ` (${mevzuatId})`;
+
+      excerpt = orijinalMetin || ozet || row.excerpt || '';
+    }
+    else if (sourceTable === 'mevzuat') {
+      // Mevzuat table - use mevzuat_adi and details
+      const mevzuatAdi = metadata.mevzuat_adi || metadata.title || '';
+      const mevzuatTipi = metadata.mevzuat_tipi || '';
+      const durum = metadata.durum || '';
+      const kaynakUrl = metadata.kaynak_url || '';
+
+      title = mevzuatAdi || 'Mevzuat';
+      if (mevzuatTipi) title = `${mevzuatTipi}: ${title}`;
+
+      // Build natural excerpt
+      const excerptParts = [];
+      if (durum) excerptParts.push(`Durum: ${durum}`);
+      if (kaynakUrl) excerptParts.push(`Kaynak: ${kaynakUrl}`);
+      excerpt = excerptParts.length > 0 ? excerptParts.join(' | ') : (row.excerpt || '');
+    }
+    else if (sourceTable === 'sorucevap' || sourceTable.includes('soru')) {
+      // Q&A format
+      title = metadata.question || metadata.soru || row.title || 'Soru-Cevap';
+      excerpt = metadata.answer || metadata.cevap || row.excerpt || '';
+    }
+    else if (sourceTable === 'ozelgeler') {
+      // Özelge format
+      title = metadata.ozelge_no || metadata.konu || row.title || 'Özelge';
+      excerpt = metadata.icerik || metadata.ozet || row.excerpt || '';
+    }
+    else if (sourceTable === 'danistaykararlari' || sourceTable.includes('karar')) {
+      // Court decision format
+      const daire = metadata.daire || '';
+      const kararNo = metadata.karar_no || '';
+      title = kararNo ? `${daire} ${kararNo}` : (metadata.konu || row.title || 'Danıştay Kararı');
+      excerpt = metadata.karar || metadata.ozet || row.excerpt || '';
+    }
+    else if (sourceTable === 'makaleler') {
+      // Article format
+      title = metadata.baslik || metadata.title || row.title || 'Makale';
+      excerpt = metadata.icerik || metadata.ozet || row.excerpt || '';
+    }
+    else {
+      // Generic fallback - try common metadata fields
+      title = metadata.title || metadata.baslik || metadata.name || metadata.konu || '';
+      excerpt = metadata.content || metadata.icerik || metadata.text || metadata.ozet || '';
+
+      // If still no title/excerpt, try to clean up the raw content
+      if (!title && row.title) {
+        // Check if title is in "key: value" format and extract meaningful part
+        if (row.title.includes(':') && row.title.includes('\n')) {
+          // Multiple key:value pairs - extract first meaningful value
+          const lines = row.title.split('\n');
+          for (const line of lines) {
+            const parts = line.split(':');
+            if (parts.length >= 2) {
+              const value = parts.slice(1).join(':').trim();
+              if (value.length > 10 && !value.includes('\n')) {
+                title = value.substring(0, 150);
+                break;
+              }
+            }
+          }
+        }
+        if (!title) title = row.title;
+      }
+
+      if (!excerpt && row.excerpt) {
+        // Check if excerpt is in "key: value" format
+        if (row.excerpt.includes(':') && row.excerpt.includes('\n')) {
+          // Find the most content-like field
+          const lines = row.excerpt.split('\n');
+          const contentFields = ['orijinal_metin', 'icerik', 'content', 'text', 'cevap', 'answer', 'ozet'];
+
+          for (const line of lines) {
+            const colonIndex = line.indexOf(':');
+            if (colonIndex > 0) {
+              const key = line.substring(0, colonIndex).trim().toLowerCase();
+              const value = line.substring(colonIndex + 1).trim();
+
+              if (contentFields.some(f => key.includes(f)) && value.length > 20) {
+                excerpt = value;
+                break;
+              }
+            }
+          }
+
+          // If no content field found, take the longest value
+          if (!excerpt) {
+            let longestValue = '';
+            for (const line of lines) {
+              const colonIndex = line.indexOf(':');
+              if (colonIndex > 0) {
+                const value = line.substring(colonIndex + 1).trim();
+                if (value.length > longestValue.length) {
+                  longestValue = value;
+                }
+              }
+            }
+            excerpt = longestValue || row.excerpt;
+          }
+        } else {
+          excerpt = row.excerpt;
+        }
+      }
+    }
+
+    // Final cleanup
+    title = (title || 'Kaynak').substring(0, 200).trim();
+    excerpt = (excerpt || '').substring(0, 1500).trim();
+
+    return { title, excerpt };
   }
 
   async getSampleDocuments(limit: number = 5) {
