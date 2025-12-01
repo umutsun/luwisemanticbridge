@@ -1595,6 +1595,41 @@
     "analyzingItems": "Analyzing {count} items...",
     "transformingItems": "Transforming {count} items..."
   },
+  "login": {
+    "title": "Sign In",
+    "email": "Email",
+    "emailPlaceholder": "Enter your email address",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign In",
+    "signingIn": "Signing in...",
+    "signUp": "Sign Up",
+    "noAccount": "Don't have an account?",
+    "forgotPassword": "Forgot password?",
+    "success": "Success",
+    "failed": "Failed",
+    "redirectingToDashboard": "Redirecting to dashboard...",
+    "failedMessage": "Login failed. Please check your credentials.",
+    "loginTitle": "Sign In to Your Account",
+    "systemActive": "SYSTEM ACTIVE",
+    "initializing": "Initializing...",
+    "pleaseWait": "Please wait...",
+    "steps": {
+      "connection": "Establishing connection",
+      "database": "Preparing database",
+      "services": "Starting services",
+      "interface": "Loading interface"
+    },
+    "details": {
+      "latency": "Latency: 12ms",
+      "tables": "42 tables loaded",
+      "redisReady": "Redis ready",
+      "components": "Components loaded"
+    },
+    "loggingIn": "Logging in...",
+    "loginButton": "Sign In",
+    "register": "Sign Up"
+  },
   "register": {
     "title": "Create Account",
     "subtitle": "Join us today",
@@ -1623,6 +1658,21 @@
     "validation": {
       "passwordMinLength": "Password must be at least 8 characters",
       "passwordsMatch": "Passwords match"
+    }
+  },
+  "forgotPassword": {
+    "title": "Forgot Password",
+    "description": "Enter your email address to reset your password",
+    "emailLabel": "Email Address",
+    "emailPlaceholder": "Enter your email address",
+    "sendResetLink": "Send Reset Link",
+    "sending": "Sending...",
+    "backToLogin": "Back to login",
+    "success": "Password reset link has been sent to your email address. Please check your email.",
+    "errors": {
+      "requestFailed": "Password reset request failed",
+      "invalidEmail": "Invalid email address",
+      "emailNotFound": "This email address is not registered in the system"
     }
   },
   "profile": {

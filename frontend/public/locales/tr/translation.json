@@ -1404,6 +1404,41 @@
     "analyzingItems": "{count} öğe analiz ediliyor...",
     "transformingItems": "{count} öğe dönüştürülüyor..."
   },
+  "login": {
+    "title": "Giriş Yap",
+    "email": "E-posta",
+    "emailPlaceholder": "E-posta adresinizi girin",
+    "password": "Şifre",
+    "passwordPlaceholder": "Şifrenizi girin",
+    "signIn": "Giriş Yap",
+    "signingIn": "Giriş yapılıyor...",
+    "signUp": "Kayıt Ol",
+    "noAccount": "Hesabınız yok mu?",
+    "forgotPassword": "Şifremi unuttum",
+    "success": "Başarılı",
+    "failed": "Başarısız",
+    "redirectingToDashboard": "Panele yönlendiriliyorsunuz...",
+    "failedMessage": "Giriş başarısız oldu. Lütfen bilgilerinizi kontrol edin.",
+    "loginTitle": "Hesabınıza Giriş Yapın",
+    "systemActive": "SİSTEM AKTİF",
+    "initializing": "Başlatılıyor...",
+    "pleaseWait": "Lütfen bekleyin...",
+    "steps": {
+      "connection": "Bağlantı kuruluyor",
+      "database": "Veritabanı hazırlanıyor",
+      "services": "Servisler başlatılıyor",
+      "interface": "Arayüz yükleniyor"
+    },
+    "details": {
+      "latency": "Gecikme: 12ms",
+      "tables": "42 tablo yüklendi",
+      "redisReady": "Redis hazır",
+      "components": "Bileşenler yüklendi"
+    },
+    "loggingIn": "Giriş yapılıyor...",
+    "loginButton": "Giriş Yap",
+    "register": "Kayıt Ol"
+  },
   "register": {
     "title": "Hesap Oluştur",
     "subtitle": "Bugün bize katılın",
@@ -1432,6 +1467,21 @@
     "validation": {
       "passwordMinLength": "Şifre en az 8 karakter olmalıdır",
       "passwordsMatch": "Şifreler eşleşiyor"
+    }
+  },
+  "forgotPassword": {
+    "title": "Şifremi Unuttum",
+    "description": "Şifrenizi sıfırlamak için e-posta adresinizi girin",
+    "emailLabel": "E-posta Adresi",
+    "emailPlaceholder": "E-posta adresinizi girin",
+    "sendResetLink": "Sıfırlama Bağlantısı Gönder",
+    "sending": "Gönderiliyor...",
+    "backToLogin": "Giriş sayfasına dön",
+    "success": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi. Lütfen e-postanızı kontrol edin.",
+    "errors": {
+      "requestFailed": "Şifre sıfırlama isteği başarısız oldu",
+      "invalidEmail": "Geçersiz e-posta adresi",
+      "emailNotFound": "Bu e-posta adresi sistemde kayıtlı değil"
     }
   },
   "profile": {

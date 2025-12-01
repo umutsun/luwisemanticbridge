@@ -93,6 +93,13 @@ function LLMSettings() {
   const [modalProvider, setModalProvider] = useState<string>('');
   const [modalResults, setModalResults] = useState<any[]>([]);
   const [swaggerActive, setSwaggerActive] = useState<boolean>(false);
+
+  // Database configuration states
+  const [dbConfig, setDbConfig] = useState<any>({});
+  const [tempDBConfig, setTempDBConfig] = useState<any>({});
+  const [dbTesting, setDbTesting] = useState(false);
+  const [dbType, setDbType] = useState('postgresql');
+
   const { toast } = useToast();
 
   // Model-specific pricing per 1M tokens (USD)
@@ -133,11 +140,17 @@ function LLMSettings() {
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, translationData] = await Promise.all([
+      const [data, translationData, dbData] = await Promise.all([
         getLLMSettings(),
-        getTranslationSettings()
+        getTranslationSettings(),
+        getDatabaseSettings()
       ]);
       setTranslationConfig(translationData);
+
+      // Load database settings
+      setDbConfig(dbData);
+      setTempDBConfig(dbData);
+      setDbType(dbData?.database?.type || 'postgresql');
 
       // Initialize with database values or defaults
       // IMPORTANT: Use database values directly, fallback to defaults only if null/undefined
@@ -480,6 +493,20 @@ function LLMSettings() {
         throw new Error(`Failed to save translation settings: ${translationError instanceof Error ? translationError.message : 'Unknown error'}`);
       }
 
+      // Save database settings if changed
+      if (tempDBConfig?.database) {
+        try {
+          console.log('📤 [SETTINGS SAVE] Sending database settings to API...');
+          await updateSettingsCategory('database', tempDBConfig);
+          console.log('✅ [SETTINGS SAVE] Database settings saved successfully');
+          setDbConfig(tempDBConfig);
+        } catch (dbError) {
+          console.error('❌ [SETTINGS SAVE] Database settings save error:', dbError);
+          // Don't throw - just warn since it's not critical
+          console.warn('Database settings save failed, continuing...');
+        }
+      }
+
       // Update validated keys based on current API status to trigger badge updates
       // Keep existing validated providers - don't clear them on save
       const currentlyValidatedProviders = Object.keys(apiStatus).filter(
@@ -521,6 +548,57 @@ function LLMSettings() {
 
     current[keys[keys.length - 1]] = value;
     setTempConfig(newConfig);
+  };
+
+  // Database helper functions
+  const updateDBSetting = (key: string, value: any) => {
+    setTempDBConfig({
+      ...tempDBConfig,
+      database: {
+        ...tempDBConfig.database,
+        [key]: value
+      }
+    });
+  };
+
+  const saveDbType = (type: string) => {
+    setDbType(type);
+    updateDBSetting('type', type);
+  };
+
+  const testDbConnection = async () => {
+    setDbTesting(true);
+    try {
+      const response = await fetch(`/api/config/database/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'database',
+          config: tempDBConfig
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Connection test failed');
+      }
+
+      toast({
+        title: "Success",
+        description: "Database connection successful",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Database connection failed",
+        variant: "destructive",
+      });
+    } finally {
+      setDbTesting(false);
+    }
   };
 
   const validateAllModelsForProvider = async (provider: string, apiKey: string) => {
@@ -1786,21 +1864,104 @@ function LLMSettings() {
                   </div>
                 </div>
               )}
-
-              <div className="flex justify-end pt-4">
-                <Button onClick={saveAllSettings} disabled={saving}>
-                  {saving ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save'
-                  )}
-                </Button>
-              </div>
             </CardContent>
           </Card>
+
+          {/* Source Database Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Source Database</CardTitle>
+              <CardDescription>Configure connection to your data source</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Database Type</Label>
+                  <Select value={dbType} onValueChange={saveDbType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select database type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="postgresql">PostgreSQL</SelectItem>
+                      <SelectItem value="mysql">MySQL</SelectItem>
+                      <SelectItem value="mariadb">MariaDB</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Host</Label>
+                  <Input
+                    value={tempDBConfig?.database?.host || 'localhost'}
+                    onChange={(e) => updateDBSetting('host', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Port</Label>
+                  <Input
+                    type="number"
+                    value={tempDBConfig?.database?.port || dbConfig?.database?.port || (dbType === 'mysql' || dbType === 'mariadb' ? 3306 : 5432)}
+                    onChange={(e) => updateDBSetting('port', parseInt(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <Label>Database Name</Label>
+                  <Input
+                    value={tempDBConfig?.database?.name || ''}
+                    onChange={(e) => updateDBSetting('name', e.target.value)}
+                    placeholder="e.g. my_database"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>User</Label>
+                  <Input
+                    value={tempDBConfig?.database?.user || ''}
+                    onChange={(e) => updateDBSetting('user', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label>Password</Label>
+                  <Input
+                    type="password"
+                    value={tempDBConfig?.database?.password || ''}
+                    onChange={(e) => updateDBSetting('password', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Label>SSL Enabled</Label>
+                <Switch
+                  checked={tempDBConfig?.database?.ssl ?? dbConfig?.database?.ssl}
+                  onCheckedChange={(checked) => updateDBSetting('ssl', checked)}
+                />
+              </div>
+
+              <Button onClick={testDbConnection} disabled={dbTesting} size="sm" variant="outline">
+                {dbTesting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Test Connection
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <Button onClick={saveAllSettings} disabled={saving}>
+              {saving ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save All'
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -3023,368 +3184,6 @@ function RAGSettings() {
         </div>
         {/* End Right Column */}
 
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={saveAllSettings} disabled={saving}>
-          {saving ? (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            'Save'
-          )}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// Source Table Weights Component (DYNAMIC - no hardcoded table names)
-// SourceTableWeights Component (controlled by parent)
-function SourceTableWeights({
-  sourceTables,
-  weights,
-  setWeights,
-  loading
-}: {
-  sourceTables: Array<{ name: string; embeddingCount: number }>;
-  weights: Record<string, number>;
-  setWeights: (weights: Record<string, number>) => void;
-  loading: boolean;
-}) {
-  if (loading) {
-    return (
-      <Card className="h-full flex flex-col">
-        <CardHeader>
-          <CardTitle>Search Priority</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Spinner size="md" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader>
-        <CardTitle>Search Priority</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 flex-1 overflow-hidden flex flex-col">
-        {sourceTables.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No embedded tables found</p>
-        ) : (
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            {sourceTables.map((table) => (
-              <div key={table.name} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="font-medium capitalize">
-                      {table.name.replace(/_/g, ' ')}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {table.embeddingCount.toLocaleString()} records
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono w-12 text-right">
-                      {weights[table.name]?.toFixed(2) || '1.00'}
-                    </span>
-                  </div>
-                </div>
-                <Slider
-                  value={[weights[table.name] || 1.0]}
-                  onValueChange={(value) => {
-                    setWeights({
-                      ...weights,
-                      [table.name]: value[0]
-                    });
-                  }}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  className="w-full"
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Optimized Database Settings Component (Source DB Configuration)
-function DatabaseSettings() {
-  const [dbConfig, setDbConfig] = useState<any>({});
-  const [tempDBConfig, setTempDBConfig] = useState<any>({});
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [dbType, setDbType] = useState('postgresql');
-
-  // Source table weights state
-  const [sourceTables, setSourceTables] = useState<Array<{ name: string; embeddingCount: number }>>([]);
-  const [weights, setWeights] = useState<Record<string, number>>({});
-  const [weightsLoading, setWeightsLoading] = useState(true);
-
-  const { toast } = useToast();
-
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    try {
-      const dbData = await getDatabaseSettings();
-      setDbConfig(dbData);
-      setTempDBConfig(dbData);
-      setDbType(dbData?.database?.type || 'postgresql');
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadSourceTables = useCallback(async () => {
-    try {
-      setWeightsLoading(true);
-      const API_BASE_URL = API_CONFIG.baseUrl;
-      const token = localStorage.getItem('token');
-
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json'
-      };
-
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      // Fetch source tables and weights in parallel
-      const [tablesResponse, weightsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/v2/search/source-tables`, { headers }),
-        fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, { headers })
-      ]);
-
-      if (!tablesResponse.ok) {
-        console.error(`Source tables API error: ${tablesResponse.status} ${tablesResponse.statusText}`);
-        throw new Error(`Failed to fetch source tables: ${tablesResponse.status}`);
-      }
-
-      const tablesData = await tablesResponse.json();
-      const weightsData = weightsResponse.ok ? await weightsResponse.json() : { weights: {} };
-
-      console.log('📊 Source tables loaded:', tablesData.sourceTables?.length || 0);
-      setSourceTables(tablesData.sourceTables || []);
-
-      // Initialize weights: use saved weights or default to 1.0 for all tables
-      const initialWeights: Record<string, number> = {};
-      tablesData.sourceTables?.forEach((table: { name: string }) => {
-        initialWeights[table.name] = weightsData.weights?.[table.name] ?? 1.0;
-      });
-      setWeights(initialWeights);
-    } catch (error: any) {
-      console.error('❌ Failed to load source tables:', error);
-      toast({
-        title: "Error",
-        description: `Failed to load source tables: ${error.message}`,
-        variant: "destructive"
-      });
-    } finally {
-      setWeightsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadSettings();
-    loadSourceTables();
-  }, [loadSettings, loadSourceTables]);
-
-  const saveAllSettings = async () => {
-    setSaving(true);
-    try {
-      // Save database settings
-      await updateSettingsCategory('database', tempDBConfig);
-      setDbConfig(tempDBConfig);
-
-      // Save source table weights
-      const API_BASE_URL = API_CONFIG.baseUrl;
-      const weightsResponse = await fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ weights })
-      });
-
-      if (!weightsResponse.ok) {
-        const result = await weightsResponse.json();
-        throw new Error(result.error || 'Failed to save weights');
-      }
-
-      toast({
-        title: "Success",
-        description: "Database settings and search priorities saved successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save settings",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateDBSetting = (key: string, value: any) => {
-    setTempDBConfig({
-      ...tempDBConfig,
-      database: {
-        ...tempDBConfig.database,
-        [key]: value
-      }
-    });
-  };
-
-  const saveDbType = async (type: string) => {
-    setDbType(type);
-    updateDBSetting('type', type);
-  };
-
-  const testConnection = async () => {
-    setTesting(true);
-    try {
-      const response = await fetch(`/api/config/database/test`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          type: 'database',
-          config: tempDBConfig
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Connection test failed');
-      }
-
-      toast({
-        title: "Success",
-        description: "Database connection successful",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Database connection failed",
-        variant: "destructive",
-      });
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  if (loading) {
-    return <Spinner size="lg" />;
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
-        {/* Source Database Configuration - Left Column */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Source Database</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Database Type</Label>
-                <Select value={dbType} onValueChange={saveDbType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select database type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="postgresql">PostgreSQL</SelectItem>
-                    <SelectItem value="mysql">MySQL</SelectItem>
-                    <SelectItem value="mariadb">MariaDB</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Host</Label>
-                <Input
-                  value={tempDBConfig?.database?.host || 'localhost'}
-                  onChange={(e) => updateDBSetting('host', e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Port</Label>
-                <Input
-                  type="number"
-                  value={tempDBConfig?.database?.port || dbConfig?.database?.port || (dbType === 'mysql' || dbType === 'mariadb' ? 3306 : 5432)}
-                  onChange={(e) => updateDBSetting('port', parseInt(e.target.value))}
-                />
-              </div>
-              <div>
-                <Label>Database Name</Label>
-                <Input
-                  value={tempDBConfig?.database?.name || ''}
-                  onChange={(e) => updateDBSetting('name', e.target.value)}
-                  placeholder="e.g. vergilex_db"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>User</Label>
-                <Input
-                  value={tempDBConfig?.database?.user || ''}
-                  onChange={(e) => updateDBSetting('user', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label>Password</Label>
-                <Input
-                  type="password"
-                  value={tempDBConfig?.database?.password || ''}
-                  onChange={(e) => updateDBSetting('password', e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label>SSL Enabled</Label>
-              <Switch
-                checked={tempDBConfig?.database?.ssl ?? dbConfig?.database?.ssl}
-                onCheckedChange={(checked) => updateDBSetting('ssl', checked)}
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={testConnection} disabled={testing} size="sm" variant="outline">
-                {testing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Test Connection
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Source Table Weights - Right Column */}
-        <SourceTableWeights
-          sourceTables={sourceTables}
-          weights={weights}
-          setWeights={setWeights}
-          loading={weightsLoading}
-        />
       </div>
 
       {/* Save Button */}
@@ -5343,9 +5142,6 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="rag" className="h-12 px-4">
             <span className="text-sm">RAG</span>
           </TabsTrigger>
-          <TabsTrigger value="database" className="h-12 px-4">
-            <span className="text-sm">Database</span>
-          </TabsTrigger>
           <TabsTrigger value="prompts" className="h-12 px-4">
             <span className="text-sm">Prompts</span>
           </TabsTrigger>
@@ -5370,10 +5166,6 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="rag">
           <RAGSettings />
-        </TabsContent>
-
-        <TabsContent value="database">
-          <DatabaseSettings />
         </TabsContent>
 
         <TabsContent value="prompts">

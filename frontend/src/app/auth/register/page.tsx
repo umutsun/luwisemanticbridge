@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useConfig } from '@/contexts/ConfigContext';
 import RegisterForm from '@/components/auth/RegisterForm';
+import { useTranslation } from 'react-i18next';
 
 export default function RegisterPage() {
   const { config } = useConfig();
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -16,9 +18,9 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (config?.app?.name) {
-      document.title = `Kayıt Ol - ${config.app.name}`;
+      document.title = `${t('register.title')} - ${config.app.name}`;
     }
-  }, [config]);
+  }, [config, t]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
@@ -48,9 +50,9 @@ export default function RegisterPage() {
           <CardContent className="pt-6">
             <RegisterForm />
             <div className="text-center text-sm text-muted-foreground mt-6">
-              <p>Zaten hesabınız var mı? {' '}
+              <p>{t('register.alreadyHaveAccount')} {' '}
                 <Link href="/login" className="text-primary hover:underline">
-                  Giriş yapın
+                  {t('register.signIn')}
                 </Link>
               </p>
             </div>
