@@ -72,6 +72,7 @@ import { generalRateLimit, createEmbeddingRateLimit, createUploadRateLimit, crea
 import systemLogsRoutes from "./routes/system.logs.routes";
 import frontendLogsRoutes from "./routes/frontend.logs.routes";
 import embeddingsTablesRoutes from "./routes/embeddings-tables.routes";
+import embeddingsSyncRoutes from "./routes/embeddings-sync.routes";
 import databaseRoutes from "./routes/database.routes";
 import redisRoutes from "./routes/redis.routes";
 import apiTestsRoutes from "./routes/api-tests.routes";
@@ -490,6 +491,7 @@ app.use("/api/v2/llm", llmStatusRoutes);
 app.use("/api/v2/admin", adminRoutes);
 app.use("/api/v2/logs", logsRoutes);
 app.use("/api/v2/embeddings-tables", embeddingsTablesRoutes);
+app.use("/api/v2/embeddings-sync", embeddingsSyncRoutes);
 app.use("/api/v2/database", databaseRoutes);
 app.use("/api/v2/redis", redisRoutes);
 app.use("/api/v2/api-tests", apiTestsRoutes);

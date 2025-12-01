@@ -10,6 +10,7 @@ import { ocrService } from '../services/ocr.service';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { createUploadRateLimit } from '../middleware/rate-limit.middleware';
 import { getUploadLimitBytes } from '../middleware/security.middleware';
+import { unifiedEmbeddingsSync } from '../services/unified-embeddings-sync.service';
 
 const router = Router();
 
@@ -1320,11 +1321,16 @@ router.post('/:id/embeddings', authenticateToken, async (req: AuthenticatedReque
       [id]
     );
 
+    // Sync to unified_embeddings for unified search
+    const syncResult = await unifiedEmbeddingsSync.syncDocumentEmbeddings(parseInt(id));
+    console.log(`[Documents] Synced ${syncResult.synced} embeddings to unified_embeddings`);
+
     res.json({
       success: true,
-      message: 'Embeddings created successfully',
+      message: 'Embeddings created and synced successfully',
       documentId: id,
-      embeddingCount: parseInt(newEmbeddings.rows[0].count)
+      embeddingCount: parseInt(newEmbeddings.rows[0].count),
+      syncedToUnified: syncResult.synced
     });
   } catch (error: any) {
     console.error('Error creating embeddings:', error);
@@ -1486,16 +1492,20 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
           );
         }
 
+        // Sync to unified_embeddings
+        const syncResult = await unifiedEmbeddingsSync.syncDocumentEmbeddings(docId);
+
         embeddedCount++;
         results.push({
           id: docId,
           title: document.title,
           status: 'success',
           chunks: embeddingStats.rows[0]?.chunk_count || 0,
-          tokens: embeddingStats.rows[0]?.total_tokens || 0
+          tokens: embeddingStats.rows[0]?.total_tokens || 0,
+          syncedToUnified: syncResult.synced
         });
 
-        console.log(`✅ Embedded document ${docId}: ${document.title} (${embeddingStats.rows[0]?.chunk_count || 0} chunks)`);
+        console.log(`✅ Embedded document ${docId}: ${document.title} (${embeddingStats.rows[0]?.chunk_count || 0} chunks, ${syncResult.synced} synced)`);
 
       } catch (error) {
         console.error(`❌ Failed to embed document ${docId}:`, error);
