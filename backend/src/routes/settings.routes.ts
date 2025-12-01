@@ -640,6 +640,15 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
 
     flattenObject(settings);
 
+    // Debug log for RAG settings
+    if (categoryName === 'rag') {
+      console.log('[Settings RAG] Flattened updates:', updates.map(u => `${u.key}=${u.value}`).join(', '));
+      const hybridSetting = updates.find(u => u.key === 'ragSettings.enableHybridSearch');
+      if (hybridSetting) {
+        console.log('[Settings RAG] enableHybridSearch value:', hybridSetting.value, 'type:', typeof hybridSetting.value);
+      }
+    }
+
     // Batch update
     for (const update of updates) {
       await lsembPool.query(
