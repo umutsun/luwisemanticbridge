@@ -1105,6 +1105,187 @@ export default function DocumentManagerPage() {
     }
   };
 
+  // Re-embed a single document
+  const handleReEmbed = async (docId: string, docTitle: string) => {
+    try {
+      toast({
+        title: 'Re-embedding started',
+        description: `Processing "${docTitle}"...`,
+      });
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Re-embed failed');
+      }
+
+      toast({
+        title: 'Re-embed successful',
+        description: `"${docTitle}" has been re-embedded.`,
+      });
+
+      fetchDocuments();
+      fetchStats();
+    } catch (error: any) {
+      console.error('Re-embed error:', error);
+      toast({
+        title: 'Re-embed failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Delete embeddings for a single document
+  const handleDeleteEmbeddings = async (docId: string, docTitle: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Delete embeddings failed');
+      }
+
+      toast({
+        title: 'Embeddings deleted',
+        description: `Embeddings for "${docTitle}" have been removed.`,
+      });
+
+      fetchDocuments();
+      fetchStats();
+    } catch (error: any) {
+      console.error('Delete embeddings error:', error);
+      toast({
+        title: 'Delete embeddings failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Bulk delete embeddings
+  const handleBulkDeleteEmbeddings = async () => {
+    if (selectedRows.size === 0) {
+      toast({
+        title: t('documents.toast.warning'),
+        description: t('documents.toast.selectAtLeastOneDocument'),
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setBatchProcessing(true);
+      const documentIds = Array.from(selectedRows);
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const docId of documentIds) {
+        try {
+          const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch {
+          failCount++;
+        }
+      }
+
+      toast({
+        title: 'Bulk embeddings deleted',
+        description: `${successCount} successful, ${failCount} failed`,
+      });
+
+      setSelectedRows(new Set());
+      setSelectAll(false);
+      fetchDocuments();
+      fetchStats();
+    } catch (error: any) {
+      console.error('Bulk delete embeddings error:', error);
+      toast({
+        title: 'Bulk delete embeddings failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  // Bulk re-embed documents
+  const handleBulkReEmbed = async () => {
+    if (selectedRows.size === 0) {
+      toast({
+        title: t('documents.toast.warning'),
+        description: t('documents.toast.selectAtLeastOneDocument'),
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setBatchProcessing(true);
+      const documentIds = Array.from(selectedRows).map(id => parseInt(id));
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/bulk-embed`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ documentIds })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Bulk re-embed failed');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: 'Bulk re-embed started',
+        description: `Processing ${result.processed || documentIds.length} documents...`,
+      });
+
+      setSelectedRows(new Set());
+      setSelectAll(false);
+      fetchDocuments();
+      fetchStats();
+    } catch (error: any) {
+      console.error('Bulk re-embed error:', error);
+      toast({
+        title: 'Bulk re-embed failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
   const [selectAll, setSelectAll] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
@@ -2277,6 +2458,22 @@ export default function DocumentManagerPage() {
                                           <Eye className="w-3 h-3 mr-2" />
                                           {t('documents.table.preview')}
                                         </DropdownMenuItem>
+                                        {/* Re-embed option */}
+                                        <DropdownMenuItem onClick={() => handleReEmbed(doc.id, doc.title)}>
+                                          <RefreshCw className="w-3 h-3 mr-2" />
+                                          Re-embed
+                                        </DropdownMenuItem>
+                                        {/* Delete embeddings option */}
+                                        {doc.hasEmbeddings && (
+                                          <DropdownMenuItem
+                                            onClick={() => handleDeleteEmbeddings(doc.id, doc.title)}
+                                            className="text-orange-600 focus:text-orange-600"
+                                          >
+                                            <XCircle className="w-3 h-3 mr-2" />
+                                            Delete Embeddings
+                                          </DropdownMenuItem>
+                                        )}
+                                        {/* Delete document */}
                                         <DropdownMenuItem
                                           onClick={() => handleDelete(doc.id, doc.title)}
                                           className="text-red-600 focus:text-red-600"
@@ -2385,7 +2582,41 @@ export default function DocumentManagerPage() {
                           );
                         })()}
 
-                        {/* Bulk Delete Icon */}
+                        {/* Bulk Re-embed Button */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={handleBulkReEmbed}
+                                disabled={batchProcessing}
+                                className="h-8 w-8 p-0 hover:bg-purple-100 dark:hover:bg-purple-900/20 transition-colors disabled:opacity-50"
+                              >
+                                <RefreshCw className={`w-4 h-4 text-purple-600 ${batchProcessing ? 'animate-spin' : ''}`} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Re-embed selected ({selectedRows.size})</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+
+                        {/* Bulk Delete Embeddings Button */}
+                        <ConfirmTooltip
+                          onConfirm={handleBulkDeleteEmbeddings}
+                          message={`Delete embeddings for ${selectedRows.size} documents?`}
+                          side="top"
+                        >
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={batchProcessing}
+                            className="h-8 w-8 p-0 hover:bg-orange-100 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-50"
+                          >
+                            <XCircle className="w-4 h-4 text-orange-600" />
+                          </Button>
+                        </ConfirmTooltip>
+
+                        {/* Bulk Delete Documents */}
                         <ConfirmTooltip
                           onConfirm={handleBulkDelete}
                           message={t('documents.actions.deleteSelected', { count: selectedRows.size })}
@@ -2397,7 +2628,7 @@ export default function DocumentManagerPage() {
                             className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
                             title={t('documents.actions.deleteSelectedDocuments')}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
                         </ConfirmTooltip>
                       </div>
