@@ -1411,10 +1411,13 @@ async function performMigration(migrationId: string, config: any) {
 
             if (embedding.length === 0) continue;
 
+            // Get current embedding settings for metadata
+            const embedSettings = await getEmbeddingSettings();
+
             // Prepare metadata
             const metadata: any = {
-              embeddingProvider: 'openai',
-              embeddingModel: 'text-embedding-ada-002',
+              embeddingProvider: embedSettings.provider,
+              embeddingModel: embedSettings.model,
               tokens_used: Math.ceil(truncatedContent.length / 4)
             };
 
