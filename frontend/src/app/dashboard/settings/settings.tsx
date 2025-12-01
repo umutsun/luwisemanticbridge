@@ -2228,6 +2228,12 @@ function RAGSettings() {
   const [tempChatbotConfig, setTempChatbotConfig] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Table priorities state
+  const [sourceTables, setSourceTables] = useState<Array<{ name: string; embeddingCount: number }>>([]);
+  const [tableWeights, setTableWeights] = useState<Record<string, number>>({});
+  const [tablesLoading, setTablesLoading] = useState(true);
+
   const { toast } = useToast();
 
   // Optimal default values for RAG settings
@@ -2248,6 +2254,40 @@ function RAGSettings() {
     unifiedEmbeddingsPriority: 8    // High priority for database content
   };
 
+  // Load source tables for table priorities
+  const loadSourceTables = useCallback(async () => {
+    try {
+      setTablesLoading(true);
+      const API_BASE_URL = API_CONFIG.baseUrl;
+      const token = localStorage.getItem('token');
+
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const [tablesResponse, weightsResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v2/search/source-tables`, { headers }),
+        fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, { headers })
+      ]);
+
+      if (tablesResponse.ok) {
+        const tablesData = await tablesResponse.json();
+        const weightsData = weightsResponse.ok ? await weightsResponse.json() : { weights: {} };
+
+        setSourceTables(tablesData.sourceTables || []);
+
+        const initialWeights: Record<string, number> = {};
+        tablesData.sourceTables?.forEach((table: { name: string }) => {
+          initialWeights[table.name] = weightsData.weights?.[table.name] ?? 1.0;
+        });
+        setTableWeights(initialWeights);
+      }
+    } catch (error) {
+      console.error('Failed to load source tables:', error);
+    } finally {
+      setTablesLoading(false);
+    }
+  }, []);
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -2255,6 +2295,9 @@ function RAGSettings() {
         getRAGSettings(),
         fetch('/api/v2/chatbot/settings').then(res => res.json())
       ]);
+
+      // Load source tables in parallel
+      loadSourceTables();
       console.log('📊 [RAG SETTINGS LOAD] Full RAG Data from API:', ragData);
       console.log('📊 [RAG SETTINGS LOAD] RAG Settings values:', {
         similarityThreshold: ragData?.ragSettings?.similarityThreshold,
@@ -2372,6 +2415,22 @@ function RAGSettings() {
       }
 
       console.log('✅ [RAG SETTINGS SAVE] Chatbot settings saved successfully');
+
+      // Save table weights if any tables exist
+      if (Object.keys(tableWeights).length > 0) {
+        const API_BASE_URL = API_CONFIG.baseUrl;
+        const weightsResponse = await fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weights: tableWeights })
+        });
+
+        if (!weightsResponse.ok) {
+          console.warn('⚠️ Failed to save table weights');
+        } else {
+          console.log('✅ [RAG SETTINGS SAVE] Table weights saved');
+        }
+      }
 
       setRagConfig(tempRAGConfig);
       setChatbotConfig(tempChatbotConfig);
@@ -2658,6 +2717,64 @@ function RAGSettings() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Table Priorities */}
+            <div className="space-y-4 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Table Priorities</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Adjust priority weights for each embedded table (0-1 scale)
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs">Database Tables</Badge>
+              </div>
+
+              {tablesLoading ? (
+                <div className="flex justify-center py-4">
+                  <Spinner size="md" />
+                </div>
+              ) : sourceTables.length === 0 ? (
+                <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
+                  <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+                    No embedded tables found. Run embedding generation first in the Database tab.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                  {sourceTables.map((table) => (
+                    <div key={table.name} className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label className="text-sm font-medium capitalize">
+                            {table.name.replace(/_/g, ' ')}
+                          </Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {table.embeddingCount.toLocaleString()} records
+                          </p>
+                        </div>
+                        <Badge variant={(tableWeights[table.name] ?? 1) > 0 ? "default" : "secondary"}>
+                          {(tableWeights[table.name] ?? 1).toFixed(2)}
+                        </Badge>
+                      </div>
+                      <Slider
+                        value={[tableWeights[table.name] ?? 1.0]}
+                        onValueChange={(value) => {
+                          setTableWeights({
+                            ...tableWeights,
+                            [table.name]: value[0]
+                          });
+                        }}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="w-full"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
