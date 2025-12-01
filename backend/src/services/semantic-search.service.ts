@@ -1000,7 +1000,7 @@ export class SemanticSearchService {
     try {
       await this.refreshRAGSettings();
       await this.refreshEmbeddingSettings();
-      await this.refreshSourceTableWeights();
+      // Note: refreshSourceTableWeights() is called later after record types are loaded
 
       const effectiveLimit = this.applyResultLimits(limit);
 
