@@ -1917,6 +1917,305 @@ function TemplateSelector() {
   );
 }
 
+// Question Pattern Types
+interface QuestionPatternCombination {
+  with: string;
+  question: string;
+}
+
+interface QuestionPattern {
+  name: string;
+  keywords: string;
+  titleKeywords?: string;
+  combinations?: QuestionPatternCombination[];
+  defaultQuestion: string;
+  priority?: number;
+}
+
+// Default patterns for new installations
+const DEFAULT_QUESTION_PATTERNS: QuestionPattern[] = [
+  {
+    name: 'emlak',
+    keywords: 'satılık|kiralık|emlak|daire|konut|arsa|tarla|bahçe|villa|müstakil',
+    titleKeywords: 'satılık|kiralık|arsa|tarla|bahçe|daire|konut',
+    combinations: [
+      { with: 'fiyat,metrekare', question: '{topic} için m² fiyatı ve toplam maliyet ne kadardır?' },
+      { with: 'ozellik', question: '{topic} özellikleri ve imkanları nelerdir?' },
+      { with: 'konum', question: '{topic} lokasyonu ve çevre özellikleri nasıldır?' },
+      { with: 'fiyat', question: '{topic} fiyatı ve ödeme seçenekleri nelerdir?' }
+    ],
+    defaultQuestion: '{topic} özellikleri ve fiyat bilgisi nedir?',
+    priority: 1
+  },
+  {
+    name: 'saglik',
+    keywords: 'aşı|aşılama|sağlık|hastane|tedavi|hastalık',
+    combinations: [
+      { with: 'basvuru', question: '{topic} için başvuru süreci ve gerekli belgeler nelerdir?' },
+      { with: 'sure', question: '{topic} ne zaman ve hangi aralıklarla yapılmalı?' }
+    ],
+    defaultQuestion: '{topic} kimlere uygulanmalı ve nelere dikkat edilmeli?',
+    priority: 2
+  },
+  {
+    name: 'vergi',
+    keywords: 'stopaj|tevkifat|kdv|katma değer|gelir vergisi|beyanname|muafiyet',
+    combinations: [
+      { with: 'oran', question: '{topic} kapsamında vergi oranları nedir?' },
+      { with: 'sure', question: '{topic} için beyanname süreleri nedir?' }
+    ],
+    defaultQuestion: '{topic} ile ilgili vergi uygulaması nasıldır?',
+    priority: 3
+  }
+];
+
+// Question Patterns Editor Component
+function QuestionPatternsEditor({
+  patterns,
+  onChange
+}: {
+  patterns?: QuestionPattern[];
+  onChange: (patterns: QuestionPattern[]) => void;
+}) {
+  const [editingPattern, setEditingPattern] = useState<QuestionPattern | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+
+  const currentPatterns = patterns || DEFAULT_QUESTION_PATTERNS;
+
+  const handleAddPattern = () => {
+    setEditingPattern({
+      name: '',
+      keywords: '',
+      defaultQuestion: '{topic} hakkında bilgi verir misiniz?',
+      priority: currentPatterns.length + 1,
+      combinations: []
+    });
+    setIsAddingNew(true);
+  };
+
+  const handleSavePattern = (pattern: QuestionPattern) => {
+    if (isAddingNew) {
+      onChange([...currentPatterns, pattern]);
+    } else {
+      onChange(currentPatterns.map(p => p.name === editingPattern?.name ? pattern : p));
+    }
+    setEditingPattern(null);
+    setIsAddingNew(false);
+  };
+
+  const handleDeletePattern = (name: string) => {
+    onChange(currentPatterns.filter(p => p.name !== name));
+  };
+
+  const handleResetToDefaults = () => {
+    onChange(DEFAULT_QUESTION_PATTERNS);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Pattern List */}
+      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+        {currentPatterns.map((pattern, idx) => (
+          <div
+            key={pattern.name}
+            className="flex items-center justify-between p-3 border rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm capitalize">{pattern.name}</span>
+                <Badge variant="outline" className="text-xs">Priority: {pattern.priority || idx + 1}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground truncate mt-1">
+                Keywords: {pattern.keywords.split('|').slice(0, 3).join(', ')}
+                {pattern.keywords.split('|').length > 3 && '...'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 ml-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingPattern(pattern);
+                  setIsAddingNew(false);
+                }}
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeletePattern(pattern.name)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={handleAddPattern}>
+          <Plus className="h-4 w-4 mr-1" /> Add Pattern
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleResetToDefaults}>
+          <RefreshCw className="h-4 w-4 mr-1" /> Reset Defaults
+        </Button>
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingPattern} onOpenChange={(open) => !open && setEditingPattern(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isAddingNew ? 'Add New Pattern' : 'Edit Pattern'}</DialogTitle>
+          </DialogHeader>
+          {editingPattern && (
+            <PatternEditForm
+              pattern={editingPattern}
+              onSave={handleSavePattern}
+              onCancel={() => setEditingPattern(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// Pattern Edit Form Component
+function PatternEditForm({
+  pattern,
+  onSave,
+  onCancel
+}: {
+  pattern: QuestionPattern;
+  onSave: (pattern: QuestionPattern) => void;
+  onCancel: () => void;
+}) {
+  const [form, setForm] = useState<QuestionPattern>(pattern);
+  const [newCombo, setNewCombo] = useState({ with: '', question: '' });
+
+  const handleAddCombination = () => {
+    if (newCombo.with && newCombo.question) {
+      setForm({
+        ...form,
+        combinations: [...(form.combinations || []), newCombo]
+      });
+      setNewCombo({ with: '', question: '' });
+    }
+  };
+
+  const handleRemoveCombination = (idx: number) => {
+    setForm({
+      ...form,
+      combinations: form.combinations?.filter((_, i) => i !== idx)
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Pattern Name</Label>
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+            placeholder="e.g., emlak, vergi, saglik"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Priority (lower = higher)</Label>
+          <Input
+            type="number"
+            value={form.priority || 1}
+            onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) || 1 })}
+            min={1}
+            max={99}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Keywords (pipe-separated regex)</Label>
+        <Input
+          value={form.keywords}
+          onChange={(e) => setForm({ ...form, keywords: e.target.value })}
+          placeholder="e.g., satılık|kiralık|daire|konut"
+        />
+        <p className="text-xs text-muted-foreground">Use | to separate keywords. These match content text.</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Title Keywords (optional)</Label>
+        <Input
+          value={form.titleKeywords || ''}
+          onChange={(e) => setForm({ ...form, titleKeywords: e.target.value })}
+          placeholder="e.g., satılık|arsa"
+        />
+        <p className="text-xs text-muted-foreground">Additional keywords to match in titles only.</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Default Question Template</Label>
+        <Input
+          value={form.defaultQuestion}
+          onChange={(e) => setForm({ ...form, defaultQuestion: e.target.value })}
+          placeholder="{topic} hakkında bilgi verir misiniz?"
+        />
+        <p className="text-xs text-muted-foreground">Use {'{topic}'} as placeholder. Used when no combination matches.</p>
+      </div>
+
+      {/* Combinations */}
+      <div className="space-y-3 pt-2 border-t">
+        <Label>Question Combinations</Label>
+        <p className="text-xs text-muted-foreground">
+          Define specific questions when certain secondary keywords are found.
+          Secondary keywords: fiyat, metrekare, konum, ozellik, oran, sure, basvuru, muafiyet
+        </p>
+
+        {form.combinations?.map((combo, idx) => (
+          <div key={idx} className="flex gap-2 items-start p-2 bg-muted/30 rounded">
+            <div className="flex-1 space-y-1">
+              <div className="text-xs font-medium">When: {combo.with}</div>
+              <div className="text-xs text-muted-foreground">{combo.question}</div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => handleRemoveCombination(idx)}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+
+        <div className="grid grid-cols-[1fr_2fr_auto] gap-2">
+          <Input
+            placeholder="fiyat,konum"
+            value={newCombo.with}
+            onChange={(e) => setNewCombo({ ...newCombo, with: e.target.value })}
+            className="text-sm"
+          />
+          <Input
+            placeholder="{topic} için fiyat ve konum bilgisi nedir?"
+            value={newCombo.question}
+            onChange={(e) => setNewCombo({ ...newCombo, question: e.target.value })}
+            className="text-sm"
+          />
+          <Button variant="outline" size="sm" onClick={handleAddCombination}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end gap-2 pt-4 border-t">
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button onClick={() => onSave(form)} disabled={!form.name || !form.keywords}>
+          Save Pattern
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Optimized Chatbot Settings Component
 function RAGSettings() {
   const [ragConfig, setRagConfig] = useState<any>({});
@@ -2553,6 +2852,29 @@ function RAGSettings() {
                   <li>• Location: frontend/src/templates/</li>
                 </ul>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Question Generation Patterns */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Question Generation Patterns
+                <Badge variant="outline" className="text-xs">Configurable</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+                  <strong>Domain-Specific:</strong> Configure keyword patterns to generate contextual questions from your content. Each pattern defines keywords to match and question templates to generate.
+                </AlertDescription>
+              </Alert>
+
+              {/* Pattern List */}
+              <QuestionPatternsEditor
+                patterns={tempRAGConfig?.ragSettings?.questionPatterns}
+                onChange={(patterns) => updateRAGSetting('questionPatterns', patterns)}
+              />
             </CardContent>
           </Card>
         </div>
@@ -3488,12 +3810,13 @@ function AppSettings() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('settings.generalSettingsTitle')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-6">
+        {/* Left Column - General App Settings */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('settings.generalSettingsTitle')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div>
               <Label>{t('settings.appNameLabel')}</Label>
               <Input
@@ -3502,9 +3825,7 @@ function AppSettings() {
                 placeholder={t('settings.appNamePlaceholder')}
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label className="text-base font-medium flex items-center gap-2">
                 <Languages className="w-4 h-4" />
@@ -3517,18 +3838,13 @@ function AppSettings() {
                 value={tempConfig?.locale || appConfig?.app?.locale || 'tr'}
                 onValueChange={async (value) => {
                   setTempConfig({ ...tempConfig, locale: value });
-                  // Dil değiştiğinde i18n dilini de güncelle
                   try {
                     const i18nModule = await import('@/lib/i18n');
                     const i18n = i18nModule.default || i18nModule.i18n;
                     await i18n.changeLanguage(value);
-
-                    // HTML lang attribute'ini güncelle
                     if (typeof document !== 'undefined') {
                       document.documentElement.lang = value;
                     }
-
-                    // Local storage'a kaydet
                     if (typeof window !== 'undefined') {
                       localStorage.setItem('selectedLanguage', value);
                     }
@@ -3541,82 +3857,21 @@ function AppSettings() {
                   <SelectValue placeholder={t('settings.languageLabel')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tr" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇹🇷</span>
-                      <span className="font-medium">Türkçe</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="en" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇺🇸</span>
-                      <span className="font-medium">English</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="fr" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇫🇷</span>
-                      <span className="font-medium">Français</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="es" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇪🇸</span>
-                      <span className="font-medium">Español</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="de" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇩🇪</span>
-                      <span className="font-medium">Deutsch</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="zh" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇨🇳</span>
-                      <span className="font-medium">中文</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="el" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇬🇷</span>
-                      <span className="font-medium">Ελληνικά</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="th" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇹🇭</span>
-                      <span className="font-medium">ไทย</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="ru" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇷🇺</span>
-                      <span className="font-medium">Русский</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="ar" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇸🇦</span>
-                      <span className="font-medium">العربية</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="ja" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇯🇵</span>
-                      <span className="font-medium">日本語</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="ko" className="py-2 px-4 cursor-pointer hover:bg-accent focus:bg-accent">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">🇰🇷</span>
-                      <span className="font-medium">한국어</span>
-                    </div>
-                  </SelectItem>
+                  <SelectItem value="tr"><div className="flex items-center gap-3"><span className="text-xl">🇹🇷</span><span>Türkçe</span></div></SelectItem>
+                  <SelectItem value="en"><div className="flex items-center gap-3"><span className="text-xl">🇺🇸</span><span>English</span></div></SelectItem>
+                  <SelectItem value="fr"><div className="flex items-center gap-3"><span className="text-xl">🇫🇷</span><span>Français</span></div></SelectItem>
+                  <SelectItem value="es"><div className="flex items-center gap-3"><span className="text-xl">🇪🇸</span><span>Español</span></div></SelectItem>
+                  <SelectItem value="de"><div className="flex items-center gap-3"><span className="text-xl">🇩🇪</span><span>Deutsch</span></div></SelectItem>
+                  <SelectItem value="zh"><div className="flex items-center gap-3"><span className="text-xl">🇨🇳</span><span>中文</span></div></SelectItem>
+                  <SelectItem value="el"><div className="flex items-center gap-3"><span className="text-xl">🇬🇷</span><span>Ελληνικά</span></div></SelectItem>
+                  <SelectItem value="th"><div className="flex items-center gap-3"><span className="text-xl">🇹🇭</span><span>ไทย</span></div></SelectItem>
+                  <SelectItem value="ru"><div className="flex items-center gap-3"><span className="text-xl">🇷🇺</span><span>Русский</span></div></SelectItem>
+                  <SelectItem value="ar"><div className="flex items-center gap-3"><span className="text-xl">🇸🇦</span><span>العربية</span></div></SelectItem>
+                  <SelectItem value="ja"><div className="flex items-center gap-3"><span className="text-xl">🇯🇵</span><span>日本語</span></div></SelectItem>
+                  <SelectItem value="ko"><div className="flex items-center gap-3"><span className="text-xl">🇰🇷</span><span>한국어</span></div></SelectItem>
                 </SelectContent>
               </Select>
 
-              {/* Dil Değiştirme Bilgilendirmesi */}
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <div className="flex items-start gap-2">
                   <Languages className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
@@ -3626,57 +3881,111 @@ function AppSettings() {
                 </div>
               </div>
             </div>
+
             <div>
               <Label>{t('settings.logoUrlLabel')}</Label>
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    value={tempConfig?.logoUrl || appConfig?.app?.logoUrl || ''}
-                    placeholder={t('settings.logoUrlLabel')}
-                    onChange={(e) => setTempConfig({ ...tempConfig, logoUrl: e.target.value })}
-                    className="flex-1"
-                  />
-                  {(tempConfig?.logoUrl || appConfig?.app?.logoUrl) && (
-                    <div className="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 flex items-center justify-center bg-white dark:bg-gray-800 flex-shrink-0">
-                      <img
-                        src={tempConfig?.logoUrl || appConfig?.app?.logoUrl}
-                        alt="Logo"
-                        className="w-6 h-6 object-contain"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
+              <div className="flex gap-2">
+                <Input
+                  value={tempConfig?.logoUrl || appConfig?.app?.logoUrl || ''}
+                  placeholder={t('settings.logoUrlLabel')}
+                  onChange={(e) => setTempConfig({ ...tempConfig, logoUrl: e.target.value })}
+                  className="flex-1"
+                />
+                {(tempConfig?.logoUrl || appConfig?.app?.logoUrl) && (
+                  <div className="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 flex items-center justify-center bg-white dark:bg-gray-800 flex-shrink-0">
+                    <img
+                      src={tempConfig?.logoUrl || appConfig?.app?.logoUrl}
+                      alt="Logo"
+                      className="w-6 h-6 object-contain"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
-          </div>
 
-          <div>
-            <Label>{t('settings.descriptionLabel')}</Label>
-            <Textarea
-              value={tempConfig?.description || appConfig?.app?.description || ''}
-              placeholder={t('settings.descriptionPlaceholder')}
-              rows={3}
-              onChange={(e) => setTempConfig({ ...tempConfig, description: e.target.value })}
-            />
-          </div>
+            <div>
+              <Label>{t('settings.descriptionLabel')}</Label>
+              <Textarea
+                value={tempConfig?.description || appConfig?.app?.description || ''}
+                placeholder={t('settings.descriptionPlaceholder')}
+                rows={3}
+                onChange={(e) => setTempConfig({ ...tempConfig, description: e.target.value })}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="flex justify-end pt-4">
-            <Button onClick={saveAllSettings} disabled={saving}>
-              {saving ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  {t('settings.savingButton')}
-                </>
-              ) : (
-                t('settings.saveButton')
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Right Column - Chat Interface Settings */}
+        <div className="space-y-6">
+          {/* Template Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Chat Interface
+                <Badge variant="outline" className="text-xs">Template</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Active Template</Label>
+                <TemplateSelector />
+                <p className="text-xs text-muted-foreground">
+                  Select the chat interface design for your application
+                </p>
+              </div>
+
+              <div className="pt-2 border-t">
+                <h4 className="text-sm font-medium mb-2">Available Templates:</h4>
+                <ul className="text-xs space-y-1 text-muted-foreground">
+                  <li>• <strong>Base:</strong> Clean, functional design</li>
+                  <li>• <strong>Gemini:</strong> Modern glassmorphism style</li>
+                  <li>• <strong>Modern:</strong> Sleek contemporary look</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quick Chatbot Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Quick Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
+                <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+                  For detailed chat configuration (welcome message, suggestions, response limits), go to the <strong>RAG</strong> tab.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label>Primary Color</Label>
+                <Input
+                  type="color"
+                  value={tempConfig?.primaryColor || '#3b82f6'}
+                  onChange={(e) => setTempConfig({ ...tempConfig, primaryColor: e.target.value })}
+                  className="h-10 w-full cursor-pointer"
+                />
+                <p className="text-xs text-muted-foreground">Main accent color for chat interface</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button onClick={saveAllSettings} disabled={saving}>
+          {saving ? (
+            <>
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              {t('settings.savingButton')}
+            </>
+          ) : (
+            t('settings.saveButton')
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

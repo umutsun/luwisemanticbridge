@@ -12,6 +12,21 @@ interface SettingsService {
   getApiKey(keyName: string): Promise<string | null>;
 }
 
+// Question pattern types for dynamic question generation
+interface QuestionPatternCombination {
+  with: string;  // comma-separated secondary keywords e.g. "fiyat,metrekare"
+  question: string;  // question template with {topic} placeholder
+}
+
+interface QuestionPattern {
+  name: string;
+  keywords: string;  // pipe-separated regex e.g. "satılık|kiralık|daire"
+  titleKeywords?: string;  // optional: keywords to match in title
+  combinations?: QuestionPatternCombination[];
+  defaultQuestion: string;  // fallback question template
+  priority?: number;  // lower = higher priority (default 99)
+}
+
 // Settings service using the existing chatbot_settings table
 class SettingsServiceImpl implements SettingsService {
   private pool = pool;
@@ -991,11 +1006,89 @@ export class RAGChatService {
   }
 
   /**
+   * Default question patterns - can be overridden via RAG settings
+   */
+  private getDefaultQuestionPatterns(): QuestionPattern[] {
+    return [
+      {
+        name: 'emlak',
+        keywords: 'satılık|kiralık|emlak|daire|konut|arsa|tarla|bahçe|villa|müstakil',
+        titleKeywords: 'satılık|kiralık|arsa|tarla|bahçe|daire|konut',
+        combinations: [
+          { with: 'fiyat,metrekare', question: '{topic} için m² fiyatı ve toplam maliyet ne kadardır?' },
+          { with: 'ozellik', question: '{topic} özellikleri ve imkanları nelerdir?' },
+          { with: 'konum', question: '{topic} lokasyonu ve çevre özellikleri nasıldır?' },
+          { with: 'fiyat', question: '{topic} fiyatı ve ödeme seçenekleri nelerdir?' },
+          { with: 'metrekare', question: '{topic} büyüklüğü ve alan kullanımı nasıldır?' }
+        ],
+        defaultQuestion: '{topic} özellikleri ve fiyat bilgisi nedir?',
+        priority: 1
+      },
+      {
+        name: 'saglik',
+        keywords: 'aşı|aşılama|bağışıklık|sağlık|hastane|tedavi|hastalık',
+        titleKeywords: 'aşı|sağlık|hastane',
+        combinations: [
+          { with: 'basvuru', question: '{topic} için başvuru süreci ve gerekli belgeler nelerdir?' },
+          { with: 'sure', question: '{topic} ne zaman ve hangi aralıklarla yapılmalı?' }
+        ],
+        defaultQuestion: '{topic} kimlere uygulanmalı ve nelere dikkat edilmeli?',
+        priority: 2
+      },
+      {
+        name: 'vergi',
+        keywords: 'stopaj|tevkifat|kdv|katma değer|gelir vergisi|kurumlar vergisi|beyanname|muafiyet|istisna',
+        combinations: [
+          { with: 'oran', question: '{topic} kapsamında vergi oranları nedir?' },
+          { with: 'sure', question: '{topic} için beyanname süreleri nedir?' },
+          { with: 'muafiyet', question: '{topic} kapsamında muafiyetten kimler yararlanabilir?' }
+        ],
+        defaultQuestion: '{topic} ile ilgili vergi uygulaması nasıldır?',
+        priority: 3
+      },
+      {
+        name: 'genel',
+        keywords: 'oran|yüzde|%|süre|tarih|başvuru|kayıt|müracaat',
+        combinations: [
+          { with: 'oran', question: '{topic} için geçerli oranlar ve şartlar nelerdir?' },
+          { with: 'basvuru', question: '{topic} için başvuru nasıl yapılır?' },
+          { with: 'sure', question: '{topic} için süreler ve tarihler nelerdir?' }
+        ],
+        defaultQuestion: '{topic} konusunda önemli noktalar nelerdir?',
+        priority: 10
+      }
+    ];
+  }
+
+  /**
+   * Secondary keyword patterns for combination matching
+   */
+  private getSecondaryPatterns(): Record<string, string> {
+    return {
+      fiyat: 'fiyat|tl|₺|lira|m²|metrekare',
+      metrekare: 'm²|metrekare|\\d+\\s*m2',
+      konum: 'ilçe|mahalle|cadde|sokak|bölge|mevki|lokasyon',
+      ozellik: 'oda|salon|banyo|balkon|otopark|asansör|site|güvenlik',
+      oran: 'oran|yüzde|%',
+      sure: 'süre|tarih|son gün',
+      basvuru: 'başvuru|kayıt|müracaat',
+      muafiyet: 'muafiyet|istisna'
+    };
+  }
+
+  /**
    * Generate dynamic question based on title, excerpt and category without LLM
    * IMPORTANT: Questions must include the TOPIC from title to be meaningful standalone
    * @param maxLength - Maximum question length from settings (default 500)
+   * @param customPatterns - Optional custom patterns from settings
    */
-  private generateDynamicQuestion(title: string, excerpt: string, category: string, maxLength: number = 500): string {
+  private generateDynamicQuestion(
+    title: string,
+    excerpt: string,
+    category: string,
+    maxLength: number = 500,
+    customPatterns?: QuestionPattern[]
+  ): string {
     // Detect language
     const isTurkish = /[çğıöşüÇĞİÖŞÜ]/.test(excerpt) ||
       /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
@@ -1026,68 +1119,53 @@ export class RAGChatService {
     let smartQuestion = '';
 
     if (isTurkish) {
-      // Extract key terms to create contextual questions WITH topic included
-      const hasStopaj = /stopaj|tevkifat/i.test(excerpt);
-      const hasKDV = /kdv|katma değer/i.test(excerpt);
-      const hasGelir = /gelir vergisi/i.test(excerpt);
-      const hasBeyanname = /beyanname/i.test(excerpt);
-      const hasMuafiyet = /muafiyet|istisna/i.test(excerpt);
-      const hasOran = /oran|yüzde|%/i.test(excerpt);
-      const hasSure = /süre|tarih|son gün/i.test(excerpt);
-      const hasBasvuru = /başvuru|kayıt|müracaat/i.test(excerpt);
-      const hasAsi = /aşı|aşılama|bağışıklık/i.test(excerpt) || /aşı/i.test(title);
-      const hasSaglik = /sağlık|hastane|tedavi|hastalık/i.test(excerpt) || /sağlık|hastane/i.test(title);
+      // Get patterns - use custom if provided, otherwise defaults
+      const patterns = customPatterns || this.getDefaultQuestionPatterns();
+      const secondaryPatterns = this.getSecondaryPatterns();
+      const content = `${title} ${excerpt}`;
 
-      // Real estate patterns
-      const hasEmlak = /satılık|kiralık|emlak|daire|konut|arsa|tarla|bahçe|villa|müstakil/i.test(excerpt) ||
-                       /satılık|kiralık|arsa|tarla|bahçe|daire|konut/i.test(title);
-      const hasFiyat = /fiyat|tl|₺|lira|m²|metrekare/i.test(excerpt);
-      const hasKonum = /ilçe|mahalle|cadde|sokak|bölge|mevki|lokasyon/i.test(excerpt);
-      const hasOzellik = /oda|salon|banyo|balkon|otopark|asansör|site|güvenlik/i.test(excerpt);
-      const hasMetrekare = /m²|metrekare|\d+\s*m2/i.test(excerpt);
+      // Sort patterns by priority (lower = higher priority)
+      const sortedPatterns = [...patterns].sort((a, b) => (a.priority || 99) - (b.priority || 99));
 
-      // Generate questions that INCLUDE the topic for context
-      // Real estate questions first (before tax questions)
-      if (hasEmlak && hasFiyat && hasMetrekare) {
-        smartQuestion = `${topic} için m² fiyatı ve toplam maliyet ne kadardır?`;
-      } else if (hasEmlak && hasOzellik) {
-        smartQuestion = `${topic} özellikleri ve imkanları nelerdir?`;
-      } else if (hasEmlak && hasKonum) {
-        smartQuestion = `${topic} lokasyonu ve çevre özellikleri nasıldır?`;
-      } else if (hasEmlak && hasFiyat) {
-        smartQuestion = `${topic} fiyatı ve ödeme seçenekleri nelerdir?`;
-      } else if (hasEmlak && hasMetrekare) {
-        smartQuestion = `${topic} büyüklüğü ve alan kullanımı nasıldır?`;
-      } else if (hasEmlak) {
-        smartQuestion = `${topic} özellikleri ve fiyat bilgisi nedir?`;
-      } else if (hasAsi && hasBasvuru) {
-        smartQuestion = `${topic} için başvuru süreci ve gerekli belgeler nelerdir?`;
-      } else if (hasAsi && hasSure) {
-        smartQuestion = `${topic} ne zaman ve hangi aralıklarla yapılmalı?`;
-      } else if (hasAsi) {
-        smartQuestion = `${topic} kimlere uygulanmalı ve nelere dikkat edilmeli?`;
-      } else if (hasSaglik && hasBasvuru) {
-        smartQuestion = `${topic} için başvuru şartları ve süreci nasıl işliyor?`;
-      } else if (hasStopaj && hasOran) {
-        smartQuestion = `${topic} kapsamında stopaj oranları nedir?`;
-      } else if (hasStopaj) {
-        smartQuestion = `${topic} ile ilgili stopaj uygulaması kimleri kapsıyor?`;
-      } else if (hasKDV && hasOran) {
-        smartQuestion = `${topic} için KDV oranı ne kadardır?`;
-      } else if (hasBeyanname && hasSure) {
-        smartQuestion = `${topic} için beyanname süreleri nedir?`;
-      } else if (hasMuafiyet) {
-        smartQuestion = `${topic} kapsamında muafiyetten kimler yararlanabilir?`;
-      } else if (hasGelir) {
-        smartQuestion = `${topic} için gelir vergisi nasıl hesaplanır?`;
-      } else if (hasOran) {
-        smartQuestion = `${topic} için geçerli oranlar ve şartlar nelerdir?`;
-      } else if (hasBasvuru) {
-        smartQuestion = `${topic} için başvuru nasıl yapılır?`;
-      } else if (hasSure) {
-        smartQuestion = `${topic} için süreler ve tarihler nelerdir?`;
-      } else {
-        // Default: use varied question patterns to avoid generic filter
+      // Find matching pattern
+      for (const pattern of sortedPatterns) {
+        const mainRegex = new RegExp(pattern.keywords, 'i');
+        const titleRegex = pattern.titleKeywords ? new RegExp(pattern.titleKeywords, 'i') : null;
+
+        const matchesMain = mainRegex.test(excerpt);
+        const matchesTitle = titleRegex ? titleRegex.test(title) : false;
+
+        if (matchesMain || matchesTitle) {
+          // Check combinations
+          if (pattern.combinations) {
+            for (const combo of pattern.combinations) {
+              const comboKeywords = combo.with.split(',').map(k => k.trim());
+              const allMatch = comboKeywords.every(keyword => {
+                const secondaryRegex = secondaryPatterns[keyword];
+                if (secondaryRegex) {
+                  return new RegExp(secondaryRegex, 'i').test(excerpt);
+                }
+                return new RegExp(keyword, 'i').test(excerpt);
+              });
+
+              if (allMatch) {
+                smartQuestion = combo.question.replace('{topic}', topic);
+                break;
+              }
+            }
+          }
+
+          // If no combination matched, use default
+          if (!smartQuestion && pattern.defaultQuestion) {
+            smartQuestion = pattern.defaultQuestion.replace('{topic}', topic);
+          }
+
+          if (smartQuestion) break;
+        }
+      }
+
+      // Fallback if no pattern matched
+      if (!smartQuestion) {
         const defaultQuestions = [
           `${topic} konusunda önemli noktalar nelerdir?`,
           `${topic} ile ilgili temel bilgiler nedir?`,
