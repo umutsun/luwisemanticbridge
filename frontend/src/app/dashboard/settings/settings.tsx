@@ -2063,17 +2063,6 @@ function TemplateSelector() {
           </Card>
         ))}
       </div>
-
-      <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground border border-border">
-        <div className="flex items-start gap-2">
-          <Sparkles className="h-4 w-4 mt-0.5 text-primary" />
-          <div>
-            <p className="font-medium mb-1 text-foreground">Developer Note</p>
-            <p>To add more templates, create a new folder in <code>frontend/src/templates/</code> and register it in <code>registry.ts</code>.</p>
-            <p className="mt-2 text-xs">Each template can have its own ChatInterface component, configuration, and styles.</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -2666,12 +2655,6 @@ function RAGSettings() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-              <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                <strong>Optimal defaults:</strong> 25% similarity threshold, 5-15 results, semantic search only, database content enabled.
-                These settings provide the best balance between accuracy and coverage for most use cases.
-              </AlertDescription>
-            </Alert>
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Search Parameters</h3>
               <div className="space-y-4">
@@ -2788,11 +2771,6 @@ function RAGSettings() {
 
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Data Source Priorities</h3>
-              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-                <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                  <strong>Priority System:</strong> Set priority (0-10) for each data source. Higher values = more weight in search results. Set to 0 to disable a source completely.
-                </AlertDescription>
-              </Alert>
               <div className="space-y-4">
                 {/* Database Content Priority */}
                 <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
@@ -3769,13 +3747,10 @@ function AppSettings() {
             </div>
 
             <div>
-              <Label className="text-base font-medium flex items-center gap-2">
+              <Label className="flex items-center gap-2">
                 <Languages className="w-4 h-4" />
                 {t('settings.languageLabel')}
               </Label>
-              <p className="text-xs text-muted-foreground mt-1 mb-3">
-                {t('settings.languageDescription')}
-              </p>
               <Select
                 value={tempConfig?.locale || appConfig?.app?.locale || 'tr'}
                 onValueChange={async (value) => {
@@ -3813,15 +3788,6 @@ function AppSettings() {
                   <SelectItem value="ko"><div className="flex items-center gap-3"><span className="text-xl">🇰🇷</span><span>한국어</span></div></SelectItem>
                 </SelectContent>
               </Select>
-
-              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <Languages className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                  <div className="text-xs text-blue-800 dark:text-blue-200">
-                    <strong>{t('settings.languageInfo.title')}:</strong> {t('settings.languageInfo.description')}
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div>
@@ -3868,23 +3834,8 @@ function AppSettings() {
                 <Badge variant="outline" className="text-xs">Template</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Active Template</Label>
-                <TemplateSelector />
-                <p className="text-xs text-muted-foreground">
-                  Select the chat interface design for your application
-                </p>
-              </div>
-
-              <div className="pt-2 border-t">
-                <h4 className="text-sm font-medium mb-2">Available Templates:</h4>
-                <ul className="text-xs space-y-1 text-muted-foreground">
-                  <li>• <strong>Base:</strong> Clean, functional design</li>
-                  <li>• <strong>Gemini:</strong> Modern glassmorphism style</li>
-                  <li>• <strong>Modern:</strong> Sleek contemporary look</li>
-                </ul>
-              </div>
+            <CardContent>
+              <TemplateSelector />
             </CardContent>
           </Card>
 
@@ -3894,12 +3845,6 @@ function AppSettings() {
               <CardTitle className="text-base">Chat Branding</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-                <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                  Configure branding for the chat interface. Title and logo appear in the chat header.
-                </AlertDescription>
-              </Alert>
-
               <div className="space-y-2">
                 <Label>Chat Title</Label>
                 <Input
@@ -3907,7 +3852,6 @@ function AppSettings() {
                   onChange={(e) => setTempConfig({ ...tempConfig, chatTitle: e.target.value })}
                   placeholder="AI Assistant"
                 />
-                <p className="text-xs text-muted-foreground">Displayed in the chat header</p>
               </div>
 
               <div className="space-y-2">
