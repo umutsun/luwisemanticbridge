@@ -870,15 +870,45 @@ router.post('/generate', async (req: Request, res: Response) => {
           // Find first non-empty content field (case-insensitive)
           content = getColumnValue(row, contentKeys) || '';
 
+          // FALLBACK: If no standard content field found, combine ALL row fields as content
+          // This handles CSV tables where column names don't match standard patterns
+          if (!content || content.trim().length === 0) {
+            const rowKeys = Object.keys(row).filter(k =>
+              k !== 'id' &&
+              k !== '_sourceTable' &&
+              k !== 'created_at' &&
+              k !== 'updated_at' &&
+              row[k] !== null &&
+              row[k] !== undefined &&
+              String(row[k]).trim().length > 0
+            );
+
+            if (rowKeys.length > 0) {
+              // Combine all fields as "key: value" pairs
+              content = rowKeys.map(key => `${key}: ${row[key]}`).join('\n');
+              console.log(`[Migration] Using combined fields as content for ${table}[${row.id}] (${rowKeys.length} fields)`);
+            }
+          }
+
           // Find first non-empty title field (case-insensitive)
           const titleValue = getColumnValue(row, titleKeys);
           if (titleValue) {
             title = titleValue.substring(0, 255);
           }
 
-          // Fallback title
+          // Fallback title - use first text field or table name
           if (!title) {
-            title = `${table} #${row.id}`;
+            // Try to find any short text field for title
+            const rowKeys = Object.keys(row).filter(k =>
+              k !== 'id' && k !== '_sourceTable' &&
+              row[k] && typeof row[k] === 'string' &&
+              row[k].length > 0 && row[k].length <= 255
+            );
+            if (rowKeys.length > 0) {
+              title = String(row[rowKeys[0]]).substring(0, 255);
+            } else {
+              title = `${table} #${row.id}`;
+            }
           }
 
           // Infer source type from table name

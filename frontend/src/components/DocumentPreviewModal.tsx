@@ -68,6 +68,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { executeQuery, executeMutation } from '@/lib/graphql/client';
 import { GET_DOCUMENT_PREVIEW, TRANSFORM_DOCUMENTS_TO_SOURCE_DB, type DocumentPreview as GraphQLDocumentPreview } from '@/lib/graphql/documents.queries';
 import { GraphQLTransformTab } from './DocumentTransformModal';
+import { useTransformProgressSubscription } from '@/hooks/useDocumentTransform';
 import { useConfig } from '@/contexts/ConfigContext';
 import JsonViewer from '@/components/ui/json-viewer';
 
@@ -114,6 +115,16 @@ export default function DocumentPreviewModal({
   const [batchSize, setBatchSize] = useState(50); // Batch size for insert operations
   const [tableName, setTableName] = useState<string>(''); // User-editable table name
   const [jobId, setJobId] = useState<string | null>(null); // Job ID for progress tracking
+
+  // Subscribe to transform progress to detect completion
+  const { progress: transformProgress } = useTransformProgressSubscription(jobId);
+
+  // Reset isGenerating when transform completes or fails
+  useEffect(() => {
+    if (transformProgress.status === 'completed' || transformProgress.status === 'failed') {
+      setIsGenerating(false);
+    }
+  }, [transformProgress.status]);
 
   // PDF-specific state
   const [pdfProcessing, setPdfProcessing] = useState(false);
