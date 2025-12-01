@@ -22,12 +22,70 @@ router.get('/stats', async (req: Request, res: Response) => {
     const stats = await unifiedEmbeddingsSync.getStats();
     res.json({
       success: true,
-      stats
+      data: stats
     });
   } catch (error: any) {
     console.error('[EmbeddingsSync] Stats error:', error);
     res.status(500).json({
       error: error.message || 'Failed to get stats'
+    });
+  }
+});
+
+/**
+ * GET /api/v2/embeddings-sync/pending-stats
+ * Get stats for pending embeddings (documents without embeddings, crawl data without embeddings)
+ */
+router.get('/pending-stats', async (req: Request, res: Response) => {
+  try {
+    // Get documents stats
+    const docsResult = await lsembPool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM documents) as total,
+        (SELECT COUNT(DISTINCT document_id) FROM document_embeddings) as embedded
+    `);
+
+    const docsTotal = parseInt(docsResult.rows[0]?.total || '0');
+    const docsEmbedded = parseInt(docsResult.rows[0]?.embedded || '0');
+
+    // Get crawl data stats - call the crawler embed-stats endpoint internally
+    let crawlTotal = 0;
+    let crawlEmbedded = 0;
+
+    try {
+      // Try to get crawl stats from crawler routes
+      const crawlEmbeddedResult = await lsembPool.query(`
+        SELECT COUNT(DISTINCT source_url) as count FROM scrape_embeddings
+      `);
+      crawlEmbedded = parseInt(crawlEmbeddedResult.rows[0]?.count || '0');
+
+      // For crawl total, we need Redis - this is estimated from scrape_embeddings for now
+      // The actual total will come from the crawler/embed-stats endpoint
+      crawlTotal = crawlEmbedded;
+    } catch (crawlError) {
+      console.error('[EmbeddingsSync] Crawl stats error:', crawlError);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        documents: {
+          total: docsTotal,
+          embedded: docsEmbedded,
+          pending: docsTotal - docsEmbedded
+        },
+        crawlData: {
+          total: crawlTotal,
+          embedded: crawlEmbedded,
+          pending: Math.max(0, crawlTotal - crawlEmbedded)
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('[EmbeddingsSync] Pending stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get pending stats'
     });
   }
 });

@@ -2087,4 +2087,143 @@ router.get('/items/:crawlerName/:itemId', async (req: Request, res: Response) =>
   }
 });
 
+/**
+ * POST /embed-all
+ * Embed all crawl data from Redis to scrape_embeddings table
+ */
+router.post('/embed-all', async (req: Request, res: Response) => {
+  try {
+    // Import the scrape embedding service
+    const { scrapeEmbeddingService } = await import('../services/scrape-embedding.service');
+
+    // Get all crawler directories
+    const keys = await crawl4aiRedis.keys('crawl4ai:*');
+
+    // Extract unique crawler names
+    const crawlerNames = new Set<string>();
+    for (const key of keys) {
+      const parts = key.split(':');
+      if (parts.length >= 2 && parts[2] !== '_init') {
+        crawlerNames.add(parts[1]);
+      }
+    }
+
+    const results = {
+      processed: 0,
+      embedded: 0,
+      skipped: 0,
+      errors: [] as string[]
+    };
+
+    // Process each crawler's data
+    for (const crawlerName of crawlerNames) {
+      const crawlerKeys = await crawl4aiRedis.keys(`crawl4ai:${crawlerName}:*`);
+
+      for (const key of crawlerKeys) {
+        // Skip init keys
+        if (key.endsWith('_init')) continue;
+
+        try {
+          const rawData = await crawl4aiRedis.get(key);
+          if (!rawData) continue;
+
+          const parsedData = JSON.parse(rawData);
+          const content = parsedData.markdown || parsedData.rawData || parsedData.content || '';
+
+          // Skip if no content or too short
+          if (!content || content.length < 50) {
+            results.skipped++;
+            continue;
+          }
+
+          // Check if already embedded (by source_url)
+          const sourceUrl = parsedData.url || key;
+          const existing = await lsembPool.query(
+            'SELECT id FROM scrape_embeddings WHERE source_url = $1 LIMIT 1',
+            [sourceUrl]
+          );
+
+          if (existing.rows.length > 0) {
+            results.skipped++;
+            continue;
+          }
+
+          // Generate embeddings
+          const embeddingIds = await scrapeEmbeddingService.processAndSaveChunks(
+            content,
+            {
+              content,
+              sourceUrl,
+              title: parsedData.title || parsedData.data?.title || crawlerName,
+              category: crawlerName,
+              projectId: crawlerName,
+              metadata: {
+                crawlerName,
+                redisKey: key,
+                scrapedAt: parsedData.timestamp || parsedData.scraped_at
+              }
+            }
+          );
+
+          results.processed++;
+          results.embedded += embeddingIds.length;
+
+          console.log(`[CrawlerEmbed] Embedded ${key}: ${embeddingIds.length} chunks`);
+
+        } catch (error: any) {
+          results.errors.push(`${key}: ${error.message}`);
+          console.error(`[CrawlerEmbed] Failed to embed ${key}:`, error.message);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Crawl data embedding completed',
+      data: results
+    });
+
+  } catch (error: any) {
+    console.error('[CrawlerEmbed] Embed all error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to embed crawl data'
+    });
+  }
+});
+
+/**
+ * GET /embed-stats
+ * Get crawl data embedding statistics
+ */
+router.get('/embed-stats', async (req: Request, res: Response) => {
+  try {
+    // Count Redis items
+    const keys = await crawl4aiRedis.keys('crawl4ai:*');
+    const dataKeys = keys.filter(k => !k.endsWith('_init'));
+
+    // Count embedded items
+    const embeddedResult = await lsembPool.query(
+      'SELECT COUNT(DISTINCT source_url) as count FROM scrape_embeddings'
+    );
+    const embedded = parseInt(embeddedResult.rows[0]?.count || '0');
+
+    res.json({
+      success: true,
+      data: {
+        total: dataKeys.length,
+        embedded,
+        pending: Math.max(0, dataKeys.length - embedded)
+      }
+    });
+
+  } catch (error: any) {
+    console.error('[CrawlerEmbed] Stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get embed stats'
+    });
+  }
+});
+
 export default router;

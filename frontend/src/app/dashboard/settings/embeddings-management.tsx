@@ -44,15 +44,14 @@ interface EmbeddingConfig {
   };
 }
 
-interface SyncStats {
-  document_embeddings: { total: number; synced: number; unsynced: number };
-  scrape_embeddings: { total: number; synced: number; unsynced: number };
-  unified_embeddings: { total: number; by_source: Record<string, number> };
+interface EmbeddingStats {
+  documents: { total: number; embedded: number; pending: number };
+  crawlData: { total: number; embedded: number; pending: number };
 }
 
 const EmbeddingsManagement = () => {
-  const [syncLoading, setSyncLoading] = useState<string | null>(null);
-  const [syncStats, setSyncStats] = useState<SyncStats | null>(null);
+  const [embeddingLoading, setEmbeddingLoading] = useState<string | null>(null);
+  const [embeddingStats, setEmbeddingStats] = useState<EmbeddingStats | null>(null);
   const [config, setConfig] = useState<EmbeddingConfig>({
     unified_embeddings: {
       enabled: true,
@@ -134,13 +133,12 @@ const EmbeddingsManagement = () => {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const [unified, documents, scrape, messages, mainStats, syncStatsRes] = await Promise.all([
+      const [unified, documents, scrape, messages, mainStats] = await Promise.all([
         fetch(apiConfig.getApiUrl('/embeddings/unified/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/documents/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/scrape/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/messages/stats')).then(r => r.json()),
-        fetch(apiConfig.getApiUrl('/v2/embeddings/stats')).then(r => r.json()).catch(() => null),
-        fetch(apiConfig.getApiUrl('/v2/embeddings-sync/stats')).then(r => r.json()).catch(() => null)
+        fetch(apiConfig.getApiUrl('/v2/embeddings/stats')).then(r => r.json()).catch(() => null)
       ]);
 
       setConfig(prev => ({
@@ -155,79 +153,61 @@ const EmbeddingsManagement = () => {
       if (mainStats?.dimensions) {
         setDimensions(mainStats.dimensions);
       }
-
-      // Set sync stats
-      if (syncStatsRes?.success) {
-        setSyncStats(syncStatsRes.data);
-      }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
     }
   };
 
-  // Sync functions
-  const syncDocumentEmbeddings = async () => {
+  // Fetch embedding stats (documents without embeddings, crawl data without embeddings)
+  const fetchEmbeddingStats = async () => {
     try {
-      setSyncLoading('documents');
-      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/documents'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/pending-stats'));
       const result = await response.json();
-
       if (result.success) {
-        toast({
-          title: 'Sync Completed',
-          description: `Synced ${result.data.synced} document embeddings to unified table`,
-        });
-        fetchStats();
-      } else {
-        throw new Error(result.error);
+        setEmbeddingStats(result.data);
       }
-    } catch (error: any) {
-      toast({
-        title: 'Sync Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setSyncLoading(null);
+    } catch (error) {
+      console.error('Failed to fetch embedding stats:', error);
     }
   };
 
-  const syncScrapeEmbeddings = async () => {
+  // Embed all documents to document_embeddings table
+  const embedDocuments = async () => {
     try {
-      setSyncLoading('scrapes');
-      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/scrapes'), {
+      setEmbeddingLoading('documents');
+      const response = await fetch(apiConfig.getApiUrl('/v2/documents/bulk-embed'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embedAll: true })
       });
       const result = await response.json();
 
       if (result.success) {
         toast({
-          title: 'Sync Completed',
-          description: `Synced ${result.data.synced} scrape embeddings to unified table`,
+          title: 'Document Embedding Complete',
+          description: `Embedded ${result.embedded} documents to document_embeddings`,
         });
         fetchStats();
+        fetchEmbeddingStats();
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Failed to embed documents');
       }
     } catch (error: any) {
       toast({
-        title: 'Sync Failed',
+        title: 'Embedding Failed',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setSyncLoading(null);
+      setEmbeddingLoading(null);
     }
   };
 
-  const generateScrapeEmbeddings = async () => {
+  // Embed crawl data to scrape_embeddings table
+  const embedCrawlData = async () => {
     try {
-      setSyncLoading('generate-scrapes');
-      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/scrapes/generate'), {
+      setEmbeddingLoading('crawl');
+      const response = await fetch(apiConfig.getApiUrl('/v2/crawler/embed-all'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -235,84 +215,65 @@ const EmbeddingsManagement = () => {
 
       if (result.success) {
         toast({
-          title: 'Generation Started',
-          description: `Generated embeddings for ${result.data.processed} scraped content items`,
+          title: 'Crawl Data Embedding Complete',
+          description: `Embedded ${result.data?.embedded || 0} crawl items to scrape_embeddings`,
         });
         fetchStats();
+        fetchEmbeddingStats();
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Failed to embed crawl data');
       }
     } catch (error: any) {
       toast({
-        title: 'Generation Failed',
+        title: 'Embedding Failed',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setSyncLoading(null);
+      setEmbeddingLoading(null);
     }
   };
 
-  const syncAll = async () => {
+  // Embed all pending data
+  const embedAll = async () => {
     try {
-      setSyncLoading('all');
-      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/all'), {
+      setEmbeddingLoading('all');
+
+      // Embed documents first
+      const docResponse = await fetch(apiConfig.getApiUrl('/v2/documents/bulk-embed'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embedAll: true })
+      });
+      const docResult = await docResponse.json();
+
+      // Then embed crawl data
+      const crawlResponse = await fetch(apiConfig.getApiUrl('/v2/crawler/embed-all'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      const result = await response.json();
+      const crawlResult = await crawlResponse.json();
 
-      if (result.success) {
-        toast({
-          title: 'Full Sync Completed',
-          description: `Documents: ${result.data.documents.synced}, Scrapes: ${result.data.scrapes.synced}`,
-        });
-        fetchStats();
-      } else {
-        throw new Error(result.error);
-      }
+      toast({
+        title: 'All Embeddings Complete',
+        description: `Documents: ${docResult.embedded || 0}, Crawl: ${crawlResult.data?.embedded || 0}`,
+      });
+      fetchStats();
+      fetchEmbeddingStats();
     } catch (error: any) {
       toast({
-        title: 'Sync Failed',
+        title: 'Embedding Failed',
         description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setSyncLoading(null);
-    }
-  };
-
-  const cleanupOrphaned = async () => {
-    try {
-      setSyncLoading('cleanup');
-      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/cleanup'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        toast({
-          title: 'Cleanup Completed',
-          description: `Removed ${result.data.removed} orphaned embeddings`,
-        });
-        fetchStats();
-      } else {
-        throw new Error(result.error);
-      }
-    } catch (error: any) {
-      toast({
-        title: 'Cleanup Failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } finally {
-      setSyncLoading(null);
+      setEmbeddingLoading(null);
     }
   };
 
   useEffect(() => {
     fetchStats();
+    fetchEmbeddingStats();
   }, []);
 
   return (
@@ -591,137 +552,110 @@ const EmbeddingsManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Sync Operations */}
+      {/* Embedding Operations - Generate embeddings for documents and crawl data */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5 text-indigo-500" />
+              <Database className="h-5 w-5 text-indigo-500" />
               <div>
-                <CardTitle>Sync Operations</CardTitle>
+                <CardTitle>Embedding Operations</CardTitle>
                 <CardDescription>
-                  Sync embeddings to unified table for unified search
+                  Generate embeddings for documents and crawl data
                 </CardDescription>
               </div>
             </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={fetchStats}
-              disabled={!!syncLoading}
+              onClick={() => { fetchStats(); fetchEmbeddingStats(); }}
+              disabled={!!embeddingLoading}
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${embeddingLoading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Sync Status */}
-          {syncStats && (
+          {/* Embedding Status */}
+          {embeddingStats && (
             <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
               <div>
-                <div className="text-sm font-medium">Document Embeddings</div>
+                <div className="text-sm font-medium">Documents (PDF, DOCX, etc.)</div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-2xl font-bold">{syncStats.document_embeddings.synced}</span>
-                  <span className="text-muted-foreground">/ {syncStats.document_embeddings.total} synced</span>
+                  <span className="text-2xl font-bold">{embeddingStats.documents.embedded}</span>
+                  <span className="text-muted-foreground">/ {embeddingStats.documents.total} embedded</span>
                 </div>
-                {syncStats.document_embeddings.unsynced > 0 && (
+                {embeddingStats.documents.pending > 0 && (
                   <Badge variant="secondary" className="mt-1">
-                    {syncStats.document_embeddings.unsynced} unsynced
+                    {embeddingStats.documents.pending} pending
                   </Badge>
                 )}
               </div>
               <div>
-                <div className="text-sm font-medium">Scrape Embeddings</div>
+                <div className="text-sm font-medium">Crawl Data (Redis)</div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-2xl font-bold">{syncStats.scrape_embeddings.synced}</span>
-                  <span className="text-muted-foreground">/ {syncStats.scrape_embeddings.total} synced</span>
+                  <span className="text-2xl font-bold">{embeddingStats.crawlData.embedded}</span>
+                  <span className="text-muted-foreground">/ {embeddingStats.crawlData.total} embedded</span>
                 </div>
-                {syncStats.scrape_embeddings.unsynced > 0 && (
+                {embeddingStats.crawlData.pending > 0 && (
                   <Badge variant="secondary" className="mt-1">
-                    {syncStats.scrape_embeddings.unsynced} unsynced
+                    {embeddingStats.crawlData.pending} pending
                   </Badge>
                 )}
               </div>
             </div>
           )}
 
-          {/* Sync Actions */}
+          {/* Embedding Actions */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Document Embeddings</Label>
+              <Label>Documents to document_embeddings</Label>
               <Button
                 className="w-full"
                 variant="outline"
-                onClick={syncDocumentEmbeddings}
-                disabled={!!syncLoading}
+                onClick={embedDocuments}
+                disabled={!!embeddingLoading}
               >
-                {syncLoading === 'documents' ? (
+                {embeddingLoading === 'documents' ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
+                  <FileText className="h-4 w-4 mr-2" />
                 )}
-                Sync to Unified
+                Embed Documents
               </Button>
             </div>
             <div className="space-y-2">
-              <Label>Scrape Embeddings</Label>
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1"
-                  variant="outline"
-                  onClick={generateScrapeEmbeddings}
-                  disabled={!!syncLoading}
-                >
-                  {syncLoading === 'generate-scrapes' ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Database className="h-4 w-4 mr-2" />
-                  )}
-                  Generate
-                </Button>
-                <Button
-                  className="flex-1"
-                  variant="outline"
-                  onClick={syncScrapeEmbeddings}
-                  disabled={!!syncLoading}
-                >
-                  {syncLoading === 'scrapes' ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Sync
-                </Button>
-              </div>
+              <Label>Crawl Data to scrape_embeddings</Label>
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={embedCrawlData}
+                disabled={!!embeddingLoading}
+              >
+                {embeddingLoading === 'crawl' ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Globe className="h-4 w-4 mr-2" />
+                )}
+                Embed Crawl Data
+              </Button>
             </div>
           </div>
 
           {/* Bulk Actions */}
           <div className="flex gap-2 pt-4 border-t">
             <Button
-              onClick={syncAll}
-              disabled={!!syncLoading}
+              onClick={embedAll}
+              disabled={!!embeddingLoading}
               className="flex-1"
             >
-              {syncLoading === 'all' ? (
+              {embeddingLoading === 'all' ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <CheckCircle className="h-4 w-4 mr-2" />
               )}
-              Sync All to Unified
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={cleanupOrphaned}
-              disabled={!!syncLoading}
-            >
-              {syncLoading === 'cleanup' ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
-              )}
-              Cleanup Orphaned
+              Embed All Pending
             </Button>
           </div>
         </CardContent>
