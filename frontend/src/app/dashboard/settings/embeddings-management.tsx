@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { apiConfig } from '@/config/api.config';
-import { Database, FileText, Globe, MessageSquare, Trash2, Download, Upload } from 'lucide-react';
+import { Database, FileText, Globe, MessageSquare, Trash2, Download, Upload, RefreshCw, Loader2, CheckCircle } from 'lucide-react';
 
 interface EmbeddingConfig {
   unified_embeddings: {
@@ -44,7 +44,15 @@ interface EmbeddingConfig {
   };
 }
 
+interface SyncStats {
+  document_embeddings: { total: number; synced: number; unsynced: number };
+  scrape_embeddings: { total: number; synced: number; unsynced: number };
+  unified_embeddings: { total: number; by_source: Record<string, number> };
+}
+
 const EmbeddingsManagement = () => {
+  const [syncLoading, setSyncLoading] = useState<string | null>(null);
+  const [syncStats, setSyncStats] = useState<SyncStats | null>(null);
   const [config, setConfig] = useState<EmbeddingConfig>({
     unified_embeddings: {
       enabled: true,
@@ -126,12 +134,13 @@ const EmbeddingsManagement = () => {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const [unified, documents, scrape, messages, mainStats] = await Promise.all([
+      const [unified, documents, scrape, messages, mainStats, syncStatsRes] = await Promise.all([
         fetch(apiConfig.getApiUrl('/embeddings/unified/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/documents/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/scrape/stats')).then(r => r.json()),
         fetch(apiConfig.getApiUrl('/embeddings/messages/stats')).then(r => r.json()),
-        fetch(apiConfig.getApiUrl('/v2/embeddings/stats')).then(r => r.json()).catch(() => null)
+        fetch(apiConfig.getApiUrl('/v2/embeddings/stats')).then(r => r.json()).catch(() => null),
+        fetch(apiConfig.getApiUrl('/v2/embeddings-sync/stats')).then(r => r.json()).catch(() => null)
       ]);
 
       setConfig(prev => ({
@@ -146,8 +155,159 @@ const EmbeddingsManagement = () => {
       if (mainStats?.dimensions) {
         setDimensions(mainStats.dimensions);
       }
+
+      // Set sync stats
+      if (syncStatsRes?.success) {
+        setSyncStats(syncStatsRes.data);
+      }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  // Sync functions
+  const syncDocumentEmbeddings = async () => {
+    try {
+      setSyncLoading('documents');
+      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/documents'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Sync Completed',
+          description: `Synced ${result.data.synced} document embeddings to unified table`,
+        });
+        fetchStats();
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Sync Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncLoading(null);
+    }
+  };
+
+  const syncScrapeEmbeddings = async () => {
+    try {
+      setSyncLoading('scrapes');
+      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/scrapes'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Sync Completed',
+          description: `Synced ${result.data.synced} scrape embeddings to unified table`,
+        });
+        fetchStats();
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Sync Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncLoading(null);
+    }
+  };
+
+  const generateScrapeEmbeddings = async () => {
+    try {
+      setSyncLoading('generate-scrapes');
+      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/scrapes/generate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Generation Started',
+          description: `Generated embeddings for ${result.data.processed} scraped content items`,
+        });
+        fetchStats();
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Generation Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncLoading(null);
+    }
+  };
+
+  const syncAll = async () => {
+    try {
+      setSyncLoading('all');
+      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/all'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Full Sync Completed',
+          description: `Documents: ${result.data.documents.synced}, Scrapes: ${result.data.scrapes.synced}`,
+        });
+        fetchStats();
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Sync Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncLoading(null);
+    }
+  };
+
+  const cleanupOrphaned = async () => {
+    try {
+      setSyncLoading('cleanup');
+      const response = await fetch(apiConfig.getApiUrl('/v2/embeddings-sync/cleanup'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        toast({
+          title: 'Cleanup Completed',
+          description: `Removed ${result.data.removed} orphaned embeddings`,
+        });
+        fetchStats();
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Cleanup Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncLoading(null);
     }
   };
 
@@ -426,6 +586,142 @@ const EmbeddingsManagement = () => {
             <Button variant="outline" size="sm">
               <Trash2 className="h-4 w-4 mr-2" />
               Clear Old
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sync Operations */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-indigo-500" />
+              <div>
+                <CardTitle>Sync Operations</CardTitle>
+                <CardDescription>
+                  Sync embeddings to unified table for unified search
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchStats}
+              disabled={!!syncLoading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Sync Status */}
+          {syncStats && (
+            <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div>
+                <div className="text-sm font-medium">Document Embeddings</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-2xl font-bold">{syncStats.document_embeddings.synced}</span>
+                  <span className="text-muted-foreground">/ {syncStats.document_embeddings.total} synced</span>
+                </div>
+                {syncStats.document_embeddings.unsynced > 0 && (
+                  <Badge variant="secondary" className="mt-1">
+                    {syncStats.document_embeddings.unsynced} unsynced
+                  </Badge>
+                )}
+              </div>
+              <div>
+                <div className="text-sm font-medium">Scrape Embeddings</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-2xl font-bold">{syncStats.scrape_embeddings.synced}</span>
+                  <span className="text-muted-foreground">/ {syncStats.scrape_embeddings.total} synced</span>
+                </div>
+                {syncStats.scrape_embeddings.unsynced > 0 && (
+                  <Badge variant="secondary" className="mt-1">
+                    {syncStats.scrape_embeddings.unsynced} unsynced
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sync Actions */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Document Embeddings</Label>
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={syncDocumentEmbeddings}
+                disabled={!!syncLoading}
+              >
+                {syncLoading === 'documents' ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Sync to Unified
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Label>Scrape Embeddings</Label>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={generateScrapeEmbeddings}
+                  disabled={!!syncLoading}
+                >
+                  {syncLoading === 'generate-scrapes' ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Database className="h-4 w-4 mr-2" />
+                  )}
+                  Generate
+                </Button>
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  onClick={syncScrapeEmbeddings}
+                  disabled={!!syncLoading}
+                >
+                  {syncLoading === 'scrapes' ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Sync
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Bulk Actions */}
+          <div className="flex gap-2 pt-4 border-t">
+            <Button
+              onClick={syncAll}
+              disabled={!!syncLoading}
+              className="flex-1"
+            >
+              {syncLoading === 'all' ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mr-2" />
+              )}
+              Sync All to Unified
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={cleanupOrphaned}
+              disabled={!!syncLoading}
+            >
+              {syncLoading === 'cleanup' ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Cleanup Orphaned
             </Button>
           </div>
         </CardContent>
