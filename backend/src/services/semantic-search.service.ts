@@ -1031,6 +1031,9 @@ export class SemanticSearchService {
       // Refresh record types cache if needed
       await this.refreshUnifiedRecordTypes();
 
+      // Refresh source table weights cache
+      await this.refreshSourceTableWeights();
+
       // Build WHERE clause based on enabled record types
       const enabledTypes: string[] = [];
       if (this.enableMessageEmbeddings) enabledTypes.push('message_embeddings');
@@ -1038,8 +1041,20 @@ export class SemanticSearchService {
       if (this.enableScrapeEmbeddings) enabledTypes.push('scrape_embeddings');
 
       // DYNAMIC: Add all unified record types from database (not hardcoded!)
+      // IMPORTANT: Filter out tables with weight = 0 (disabled by user)
       if (this.enableUnifiedEmbeddings && this.unifiedRecordTypes.length > 0) {
-        enabledTypes.push(...this.unifiedRecordTypes);
+        const activeTypes = this.unifiedRecordTypes.filter(tableType => {
+          const weight = this.sourceTableWeights[tableType];
+          // Include if weight is undefined (default 1.0) or > 0
+          return weight === undefined || weight > 0;
+        });
+
+        if (activeTypes.length < this.unifiedRecordTypes.length) {
+          const excludedTypes = this.unifiedRecordTypes.filter(t => !activeTypes.includes(t));
+          console.log('[SemanticSearch] Excluding tables with weight=0:', excludedTypes);
+        }
+
+        enabledTypes.push(...activeTypes);
       }
 
       // If no types enabled, return empty results
