@@ -96,24 +96,6 @@ const defaultSettings = [
   { key: 'ragSettings.maxResults', value: '10' },
   { key: 'ragSettings.minResults', value: '3' },
   { key: 'ragSettings.enableHybridSearch', value: 'true' },
-  { key: 'ragSettings.enableKeywordBoost', value: 'true' },
-
-  // n8n settings
-  { key: 'n8n.url', value: 'http://localhost:5678' },
-  { key: 'n8n.apiKey', value: '' },
-
-  // SMTP settings
-  { key: 'smtp.host', value: '' },
-  { key: 'smtp.port', value: '587' },
-  { key: 'smtp.secure', value: 'false' },
-  { key: 'smtp.auth.user', value: '' },
-  { key: 'smtp.auth.pass', value: '' },
-
-  // Security settings
-  { key: 'security.jwtSecret', value: process.env.JWT_SECRET || 'your-super-secret-jwt-key' },
-  { key: 'security.jwtExpirationHours', value: '24' },
-
-  // Logging settings
   { key: 'logging.level', value: 'info' },
   { key: 'logging.enableConsole', value: 'true' },
   { key: 'logging.enableFile', value: 'false' }

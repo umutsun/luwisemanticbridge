@@ -2610,6 +2610,7 @@
       "help": "Enter ile gönder, Shift+Enter ile yeni satır"
     },
     "messageCount": "{{count}} mesaj",
+    "messagesLabel": "mesaj",
     "followUp": "İlgili sorular"
   }
 }

@@ -1510,7 +1510,7 @@ export default function ChatInterface() {
                 {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
               </p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>{t('chat.messageCount', { count: messages.length - 1 })}</span>
+                <span>{`${messages.length - 1} ${t('chat.messagesLabel', 'mesaj')}`}</span>
               </div>
             </div>
           </div>

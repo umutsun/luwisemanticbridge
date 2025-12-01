@@ -2904,7 +2904,8 @@
     "input": {
       "help": "Press Enter to send, Shift+Enter for new line"
     },
-    "messageCount": "{{count}} messages"
+    "messageCount": "{{count}} messages",
+    "messagesLabel": "messages"
   },
   "systemMonitor": {
     "title": "System Monitor",
