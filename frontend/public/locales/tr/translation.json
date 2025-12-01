@@ -670,7 +670,96 @@
     "description": "Tüm sistem kullanıcılarını görüntüleyin ve yönetin",
     "loadFailed": "Kullanıcılar yüklenemedi",
     "statusUpdated": "Kullanıcı durumu güncellendi",
-    "statusUpdateFailed": "Durum güncellenemedi"
+    "statusUpdateFailed": "Durum güncellenemedi",
+    "stats": {
+      "totalUsers": "Toplam Kullanıcı",
+      "activeUsers": "Aktif Kullanıcılar",
+      "premiumUsers": "Premium Kullanıcılar",
+      "totalTokensUsed": "Kullanılan Toplam Token"
+    },
+    "subscriptionManagement": {
+      "title": "Abonelik Yönetimi",
+      "description": "Abonelik planlarını yönetin",
+      "addPlan": "Plan Ekle",
+      "month": "ay",
+      "active": "Aktif",
+      "inactive": "İnaktif",
+      "editPlan": "Planı Düzenle",
+      "deletePlan": "Planı Sil",
+      "deletePlanConfirm": "Bu planı silmek istediğinizden emin misiniz?",
+      "users": "Kullanıcılar",
+      "ofAllUsers": "tüm kullanıcıların",
+      "tokensPerMonth": "token/ay",
+      "avgUsage": "Ort. Kullanım",
+      "tokens": "token",
+      "features": "Özellikler",
+      "moreFeatures": "daha fazla özellik"
+    },
+    "table": {
+      "title": "Kullanıcı Listesi",
+      "description": "Kullanıcıları arayın ve filtreleyin",
+      "searchPlaceholder": "Kullanıcı ara...",
+      "rolePlaceholder": "Rol seç",
+      "allRoles": "Tüm Roller",
+      "user": "Kullanıcı",
+      "admin": "Yönetici",
+      "premium": "Premium",
+      "statusPlaceholder": "Durum seç",
+      "allStatus": "Tüm Durumlar",
+      "active": "Aktif",
+      "inactive": "İnaktif",
+      "suspended": "Askıya Alındı",
+      "columns": {
+        "user": "Kullanıcı",
+        "role": "Rol",
+        "status": "Durum",
+        "subscription": "Abonelik",
+        "tokenUsage": "Token Kullanımı",
+        "messages": "Mesajlar",
+        "lastActivity": "Son Aktivite",
+        "actions": "İşlemler"
+      },
+      "joined": "Katıldı:",
+      "noPlan": "Plan Yok",
+      "left": "kaldı",
+      "sessions": "oturum",
+      "never": "Hiçbir zaman",
+      "editUser": "Kullanıcıyı Düzenle",
+      "resetPassword": "Şifreyi Sıfırla"
+    },
+    "dialogs": {
+      "editUser": {
+        "title": "Kullanıcıyı Düzenle",
+        "description": "Kullanıcı bilgilerini güncelleyin",
+        "name": "Ad",
+        "email": "E-posta",
+        "role": "Rol",
+        "status": "Durum",
+        "save": "Kaydet",
+        "cancel": "İptal"
+      },
+      "resetPassword": {
+        "title": "Şifreyi Sıfırla",
+        "description": "Kullanıcı için yeni şifre belirleyin",
+        "newPassword": "Yeni Şifre",
+        "confirmPassword": "Şifreyi Onayla",
+        "reset": "Sıfırla",
+        "cancel": "İptal"
+      },
+      "subscriptionPlan": {
+        "title": "Abonelik Planı",
+        "editTitle": "Planı Düzenle",
+        "addTitle": "Yeni Plan Ekle",
+        "name": "Plan Adı",
+        "price": "Fiyat",
+        "monthlyTokens": "Aylık Token",
+        "features": "Özellikler",
+        "addFeature": "Özellik Ekle",
+        "isActive": "Aktif",
+        "save": "Kaydet",
+        "cancel": "İptal"
+      }
+    }
   },
   "toasts": {
     "settingsSavedSuccessTitle": "Başarılı ✨",
@@ -1392,7 +1481,7 @@
     "accountDetails": {
       "role": "Rol",
       "status": "Durum",
-      "emailVerification": "E-posta Doğrulaması",
+      "emailVerification": "E-posta Doğrulama",
       "membershipDate": "Üyelik Tarihi",
       "admin": "Yönetici",
       "user": "Kullanıcı",
@@ -1401,15 +1490,16 @@
       "unverified": "Doğrulanmamış"
     },
     "actions": {
-      "backToHome": "Ana Sayfaya Dön"
+      "backToHome": "Ana Sayfaya Dön",
+      "changePassword": "Şifre Değiştir"
     },
     "notifications": {
-      "profileUpdated": "Profil bilgileriniz başarıyla güncellendi",
-      "profileUpdateFailed": "Profil bilgileri güncellenemedi",
+      "profileUpdated": "Profil bilgileriniz güncellendi",
+      "profileUpdateFailed": "Profil güncellenemedi",
       "passwordChanged": "Şifreniz başarıyla değiştirildi",
       "passwordChangeFailed": "Şifre değiştirilemedi",
-      "photoUpdated": "Profil fotoğrafınız başarıyla güncellendi",
-      "photoUpdateFailed": "Profil fotoğrafı güncellenemedi"
+      "photoUpdated": "Profil fotoğrafınız güncellendi",
+      "photoUpdateFailed": "Profil fotoğrafı yüklenemedi"
     }
   },
   "terminal": {

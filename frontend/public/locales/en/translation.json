@@ -651,7 +651,9 @@
       "newUsersThisWeek": "New Users This Week",
       "newUsersThisMonth": "New Users This Month",
       "adminUsers": "Admin Users",
-      "regularUsers": "Regular Users"
+      "regularUsers": "Regular Users",
+      "premiumUsers": "Premium Users",
+      "totalTokensUsed": "Total Tokens Used"
     },
     "search": {
       "placeholder": "Search users...",
@@ -665,13 +667,43 @@
       "user": "User"
     },
     "table": {
+      "title": "User List",
+      "description": "Search and filter users",
+      "searchPlaceholder": "Search users...",
+      "rolePlaceholder": "Select role",
+      "allRoles": "All Roles",
+      "user": "User",
+      "admin": "Admin",
+      "premium": "Premium",
+      "statusPlaceholder": "Select status",
+      "allStatus": "All Statuses",
+      "active": "Active",
+      "inactive": "Inactive",
+      "suspended": "Suspended",
       "name": "Name",
       "email": "Email",
       "role": "Role",
       "status": "Status",
       "lastLogin": "Last Login",
       "createdAt": "Created",
-      "actions": "Actions"
+      "actions": "Actions",
+      "columns": {
+        "user": "User",
+        "role": "Role",
+        "status": "Status",
+        "subscription": "Subscription",
+        "tokenUsage": "Token Usage",
+        "messages": "Messages",
+        "lastActivity": "Last Activity",
+        "actions": "Actions"
+      },
+      "joined": "Joined:",
+      "noPlan": "No Plan",
+      "left": "left",
+      "sessions": "sessions",
+      "never": "Never",
+      "editUser": "Edit User",
+      "resetPassword": "Reset Password"
     },
     "actions": {
       "viewDetails": "View Details",
@@ -842,6 +874,57 @@
       "ipAddress": "IP Address",
       "userAgent": "User Agent",
       "noActivityFound": "No activity found"
+    },
+    "subscriptionManagement": {
+      "title": "Subscription Management",
+      "description": "Manage subscription plans",
+      "addPlan": "Add Plan",
+      "month": "month",
+      "active": "Active",
+      "inactive": "Inactive",
+      "editPlan": "Edit Plan",
+      "deletePlan": "Delete Plan",
+      "deletePlanConfirm": "Are you sure you want to delete this plan?",
+      "users": "Users",
+      "ofAllUsers": "of all users",
+      "tokensPerMonth": "tokens/month",
+      "avgUsage": "Avg. Usage",
+      "tokens": "tokens",
+      "features": "Features",
+      "moreFeatures": "more features"
+    },
+    "dialogs": {
+      "editUser": {
+        "title": "Edit User",
+        "description": "Update user information",
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "status": "Status",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "resetPassword": {
+        "title": "Reset Password",
+        "description": "Set a new password for the user",
+        "newPassword": "New Password",
+        "confirmPassword": "Confirm Password",
+        "reset": "Reset",
+        "cancel": "Cancel"
+      },
+      "subscriptionPlan": {
+        "title": "Subscription Plan",
+        "editTitle": "Edit Plan",
+        "addTitle": "Add New Plan",
+        "name": "Plan Name",
+        "price": "Price",
+        "monthlyTokens": "Monthly Tokens",
+        "features": "Features",
+        "addFeature": "Add Feature",
+        "isActive": "Active",
+        "save": "Save",
+        "cancel": "Cancel"
+      }
     },
     "settings": {
       "title": "User Settings",
@@ -1598,7 +1681,8 @@
       "unverified": "Unverified"
     },
     "actions": {
-      "backToHome": "Back to Home"
+      "backToHome": "Back to Home",
+      "changePassword": "Change Password"
     },
     "notifications": {
       "profileUpdated": "Profile information updated successfully",

@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { User, Lock, Mail, Save, ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
+
+import { User, Lock, Save, ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -90,7 +90,7 @@ export default function ProfilePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Profil güncellenemedi');
+        throw new Error(errorData.error || t('profile.notifications.profileUpdateFailed'));
       }
 
       const data = await response.json();
@@ -99,15 +99,15 @@ export default function ProfilePage() {
       localStorage.setItem('user', JSON.stringify(data.user));
 
       toast({
-        title: 'Başarılı',
-        description: 'Profil bilgileriniz güncellendi',
+        title: t('common.success'),
+        description: t('profile.notifications.profileUpdated'),
       });
 
     } catch (error) {
       console.error('Profile update error:', error);
       toast({
-        title: 'Hata',
-        description: error instanceof Error ? error.message : 'Profil güncellenemedi',
+        title: t('common.error'),
+        description: error instanceof Error ? error.message : t('profile.notifications.profileUpdateFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -124,19 +124,19 @@ export default function ProfilePage() {
     const newErrors: typeof errors = {};
 
     if (!passwordData.currentPassword) {
-      newErrors.currentPassword = 'Mevcut şifre gerekli';
+      newErrors.currentPassword = t('profile.passwordChange.errors.currentPasswordRequired');
     }
 
     if (!passwordData.newPassword) {
-      newErrors.newPassword = 'Yeni şifre gerekli';
+      newErrors.newPassword = t('profile.passwordChange.errors.newPasswordRequired');
     } else if (passwordData.newPassword.length < 6) {
-      newErrors.newPassword = 'Şifre en az 6 karakter olmalı';
+      newErrors.newPassword = t('profile.passwordChange.errors.newPasswordMinLength');
     }
 
     if (!passwordData.confirmPassword) {
-      newErrors.confirmPassword = 'Şifre onayı gerekli';
+      newErrors.confirmPassword = t('profile.passwordChange.errors.confirmPasswordRequired');
     } else if (passwordData.newPassword !== passwordData.confirmPassword) {
-      newErrors.confirmPassword = 'Şifreler eşleşmiyor';
+      newErrors.confirmPassword = t('profile.passwordChange.errors.passwordsDoNotMatch');
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -160,12 +160,12 @@ export default function ProfilePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Şifre değiştirilemedi');
+        throw new Error(errorData.error || t('profile.notifications.passwordChangeFailed'));
       }
 
       toast({
-        title: 'Başarılı',
-        description: 'Şifreniz başarıyla değiştirildi',
+        title: t('common.success'),
+        description: t('profile.notifications.passwordChanged'),
       });
 
       // Reset password form
@@ -179,8 +179,8 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Password change error:', error);
       toast({
-        title: 'Hata',
-        description: error instanceof Error ? error.message : 'Şifre değiştirilemedi',
+        title: t('common.error'),
+        description: error instanceof Error ? error.message : t('profile.notifications.passwordChangeFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -195,8 +195,8 @@ export default function ProfilePage() {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       toast({
-        title: 'Hata',
-        description: 'Lütfen geçerli bir resim dosyası seçin',
+        title: t('common.error'),
+        description: t('profile.profileImage.errors.invalidFileType'),
         variant: 'destructive',
       });
       return;
@@ -205,8 +205,8 @@ export default function ProfilePage() {
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: 'Hata',
-        description: 'Resim dosyası maksimum 5MB olabilir',
+        title: t('common.error'),
+        description: t('profile.profileImage.errors.fileTooLarge'),
         variant: 'destructive',
       });
       return;
@@ -228,7 +228,7 @@ export default function ProfilePage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Profil fotoğrafı yüklenemedi');
+        throw new Error(errorData.error || t('profile.profileImage.errors.uploadFailed'));
       }
 
       const data = await response.json();
@@ -240,15 +240,15 @@ export default function ProfilePage() {
       setProfileImage(data.profileImage);
 
       toast({
-        title: 'Başarılı',
-        description: 'Profil fotoğrafınız güncellendi',
+        title: t('common.success'),
+        description: t('profile.notifications.photoUpdated'),
       });
 
     } catch (error) {
       console.error('Image upload error:', error);
       toast({
-        title: 'Hata',
-        description: error instanceof Error ? error.message : 'Profil fotoğrafı yüklenemedi',
+        title: t('common.error'),
+        description: error instanceof Error ? error.message : t('profile.notifications.photoUpdateFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -344,7 +344,7 @@ export default function ProfilePage() {
                     className="w-full"
                   >
                     <Lock className="h-4 w-4 mr-2" />
-                    Şifre Değiştir
+                    {t('profile.actions.changePassword')}
                   </Button>
                 ) : (
                   <form onSubmit={handlePasswordChange} className="space-y-4">
@@ -469,9 +469,9 @@ export default function ProfilePage() {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Profil Bilgileri</CardTitle>
+                <CardTitle>{t('profile.profileImage.title')}</CardTitle>
                 <CardDescription>
-                  Hesap bilgilerinizi ve profil fotoğrafınızı yönetin
+                  {t('profile.profileImage.description')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -518,7 +518,7 @@ export default function ProfilePage() {
                       )}
                     </Button>
                   </div>
-                  <p className="text-sm text-gray-500 mt-3">Profil fotoğrafını değiştirmek için tıklayın</p>
+                  <p className="text-sm text-gray-500 mt-3">{t('profile.profileImage.changePhoto')}</p>
                 </div>
 
                 {/* User Info Section */}
@@ -530,25 +530,25 @@ export default function ProfilePage() {
                 {/* Account Details */}
                 <div className="space-y-3 pt-4 border-t">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Rol</span>
+                    <span className="text-muted-foreground">{t('profile.accountDetails.role')}</span>
                     <span className="font-medium">
-                      {user.role === 'admin' ? 'Yönetici' : 'Kullanıcı'}
+                      {user.role === 'admin' ? t('profile.accountDetails.admin') : t('profile.accountDetails.user')}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Durum</span>
+                    <span className="text-muted-foreground">{t('profile.accountDetails.status')}</span>
                     <span className="font-medium">
-                      {user.status === 'active' ? 'Aktif' : user.status}
+                      {user.status === 'active' ? t('profile.accountDetails.active') : user.status}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">E-posta Doğrulama</span>
+                    <span className="text-muted-foreground">{t('profile.accountDetails.emailVerification')}</span>
                     <span className="font-medium">
-                      {user.email_verified ? 'Doğrulanmış' : 'Doğrulanmamış'}
+                      {user.email_verified ? t('profile.accountDetails.verified') : t('profile.accountDetails.unverified')}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Üyelik Tarihi</span>
+                    <span className="text-muted-foreground">{t('profile.accountDetails.membershipDate')}</span>
                     <span className="font-medium">
                       {new Date(user.created_at).toLocaleDateString('tr-TR')}
                     </span>
@@ -563,7 +563,7 @@ export default function ProfilePage() {
                 <Link href="/" className="block">
                   <Button variant="outline" className="w-full">
                     <ArrowLeft className="h-4 w-4 mr-2" />
-                    Ana Sayfaya Dön
+                    {t('profile.actions.backToHome')}
                   </Button>
                 </Link>
               </CardContent>

@@ -2041,14 +2041,18 @@ function QuestionPatternsEditor({
               >
                 <Settings className="h-4 w-4" />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeletePattern(pattern.name)}
-                className="text-red-500 hover:text-red-700"
+              <ConfirmTooltip
+                message={`Delete "${pattern.name}"?`}
+                onConfirm={() => handleDeletePattern(pattern.name)}
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </ConfirmTooltip>
             </div>
           </div>
         ))}
@@ -2563,71 +2567,94 @@ function RAGSettings() {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Data Sources</h3>
-              <p className="text-xs text-muted-foreground">
-                Control which data sources are included in semantic search results
-              </p>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between py-2">
-                  <div className="flex-1">
-                    <Label>Database Content</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Include content from your connected database
-                    </p>
+              <h3 className="text-lg font-medium">Data Source Priorities</h3>
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+                <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                  <strong>Priority System:</strong> Set priority (0-10) for each data source. Higher values = more weight in search results. Set to 0 to disable a source completely.
+                </AlertDescription>
+              </Alert>
+              <div className="space-y-4">
+                {/* Database Content Priority */}
+                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Database Content</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">Connected database tables</p>
+                    </div>
+                    <Badge variant={(tempRAGConfig?.ragSettings?.databasePriority ?? 8) > 0 ? "default" : "secondary"}>
+                      {tempRAGConfig?.ragSettings?.databasePriority ?? 8}
+                    </Badge>
                   </div>
-                  <Switch
-                    checked={tempRAGConfig?.ragSettings?.enableUnifiedEmbeddings ?? ragConfig?.ragSettings?.enableUnifiedEmbeddings ?? true}
-                    onCheckedChange={(checked) => updateRAGSetting('enableUnifiedEmbeddings', checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <div className="flex-1">
-                    <Label>Chat Messages</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Previous conversations and Q&A
-                    </p>
-                  </div>
-                  <Switch
-                    checked={tempRAGConfig?.ragSettings?.enableMessageEmbeddings ?? ragConfig?.ragSettings?.enableMessageEmbeddings ?? true}
-                    onCheckedChange={(checked) => updateRAGSetting('enableMessageEmbeddings', checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <div className="flex-1">
-                    <Label>Documents</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Uploaded PDFs, Word docs, etc.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={tempRAGConfig?.ragSettings?.enableDocumentEmbeddings ?? ragConfig?.ragSettings?.enableDocumentEmbeddings ?? true}
-                    onCheckedChange={(checked) => updateRAGSetting('enableDocumentEmbeddings', checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <div className="flex-1">
-                    <Label>Web Content</Label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Scraped web pages
-                    </p>
-                  </div>
-                  <Switch
-                    checked={tempRAGConfig?.ragSettings?.enableScrapeEmbeddings ?? ragConfig?.ragSettings?.enableScrapeEmbeddings ?? true}
-                    onCheckedChange={(checked) => updateRAGSetting('enableScrapeEmbeddings', checked)}
-                  />
-                </div>
-                <div className="mt-4">
-                  <Label>Database Content Priority: {tempRAGConfig?.ragSettings?.unifiedEmbeddingsPriority || ragConfig?.ragSettings?.unifiedEmbeddingsPriority || 1}</Label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Boost priority for database content (1-10, higher = more priority)
-                  </p>
                   <Slider
-                    value={[tempRAGConfig?.ragSettings?.unifiedEmbeddingsPriority || ragConfig?.ragSettings?.unifiedEmbeddingsPriority || 1]}
+                    value={[tempRAGConfig?.ragSettings?.databasePriority ?? 8]}
                     max={10}
-                    min={1}
+                    min={0}
                     step={1}
                     className="mt-2"
-                    onValueChange={([value]) => updateRAGSetting('unifiedEmbeddingsPriority', value)}
+                    onValueChange={([value]) => updateRAGSetting('databasePriority', value)}
+                  />
+                </div>
+
+                {/* Documents Priority */}
+                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Documents</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">Uploaded PDFs, Word docs, etc.</p>
+                    </div>
+                    <Badge variant={(tempRAGConfig?.ragSettings?.documentsPriority ?? 5) > 0 ? "default" : "secondary"}>
+                      {tempRAGConfig?.ragSettings?.documentsPriority ?? 5}
+                    </Badge>
+                  </div>
+                  <Slider
+                    value={[tempRAGConfig?.ragSettings?.documentsPriority ?? 5]}
+                    max={10}
+                    min={0}
+                    step={1}
+                    className="mt-2"
+                    onValueChange={([value]) => updateRAGSetting('documentsPriority', value)}
+                  />
+                </div>
+
+                {/* Chat Messages Priority */}
+                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Chat Messages</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">Previous conversations and Q&A</p>
+                    </div>
+                    <Badge variant={(tempRAGConfig?.ragSettings?.chatPriority ?? 3) > 0 ? "default" : "secondary"}>
+                      {tempRAGConfig?.ragSettings?.chatPriority ?? 3}
+                    </Badge>
+                  </div>
+                  <Slider
+                    value={[tempRAGConfig?.ragSettings?.chatPriority ?? 3]}
+                    max={10}
+                    min={0}
+                    step={1}
+                    className="mt-2"
+                    onValueChange={([value]) => updateRAGSetting('chatPriority', value)}
+                  />
+                </div>
+
+                {/* Web Content Priority */}
+                <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">Web Content</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">Scraped web pages</p>
+                    </div>
+                    <Badge variant={(tempRAGConfig?.ragSettings?.webPriority ?? 4) > 0 ? "default" : "secondary"}>
+                      {tempRAGConfig?.ragSettings?.webPriority ?? 4}
+                    </Badge>
+                  </div>
+                  <Slider
+                    value={[tempRAGConfig?.ragSettings?.webPriority ?? 4]}
+                    max={10}
+                    min={0}
+                    step={1}
+                    className="mt-2"
+                    onValueChange={([value]) => updateRAGSetting('webPriority', value)}
                   />
                 </div>
               </div>
@@ -2643,37 +2670,6 @@ function RAGSettings() {
               <CardTitle>Chat Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Branding */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Branding</h3>
-
-                <div className="space-y-2">
-                  <Label htmlFor="chatbotTitle">Title</Label>
-                  <Input
-                    id="chatbotTitle"
-                    value={tempChatbotConfig?.chatbot?.title || chatbotConfig?.chatbot?.title || ''}
-                    onChange={(e) => updateChatbotSetting('title', e.target.value)}
-                    placeholder="Enter title"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Appears in the chat header
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="chatbotLogo">Logo URL</Label>
-                  <Input
-                    id="chatbotLogo"
-                    value={tempChatbotConfig?.chatbot?.logoUrl || chatbotConfig?.chatbot?.logoUrl || ''}
-                    onChange={(e) => updateChatbotSetting('logoUrl', e.target.value)}
-                    placeholder="Enter logo URL"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    URL to your logo image
-                  </p>
-                </div>
-              </div>
-
               {/* Opening Messages */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Opening Messages</h3>
@@ -2704,12 +2700,25 @@ function RAGSettings() {
                     Placeholder text in the chat input field
                   </p>
                 </div>
+              </div>
+
+              {/* Suggestion Cards - Initial suggestions shown on chat load */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Suggestion Cards</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Initial question suggestions shown when chat loads
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs">Welcome Screen</Badge>
+                </div>
 
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label>Enable Question Suggestions</Label>
+                    <Label>Enable Suggestion Cards</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Show suggested questions in chat interface
+                      Show clickable question cards on welcome screen
                     </p>
                   </div>
                   <Switch
@@ -2718,23 +2727,98 @@ function RAGSettings() {
                   />
                 </div>
 
-                {/* Keyword-Based Suggestions - Disabled (not implemented yet, reserved for future) */}
-                <div className="flex items-center justify-between opacity-50">
+                <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label>Use Keyword-Based Suggestions</Label>
+                    <Label>Max Suggestion Cards</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Enable to use keywords below for generating suggestions. When disabled, shows popular questions from database. (Feature will be implemented later)
+                      Maximum number of suggestion cards to show (1-6)
                     </p>
                   </div>
-                  <Switch disabled checked={false} />
+                  <div className="w-20">
+                    <Input
+                      type="number"
+                      value={tempChatbotConfig?.chatbot?.maxSuggestionCards || 4}
+                      onChange={(e) =>
+                        updateChatbotSetting(
+                          "maxSuggestionCards",
+                          Math.min(6, Math.max(1, parseInt(e.target.value) || 4))
+                        )
+                      }
+                      min="1"
+                      max="6"
+                    />
+                  </div>
                 </div>
 
-                {/* Suggestion Keywords - Disabled (not implemented yet) */}
-                <div className="space-y-2 opacity-50">
-                  <Label htmlFor="suggestionKeywords">Suggestion Keywords</Label>
-                  <Input disabled id="suggestionKeywords" value="" placeholder="Feature will be implemented later" />
-                  <p className="text-xs text-muted-foreground">Reserved for future use</p>
+                <div className="space-y-2">
+                  <Label>Custom Suggestions (one per line)</Label>
+                  <Textarea
+                    value={tempChatbotConfig?.chatbot?.customSuggestions || ''}
+                    onChange={(e) => updateChatbotSetting('customSuggestions', e.target.value)}
+                    placeholder="Enter custom suggestions, one per line...&#10;Example: Fiyat aralığı nedir?&#10;Example: Hangi bölgelerde hizmet veriyorsunuz?"
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to auto-generate from database content
+                  </p>
                 </div>
+              </div>
+
+              {/* Follow-up Questions - Questions shown after AI response */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Follow-up Questions</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Contextual questions shown after each AI response
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs">After Response</Badge>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label>Enable Follow-up Questions</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Show related questions based on conversation context
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempChatbotConfig?.chatbot?.autoGenerateQuestions ?? true}
+                    onCheckedChange={(checked) =>
+                      updateChatbotSetting("autoGenerateQuestions", checked)
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label>Max Follow-up Questions</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Maximum questions to show after response (1-5)
+                    </p>
+                  </div>
+                  <div className="w-20">
+                    <Input
+                      type="number"
+                      value={tempChatbotConfig?.chatbot?.maxFollowUpQuestions || 3}
+                      onChange={(e) =>
+                        updateChatbotSetting(
+                          "maxFollowUpQuestions",
+                          Math.min(5, Math.max(1, parseInt(e.target.value) || 3))
+                        )
+                      }
+                      min="1"
+                      max="5"
+                    />
+                  </div>
+                </div>
+
+                <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
+                  <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
+                    Follow-up questions are generated using the <strong>Question Generation Patterns</strong> configured below. Add domain-specific patterns for better results.
+                  </AlertDescription>
+                </Alert>
               </div>
 
               {/* Response Generation Settings */}
@@ -2790,68 +2874,10 @@ function RAGSettings() {
                     </div>
                   </div>
 
-                  {/* Question Template - Disabled (not currently used)
-                <div>
-                  <Label htmlFor="questionTemplate">Question Template</Label>
-                  <Textarea disabled id="questionTemplate" value="Future feature" rows={2} />
-                  <p className="text-xs text-muted-foreground mt-1">Reserved for future use</p>
-                </div>
-                */}
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <Label>Auto-generate Questions</Label>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Automatically generate relevant questions
-                      </p>
-                    </div>
-                    <Switch
-                      checked={tempChatbotConfig?.chatbot?.autoGenerateQuestions ?? false}
-                      onCheckedChange={(checked) =>
-                        updateChatbotSetting("autoGenerateQuestions", checked)
-                      }
-                    />
-                  </div>
                 </div>
               </div>
 
               {/* Note: Max/Min Results are configured in RAG Settings tab */}
-            </CardContent>
-          </Card>
-
-          {/* Template Management - Right Column (Experimental) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                Template Management
-                <Badge variant="outline" className="text-xs">Experimental</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
-                <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
-                  <strong>Experimental Feature:</strong> Template system allows customizing chat interface per customer without code changes.
-                </AlertDescription>
-              </Alert>
-
-              {/* Template Selection */}
-              <div className="space-y-2">
-                <Label>Active Template</Label>
-                <TemplateSelector />
-                <p className="text-xs text-muted-foreground">
-                  Select which template to use for the chat interface
-                </p>
-              </div>
-
-              {/* Quick Info */}
-              <div className="space-y-2 pt-2">
-                <h4 className="text-sm font-medium">Current Setup:</h4>
-                <ul className="text-xs space-y-1 text-muted-foreground">
-                  <li>• Base template: Always available</li>
-                  <li>• Custom templates: Add via code (see docs)</li>
-                  <li>• Location: frontend/src/templates/</li>
-                </ul>
-              </div>
             </CardContent>
           </Card>
 
@@ -3946,26 +3972,67 @@ function AppSettings() {
             </CardContent>
           </Card>
 
-          {/* Quick Chatbot Settings */}
+          {/* Chat Branding */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Quick Settings</CardTitle>
+              <CardTitle className="text-base">Chat Branding</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Alert className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900">
-                <AlertDescription className="text-xs text-amber-800 dark:text-amber-200">
-                  For detailed chat configuration (welcome message, suggestions, response limits), go to the <strong>RAG</strong> tab.
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+                <AlertDescription className="text-xs text-blue-800 dark:text-blue-200">
+                  Configure branding for the chat interface. Title and logo appear in the chat header.
                 </AlertDescription>
               </Alert>
 
               <div className="space-y-2">
-                <Label>Primary Color</Label>
+                <Label>Chat Title</Label>
                 <Input
-                  type="color"
-                  value={tempConfig?.primaryColor || '#3b82f6'}
-                  onChange={(e) => setTempConfig({ ...tempConfig, primaryColor: e.target.value })}
-                  className="h-10 w-full cursor-pointer"
+                  value={tempConfig?.chatTitle || ''}
+                  onChange={(e) => setTempConfig({ ...tempConfig, chatTitle: e.target.value })}
+                  placeholder="AI Assistant"
                 />
+                <p className="text-xs text-muted-foreground">Displayed in the chat header</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Chat Logo URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={tempConfig?.chatLogoUrl || tempConfig?.logoUrl || ''}
+                    onChange={(e) => setTempConfig({ ...tempConfig, chatLogoUrl: e.target.value })}
+                    placeholder="https://example.com/logo.png"
+                    className="flex-1"
+                  />
+                  {(tempConfig?.chatLogoUrl || tempConfig?.logoUrl) && (
+                    <div className="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 flex items-center justify-center bg-white dark:bg-gray-800 flex-shrink-0">
+                      <img
+                        src={tempConfig?.chatLogoUrl || tempConfig?.logoUrl}
+                        alt="Chat Logo"
+                        className="w-6 h-6 object-contain"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Logo shown in chat header (uses App logo if not set)</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Primary Color</Label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="color"
+                    value={tempConfig?.primaryColor || '#3b82f6'}
+                    onChange={(e) => setTempConfig({ ...tempConfig, primaryColor: e.target.value })}
+                    className="h-10 w-16 cursor-pointer p-1"
+                  />
+                  <Input
+                    value={tempConfig?.primaryColor || '#3b82f6'}
+                    onChange={(e) => setTempConfig({ ...tempConfig, primaryColor: e.target.value })}
+                    placeholder="#3b82f6"
+                    className="flex-1"
+                  />
+                </div>
                 <p className="text-xs text-muted-foreground">Main accent color for chat interface</p>
               </div>
             </CardContent>
