@@ -2443,5 +2443,33 @@
       "passwordPlaceholder": "•••••••",
       "confirmPasswordPlaceholder": "•••••••"
     }
+  },
+  "chat": {
+    "source": {
+      "default": "Varsayılan",
+      "table": {
+        "documents": "Dokümanlar",
+        "scraped_content": "Taranmış İçerik",
+        "message_history": "Mesaj Geçmişi",
+        "legal_documents": "Yasal Dokümanlar",
+        "tax_regulations": "Vergi Mevzuatı",
+        "court_decisions": "Mahkeme Kararları",
+        "commercial_law": "Ticaret Hukuku",
+        "tax_law": "Vergi Hukuku",
+        "labor_law": "İş Hukuku",
+        "corporate_law": "Şirketler Hukuku"
+      }
+    },
+    "errors": {
+      "adminLimit": "Admin kullanıcı olarak sınırsız erişiminiz olmalı. Ancak teknik bir sorun görüyoruz.",
+      "queryLimit": "Üzgünüz, aylık soru limitinize ulaştınız. Devam etmek için lütfen abonelik planınızı yükseltin veya bir yöneticiyle iletişime geçin.",
+      "general": "Üzgünüz, bir hata oluştu."
+    },
+    "newChat": "Yeni Sohbet",
+    "input": {
+      "help": "Enter ile gönder, Shift+Enter ile yeni satır"
+    },
+    "messageCount": "{{count}} mesaj",
+    "followUp": "İlgili sorular"
   }
 }

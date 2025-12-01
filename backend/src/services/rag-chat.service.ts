@@ -1038,8 +1038,29 @@ export class RAGChatService {
       const hasAsi = /aşı|aşılama|bağışıklık/i.test(excerpt) || /aşı/i.test(title);
       const hasSaglik = /sağlık|hastane|tedavi|hastalık/i.test(excerpt) || /sağlık|hastane/i.test(title);
 
+      // Real estate patterns
+      const hasEmlak = /satılık|kiralık|emlak|daire|konut|arsa|tarla|bahçe|villa|müstakil/i.test(excerpt) ||
+                       /satılık|kiralık|arsa|tarla|bahçe|daire|konut/i.test(title);
+      const hasFiyat = /fiyat|tl|₺|lira|m²|metrekare/i.test(excerpt);
+      const hasKonum = /ilçe|mahalle|cadde|sokak|bölge|mevki|lokasyon/i.test(excerpt);
+      const hasOzellik = /oda|salon|banyo|balkon|otopark|asansör|site|güvenlik/i.test(excerpt);
+      const hasMetrekare = /m²|metrekare|\d+\s*m2/i.test(excerpt);
+
       // Generate questions that INCLUDE the topic for context
-      if (hasAsi && hasBasvuru) {
+      // Real estate questions first (before tax questions)
+      if (hasEmlak && hasFiyat && hasMetrekare) {
+        smartQuestion = `${topic} için m² fiyatı ve toplam maliyet ne kadardır?`;
+      } else if (hasEmlak && hasOzellik) {
+        smartQuestion = `${topic} özellikleri ve imkanları nelerdir?`;
+      } else if (hasEmlak && hasKonum) {
+        smartQuestion = `${topic} lokasyonu ve çevre özellikleri nasıldır?`;
+      } else if (hasEmlak && hasFiyat) {
+        smartQuestion = `${topic} fiyatı ve ödeme seçenekleri nelerdir?`;
+      } else if (hasEmlak && hasMetrekare) {
+        smartQuestion = `${topic} büyüklüğü ve alan kullanımı nasıldır?`;
+      } else if (hasEmlak) {
+        smartQuestion = `${topic} özellikleri ve fiyat bilgisi nedir?`;
+      } else if (hasAsi && hasBasvuru) {
         smartQuestion = `${topic} için başvuru süreci ve gerekli belgeler nelerdir?`;
       } else if (hasAsi && hasSure) {
         smartQuestion = `${topic} ne zaman ve hangi aralıklarla yapılmalı?`;
@@ -1066,8 +1087,14 @@ export class RAGChatService {
       } else if (hasSure) {
         smartQuestion = `${topic} için süreler ve tarihler nelerdir?`;
       } else {
-        // Default: use topic directly in question
-        smartQuestion = `${topic} hakkında detaylı bilgi verir misiniz?`;
+        // Default: use varied question patterns to avoid generic filter
+        const defaultQuestions = [
+          `${topic} konusunda önemli noktalar nelerdir?`,
+          `${topic} ile ilgili temel bilgiler nedir?`,
+          `${topic} kapsamında nelere dikkat edilmeli?`,
+          `${topic} hakkında merak edilenler nelerdir?`
+        ];
+        smartQuestion = defaultQuestions[Math.floor(Math.random() * defaultQuestions.length)];
       }
     } else {
       // English with topic
