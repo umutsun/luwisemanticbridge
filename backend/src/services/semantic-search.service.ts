@@ -1120,21 +1120,23 @@ export class SemanticSearchService {
         console.log('[SemanticSearch] Including document_embeddings in search');
       }
 
-      // Include scrape_embeddings if enabled
+      // Include scrape_embeddings if enabled - use unified_embeddings with source_table = 'scrapes'
+      // (scrape_embeddings table has been migrated to unified_embeddings)
       if (this.enableScrapeEmbeddings && enabledTypes.includes('scrape_embeddings')) {
         unionParts.push(`
           SELECT
-            se.id,
-            COALESCE(se.metadata, '{}'::jsonb) AS metadata,
-            COALESCE(se.content, se.processed_content, se.original_content, '') AS content,
-            se.id::text AS source_id,
-            se.embedding <=> $1::vector AS distance,
-            1 - (se.embedding <=> $1::vector) AS similarity_score,
+            ue.id,
+            ue.metadata,
+            ue.content,
+            ue.source_id::text AS source_id,
+            ue.embedding <=> $1::vector AS distance,
+            1 - (ue.embedding <=> $1::vector) AS similarity_score,
             'scrape_embeddings' AS record_type
-          FROM scrape_embeddings se
-          WHERE se.embedding IS NOT NULL
+          FROM unified_embeddings ue
+          WHERE ue.embedding IS NOT NULL
+            AND ue.source_table = 'scrapes'
         `);
-        console.log('[SemanticSearch] Including scrape_embeddings in search');
+        console.log('[SemanticSearch] Including scrape_embeddings (from unified_embeddings) in search');
       }
 
       // If no sources are enabled, return empty
