@@ -614,7 +614,7 @@ router.put('/:categoryName', async (req: Request, res: Response) => {
     const settings = req.body;
 
     // Validate category name
-    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis', 'ocr'];
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'prompts', 'chatbot', 'redis', 'ocr', 'advanced', 'storage', 'crawler', 'smtp', 'integrations'];
     if (!validCategories.includes(categoryName)) {
       return res.status(400).json({ error: `Invalid category: ${categoryName}` });
     }
@@ -698,7 +698,7 @@ router.put('/category/:categoryName', async (req: Request, res: Response) => {
     const settings = req.body;
 
     // Validate category name
-    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'ocr'];
+    const validCategories = ['llm', 'embeddings', 'rag', 'database', 'security', 'app', 'scraper', 'translation', 'ocr', 'advanced', 'storage', 'crawler', 'smtp', 'integrations'];
     if (!validCategories.includes(categoryName)) {
       return res.status(400).json({ error: `Invalid category: ${categoryName}` });
     }
