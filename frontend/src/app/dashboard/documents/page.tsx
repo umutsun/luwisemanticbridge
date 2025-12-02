@@ -540,10 +540,23 @@ export default function DocumentManagerPage() {
       return;
     }
 
-    setDriveImporting(true);
+    // Close modal immediately and show progress like file upload
+    const fileCount = selectedDriveFiles.size;
+    const fileIds = Array.from(selectedDriveFiles);
+    setShowDriveModal(false);
+    setUploading(true);
+    setUploadProgress(10);
+
     try {
       const token = localStorage.getItem('token');
-      if (!token) return;
+      if (!token) {
+        setUploading(false);
+        setUploadProgress(0);
+        return;
+      }
+
+      // Simulate progress
+      setUploadProgress(30);
 
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import`, {
         method: 'POST',
@@ -551,32 +564,36 @@ export default function DocumentManagerPage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          fileIds: Array.from(selectedDriveFiles)
-        })
+        body: JSON.stringify({ fileIds })
       });
+
+      setUploadProgress(70);
 
       const data = await response.json();
 
       if (response.ok) {
-        toast({
-          title: 'Import Complete',
-          description: `Successfully imported ${data.imported?.length || 0} file(s)${data.failed?.length ? `, ${data.failed.length} failed` : ''}`
-        });
-        setSelectedDriveFiles(new Set());
-        setShowDriveModal(false);
-        fetchDocuments(); // Refresh document list
+        setUploadProgress(100);
+        setTimeout(() => {
+          setUploading(false);
+          setUploadProgress(0);
+          toast({
+            title: 'Import Complete',
+            description: `Successfully imported ${data.imported?.length || 0} file(s)${data.failed?.length ? `, ${data.failed.length} failed` : ''}`
+          });
+          setSelectedDriveFiles(new Set());
+          fetchDocuments(); // Refresh document list
+        }, 500);
       } else {
         throw new Error(data.error || 'Import failed');
       }
     } catch (error: any) {
+      setUploading(false);
+      setUploadProgress(0);
       toast({
         title: 'Import Failed',
         description: error.message,
         variant: 'destructive'
       });
-    } finally {
-      setDriveImporting(false);
     }
   };
 
@@ -3306,21 +3323,8 @@ export default function DocumentManagerPage() {
               </div>
             ) : (
               <>
-                {/* Select All (only files) */}
-                {driveFiles.filter(f => isImportableFile(f.mimeType)).length > 0 && (
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
-                    <Checkbox
-                      checked={selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length}
-                      onCheckedChange={selectAllDriveFiles}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {selectedDriveFiles.size > 0 ? `${selectedDriveFiles.size} selected` : 'Select all'}
-                    </span>
-                  </div>
-                )}
-
                 {/* File List */}
-                <ScrollArea className="h-[320px]">
+                <ScrollArea className="h-[360px]">
                   <div className="space-y-0.5">
                     {driveFiles.map((file) => {
                       const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
@@ -3360,11 +3364,11 @@ export default function DocumentManagerPage() {
                             <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm truncate ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
+                            <p className={`text-sm break-words leading-tight ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
                               {file.name}
                             </p>
                             {!isFolder && file.modifiedTime && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-muted-foreground mt-0.5">
                                 {new Date(file.modifiedTime).toLocaleDateString()}
                               </p>
                             )}
@@ -3396,28 +3400,26 @@ export default function DocumentManagerPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 dark:border-white/5 bg-gradient-to-r from-slate-500/5 to-slate-500/5">
-            <Button variant="ghost" size="sm" onClick={() => setShowDriveModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={importFromDrive}
-              disabled={selectedDriveFiles.size === 0 || driveImporting}
-              size="sm"
-              className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white border-0"
-            >
-              {driveImporting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Importing...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Import{selectedDriveFiles.size > 0 ? ` (${selectedDriveFiles.size})` : ''}
-                </>
-              )}
-            </Button>
+          <div className="flex items-center justify-between px-6 py-3 border-t border-white/10 dark:border-white/5 bg-gradient-to-r from-slate-500/5 to-slate-500/5">
+            <span className="text-xs text-muted-foreground">
+              {selectedDriveFiles.size > 0
+                ? `${selectedDriveFiles.size} file${selectedDriveFiles.size > 1 ? 's' : ''} selected`
+                : `${driveFiles.filter(f => isImportableFile(f.mimeType)).length} file${driveFiles.filter(f => isImportableFile(f.mimeType)).length !== 1 ? 's' : ''}`}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowDriveModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={importFromDrive}
+                disabled={selectedDriveFiles.size === 0 || driveImporting}
+                size="sm"
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white border-0"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
