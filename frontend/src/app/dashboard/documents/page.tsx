@@ -1738,10 +1738,18 @@ export default function DocumentManagerPage() {
 
           const data = await response.json();
 
-          if (data.embedded > 0) {
+          // Check for failed status in results
+          const docResult = data.results?.find((r: any) => r.id === doc.id);
+
+          if (data.failed > 0 || docResult?.status === 'error') {
+            // Backend reported failure
+            console.error(`Embed failed for ${doc.title}:`, docResult?.error || 'Unknown error');
+            errorCount++;
+            setEmbedQueue(prev => prev.map(q =>
+              q.id === doc.id ? { ...q, status: 'error' as const } : q
+            ));
+          } else if (data.embedded > 0) {
             embeddedCount++;
-            // Get chunk count from results array
-            const docResult = data.results?.find((r: any) => r.id === doc.id);
             const chunkCount = docResult?.chunks || 1;
 
             // Update queue status to completed
@@ -1768,9 +1776,10 @@ export default function DocumentManagerPage() {
                 : d
             ));
           } else {
-            skippedCount++;
+            // No embedding, no skip - treat as error
+            errorCount++;
             setEmbedQueue(prev => prev.map(q =>
-              q.id === doc.id ? { ...q, status: 'completed' as const } : q
+              q.id === doc.id ? { ...q, status: 'error' as const } : q
             ));
           }
         } catch (docError: any) {
