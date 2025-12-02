@@ -653,12 +653,6 @@ export default function ChatInterface() {
         }
     };
 
-    const getConfidenceLevel = (score: number) => {
-        if (score >= 80) return { label: t('chatInterface.confidence.high', 'Yüksek'), color: 'text-green-400' };
-        if (score >= 50) return { label: t('chatInterface.confidence.medium', 'Orta'), color: 'text-yellow-400' };
-        return { label: t('chatInterface.confidence.low', 'Düşük'), color: 'text-red-400' };
-    };
-
     return (
         <ProtectedRoute>
             <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-sans selection:bg-violet-500/30">
@@ -883,7 +877,6 @@ export default function ChatInterface() {
                                                                 return (
                                                                     <>
                                                                         {visibleSources.map((source, idx) => {
-                                                                            const confidence = getConfidenceLevel(Math.min(100, source.score || 0));
                                                                             return (
                                                                                 <div
                                                                                     key={idx}
@@ -892,20 +885,15 @@ export default function ChatInterface() {
                                                                                     title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
                                                                                 >
                                                                                     <div className="flex items-start gap-3">
-                                                                                        <div className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500/30 to-indigo-500/30 text-xs font-bold text-violet-300 group-hover:from-violet-500/50 group-hover:to-indigo-500/50 group-hover:text-white transition-all shadow-lg shadow-violet-900/20">
-                                                                                            {idx + 1}
-                                                                                        </div>
                                                                                         <div className="min-w-0 flex-1">
-                                                                                            {/* Source Type & Confidence */}
+                                                                                            {/* Source Type & Number */}
                                                                                             <div className="flex items-center gap-2 mb-2">
+                                                                                                <span className="text-xs px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/30 font-medium">
+                                                                                                    {t('chat.source.label', 'Kaynak')} {idx + 1}
+                                                                                                </span>
                                                                                                 {source.sourceType && (
                                                                                                     <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
                                                                                                         {source.sourceType}
-                                                                                                    </span>
-                                                                                                )}
-                                                                                                {source.score && (
-                                                                                                    <span className={`text-xs ${confidence.color}`}>
-                                                                                                        {confidence.label}: {Math.round(source.score)}%
                                                                                                     </span>
                                                                                                 )}
                                                                                             </div>
@@ -929,7 +917,7 @@ export default function ChatInterface() {
                                                                                                 </p>
                                                                                             )}
 
-                                                                                            {/* Keywords & Score Bar */}
+                                                                                            {/* Keywords */}
                                                                                             <div className="flex flex-wrap items-center gap-2">
                                                                                                 {getSemanticKeywords(source).slice(0, 4).map((keyword: string, kidx: number) => {
                                                                                                     const isBoosted = kidx < 2 && lastUserQuery.length > 0;
@@ -943,21 +931,6 @@ export default function ChatInterface() {
                                                                                                         </span>
                                                                                                     );
                                                                                                 })}
-
-                                                                                                {/* Score Progress Bar */}
-                                                                                                {source.score && (
-                                                                                                    <div className="flex items-center gap-1.5 ml-auto">
-                                                                                                        <div className="w-16 h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
-                                                                                                            <div
-                                                                                                                className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500"
-                                                                                                                style={{ width: `${Math.min(100, source.score)}%` }}
-                                                                                                            />
-                                                                                                        </div>
-                                                                                                        <span className="text-[10px] text-violet-400 font-medium">
-                                                                                                            %{Math.round(source.score)}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                )}
                                                                                             </div>
                                                                                         </div>
                                                                                         <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-violet-400 flex-shrink-0 transition-colors" />
