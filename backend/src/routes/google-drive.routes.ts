@@ -79,7 +79,7 @@ router.get('/config', authenticateToken, async (req: Request, res: Response) => 
  */
 router.get('/auth-url', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const authUrl = googleDriveService.getAuthUrl();
+    const authUrl = await googleDriveService.getAuthUrl();
     res.json({ authUrl });
   } catch (error: any) {
     console.error('[GoogleDrive Routes] Get auth URL error:', error);
