@@ -17,7 +17,6 @@ import {
     LogOut,
     Plus,
     LayoutDashboard,
-    Sparkles,
     Zap,
     ChevronDown,
     ChevronUp,
@@ -98,14 +97,14 @@ const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: s
 
 const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
     if (isBoosted) {
-        return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+        return 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-500/30';
     }
     const colors = [
-        'bg-blue-500/20 text-blue-300 border-blue-500/30',
-        'bg-green-500/20 text-green-300 border-green-500/30',
-        'bg-purple-500/20 text-purple-300 border-purple-500/30',
-        'bg-orange-500/20 text-orange-300 border-orange-500/30',
-        'bg-pink-500/20 text-pink-300 border-pink-500/30'
+        'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-500/30',
+        'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/30',
+        'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-500/30',
+        'bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-500/30',
+        'bg-pink-100 dark:bg-pink-500/20 text-pink-700 dark:text-pink-300 border-pink-300 dark:border-pink-500/30'
     ];
     const index = keyword.length % colors.length;
     return colors[index];
@@ -831,7 +830,7 @@ export default function ChatInterface() {
                                                     : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm'
                                                 }`}>
                                                 {message.role === 'user' && message.isFromSource && (
-                                                    <div className="flex items-center gap-2 mb-2 text-yellow-300">
+                                                    <div className="flex items-center gap-2 mb-2 text-yellow-700 dark:text-yellow-300">
                                                         <ExternalLink className="w-4 h-4" />
                                                         <span className="text-xs">{t('chat.fromSource', 'Kaynaktan')}</span>
                                                     </div>
@@ -856,12 +855,6 @@ export default function ChatInterface() {
                                                 {/* Sources Section */}
                                                 {message.sources && message.sources.length > 0 && (
                                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                            <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
-                                                                <Sparkles className="w-3 h-3 text-violet-400" />
-                                                                {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')} ({message.sources.length})
-                                                            </div>
-                                                        </div>
                                                         <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                                             {(() => {
                                                                 const sortedSources = [...message.sources].sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -878,15 +871,15 @@ export default function ChatInterface() {
                                                                                 <div
                                                                                     key={idx}
                                                                                     onClick={() => handleSourceClick(source)}
-                                                                                    className="group p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer"
+                                                                                    className="group p-3 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer"
                                                                                     title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
                                                                                 >
                                                                                     <div className="flex items-start gap-3">
                                                                                         <div className="min-w-0 flex-1">
                                                                                             {/* Source Type & Number */}
                                                                                             <div className="flex items-center gap-2 mb-2">
-                                                                                                <span className="text-xs px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-500/30 font-medium">
-                                                                                                    {t('chat.source.label', 'Kaynak')} {idx + 1}
+                                                                                                <span className="text-xs px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-500/30 font-bold">
+                                                                                                    {idx + 1}
                                                                                                 </span>
                                                                                                 {source.sourceType && (
                                                                                                     <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-500/30">
@@ -896,9 +889,12 @@ export default function ChatInterface() {
                                                                                             </div>
 
                                                                                             {/* Title */}
-                                                                                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-violet-700 dark:group-hover:text-violet-200 transition-colors mb-2">
-                                                                                                {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
-                                                                                            </p>
+                                                                                            <div className="flex items-center gap-2 mb-2">
+                                                                                                <Bot className="w-4 h-4 text-violet-700 dark:text-violet-400 flex-shrink-0" />
+                                                                                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-violet-700 dark:group-hover:text-violet-200 transition-colors">
+                                                                                                    {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
+                                                                                                </p>
+                                                                                            </div>
 
                                                                                             {/* LLM Summary */}
                                                                                             {source.summary && (
@@ -1023,8 +1019,8 @@ export default function ChatInterface() {
                                     disabled={!inputText.trim() || isLoading}
                                     size="icon"
                                     className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-200 ${inputText.trim()
-                                        ? 'bg-violet-600 hover:bg-violet-700 text-white'
-                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
+                                        ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/25'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                                         }`}
                                 >
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
