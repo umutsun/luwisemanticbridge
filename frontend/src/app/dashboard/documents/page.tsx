@@ -2062,18 +2062,18 @@ export default function DocumentManagerPage() {
         description: `Embedded: ${embeddedCount}, Skipped: ${skippedCount}${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`,
       });
 
-      // Refresh documents and stats
-      setTimeout(async () => {
-        await Promise.all([fetchDocuments(), fetchStats()]);
-        clearSelection();
-        setBatchProcessing(false);
-        setBatchProgress(0);
-        setBatchStatus('');
-        setBatchCurrent(0);
-        setBatchTotal(0);
-        setEmbedQueue([]);
-        setCurrentEmbeddingDoc('');
-      }, 2000);
+      // Refresh documents and stats immediately
+      await Promise.all([fetchDocuments(), fetchStats()]);
+
+      // Reset batch states after refresh
+      clearSelection();
+      setBatchProcessing(false);
+      setBatchProgress(0);
+      setBatchStatus('');
+      setBatchCurrent(0);
+      setBatchTotal(0);
+      setEmbedQueue([]);
+      setCurrentEmbeddingDoc('');
 
     } catch (error: any) {
       console.error('Batch embed error:', error);
