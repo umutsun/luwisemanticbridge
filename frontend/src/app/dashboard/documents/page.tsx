@@ -1305,7 +1305,7 @@ export default function DocumentManagerPage() {
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [currentImportingFile, setCurrentImportingFile] = useState<string>('');
-  const [embedQueue, setEmbedQueue] = useState<{id: string; title: string; status: 'pending' | 'processing' | 'completed' | 'error'}[]>([]);
+  const [embedQueue, setEmbedQueue] = useState<{id: string; title: string; status: 'pending' | 'processing' | 'completed' | 'skipped' | 'error'}[]>([]);
   const [currentEmbeddingDoc, setCurrentEmbeddingDoc] = useState<string>('');
 
   // WebSocket for batch job progress
@@ -1764,10 +1764,10 @@ export default function DocumentManagerPage() {
                 : d
             ));
           } else if (data.skipped > 0) {
-            // Already embedded, still update local state
+            // Already embedded, mark as skipped
             skippedCount++;
             setEmbedQueue(prev => prev.map(q =>
-              q.id === doc.id ? { ...q, status: 'completed' as const } : q
+              q.id === doc.id ? { ...q, status: 'skipped' as const } : q
             ));
             // Mark as embedded since it was skipped (already has embeddings)
             setDocuments(prev => prev.map(d =>
@@ -2006,9 +2006,9 @@ export default function DocumentManagerPage() {
 
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-4 sm:space-y-6">
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-stretch">
             {/* Left Column (40%) - Upload & Physical Files */}
-            <div className="xl:col-span-5 lg:col-span-6 flex flex-col gap-4">
+            <div className="xl:col-span-5 lg:col-span-6 flex flex-col gap-4 h-full">
               {/* Upload Area */}
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
                 <CardContent className="p-4">
@@ -2151,7 +2151,7 @@ export default function DocumentManagerPage() {
               </Card>
 
               {/* Physical Files List */}
-              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-1 flex flex-col">
                 <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -2163,7 +2163,7 @@ export default function DocumentManagerPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex flex-col overflow-hidden p-4">
+                <CardContent className="flex flex-col overflow-hidden p-4 flex-1">
                   {/* Search & Filter */}
                   <div className="flex gap-2 mb-4" role="search" aria-label={t('documents.physicalFiles.searchFiles')}>
                     <div className="relative flex-1">
@@ -2193,7 +2193,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Files List */}
-                  <ScrollArea className="h-[400px] sm:h-[500px] lg:h-[600px] max-h-[60vh]">
+                  <ScrollArea className="flex-1 min-h-[300px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -2353,8 +2353,12 @@ export default function DocumentManagerPage() {
 
                                 {/* File name and size */}
                                 <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                                  <p className="text-sm font-medium truncate flex-1" title={file.displayName || file.filename}>
-                                    {file.displayName || file.filename}
+                                  <p
+                                    className="text-sm font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
+                                    style={{ direction: 'rtl', textAlign: 'left' }}
+                                    title={file.displayName || file.filename}
+                                  >
+                                    <bdi>{file.displayName || file.filename}</bdi>
                                   </p>
                                   <span className="text-[10px] text-muted-foreground flex-shrink-0 font-mono">
                                     {formatFileSize(file.size)}
@@ -2372,7 +2376,7 @@ export default function DocumentManagerPage() {
             </div>
 
             {/* Right Column (60%) - Database Files */}
-            <div className="xl:col-span-7 lg:col-span-6 flex flex-col gap-4">
+            <div className="xl:col-span-7 lg:col-span-6 flex flex-col gap-4 h-full">
               {/* Search and Filter - Moved Above Table */}
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
                 <CardContent className="p-4">
@@ -2409,7 +2413,7 @@ export default function DocumentManagerPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col min-h-[400px] max-h-[calc(100vh-240px)]">
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1 min-h-[400px]">
                 <CardContent className="p-0 flex flex-col flex-1 min-h-0">
                   {/* Fixed Header */}
                   <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
@@ -2911,6 +2915,8 @@ export default function DocumentManagerPage() {
                               ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
                               : item.status === 'completed'
                               ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+                              : item.status === 'skipped'
+                              ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
                               : item.status === 'error'
                               ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
                               : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
@@ -2918,9 +2924,11 @@ export default function DocumentManagerPage() {
                         >
                           {item.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
                           {item.status === 'completed' && <CheckCircle className="w-3 h-3" />}
+                          {item.status === 'skipped' && <span className="w-3 h-3 text-center font-bold">~</span>}
                           {item.status === 'error' && <XCircle className="w-3 h-3" />}
                           {item.status === 'pending' && <Clock className="w-3 h-3" />}
                           <span className="truncate flex-1">{item.title}</span>
+                          {item.status === 'skipped' && <span className="text-[10px] opacity-70">(already embedded)</span>}
                         </div>
                       ))}
                     </div>
