@@ -2522,7 +2522,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     ) : (
                       <div className="space-y-2">
                         {/* Column Headers */}
-                        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 pb-2 border-b border-border/50 sticky top-0 bg-muted/10 z-10">
+                        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 pb-2 border-b border-border/50 sticky top-0 bg-background dark:bg-zinc-900 z-10">
                           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                             Source Field
                           </div>

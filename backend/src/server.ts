@@ -90,6 +90,7 @@ import batchFoldersRoutes from "./routes/batch-folders.routes";
 import transformConfigRoutes from "./routes/transform-config.routes";
 import servicesRoutes from "./routes/services.routes";
 import aiServicesRoutes from "./routes/ai-services.routes";
+import googleDriveRoutes from "./routes/google-drive.routes";
 import websocketLogStreamRoutes from "./api/websocket-log-stream.router";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
@@ -508,6 +509,7 @@ app.use("/api/v2/ocr", ocrRoutes);
 app.use("/api/v2/integrations", integrationsRoutes);
 app.use("/api/v2/services", servicesRoutes);
 app.use("/api/v2/ai-services", aiServicesRoutes);
+app.use("/api/v2/google-drive", googleDriveRoutes);
 app.use("/api/v2/websocket-log-stream", websocketLogStreamRoutes);
 app.use("/api/whisper", whisperRoutes);
 

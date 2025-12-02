@@ -300,21 +300,26 @@ export function createEnhancedSourceClickHandler(
       sourceTable: source.sourceTable
     });
 
-    // ALWAYS generate question from source content for specificity
-    // Don't use pre-generated questions as they may be generic
-    const title = (source.title as string) || '';
-    const excerpt = (source.excerpt as string) || '';
-    const content = (source.content as string) || '';
-    const category = (source.category as string) || (source.sourceTable as string) || '';
-    const sourceTable = (source.sourceTable as string) || '';
+    // USE backend-generated question if available (uses configured RAG patterns)
+    // Backend generates questions using patterns configured in Settings > RAG
+    if (source.question && typeof source.question === 'string' && source.question.trim().length > 10) {
+      question = source.question.trim();
+      console.log('Using backend-generated question:', question);
+    } else {
+      // Fallback: Generate locally if backend didn't provide a question
+      const title = (source.title as string) || '';
+      const excerpt = (source.excerpt as string) || '';
+      const content = (source.content as string) || '';
+      const category = (source.category as string) || (source.sourceTable as string) || '';
+      const sourceTable = (source.sourceTable as string) || '';
 
-    // Extract keywords from the source
-    const keywords = extractKeywords(title + ' ' + excerpt + ' ' + content);
+      // Extract keywords from the source
+      const keywords = extractKeywords(title + ' ' + excerpt + ' ' + content);
 
-    // Generate content-specific question (not generic!)
-    question = await generateContentSpecificQuestion(title, content || excerpt, category, sourceTable, keywords);
-
-    console.log('Generated content-specific question:', question);
+      // Generate content-specific question (not generic!)
+      question = await generateContentSpecificQuestion(title, content || excerpt, category, sourceTable, keywords);
+      console.log('Generated fallback question:', question);
+    }
 
     console.log('Final question to be set:', question);
     console.log('Current input text:', getInputText());
