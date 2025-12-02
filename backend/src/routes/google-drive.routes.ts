@@ -1,5 +1,7 @@
 /**
  * Google Drive Integration Routes
+ *
+ * OAuth 2.0 based authentication for easy user access.
  */
 
 import { Router, Request, Response } from 'express';
@@ -9,31 +11,63 @@ import { authenticateToken } from '../middleware/auth.middleware';
 const router = Router();
 
 /**
+ * Get OAuth configuration status
+ */
+router.get('/oauth-config', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const oauthConfig = await googleDriveService.getOAuthConfig();
+    const publicConfig = await googleDriveService.getPublicConfig();
+
+    res.json({
+      oauthConfigured: oauthConfig.configured,
+      clientId: oauthConfig.clientId,
+      redirectUri: oauthConfig.redirectUri,
+      ...publicConfig
+    });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Get OAuth config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Save OAuth credentials
+ */
+router.post('/oauth-config', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { clientId, clientSecret, redirectUri } = req.body;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      return res.status(400).json({ error: 'clientId, clientSecret, and redirectUri are required' });
+    }
+
+    await googleDriveService.saveOAuthCredentials({
+      clientId,
+      clientSecret,
+      redirectUri
+    });
+
+    res.json({ success: true, message: 'OAuth credentials saved successfully' });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Save OAuth config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Get Google Drive configuration
  */
 router.get('/config', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const config = await googleDriveService.getConfig();
+    const publicConfig = await googleDriveService.getPublicConfig();
+    const oauthConfig = await googleDriveService.getOAuthConfig();
 
-    // Mask the service account JSON for security
-    if (config?.serviceAccountJson) {
-      try {
-        const parsed = typeof config.serviceAccountJson === 'string'
-          ? JSON.parse(config.serviceAccountJson)
-          : config.serviceAccountJson;
-        config.serviceAccountJson = JSON.stringify({
-          type: parsed.type,
-          project_id: parsed.project_id,
-          client_email: parsed.client_email,
-          // Mask private key
-          private_key: '••••••••'
-        });
-      } catch {
-        config.serviceAccountJson = '••••••••';
-      }
-    }
-
-    res.json({ config });
+    res.json({
+      config: publicConfig,
+      oauthConfigured: oauthConfig.configured,
+      clientId: oauthConfig.clientId,
+      redirectUri: oauthConfig.redirectUri
+    });
   } catch (error: any) {
     console.error('[GoogleDrive Routes] Get config error:', error);
     res.status(500).json({ error: error.message });
@@ -41,43 +75,48 @@ router.get('/config', authenticateToken, async (req: Request, res: Response) => 
 });
 
 /**
- * Save Google Drive configuration
+ * Get OAuth authorization URL
  */
-router.post('/config', authenticateToken, async (req: Request, res: Response) => {
+router.get('/auth-url', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { serviceAccountJson, folderId, enabled } = req.body;
+    const authUrl = googleDriveService.getAuthUrl();
+    res.json({ authUrl });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Get auth URL error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    // Validate service account JSON
-    if (serviceAccountJson && serviceAccountJson !== '••••••••') {
-      try {
-        const parsed = JSON.parse(serviceAccountJson);
-        if (!parsed.client_email || !parsed.private_key) {
-          return res.status(400).json({
-            error: 'Invalid service account JSON. Must contain client_email and private_key.'
-          });
-        }
-      } catch (e) {
-        return res.status(400).json({ error: 'Invalid JSON format for service account credentials' });
-      }
+/**
+ * OAuth callback handler
+ */
+router.get('/callback', async (req: Request, res: Response) => {
+  try {
+    const { code, error: oauthError } = req.query;
+
+    if (oauthError) {
+      // Redirect to settings with error
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      return res.redirect(`${frontendUrl}/dashboard/settings?tab=advanced&drive_error=${encodeURIComponent(oauthError as string)}`);
     }
 
-    // Get existing config to preserve service account if not updated
-    const existingConfig = await googleDriveService.getConfig();
+    if (!code || typeof code !== 'string') {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      return res.redirect(`${frontendUrl}/dashboard/settings?tab=advanced&drive_error=no_code`);
+    }
 
-    const config = {
-      serviceAccountJson: (serviceAccountJson && serviceAccountJson !== '••••••••')
-        ? serviceAccountJson
-        : existingConfig?.serviceAccountJson || '',
-      folderId: folderId || existingConfig?.folderId || '',
-      enabled: enabled ?? existingConfig?.enabled ?? false
-    };
+    const result = await googleDriveService.handleCallback(code);
 
-    await googleDriveService.saveConfig(config);
-
-    res.json({ success: true, message: 'Configuration saved successfully' });
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    if (result.success) {
+      res.redirect(`${frontendUrl}/dashboard/settings?tab=advanced&drive_connected=true&drive_email=${encodeURIComponent(result.email || '')}`);
+    } else {
+      res.redirect(`${frontendUrl}/dashboard/settings?tab=advanced&drive_error=${encodeURIComponent(result.error || 'unknown_error')}`);
+    }
   } catch (error: any) {
-    console.error('[GoogleDrive Routes] Save config error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('[GoogleDrive Routes] Callback error:', error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/dashboard/settings?tab=advanced&drive_error=${encodeURIComponent(error.message)}`);
   }
 });
 
@@ -98,14 +137,46 @@ router.post('/test', authenticateToken, async (req: Request, res: Response) => {
 });
 
 /**
+ * Disconnect Google Drive
+ */
+router.post('/disconnect', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    await googleDriveService.disconnect();
+    res.json({ success: true, message: 'Disconnected from Google Drive' });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Disconnect error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Update folder ID
+ */
+router.post('/folder', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { folderId } = req.body;
+
+    if (folderId !== undefined) {
+      await googleDriveService.updateFolderId(folderId);
+    }
+
+    res.json({ success: true, message: 'Folder ID updated' });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Update folder error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * List files from Google Drive folder
  */
 router.get('/files', authenticateToken, async (req: Request, res: Response) => {
   try {
     const pageSize = parseInt(req.query.pageSize as string) || 50;
     const pageToken = req.query.pageToken as string || undefined;
+    const folderId = req.query.folderId as string || undefined;
 
-    const result = await googleDriveService.listFiles({ pageSize, pageToken });
+    const result = await googleDriveService.listFiles({ pageSize, pageToken, folderId });
     res.json(result);
   } catch (error: any) {
     console.error('[GoogleDrive Routes] List files error:', error);

@@ -1,8 +1,9 @@
 /**
  * Google Drive Integration Service
  *
- * Uses Service Account authentication for server-side access.
- * Folder must be shared with the service account email.
+ * Uses OAuth 2.0 user authentication for easy access.
+ * Users simply click "Connect with Google" to authorize.
+ * OAuth credentials can be configured from Settings UI.
  */
 
 import { google, drive_v3 } from 'googleapis';
@@ -10,8 +11,17 @@ import pool from '../config/database';
 import * as fs from 'fs';
 import * as path from 'path';
 
+interface OAuthCredentials {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}
+
 interface GoogleDriveConfig {
-  serviceAccountJson: string; // JSON string of service account credentials
+  accessToken?: string;
+  refreshToken?: string;
+  tokenExpiry?: number;
+  userEmail?: string;
   folderId: string;
   enabled: boolean;
 }
@@ -29,9 +39,144 @@ interface DriveFile {
 class GoogleDriveService {
   private drive: drive_v3.Drive | null = null;
   private config: GoogleDriveConfig | null = null;
+  private oauth2Client: any = null;
+  private oauthCredentials: OAuthCredentials | null = null;
 
   /**
-   * Initialize Google Drive client with service account
+   * Load OAuth credentials from database
+   */
+  async loadOAuthCredentials(): Promise<OAuthCredentials | null> {
+    try {
+      const result = await pool.query(
+        "SELECT value FROM settings WHERE key = 'googleDrive.oauth'"
+      );
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const value = result.rows[0].value;
+      return typeof value === 'string' ? JSON.parse(value) : value;
+    } catch (error) {
+      console.error('[GoogleDrive] Failed to load OAuth credentials:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Save OAuth credentials to database
+   */
+  async saveOAuthCredentials(credentials: OAuthCredentials): Promise<void> {
+    await pool.query(
+      `INSERT INTO settings (key, value, category)
+       VALUES ('googleDrive.oauth', $1, 'integrations')
+       ON CONFLICT (key)
+       DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(credentials)]
+    );
+
+    this.oauthCredentials = credentials;
+    await this.initOAuth2Client();
+  }
+
+  /**
+   * Initialize OAuth2 client from database credentials
+   */
+  private async initOAuth2Client(): Promise<void> {
+    if (!this.oauthCredentials) {
+      this.oauthCredentials = await this.loadOAuthCredentials();
+    }
+
+    if (this.oauthCredentials?.clientId && this.oauthCredentials?.clientSecret) {
+      this.oauth2Client = new google.auth.OAuth2(
+        this.oauthCredentials.clientId,
+        this.oauthCredentials.clientSecret,
+        this.oauthCredentials.redirectUri
+      );
+    } else {
+      this.oauth2Client = null;
+    }
+  }
+
+  /**
+   * Get OAuth configuration status
+   */
+  async getOAuthConfig(): Promise<{ configured: boolean; clientId?: string; redirectUri?: string }> {
+    if (!this.oauthCredentials) {
+      this.oauthCredentials = await this.loadOAuthCredentials();
+    }
+
+    return {
+      configured: !!(this.oauthCredentials?.clientId && this.oauthCredentials?.clientSecret),
+      clientId: this.oauthCredentials?.clientId || undefined,
+      redirectUri: this.oauthCredentials?.redirectUri || undefined
+    };
+  }
+
+  /**
+   * Generate OAuth authorization URL
+   */
+  async getAuthUrl(): Promise<string> {
+    await this.initOAuth2Client();
+
+    if (!this.oauth2Client) {
+      throw new Error('OAuth2 client not configured. Please configure Client ID and Client Secret in Settings.');
+    }
+
+    const scopes = [
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ];
+
+    return this.oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      prompt: 'consent' // Force consent to always get refresh token
+    });
+  }
+
+  /**
+   * Exchange authorization code for tokens
+   */
+  async handleCallback(code: string): Promise<{ success: boolean; email?: string; error?: string }> {
+    await this.initOAuth2Client();
+
+    if (!this.oauth2Client) {
+      return { success: false, error: 'OAuth2 client not configured' };
+    }
+
+    try {
+      const { tokens } = await this.oauth2Client.getToken(code);
+      this.oauth2Client.setCredentials(tokens);
+
+      // Get user email
+      const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
+      const userInfo = await oauth2.userinfo.get();
+      const email = userInfo.data.email;
+
+      // Save tokens to database
+      const existingConfig = await this.getConfig();
+      const newConfig: GoogleDriveConfig = {
+        ...existingConfig,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || existingConfig?.refreshToken,
+        tokenExpiry: tokens.expiry_date,
+        userEmail: email || undefined,
+        folderId: existingConfig?.folderId || '',
+        enabled: true
+      };
+
+      await this.saveConfig(newConfig);
+
+      return { success: true, email: email || undefined };
+    } catch (error: any) {
+      console.error('[GoogleDrive] OAuth callback error:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Initialize Google Drive client with OAuth tokens
    */
   async initialize(): Promise<boolean> {
     try {
@@ -48,24 +193,42 @@ class GoogleDriveService {
       const configValue = configResult.rows[0].value;
       this.config = typeof configValue === 'string' ? JSON.parse(configValue) : configValue;
 
-      if (!this.config?.enabled || !this.config?.serviceAccountJson) {
-        console.log('[GoogleDrive] Service not enabled or missing credentials');
+      if (!this.config?.enabled || !this.config?.accessToken) {
+        console.log('[GoogleDrive] Service not enabled or not connected');
         return false;
       }
 
-      // Parse service account JSON
-      const credentials = typeof this.config.serviceAccountJson === 'string'
-        ? JSON.parse(this.config.serviceAccountJson)
-        : this.config.serviceAccountJson;
+      if (!this.oauth2Client) {
+        console.log('[GoogleDrive] OAuth2 client not configured');
+        return false;
+      }
 
-      // Create JWT auth client
-      const auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: ['https://www.googleapis.com/auth/drive.readonly']
+      // Set credentials
+      this.oauth2Client.setCredentials({
+        access_token: this.config.accessToken,
+        refresh_token: this.config.refreshToken,
+        expiry_date: this.config.tokenExpiry
+      });
+
+      // Handle token refresh
+      this.oauth2Client.on('tokens', async (tokens: any) => {
+        if (tokens.access_token) {
+          const currentConfig = await this.getConfig();
+          if (currentConfig) {
+            currentConfig.accessToken = tokens.access_token;
+            if (tokens.refresh_token) {
+              currentConfig.refreshToken = tokens.refresh_token;
+            }
+            if (tokens.expiry_date) {
+              currentConfig.tokenExpiry = tokens.expiry_date;
+            }
+            await this.saveConfig(currentConfig);
+          }
+        }
       });
 
       // Initialize Drive API
-      this.drive = google.drive({ version: 'v3', auth });
+      this.drive = google.drive({ version: 'v3', auth: this.oauth2Client });
 
       console.log('[GoogleDrive] Service initialized successfully');
       return true;
@@ -76,18 +239,18 @@ class GoogleDriveService {
   }
 
   /**
-   * Test connection with service account
+   * Test connection
    */
   async testConnection(): Promise<{ success: boolean; message: string; email?: string; folderName?: string }> {
     try {
       if (!this.drive) {
         const initialized = await this.initialize();
         if (!initialized) {
-          return { success: false, message: 'Failed to initialize Google Drive service' };
+          return { success: false, message: 'Google Drive not connected. Please connect with Google.' };
         }
       }
 
-      // Get service account info
+      // Get user info
       const about = await this.drive!.about.get({ fields: 'user' });
       const email = about.data.user?.emailAddress;
 
@@ -106,8 +269,8 @@ class GoogleDriveService {
           };
         } catch (folderError: any) {
           return {
-            success: false,
-            message: `Connected but cannot access folder. Make sure to share the folder with ${email}`,
+            success: true,
+            message: 'Connected but folder not accessible. Please check the folder ID.',
             email
           };
         }
@@ -115,10 +278,17 @@ class GoogleDriveService {
 
       return {
         success: true,
-        message: 'Connection successful (no folder configured)',
+        message: 'Connected successfully (no folder configured)',
         email
       };
     } catch (error: any) {
+      // Check if token expired
+      if (error.message?.includes('invalid_grant') || error.message?.includes('Token has been expired')) {
+        return {
+          success: false,
+          message: 'Connection expired. Please reconnect with Google.'
+        };
+      }
       return {
         success: false,
         message: `Connection failed: ${error.message}`
@@ -127,26 +297,60 @@ class GoogleDriveService {
   }
 
   /**
-   * List files in the configured folder
+   * Disconnect Google Drive
+   */
+  async disconnect(): Promise<void> {
+    try {
+      if (this.oauth2Client && this.config?.accessToken) {
+        try {
+          await this.oauth2Client.revokeToken(this.config.accessToken);
+        } catch (e) {
+          // Token might already be invalid
+        }
+      }
+
+      // Clear config
+      const newConfig: GoogleDriveConfig = {
+        accessToken: undefined,
+        refreshToken: undefined,
+        tokenExpiry: undefined,
+        userEmail: undefined,
+        folderId: '',
+        enabled: false
+      };
+      await this.saveConfig(newConfig);
+
+      this.drive = null;
+      console.log('[GoogleDrive] Disconnected successfully');
+    } catch (error: any) {
+      console.error('[GoogleDrive] Disconnect error:', error.message);
+    }
+  }
+
+  /**
+   * List files in the configured folder or root
    */
   async listFiles(options?: {
     pageSize?: number;
     pageToken?: string;
     mimeTypes?: string[];
+    folderId?: string;
   }): Promise<{ files: DriveFile[]; nextPageToken?: string }> {
     if (!this.drive) {
       const initialized = await this.initialize();
       if (!initialized) {
-        throw new Error('Google Drive service not initialized');
+        throw new Error('Google Drive not connected');
       }
     }
 
-    if (!this.config?.folderId) {
-      throw new Error('No folder ID configured');
-    }
+    const targetFolderId = options?.folderId || this.config?.folderId;
 
     // Build query
-    let query = `'${this.config.folderId}' in parents and trashed = false`;
+    let query = 'trashed = false';
+
+    if (targetFolderId) {
+      query = `'${targetFolderId}' in parents and ${query}`;
+    }
 
     // Filter by mime types if specified
     if (options?.mimeTypes && options.mimeTypes.length > 0) {
@@ -162,7 +366,8 @@ class GoogleDriveService {
         mimeType = 'text/plain' or
         mimeType = 'text/csv' or
         mimeType = 'application/json' or
-        mimeType = 'text/markdown'
+        mimeType = 'text/markdown' or
+        mimeType = 'application/vnd.google-apps.folder'
       )`;
     }
 
@@ -171,7 +376,7 @@ class GoogleDriveService {
       pageSize: options?.pageSize || 50,
       pageToken: options?.pageToken,
       fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, webViewLink, iconLink)',
-      orderBy: 'modifiedTime desc'
+      orderBy: 'folder,modifiedTime desc'
     });
 
     const files: DriveFile[] = (response.data.files || []).map(file => ({
@@ -197,7 +402,7 @@ class GoogleDriveService {
     if (!this.drive) {
       const initialized = await this.initialize();
       if (!initialized) {
-        throw new Error('Google Drive service not initialized');
+        throw new Error('Google Drive not connected');
       }
     }
 
@@ -413,8 +618,8 @@ class GoogleDriveService {
 
     this.config = config;
 
-    // Reinitialize if enabled
-    if (config.enabled) {
+    // Reinitialize if enabled and has tokens
+    if (config.enabled && config.accessToken) {
       await this.initialize();
     } else {
       this.drive = null;
@@ -422,7 +627,7 @@ class GoogleDriveService {
   }
 
   /**
-   * Get current configuration
+   * Get current configuration (masked)
    */
   async getConfig(): Promise<GoogleDriveConfig | null> {
     try {
@@ -439,6 +644,35 @@ class GoogleDriveService {
     } catch (error) {
       console.error('[GoogleDrive] Failed to get config:', error);
       return null;
+    }
+  }
+
+  /**
+   * Get public config (without sensitive data)
+   */
+  async getPublicConfig(): Promise<{
+    connected: boolean;
+    userEmail?: string;
+    folderId?: string;
+    enabled: boolean;
+  }> {
+    const config = await this.getConfig();
+    return {
+      connected: !!(config?.accessToken),
+      userEmail: config?.userEmail,
+      folderId: config?.folderId,
+      enabled: config?.enabled ?? false
+    };
+  }
+
+  /**
+   * Update folder ID
+   */
+  async updateFolderId(folderId: string): Promise<void> {
+    const config = await this.getConfig();
+    if (config) {
+      config.folderId = folderId;
+      await this.saveConfig(config);
     }
   }
 
