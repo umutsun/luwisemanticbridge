@@ -1159,12 +1159,23 @@ export default function DocumentManagerPage() {
         throw new Error(errorData.error || 'Delete embeddings failed');
       }
 
+      // Update document state locally without refetching
+      setDocuments(prev => prev.map(doc =>
+        doc.id === docId
+          ? {
+              ...doc,
+              hasEmbeddings: false,
+              processing_status: 'pending',
+              metadata: { ...doc.metadata, embeddings: undefined }
+            }
+          : doc
+      ));
+
       toast({
         title: 'Embeddings deleted',
         description: `Embeddings for "${docTitle}" have been removed.`,
       });
 
-      fetchDocuments();
       fetchStats();
     } catch (error: any) {
       console.error('Delete embeddings error:', error);
@@ -2553,13 +2564,8 @@ export default function DocumentManagerPage() {
                                           <Eye className="w-3 h-3 mr-2" />
                                           {t('documents.table.preview')}
                                         </DropdownMenuItem>
-                                        {/* Re-embed option */}
-                                        <DropdownMenuItem onClick={() => handleReEmbed(doc.id, doc.title)}>
-                                          <RefreshCw className="w-3 h-3 mr-2" />
-                                          Re-embed
-                                        </DropdownMenuItem>
-                                        {/* Delete embeddings option */}
-                                        {doc.hasEmbeddings && (
+                                        {/* Delete embeddings option - only show for embedded docs */}
+                                        {(doc.hasEmbeddings || doc.processing_status === 'embedded' || doc.metadata?.embeddings > 0) && (
                                           <DropdownMenuItem
                                             onClick={() => handleDeleteEmbeddings(doc.id, doc.title)}
                                             className="text-orange-600 focus:text-orange-600"
@@ -2676,24 +2682,6 @@ export default function DocumentManagerPage() {
                             </>
                           );
                         })()}
-
-                        {/* Bulk Re-embed Button */}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={handleBulkReEmbed}
-                                disabled={batchProcessing}
-                                className="h-8 w-8 p-0 hover:bg-purple-100 dark:hover:bg-purple-900/20 transition-colors disabled:opacity-50"
-                              >
-                                <RefreshCw className={`w-4 h-4 text-purple-600 ${batchProcessing ? 'animate-spin' : ''}`} />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Re-embed selected ({selectedRows.size})</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
 
                         {/* Bulk Delete Embeddings Button */}
                         <ConfirmTooltip
