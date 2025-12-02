@@ -1305,6 +1305,8 @@ export default function DocumentManagerPage() {
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [batchJobId, setBatchJobId] = useState<string | null>(null);
   const [currentImportingFile, setCurrentImportingFile] = useState<string>('');
+  const [embedQueue, setEmbedQueue] = useState<{id: string; title: string; status: 'pending' | 'processing' | 'completed' | 'error'}[]>([]);
+  const [currentEmbeddingDoc, setCurrentEmbeddingDoc] = useState<string>('');
 
   // WebSocket for batch job progress
   useEffect(() => {
@@ -1690,33 +1692,87 @@ export default function DocumentManagerPage() {
     setBatchProgress(0);
     setBatchCurrent(0);
     setBatchTotal(embedDocs.length);
-    setBatchStatus(t('documents.batch.creatingEmbeddings', { count: embedDocs.length }));
+
+    // Initialize embed queue with all documents
+    const initialQueue = embedDocs.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      status: 'pending' as const
+    }));
+    setEmbedQueue(initialQueue);
+
+    let embeddedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
     try {
-      const documentIds = embedDocs.map(doc => doc.id);
+      // Process each document one by one for real-time progress
+      for (let i = 0; i < embedDocs.length; i++) {
+        const doc = embedDocs[i];
 
-      const response = await fetch(getApiUrl('bulkEmbed'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ documentIds })
-      });
+        // Update current document being processed
+        setCurrentEmbeddingDoc(doc.title);
+        setBatchCurrent(i + 1);
+        setBatchProgress(Math.round(((i) / embedDocs.length) * 100));
+        setBatchStatus(`Embedding: ${doc.title}`);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Bulk embed failed');
+        // Update queue status to processing
+        setEmbedQueue(prev => prev.map(q =>
+          q.id === doc.id ? { ...q, status: 'processing' as const } : q
+        ));
+
+        try {
+          const response = await fetch(getApiUrl('bulkEmbed'), {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ documentIds: [doc.id] })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Embed failed');
+          }
+
+          const data = await response.json();
+
+          if (data.embedded > 0) {
+            embeddedCount++;
+            // Update queue status to completed
+            setEmbedQueue(prev => prev.map(q =>
+              q.id === doc.id ? { ...q, status: 'completed' as const } : q
+            ));
+
+            // Update document in local state to show embedded status
+            setDocuments(prev => prev.map(d =>
+              d.id === doc.id
+                ? { ...d, hasEmbeddings: true, metadata: { ...d.metadata, embeddings: data.embeddingCount || 1 } }
+                : d
+            ));
+          } else {
+            skippedCount++;
+            setEmbedQueue(prev => prev.map(q =>
+              q.id === doc.id ? { ...q, status: 'completed' as const } : q
+            ));
+          }
+        } catch (docError: any) {
+          console.error(`Error embedding ${doc.title}:`, docError);
+          errorCount++;
+          setEmbedQueue(prev => prev.map(q =>
+            q.id === doc.id ? { ...q, status: 'error' as const } : q
+          ));
+        }
       }
 
-      const data = await response.json();
-
       setBatchProgress(100);
+      setCurrentEmbeddingDoc('');
       setBatchStatus(t('documents.batch.embeddingsCreated'));
 
       toast({
         title: t('documents.batch.success'),
-        description: t('documents.batch.embedSuccess', { embedded: data.embedded, skipped: data.skipped || 0 }),
+        description: `Embedded: ${embeddedCount}, Skipped: ${skippedCount}${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`,
       });
 
       // Refresh documents and stats
@@ -1728,7 +1784,9 @@ export default function DocumentManagerPage() {
         setBatchStatus('');
         setBatchCurrent(0);
         setBatchTotal(0);
-      }, 1500);
+        setEmbedQueue([]);
+        setCurrentEmbeddingDoc('');
+      }, 2000);
 
     } catch (error: any) {
       console.error('Batch embed error:', error);
@@ -1742,6 +1800,8 @@ export default function DocumentManagerPage() {
       setBatchStatus('');
       setBatchCurrent(0);
       setBatchTotal(0);
+      setEmbedQueue([]);
+      setCurrentEmbeddingDoc('');
     }
   };
 
@@ -2785,36 +2845,13 @@ export default function DocumentManagerPage() {
             {batchProcessing && (
               <div className="space-y-4 p-6 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg border border-blue-200/50">
                 <div className="flex items-center gap-6">
-                  {/* Progress Circle */}
-                  <div className="relative w-20 h-20 flex-shrink-0">
-                    <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-                    <svg className="w-20 h-20 transform -rotate-90 relative z-10">
-                      <circle
-                        cx="40"
-                        cy="40"
-                        r="36"
-                        stroke="currentColor"
-                        strokeWidth="6"
-                        fill="none"
-                        className="text-gray-200 dark:text-gray-700"
-                      />
-                      <circle
-                        cx="40"
-                        cy="40"
-                        r="36"
-                        stroke="currentColor"
-                        strokeWidth="6"
-                        fill="none"
-                        strokeDasharray={`${2 * Math.PI * 36}`}
-                        strokeDashoffset={`${2 * Math.PI * 36 * (1 - batchProgress / 100)}`}
-                        className="text-primary transition-all duration-500 ease-out"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center z-20">
-                      <span className="text-lg font-bold">{Math.round(batchProgress)}%</span>
-                    </div>
-                  </div>
+                  {/* Progress Circle with Gradient */}
+                  <ProgressCircle
+                    progress={batchProgress}
+                    showPulse={true}
+                    size={100}
+                    statusText={`${batchCurrent}/${batchTotal}`}
+                  />
 
                   {/* Status Info */}
                   <div className="flex-1 space-y-2">
@@ -2828,8 +2865,42 @@ export default function DocumentManagerPage() {
                         {currentImportingFile}
                       </p>
                     )}
+                    {currentEmbeddingDoc && (
+                      <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium truncate">
+                        📄 {currentEmbeddingDoc}
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                {/* Embed Queue Display */}
+                {embedQueue.length > 0 && (
+                  <div className="mt-4 border-t border-blue-200/50 pt-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Embed Queue</p>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {embedQueue.map((item) => (
+                        <div
+                          key={item.id}
+                          className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${
+                            item.status === 'processing'
+                              ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                              : item.status === 'completed'
+                              ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
+                              : item.status === 'error'
+                              ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          {item.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin" />}
+                          {item.status === 'completed' && <CheckCircle className="w-3 h-3" />}
+                          {item.status === 'error' && <XCircle className="w-3 h-3" />}
+                          {item.status === 'pending' && <Clock className="w-3 h-3" />}
+                          <span className="truncate flex-1">{item.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

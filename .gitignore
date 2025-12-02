@@ -454,4 +454,5 @@ frontend/src/app/page-old.tsx
 
 # Development reports and docs
 reports/
-docs/reports/
+
+!docs/reports/
