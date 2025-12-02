@@ -157,6 +157,8 @@ export default function DocumentManagerPage() {
   const [driveConnected, setDriveConnected] = useState(false);
   const [selectedDriveFiles, setSelectedDriveFiles] = useState<Set<string>>(new Set());
   const [drivePageToken, setDrivePageToken] = useState<string | null>(null);
+  const [driveFolderPath, setDriveFolderPath] = useState<{id: string; name: string}[]>([]);
+  const [currentDriveFolderId, setCurrentDriveFolderId] = useState<string | null>(null);
 
   const [stats, setStats] = useState<Stats>({
     documents: {
@@ -432,7 +434,7 @@ export default function DocumentManagerPage() {
     }
   };
 
-  const fetchDriveFiles = async (pageToken?: string) => {
+  const fetchDriveFiles = async (folderId?: string | null, pageToken?: string) => {
     setDriveLoading(true);
     try {
       const token = localStorage.getItem('token');
@@ -440,6 +442,9 @@ export default function DocumentManagerPage() {
 
       const url = new URL(`${API_CONFIG.baseUrl}/api/v2/google-drive/files`);
       url.searchParams.append('pageSize', '50');
+      if (folderId) {
+        url.searchParams.append('folderId', folderId);
+      }
       if (pageToken) {
         url.searchParams.append('pageToken', pageToken);
       }
@@ -473,6 +478,56 @@ export default function DocumentManagerPage() {
     } finally {
       setDriveLoading(false);
     }
+  };
+
+  // Navigate into a folder
+  const navigateToFolder = (folderId: string, folderName: string) => {
+    setDriveFolderPath(prev => [...prev, { id: folderId, name: folderName }]);
+    setCurrentDriveFolderId(folderId);
+    setDriveFiles([]);
+    setSelectedDriveFiles(new Set());
+    setDrivePageToken(null);
+    fetchDriveFiles(folderId);
+  };
+
+  // Navigate back to a specific folder in path
+  const navigateToPathIndex = (index: number) => {
+    if (index === -1) {
+      // Root
+      setDriveFolderPath([]);
+      setCurrentDriveFolderId(null);
+      setDriveFiles([]);
+      setDrivePageToken(null);
+      fetchDriveFiles(null);
+    } else {
+      const newPath = driveFolderPath.slice(0, index + 1);
+      setDriveFolderPath(newPath);
+      setCurrentDriveFolderId(newPath[newPath.length - 1].id);
+      setDriveFiles([]);
+      setDrivePageToken(null);
+      fetchDriveFiles(newPath[newPath.length - 1].id);
+    }
+    setSelectedDriveFiles(new Set());
+  };
+
+  // Helper to get readable file type
+  const getFileTypeLabel = (mimeType?: string): string => {
+    if (!mimeType) return 'File';
+    if (mimeType === 'application/vnd.google-apps.folder') return 'Folder';
+    if (mimeType === 'application/pdf') return 'PDF';
+    if (mimeType.includes('word') || mimeType === 'application/vnd.google-apps.document') return 'Doc';
+    if (mimeType.includes('sheet') || mimeType === 'application/vnd.google-apps.spreadsheet') return 'Sheet';
+    if (mimeType.includes('presentation') || mimeType === 'application/vnd.google-apps.presentation') return 'Slides';
+    if (mimeType.startsWith('text/')) return 'Text';
+    if (mimeType.includes('csv')) return 'CSV';
+    if (mimeType.includes('json')) return 'JSON';
+    if (mimeType.includes('image')) return 'Image';
+    return mimeType.split('/').pop()?.split('.').pop() || 'File';
+  };
+
+  // Check if file is importable (not a folder)
+  const isImportableFile = (mimeType?: string): boolean => {
+    return mimeType !== 'application/vnd.google-apps.folder';
   };
 
   const importFromDrive = async () => {
@@ -530,10 +585,15 @@ export default function DocumentManagerPage() {
     setDriveFiles([]);
     setSelectedDriveFiles(new Set());
     setDrivePageToken(null);
-    fetchDriveFiles();
+    setDriveFolderPath([]);
+    setCurrentDriveFolderId(null);
+    fetchDriveFiles(null);
   };
 
-  const toggleDriveFileSelection = (fileId: string) => {
+  const toggleDriveFileSelection = (fileId: string, mimeType?: string) => {
+    // Don't allow selecting folders
+    if (mimeType === 'application/vnd.google-apps.folder') return;
+
     setSelectedDriveFiles(prev => {
       const newSet = new Set(prev);
       if (newSet.has(fileId)) {
@@ -546,10 +606,12 @@ export default function DocumentManagerPage() {
   };
 
   const selectAllDriveFiles = () => {
-    if (selectedDriveFiles.size === driveFiles.length) {
+    // Only select importable files (not folders)
+    const importableFiles = driveFiles.filter(f => isImportableFile(f.mimeType));
+    if (selectedDriveFiles.size === importableFiles.length && importableFiles.length > 0) {
       setSelectedDriveFiles(new Set());
     } else {
-      setSelectedDriveFiles(new Set(driveFiles.map(f => f.id)));
+      setSelectedDriveFiles(new Set(importableFiles.map(f => f.id)));
     }
   };
 
@@ -3221,51 +3283,97 @@ export default function DocumentManagerPage() {
               </div>
             ) : (
               <>
-                {/* Select All */}
-                <div className="flex items-center justify-between mb-4 pb-2 border-b">
+                {/* Breadcrumb Navigation */}
+                <div className="flex items-center gap-1 mb-3 pb-2 border-b text-sm">
+                  <button
+                    onClick={() => navigateToPathIndex(-1)}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    My Drive
+                  </button>
+                  {driveFolderPath.map((folder, index) => (
+                    <span key={folder.id} className="flex items-center gap-1">
+                      <span className="text-muted-foreground">/</span>
+                      <button
+                        onClick={() => navigateToPathIndex(index)}
+                        className="text-primary hover:underline"
+                      >
+                        {folder.name}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Select All (only files) */}
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Checkbox
-                      checked={driveFiles.length > 0 && selectedDriveFiles.size === driveFiles.length}
+                      checked={driveFiles.filter(f => isImportableFile(f.mimeType)).length > 0 &&
+                               selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length}
                       onCheckedChange={selectAllDriveFiles}
+                      disabled={driveFiles.filter(f => isImportableFile(f.mimeType)).length === 0}
                     />
                     <span className="text-sm text-muted-foreground">
-                      {selectedDriveFiles.size} of {driveFiles.length} selected
+                      {selectedDriveFiles.size} file{selectedDriveFiles.size !== 1 ? 's' : ''} selected
                     </span>
                   </div>
                 </div>
 
                 {/* File List */}
-                <ScrollArea className="h-[400px] pr-4">
-                  <div className="space-y-2">
-                    {driveFiles.map((file) => (
-                      <div
-                        key={file.id}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          selectedDriveFiles.has(file.id)
-                            ? 'bg-primary/5 border-primary/30'
-                            : 'hover:bg-muted/50'
-                        }`}
-                        onClick={() => toggleDriveFileSelection(file.id)}
-                      >
-                        <Checkbox
-                          checked={selectedDriveFiles.has(file.id)}
-                          onCheckedChange={() => toggleDriveFileSelection(file.id)}
-                        />
-                        {file.iconLink && (
-                          <img src={file.iconLink} alt="" className="w-5 h-5" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {file.size ? `${(parseInt(file.size) / 1024).toFixed(1)} KB` : 'Unknown size'}
-                            {file.modifiedTime && ` • ${new Date(file.modifiedTime).toLocaleDateString()}`}
-                          </p>
+                <ScrollArea className="h-[350px] pr-4">
+                  <div className="space-y-1">
+                    {driveFiles.map((file) => {
+                      const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
+                      const isSelected = selectedDriveFiles.has(file.id);
+
+                      return (
+                        <div
+                          key={file.id}
+                          className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
+                            isFolder
+                              ? 'hover:bg-blue-50 dark:hover:bg-blue-950/30 border-transparent'
+                              : isSelected
+                                ? 'bg-primary/5 border-primary/30'
+                                : 'hover:bg-muted/50 border-transparent'
+                          }`}
+                          onClick={() => {
+                            if (isFolder) {
+                              navigateToFolder(file.id, file.name);
+                            } else {
+                              toggleDriveFileSelection(file.id, file.mimeType);
+                            }
+                          }}
+                        >
+                          {!isFolder && (
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleDriveFileSelection(file.id, file.mimeType)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                          {isFolder && (
+                            <FolderOpen className="w-5 h-5 text-blue-500 ml-1" />
+                          )}
+                          {!isFolder && file.iconLink && (
+                            <img src={file.iconLink} alt="" className="w-5 h-5" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm truncate ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
+                              {file.name}
+                            </p>
+                            {!isFolder && (
+                              <p className="text-xs text-muted-foreground">
+                                {file.size ? `${(parseInt(file.size) / 1024).toFixed(1)} KB` : ''}
+                                {file.modifiedTime && ` • ${new Date(file.modifiedTime).toLocaleDateString()}`}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className={`text-xs ${isFolder ? 'bg-blue-50 text-blue-600 border-blue-200' : ''}`}>
+                            {getFileTypeLabel(file.mimeType)}
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className="text-xs">
-                          {file.mimeType?.split('/').pop() || 'file'}
-                        </Badge>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Load More */}
@@ -3274,7 +3382,7 @@ export default function DocumentManagerPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => fetchDriveFiles(drivePageToken)}
+                        onClick={() => fetchDriveFiles(currentDriveFolderId, drivePageToken)}
                         disabled={driveLoading}
                       >
                         {driveLoading ? (
