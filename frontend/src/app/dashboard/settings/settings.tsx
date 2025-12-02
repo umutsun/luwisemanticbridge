@@ -8,6 +8,12 @@ const ServicesPage = dynamic(() => import('./services/page'), {
   ssr: false,
   loading: () => <div className="flex items-center justify-center h-64">Loading services...</div>
 });
+
+// Dynamic import for DataSchema settings
+const DataSchemaSettings = dynamic(() => import('../../../components/settings/DataSchemaSettings'), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-64">Loading data schema settings...</div>
+});
 import { useToast } from '../../../hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -5518,7 +5524,7 @@ export default function OptimizedSettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-8 h-14">
+        <TabsList className="grid w-full grid-cols-7 h-14">
           <TabsTrigger value="app" className="h-12 px-4">
             <span className="text-sm">App</span>
           </TabsTrigger>
@@ -5528,11 +5534,11 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="rag" className="h-12 px-4">
             <span className="text-sm">RAG</span>
           </TabsTrigger>
+          <TabsTrigger value="schema" className="h-12 px-4">
+            <span className="text-sm">Schema</span>
+          </TabsTrigger>
           <TabsTrigger value="prompts" className="h-12 px-4">
             <span className="text-sm">Prompts</span>
-          </TabsTrigger>
-          <TabsTrigger value="transform" className="h-12 px-4">
-            <span className="text-sm">Transform</span>
           </TabsTrigger>
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
@@ -5554,14 +5560,13 @@ export default function OptimizedSettingsPage() {
           <RAGSettings />
         </TabsContent>
 
+        <TabsContent value="schema">
+          <DataSchemaSettings />
+        </TabsContent>
+
         <TabsContent value="prompts">
           <PromptsSettings />
         </TabsContent>
-
-        <TabsContent value="transform">
-          <TemplatesManager />
-        </TabsContent>
-
 
         <TabsContent value="services">
           <ServicesPage />
