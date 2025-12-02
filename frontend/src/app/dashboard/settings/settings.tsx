@@ -45,7 +45,8 @@ import {
   Trash2,
   Plus,
   HardDrive,
-  Loader2
+  Loader2,
+  Copy
 } from 'lucide-react';
 import {
   getSettingsCategory,
@@ -3207,10 +3208,15 @@ function SecuritySettings() {
     clientId?: string;
     redirectUri?: string;
   }>({ connected: false, folderId: '', enabled: false, oauthConfigured: false });
+  // Default redirect URI based on current environment
+  const defaultRedirectUri = typeof window !== 'undefined'
+    ? `${window.location.origin.replace(':3000', ':8080').replace(':5173', ':8080')}/api/v2/google-drive/callback`
+    : `${API_CONFIG.baseUrl}/api/v2/google-drive/callback`;
+
   const [driveOAuthConfig, setDriveOAuthConfig] = useState({
     clientId: '',
     clientSecret: '',
-    redirectUri: ''
+    redirectUri: defaultRedirectUri
   });
   const [driveLoading, setDriveLoading] = useState(false);
   const [driveSaving, setDriveSaving] = useState(false);
@@ -3696,15 +3702,25 @@ function SecuritySettings() {
                             </div>
                             <div>
                               <Label className="text-xs">Redirect URI</Label>
-                              <Input
-                                placeholder="https://your-domain.com/api/v2/google-drive/callback"
-                                value={driveOAuthConfig.redirectUri}
-                                onChange={(e) => setDriveOAuthConfig(prev => ({ ...prev, redirectUri: e.target.value }))}
-                                className="text-xs font-mono"
-                              />
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Add this URI to "Authorized redirect URIs" in Google Cloud Console
-                              </p>
+                              <div className="flex gap-1">
+                                <Input
+                                  placeholder="https://your-domain.com/api/v2/google-drive/callback"
+                                  value={driveOAuthConfig.redirectUri}
+                                  onChange={(e) => setDriveOAuthConfig(prev => ({ ...prev, redirectUri: e.target.value }))}
+                                  className="text-xs font-mono"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="px-2 shrink-0"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(driveOAuthConfig.redirectUri);
+                                    toast({ title: 'Copied!', description: 'Redirect URI copied to clipboard' });
+                                  }}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </div>
                             <Button
                               onClick={saveOAuthCredentials}
