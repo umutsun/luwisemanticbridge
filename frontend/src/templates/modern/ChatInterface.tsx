@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getEndpoint } from '@/config/api.config';
 import {
     Send,
@@ -22,7 +23,12 @@ import {
     ChevronUp,
     Edit3,
     Check,
-    X
+    X,
+    Settings,
+    UserCircle,
+    MessageSquare,
+    ChevronRight,
+    ExternalLink
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
@@ -41,9 +47,9 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 
-// ... (Interfaces and helper functions same as base)
 interface Message {
     id: string;
     role: 'user' | 'assistant';
@@ -79,7 +85,7 @@ interface Message {
 }
 
 const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: string) => string) => {
-    if (!sourceTable) return t ? t('chat.source.default') : 'Default';
+    if (!sourceTable) return t ? t('chat.source.default', 'Default') : 'Default';
     const tableName = sourceTable
         .replace(/_/g, ' ')
         .replace(/([A-Z])/g, ' $1')
@@ -88,6 +94,21 @@ const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: s
         .trim();
     const translationKey = `chat.source.table.${sourceTable.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     return t?.(translationKey, tableName) || tableName;
+};
+
+const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
+    if (isBoosted) {
+        return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+    }
+    const colors = [
+        'bg-blue-500/20 text-blue-300 border-blue-500/30',
+        'bg-green-500/20 text-green-300 border-green-500/30',
+        'bg-purple-500/20 text-purple-300 border-purple-500/30',
+        'bg-orange-500/20 text-orange-300 border-orange-500/30',
+        'bg-pink-500/20 text-pink-300 border-pink-500/30'
+    ];
+    const index = keyword.length % colors.length;
+    return colors[index];
 };
 
 export default function ChatInterface() {
@@ -157,7 +178,6 @@ export default function ChatInterface() {
     const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
     const [isClient, setIsClient] = useState(false);
     const [visibleSourcesCount, setVisibleSourcesCount] = useState<{ [key: string]: number }>({});
-    const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
     const [availableModels, setAvailableModels] = useState<Array<{ provider: string, model: string, displayName: string, description: string }>>([]);
     const [currentModel, setCurrentModel] = useState<string>('Claude');
     const [lastUserQuery, setLastUserQuery] = useState<string>('');
@@ -215,12 +235,12 @@ export default function ChatInterface() {
         }
     };
 
-    // Open profile dialog
     const openProfileDialog = () => {
         setProfileForm({ name: user?.name || '', email: user?.email || '' });
         setProfileError('');
         setShowProfileDialog(true);
     };
+
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const scrollToBottom = () => {
@@ -291,7 +311,7 @@ export default function ChatInterface() {
                 };
 
                 const promptsList = settingsData.prompts?.list || [];
-                const activePromptObj = promptsList.find((p: any) => p.isActive === true);
+                const activePromptObj = promptsList.find((p: { isActive?: boolean; systemPrompt?: string; temperature?: string; maxTokens?: string; conversationTone?: string }) => p.isActive === true);
 
                 let activePromptData = {
                     content: '',
@@ -335,7 +355,7 @@ export default function ChatInterface() {
                     content: activePromptData.content || '',
                     temperature: activePromptData.temperature || llm.temperature,
                     maxTokens: activePromptData.maxTokens || llm.maxTokens,
-                    tone: (activePromptObj as any).conversationTone || 'professional'
+                    tone: activePromptObj.conversationTone || 'professional'
                 } : {
                     content: '',
                     temperature: llm.temperature,
@@ -391,6 +411,25 @@ export default function ChatInterface() {
             }
         } catch (error) {
             console.error('Failed to fetch models:', error);
+        }
+    };
+
+    // Switch model function
+    const switchModel = async (model: string) => {
+        try {
+            const response = await fetch('/api/v2/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ llmSettings: { activeChatModel: model } })
+            });
+            if (response.ok) {
+                setChatbotSettings(prev => ({ ...prev, activeChatModel: model }));
+                const selectedModel = availableModels.find(m => m.model === model);
+                if (selectedModel) setCurrentModel(selectedModel.displayName);
+                await fetchAvailableModels(true);
+            }
+        } catch (error) {
+            console.error('Error switching model:', error);
         }
     };
 
@@ -489,7 +528,17 @@ export default function ChatInterface() {
                 const errorText = await response.text();
                 let errorData;
                 try { errorData = JSON.parse(errorText); } catch { errorData = { error: errorText }; }
+
                 if (response.status === 401) { logout(); return; }
+
+                if (response.status === 429 && errorData.code === 'QUERY_LIMIT_EXCEEDED') {
+                    const subscriptionMessage = user?.role === 'admin'
+                        ? t('chat.errors.adminLimit', 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır.')
+                        : t('chat.errors.queryLimit', 'Aylık soru limitinizi doldurdunuz.');
+                    setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, content: subscriptionMessage, isStreaming: false, isError: true } : msg));
+                    return;
+                }
+
                 throw new Error(`Failed to get response: ${response.status} - ${errorText}`);
             }
 
@@ -510,12 +559,19 @@ export default function ChatInterface() {
                                     accumulatedContent += data.content;
                                     setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, content: accumulatedContent } : msg));
                                 }
-                            } catch (e) { }
+                            } catch { }
                         }
                     }
                 }
 
-                let finalData: any = {};
+                let finalData: {
+                    sources?: Message['sources'];
+                    relatedTopics?: Message['relatedTopics'];
+                    context?: Message['context'];
+                    response?: string;
+                    tokens?: Message['tokens'];
+                    usage?: Message['tokens'];
+                } = {};
                 try {
                     const finalResponse = await fetch(getEndpoint('chat', 'send'), {
                         method: 'POST',
@@ -533,7 +589,7 @@ export default function ChatInterface() {
                         }),
                     });
                     if (finalResponse.ok) finalData = await finalResponse.json();
-                } catch (e) { }
+                } catch { }
 
                 setMessages(prev => prev.map(msg => msg.id === messageId ? {
                     ...msg,
@@ -548,7 +604,16 @@ export default function ChatInterface() {
             }
         } catch (error) {
             console.error('Chat error:', error);
-            setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, content: 'Error occurred.', isStreaming: false, isError: true } : msg));
+            const errorMessage = error instanceof Error ? error.message : '';
+            let userFriendlyMessage = t('chat.errors.general', 'Bir hata oluştu.');
+
+            if (errorMessage.includes(': 429') || errorMessage.includes('QUERY_LIMIT_EXCEEDED')) {
+                userFriendlyMessage = user?.role === 'admin'
+                    ? t('chat.errors.adminLimit', 'Admin kullanıcılarsınız.')
+                    : t('chat.errors.queryLimit', 'Aylık soru limitinizi doldurdunuz.');
+            }
+
+            setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, content: userFriendlyMessage, isStreaming: false, isError: true } : msg));
         } finally {
             setIsLoading(false);
             setIsStreaming(false);
@@ -588,6 +653,12 @@ export default function ChatInterface() {
         }
     };
 
+    const getConfidenceLevel = (score: number) => {
+        if (score >= 80) return { label: t('chatInterface.confidence.high', 'Yüksek'), color: 'text-green-400' };
+        if (score >= 50) return { label: t('chatInterface.confidence.medium', 'Orta'), color: 'text-yellow-400' };
+        return { label: t('chatInterface.confidence.low', 'Düşük'), color: 'text-red-400' };
+    };
+
     return (
         <ProtectedRoute>
             <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-sans selection:bg-violet-500/30">
@@ -607,22 +678,54 @@ export default function ChatInterface() {
                         background: rgba(139, 92, 246, 0.5);
                     }
                 `}</style>
+
                 {/* Modern Glass Header */}
                 <header className="fixed top-0 left-0 right-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/5">
                     <div className="max-w-6xl mx-auto w-full px-4 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-3 cursor-pointer group" onClick={clearChat}>
-                            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                                {settingsLoaded ? chatbotSettings.title : t('chat.title', 'AI Asistan')}
-                            </h1>
+                            {settingsLoaded && chatbotSettings.logoUrl ? (
+                                <img src={chatbotSettings.logoUrl} alt={chatbotSettings.title} className="w-8 h-8 object-contain" />
+                            ) : null}
+                            <div>
+                                <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                                    {settingsLoaded ? chatbotSettings.title : t('chat.title', 'AI Asistan')}
+                                </h1>
+                                {/* Active Model Display */}
+                                {settingsLoaded && chatbotSettings.activeChatModel && (
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[9px] font-medium text-slate-500">
+                                            {chatbotSettings.activeChatModel.split('/')?.[1] || chatbotSettings.activeChatModel}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="flex items-center gap-2">
+                            {/* New Chat Button */}
                             <Button variant="ghost" size="icon" onClick={clearChat} className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full" title={t('chat.newChat', 'Yeni Sohbet')}>
                                 <Plus className="w-5 h-5" />
                             </Button>
 
+                            {/* Admin Controls */}
+                            {user?.role === 'admin' && (
+                                <>
+                                    <Link href="/dashboard/settings">
+                                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full" title={t('common.settings', 'Ayarlar')}>
+                                            <Settings className="w-5 h-5" />
+                                        </Button>
+                                    </Link>
+                                    <Link href="/dashboard">
+                                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full" title={t('common.dashboard', 'Dashboard')}>
+                                            <LayoutDashboard className="w-5 h-5" />
+                                        </Button>
+                                    </Link>
+                                </>
+                            )}
+
                             <ThemeToggle />
 
+                            {/* User Dropdown */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-white/5 rounded-full">
@@ -637,13 +740,19 @@ export default function ChatInterface() {
                                     <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer" onClick={openProfileDialog}>
                                         <Edit3 className="w-4 h-4 mr-2 text-violet-400" /> {t('profile.edit', 'Profili Düzenle')}
                                     </DropdownMenuItem>
-                                    {user && ['admin', 'manager'].includes(user.role) && (
+                                    <Link href="/profile">
                                         <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer">
-                                            <Link href="/dashboard" className="flex items-center w-full">
-                                                <LayoutDashboard className="w-4 h-4 mr-2 text-indigo-400" /> {t('nav.dashboard', 'Yönetim Paneli')}
-                                            </Link>
+                                            <UserCircle className="w-4 h-4 mr-2 text-blue-400" /> {t('common.profile', 'Profil Sayfası')}
                                         </DropdownMenuItem>
+                                    </Link>
+                                    {(user?.role === 'admin' || (user as { role?: string })?.role === 'manager') && (
+                                        <Link href="/dashboard/messages">
+                                            <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer">
+                                                <MessageSquare className="w-4 h-4 mr-2 text-green-400" /> {t('dashboard.messages.title', 'Mesaj Analizleri')}
+                                            </DropdownMenuItem>
+                                        </Link>
                                     )}
+                                    <DropdownMenuSeparator className="bg-slate-700/50" />
                                     <DropdownMenuItem className="focus:bg-red-500/20 focus:text-white cursor-pointer" onClick={logout}>
                                         <LogOut className="w-4 h-4 mr-2 text-red-400" /> {t('nav.logout', 'Çıkış')}
                                     </DropdownMenuItem>
@@ -674,24 +783,35 @@ export default function ChatInterface() {
                             {/* Suggestions Grid */}
                             {isClient && showSuggestions && messages.length === 0 && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
-                                    {memoizedSuggestions.map((question, index) => (
-                                        <motion.button
-                                            key={index}
-                                            initial={{ opacity: 0, scale: 0.95 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ delay: index * 0.1 }}
-                                            onClick={() => handleSuggestionClick(question)}
-                                            className="group relative p-4 text-left rounded-xl bg-slate-900/50 border border-white/5 hover:border-violet-500/30 hover:bg-slate-800/50 transition-all duration-300"
-                                        >
-                                            <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 via-violet-600/0 to-violet-600/0 group-hover:from-violet-600/5 group-hover:via-transparent group-hover:to-transparent rounded-xl transition-all duration-500"></div>
-                                            <div className="flex items-start gap-3">
-                                                <div className="mt-1 p-1.5 rounded-lg bg-violet-500/10 text-violet-400 group-hover:text-violet-300 group-hover:bg-violet-500/20 transition-colors">
-                                                    <Zap className="w-4 h-4" />
+                                    {isSuggestionsLoading ? (
+                                        Array.from({ length: 4 }).map((_, index) => (
+                                            <div key={`skeleton-${index}`} className="p-4 rounded-xl bg-slate-900/50 border border-white/5">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-slate-800 animate-pulse" />
+                                                    <Skeleton className="h-4 w-3/4 bg-slate-800" />
                                                 </div>
-                                                <span className="text-sm text-slate-300 group-hover:text-white transition-colors">{question}</span>
                                             </div>
-                                        </motion.button>
-                                    ))}
+                                        ))
+                                    ) : (
+                                        memoizedSuggestions.map((question, index) => (
+                                            <motion.button
+                                                key={index}
+                                                initial={{ opacity: 0, scale: 0.95 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ delay: index * 0.1 }}
+                                                onClick={() => handleSuggestionClick(question)}
+                                                className="group relative p-4 text-left rounded-xl bg-slate-900/50 border border-white/5 hover:border-violet-500/30 hover:bg-slate-800/50 transition-all duration-300"
+                                            >
+                                                <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 via-violet-600/0 to-violet-600/0 group-hover:from-violet-600/5 group-hover:via-transparent group-hover:to-transparent rounded-xl transition-all duration-500"></div>
+                                                <div className="flex items-start gap-3">
+                                                    <div className="mt-1 p-1.5 rounded-lg bg-violet-500/10 text-violet-400 group-hover:text-violet-300 group-hover:bg-violet-500/20 transition-colors">
+                                                        <Zap className="w-4 h-4" />
+                                                    </div>
+                                                    <span className="text-sm text-slate-300 group-hover:text-white transition-colors">{question}</span>
+                                                </div>
+                                            </motion.button>
+                                        ))
+                                    )}
                                 </div>
                             )}
 
@@ -712,9 +832,20 @@ export default function ChatInterface() {
 
                                         <div className={`max-w-[85%] ${message.role === 'user' ? 'order-1' : 'order-2'}`}>
                                             <div className={`p-5 shadow-xl ${message.role === 'user'
-                                                    ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
+                                                ? message.isFromSource
+                                                    ? 'bg-yellow-500/20 text-yellow-100 border border-yellow-500/30 rounded-2xl rounded-tr-sm'
+                                                    : 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
+                                                : message.isError
+                                                    ? 'bg-red-500/10 border border-red-500/30 text-red-200 rounded-2xl rounded-tl-sm'
                                                     : 'bg-slate-900/80 backdrop-blur-sm border border-white/10 text-slate-200 rounded-2xl rounded-tl-sm'
                                                 }`}>
+                                                {message.role === 'user' && message.isFromSource && (
+                                                    <div className="flex items-center gap-2 mb-2 text-yellow-300">
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        <span className="text-xs">{t('chat.fromSource', 'Kaynaktan')}</span>
+                                                    </div>
+                                                )}
+
                                                 {message.isTyping || (message.isStreaming && !message.content) ? (
                                                     <div className="flex gap-1.5">
                                                         <span className="w-2 h-2 rounded-full bg-current opacity-40 animate-bounce"></span>
@@ -740,7 +871,7 @@ export default function ChatInterface() {
                                                                 {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')} ({message.sources.length})
                                                             </div>
                                                         </div>
-                                                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                                             {(() => {
                                                                 const sortedSources = [...message.sources].sort((a, b) => (b.score || 0) - (a.score || 0));
                                                                 const initialCount = ragSettings.minResults;
@@ -751,63 +882,125 @@ export default function ChatInterface() {
 
                                                                 return (
                                                                     <>
-                                                                        {visibleSources.map((source, idx) => (
-                                                                            <div
-                                                                                key={idx}
-                                                                                onClick={() => handleSourceClick(source)}
-                                                                                className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-slate-800/40 to-slate-800/20 hover:from-violet-500/15 hover:to-indigo-500/10 border border-white/5 hover:border-violet-500/30 backdrop-blur-sm transition-all duration-300 cursor-pointer overflow-hidden"
-                                                                            >
-                                                                                <div className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-br from-violet-500/30 to-indigo-500/30 text-xs font-bold text-violet-300 group-hover:from-violet-500/50 group-hover:to-indigo-500/50 group-hover:text-white transition-all shadow-lg shadow-violet-900/20">
-                                                                                    {idx + 1}
-                                                                                </div>
-                                                                                <div className="min-w-0 flex-1 overflow-hidden">
-                                                                                    <p className="text-sm font-medium text-slate-200 group-hover:text-violet-200 truncate transition-colors">
-                                                                                        {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
-                                                                                    </p>
-                                                                                    <div className="flex items-center gap-2 mt-1.5">
-                                                                                        <div className="h-1.5 w-20 bg-slate-700/50 rounded-full overflow-hidden">
-                                                                                            <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (source.score || 0))}%` }}></div>
+                                                                        {visibleSources.map((source, idx) => {
+                                                                            const confidence = getConfidenceLevel(Math.min(100, source.score || 0));
+                                                                            return (
+                                                                                <div
+                                                                                    key={idx}
+                                                                                    onClick={() => handleSourceClick(source)}
+                                                                                    className="group p-4 rounded-xl bg-gradient-to-r from-slate-800/60 to-slate-800/30 hover:from-violet-500/15 hover:to-indigo-500/10 border border-white/5 hover:border-violet-500/30 backdrop-blur-sm transition-all duration-300 cursor-pointer"
+                                                                                    title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
+                                                                                >
+                                                                                    <div className="flex items-start gap-3">
+                                                                                        <div className="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500/30 to-indigo-500/30 text-xs font-bold text-violet-300 group-hover:from-violet-500/50 group-hover:to-indigo-500/50 group-hover:text-white transition-all shadow-lg shadow-violet-900/20">
+                                                                                            {idx + 1}
                                                                                         </div>
-                                                                                        <span className="text-[10px] font-medium text-slate-400 group-hover:text-violet-300 transition-colors">{Math.round(source.score || 0)}%</span>
+                                                                                        <div className="min-w-0 flex-1">
+                                                                                            {/* Source Type & Confidence */}
+                                                                                            <div className="flex items-center gap-2 mb-2">
+                                                                                                {source.sourceType && (
+                                                                                                    <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                                                                                        {source.sourceType}
+                                                                                                    </span>
+                                                                                                )}
+                                                                                                {source.score && (
+                                                                                                    <span className={`text-xs ${confidence.color}`}>
+                                                                                                        {confidence.label}: {Math.round(source.score)}%
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+
+                                                                                            {/* Title */}
+                                                                                            <p className="text-sm font-medium text-slate-200 group-hover:text-violet-200 transition-colors mb-2">
+                                                                                                {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
+                                                                                            </p>
+
+                                                                                            {/* LLM Summary */}
+                                                                                            {source.summary && (
+                                                                                                <div className="mb-2 p-2 rounded bg-violet-500/10 border-l-2 border-violet-500/50">
+                                                                                                    <p className="text-xs text-violet-300">💡 {source.summary}</p>
+                                                                                                </div>
+                                                                                            )}
+
+                                                                                            {/* Content/Excerpt */}
+                                                                                            {(source.content || source.excerpt) && (
+                                                                                                <p className="text-xs text-slate-400 line-clamp-3 mb-3">
+                                                                                                    {source.content || source.excerpt}
+                                                                                                </p>
+                                                                                            )}
+
+                                                                                            {/* Keywords & Score Bar */}
+                                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                                {getSemanticKeywords(source).slice(0, 4).map((keyword: string, kidx: number) => {
+                                                                                                    const isBoosted = kidx < 2 && lastUserQuery.length > 0;
+                                                                                                    return (
+                                                                                                        <span
+                                                                                                            key={kidx}
+                                                                                                            className={`text-[10px] px-2 py-0.5 rounded border ${getKeywordColor(keyword, isBoosted)}`}
+                                                                                                            title={isBoosted ? t('chat.keyword.fromQuery', `🔍 Sorgunuzdan: "${keyword}"`) : ''}
+                                                                                                        >
+                                                                                                            {keyword}
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                })}
+
+                                                                                                {/* Score Progress Bar */}
+                                                                                                {source.score && (
+                                                                                                    <div className="flex items-center gap-1.5 ml-auto">
+                                                                                                        <div className="w-16 h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
+                                                                                                            <div
+                                                                                                                className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500"
+                                                                                                                style={{ width: `${Math.min(100, source.score)}%` }}
+                                                                                                            />
+                                                                                                        </div>
+                                                                                                        <span className="text-[10px] text-violet-400 font-medium">
+                                                                                                            %{Math.round(source.score)}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-violet-400 flex-shrink-0 transition-colors" />
                                                                                     </div>
                                                                                 </div>
-                                                                                <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-violet-400 -rotate-90 flex-shrink-0 transition-colors" />
+                                                                            );
+                                                                        })}
+
+                                                                        {/* Show more/less buttons */}
+                                                                        {(hasMore || canShowLess) && (
+                                                                            <div className="flex items-center justify-center gap-2 pt-3">
+                                                                                {hasMore && (
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setVisibleSourcesCount(prev => ({
+                                                                                                ...prev,
+                                                                                                [message.id]: Math.min(visibleCount + 5, sortedSources.length)
+                                                                                            }));
+                                                                                        }}
+                                                                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 hover:border-violet-500/40 transition-all duration-300"
+                                                                                    >
+                                                                                        <span className="text-[10px] font-medium text-violet-400 group-hover:text-violet-300">
+                                                                                            +{Math.min(5, sortedSources.length - visibleCount)} {t('chat.more', 'daha')}
+                                                                                        </span>
+                                                                                        <ChevronDown className="w-3.5 h-3.5 text-violet-400 group-hover:text-violet-300 group-hover:translate-y-0.5 transition-transform" />
+                                                                                    </button>
+                                                                                )}
+                                                                                {canShowLess && (
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setVisibleSourcesCount(prev => ({
+                                                                                                ...prev,
+                                                                                                [message.id]: initialCount
+                                                                                            }));
+                                                                                        }}
+                                                                                        className="group flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/20 hover:border-slate-600/40 transition-all duration-300"
+                                                                                    >
+                                                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-300 group-hover:-translate-y-0.5 transition-transform" />
+                                                                                        <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-300">{t('chat.showLess', 'Küçült')}</span>
+                                                                                    </button>
+                                                                                )}
                                                                             </div>
-                                                                        ))}
-                                                                        {/* Show more/less arrow buttons */}
-                                                        {(hasMore || canShowLess) && (
-                                                            <div className="flex items-center justify-center gap-2 pt-3">
-                                                                {hasMore && (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setVisibleSourcesCount(prev => ({
-                                                                                ...prev,
-                                                                                [message.id]: Math.min(visibleCount + 5, sortedSources.length)
-                                                                            }));
-                                                                        }}
-                                                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 hover:border-violet-500/40 transition-all duration-300"
-                                                                        title={t('chat.showMore', '{{count}} daha göster', { count: Math.min(5, sortedSources.length - visibleCount) })}
-                                                                    >
-                                                                        <span className="text-[10px] font-medium text-violet-400 group-hover:text-violet-300">+{Math.min(5, sortedSources.length - visibleCount)}</span>
-                                                                        <ChevronDown className="w-3.5 h-3.5 text-violet-400 group-hover:text-violet-300 group-hover:translate-y-0.5 transition-transform" />
-                                                                    </button>
-                                                                )}
-                                                                {canShowLess && (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setVisibleSourcesCount(prev => ({
-                                                                                ...prev,
-                                                                                [message.id]: initialCount
-                                                                            }));
-                                                                        }}
-                                                                        className="group flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/20 hover:border-slate-600/40 transition-all duration-300"
-                                                                        title={t('chat.showLess', 'Daha az göster')}
-                                                                    >
-                                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-300 group-hover:-translate-y-0.5 transition-transform" />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                                        )}
                                                                     </>
                                                                 );
                                                             })()}
@@ -816,11 +1009,13 @@ export default function ChatInterface() {
                                                 )}
                                             </div>
 
+                                            {/* Message Footer */}
                                             {message.role === 'assistant' && (
                                                 <div className="flex justify-start mt-2 px-1">
-                                                    <span className="text-[10px] font-medium text-slate-500">
+                                                    <span className="text-[10px] font-medium text-slate-500 tabular-nums">
                                                         {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                         {message.responseTime && ` • ${(message.responseTime / 1000).toFixed(1)}s`}
+                                                        {message.tokens?.total && ` • ${message.tokens.total.toLocaleString()} tokens`}
                                                     </span>
                                                 </div>
                                             )}
@@ -859,17 +1054,20 @@ export default function ChatInterface() {
                                     disabled={!inputText.trim() || isLoading}
                                     size="icon"
                                     className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-300 ${inputText.trim()
-                                            ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-900/20 hover:shadow-violet-900/40'
-                                            : 'bg-slate-800 text-slate-500'
+                                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-900/20 hover:shadow-violet-900/40'
+                                        : 'bg-slate-800 text-slate-500'
                                         }`}
                                 >
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                                 </Button>
                             </div>
                         </div>
-                        <div className="text-center mt-3">
+                        <div className="flex items-center justify-between mt-3 px-2">
+                            <p className="text-[10px] text-slate-500 font-medium">
+                                {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
+                            </p>
                             <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">
-                                {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR. LÜTFEN ÖNEMLİ BİLGİLERİ DOĞRULAYIN.')}
+                                {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR.')}
                             </p>
                         </div>
                     </div>
