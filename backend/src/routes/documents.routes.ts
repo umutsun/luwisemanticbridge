@@ -553,11 +553,12 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
         // Get DB file paths
         const dbFilesResult = await lsembPool.query('SELECT file_path FROM documents WHERE file_path IS NOT NULL');
         const dbFilePaths = new Set(dbFilesResult.rows.map((row: any) => row.file_path));
+        const dbFileNames = new Set(dbFilesResult.rows.map((row: any) => path.basename(row.file_path)));
 
-        // Count files not in DB
+        // Count files not in DB (check by full path OR by filename)
         files.forEach(filename => {
           const filePath = path.join(uploadDir, filename);
-          if (!dbFilePaths.has(filePath)) {
+          if (!dbFilePaths.has(filePath) && !dbFileNames.has(filename)) {
             physicalFilesNotInDB++;
           }
         });
@@ -635,12 +636,15 @@ router.get('/physical-files', authenticateToken, async (req: AuthenticatedReques
 
     // Get database file paths to compare (optional - continue if DB is down)
     let dbFilePaths: Set<string> = new Set();
+    let dbFileNames: Set<string> = new Set(); // Also track by filename for flexible matching
     let dbAvailable = false;
 
     try {
       if (lsembPool) {
         const dbFilesResult = await lsembPool.query('SELECT file_path FROM documents WHERE file_path IS NOT NULL');
         dbFilePaths = new Set(dbFilesResult.rows.map(row => row.file_path));
+        // Also extract just filenames for flexible matching (handles path format differences)
+        dbFileNames = new Set(dbFilesResult.rows.map(row => path.basename(row.file_path)));
         dbAvailable = true;
         console.log(` Found ${dbFilePaths.size} files in database`);
       }
@@ -655,7 +659,7 @@ router.get('/physical-files', authenticateToken, async (req: AuthenticatedReques
       const stats = fs.statSync(filePath);
 
       // Check if file is in database
-      const inDatabase = dbFilePaths.has(filePath);
+      const inDatabase = dbFilePaths.has(filePath) || dbFileNames.has(filename);
 
       // Extract original filename from timestamp-originalname.ext format
       let displayName = filename;
