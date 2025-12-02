@@ -8,7 +8,6 @@ const ServicesPage = dynamic(() => import('./services/page'), {
   ssr: false,
   loading: () => <div className="flex items-center justify-center h-64">Loading services...</div>
 });
-import GoogleDriveSettings from './google-drive-settings';
 import { useToast } from '../../../hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -44,7 +43,9 @@ import {
   Clock,
   Zap,
   Trash2,
-  Plus
+  Plus,
+  HardDrive,
+  Loader2
 } from 'lucide-react';
 import {
   getSettingsCategory,
@@ -3196,6 +3197,24 @@ function SecuritySettings() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
+  // Google Drive states
+  const [driveConfig, setDriveConfig] = useState<{
+    serviceAccountJson: string;
+    folderId: string;
+    enabled: boolean;
+  }>({ serviceAccountJson: '', folderId: '', enabled: false });
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveSaving, setDriveSaving] = useState(false);
+  const [driveTesting, setDriveTesting] = useState(false);
+  const [driveConnectionStatus, setDriveConnectionStatus] = useState<{
+    success: boolean;
+    message: string;
+    email?: string;
+    folderName?: string;
+  } | null>(null);
+  const [showDriveJson, setShowDriveJson] = useState(false);
+  const [driveFolderUrl, setDriveFolderUrl] = useState('');
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -3212,6 +3231,116 @@ function SecuritySettings() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Google Drive functions
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
+  const loadDriveConfig = useCallback(async () => {
+    setDriveLoading(true);
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/config`, {
+        headers: getAuthHeaders()
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.config) {
+          setDriveConfig(data.config);
+          if (data.config.folderId) {
+            setDriveFolderUrl(data.config.folderId);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load Google Drive config:', error);
+    } finally {
+      setDriveLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDriveConfig();
+  }, [loadDriveConfig]);
+
+  const saveDriveConfig = async () => {
+    setDriveSaving(true);
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/config`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(driveConfig)
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast({ title: 'Google Drive settings saved' });
+      } else {
+        toast({ title: 'Save Failed', description: data.error, variant: 'destructive' });
+      }
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setDriveSaving(false);
+    }
+  };
+
+  const testDriveConnection = async () => {
+    setDriveTesting(true);
+    setDriveConnectionStatus(null);
+    try {
+      await saveDriveConfig();
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/test`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      setDriveConnectionStatus(data);
+      if (data.success) {
+        toast({ title: 'Connection Successful', description: `Connected as ${data.email}` });
+      } else {
+        toast({ title: 'Connection Failed', description: data.message, variant: 'destructive' });
+      }
+    } catch (error: any) {
+      setDriveConnectionStatus({ success: false, message: error.message });
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setDriveTesting(false);
+    }
+  };
+
+  const extractDriveFolderId = async () => {
+    if (!driveFolderUrl) return;
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/extract-folder-id`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ url: driveFolderUrl })
+      });
+      const data = await response.json();
+      if (data.folderId) {
+        setDriveConfig(prev => ({ ...prev, folderId: data.folderId }));
+        toast({ title: 'Folder ID Extracted', description: data.folderId });
+      }
+    } catch (error) {
+      console.error('Failed to extract folder ID:', error);
+    }
+  };
+
+  const getDriveServiceAccountEmail = () => {
+    if (!driveConfig.serviceAccountJson || driveConfig.serviceAccountJson === '••••••••') {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(driveConfig.serviceAccountJson);
+      return parsed.client_email;
+    } catch {
+      return null;
+    }
+  };
 
   const saveAllSettings = async () => {
     setSaving(true);
@@ -3357,6 +3486,122 @@ function SecuritySettings() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Path where system logs are stored
                   </p>
+                </div>
+              </div>
+
+              {/* Google Drive Integration */}
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-medium flex items-center gap-2">
+                      <HardDrive className="h-4 w-4" />
+                      Google Drive Integration
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Import documents directly from Google Drive using Service Account
+                    </p>
+                  </div>
+                  <Switch
+                    checked={driveConfig.enabled}
+                    onCheckedChange={(enabled) => setDriveConfig(prev => ({ ...prev, enabled }))}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-xs">Service Account JSON</Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2"
+                        onClick={() => setShowDriveJson(!showDriveJson)}
+                      >
+                        {showDriveJson ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                    <Textarea
+                      placeholder={showDriveJson ? '{"type": "service_account", ...}' : '********'}
+                      value={showDriveJson ? driveConfig.serviceAccountJson : (driveConfig.serviceAccountJson ? '********' : '')}
+                      onChange={(e) => setDriveConfig(prev => ({ ...prev, serviceAccountJson: e.target.value }))}
+                      className="font-mono text-xs min-h-[80px]"
+                      disabled={!showDriveJson && driveConfig.serviceAccountJson !== ''}
+                    />
+                    {getDriveServiceAccountEmail() && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Account: <span className="font-mono">{getDriveServiceAccountEmail()}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">Google Drive Folder</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        placeholder="Folder URL or ID"
+                        value={driveFolderUrl}
+                        onChange={(e) => setDriveFolderUrl(e.target.value)}
+                        className="flex-1 text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={extractDriveFolderId}
+                        disabled={!driveFolderUrl}
+                      >
+                        Extract
+                      </Button>
+                    </div>
+                    {driveConfig.folderId && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Folder ID: <span className="font-mono">{driveConfig.folderId}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <Alert className="py-2">
+                    <AlertDescription className="text-xs">
+                      <strong>Setup:</strong> Create a Service Account in Google Cloud Console, generate JSON key,
+                      share your Drive folder with the service account email as Editor.
+                    </AlertDescription>
+                  </Alert>
+
+                  {driveConnectionStatus && (
+                    <Alert variant={driveConnectionStatus.success ? 'default' : 'destructive'} className="py-2">
+                      {driveConnectionStatus.success ? (
+                        <CheckCircle className="h-3 w-3" />
+                      ) : (
+                        <XCircle className="h-3 w-3" />
+                      )}
+                      <AlertDescription className="text-xs">
+                        <strong>{driveConnectionStatus.success ? 'Connected' : 'Failed'}</strong>
+                        <span className="ml-1">{driveConnectionStatus.message}</span>
+                        {driveConnectionStatus.folderName && (
+                          <span className="ml-1">- Folder: {driveConnectionStatus.folderName}</span>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={testDriveConnection}
+                      variant="outline"
+                      size="sm"
+                      disabled={driveTesting || !driveConfig.serviceAccountJson}
+                    >
+                      {driveTesting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                      Test
+                    </Button>
+                    <Button
+                      onClick={saveDriveConfig}
+                      size="sm"
+                      disabled={driveSaving}
+                    >
+                      {driveSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                      Save
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -5099,9 +5344,6 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="transform" className="h-12 px-4">
             <span className="text-sm">Transform</span>
           </TabsTrigger>
-          <TabsTrigger value="integrations" className="h-12 px-4">
-            <span className="text-sm">Integrations</span>
-          </TabsTrigger>
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
           </TabsTrigger>
@@ -5130,9 +5372,6 @@ export default function OptimizedSettingsPage() {
           <TemplatesManager />
         </TabsContent>
 
-        <TabsContent value="integrations">
-          <GoogleDriveSettings />
-        </TabsContent>
 
         <TabsContent value="services">
           <ServicesPage />
