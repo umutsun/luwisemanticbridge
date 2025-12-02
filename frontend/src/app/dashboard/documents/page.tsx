@@ -2205,26 +2205,39 @@ export default function DocumentManagerPage() {
                           className="hidden"
                           id="file-upload-area"
                         />
-                        <label htmlFor="file-upload-area" className="w-full cursor-pointer" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('file-upload-area')?.click(); }}>
+
+                        {/* Buttons Row - Select Files + Google Drive */}
+                        <div className="flex gap-2 w-full">
+                          <label htmlFor="file-upload-area" className="flex-1 cursor-pointer" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') document.getElementById('file-upload-area')?.click(); }}>
+                            <Button
+                              size="sm"
+                              className="w-full pointer-events-none"
+                              disabled={uploading}
+                              type="button"
+                            >
+                              {uploading ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                                  {t('documents.upload.uploading')}
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-3 h-3 mr-2" />
+                                  {t('documents.upload.selectFiles')}
+                                </>
+                              )}
+                            </Button>
+                          </label>
                           <Button
+                            variant="outline"
                             size="sm"
-                            className="w-full pointer-events-none"
+                            onClick={openDriveFilePicker}
                             disabled={uploading}
-                            type="button"
                           >
-                            {uploading ? (
-                              <>
-                                <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                                {t('documents.upload.uploading')}
-                              </>
-                            ) : (
-                              <>
-                                <Upload className="w-3 h-3 mr-2" />
-                                {t('documents.upload.selectFiles')}
-                              </>
-                            )}
+                            <HardDrive className="w-3 h-3 mr-2" />
+                            Google Drive
                           </Button>
-                        </label>
+                        </div>
 
                         {/* Save to DB Toggle */}
                         <div className="flex items-center justify-center gap-2 mt-3 pt-3">
@@ -2237,18 +2250,6 @@ export default function DocumentManagerPage() {
                             onCheckedChange={setSaveToDb}
                           />
                         </div>
-
-                        {/* Google Drive Import Button */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full mt-3"
-                          onClick={openDriveFilePicker}
-                          disabled={uploading}
-                        >
-                          <HardDrive className="w-3 h-3 mr-2" />
-                          Import from Google Drive
-                        </Button>
                       </div>
                     </div>
 
