@@ -771,7 +771,26 @@ export class ContextualDocumentProcessorService {
     }
   }
 
-  async processAndEmbedDocumentEnhanced(documentId: number, content: string, title: string, documentType: 'tabular' | 'text' | 'structured'): Promise<void> {
+  async processAndEmbedDocumentEnhanced(
+    documentId: number,
+    content: string,
+    title: string,
+    documentType: 'tabular' | 'text' | 'structured',
+    analysisMetadata?: {
+      category?: string;
+      keywords?: string[];
+      topics?: string[];
+      entities?: {
+        people?: string[];
+        organizations?: string[];
+        locations?: string[];
+        dates?: string[];
+      };
+      language?: string;
+      summary?: string;
+      templateId?: string;
+    }
+  ): Promise<void> {
     const client = await pool.connect();
 
     try {
@@ -810,6 +829,24 @@ export class ContextualDocumentProcessorService {
       let modelName = 'text-embedding-ada-002';
       let embeddingDimension = 1536;
 
+      // Build enriched metadata from PDF analysis
+      const enrichedMetadata = analysisMetadata ? {
+        category: analysisMetadata.category,
+        keywords: analysisMetadata.keywords?.slice(0, 10), // Top 10 keywords
+        topics: analysisMetadata.topics?.slice(0, 5), // Top 5 topics
+        entities: {
+          people: analysisMetadata.entities?.people?.slice(0, 10),
+          organizations: analysisMetadata.entities?.organizations?.slice(0, 10),
+          locations: analysisMetadata.entities?.locations?.slice(0, 5),
+        },
+        language: analysisMetadata.language,
+        templateId: analysisMetadata.templateId,
+      } : null;
+
+      if (enrichedMetadata) {
+        console.log(`[Embedding] Enriching with analysis metadata: category=${enrichedMetadata.category}, keywords=${enrichedMetadata.keywords?.length || 0}, entities.people=${enrichedMetadata.entities?.people?.length || 0}`);
+      }
+
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const embeddingInfo = await this.createEmbeddingsWithMetadata(
@@ -825,6 +862,12 @@ export class ContextualDocumentProcessorService {
         modelName = embeddingInfo.model;
         embeddingDimension = embeddingInfo.embedding.length;
 
+        // Merge chunk metadata with enriched analysis metadata
+        const fullMetadata = {
+          ...embeddingInfo.chunk_metadata,
+          ...(enrichedMetadata && { analysis: enrichedMetadata })
+        };
+
         await client.query(
           `INSERT INTO document_embeddings
            (document_id, chunk_text, embedding, metadata, content_type, model_name, tokens_used, embedding_dimension)
@@ -833,7 +876,7 @@ export class ContextualDocumentProcessorService {
             documentId,
             chunk,
             `[${embeddingInfo.embedding.join(',')}]`,
-            JSON.stringify(embeddingInfo.chunk_metadata),
+            JSON.stringify(fullMetadata),
             embeddingInfo.content_type,
             modelName,
             embeddingInfo.tokens,

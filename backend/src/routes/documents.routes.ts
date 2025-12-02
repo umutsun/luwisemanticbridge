@@ -1454,12 +1454,35 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
 
         console.log(`📄 Embedding document ${docId}: ${document.title} (type: ${documentType})`);
 
-        // Create embeddings using contextual processor
+        // Extract analysis metadata from document if available (from PDF analyze)
+        const docMetadata = document.metadata || {};
+        const analysis = docMetadata.analysis || {};
+        const analysisMetadata = {
+          category: analysis.category || docMetadata.category,
+          keywords: analysis.keywords || docMetadata.keywords,
+          topics: analysis.topics || docMetadata.topics,
+          entities: analysis.entities || docMetadata.entities,
+          language: analysis.language || docMetadata.language,
+          summary: analysis.summary || docMetadata.summary,
+          templateId: analysis.templateId || docMetadata.templateId,
+        };
+
+        // Check if we have any meaningful analysis data
+        const hasAnalysisData = analysisMetadata.category ||
+          (analysisMetadata.keywords && analysisMetadata.keywords.length > 0) ||
+          (analysisMetadata.entities && Object.keys(analysisMetadata.entities).length > 0);
+
+        if (hasAnalysisData) {
+          console.log(`📊 Found analysis metadata for document ${docId}: category=${analysisMetadata.category}, keywords=${analysisMetadata.keywords?.length || 0}`);
+        }
+
+        // Create embeddings using contextual processor with enriched metadata
         await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
           document.id,
           document.content,
           document.title,
-          documentType
+          documentType,
+          hasAnalysisData ? analysisMetadata : undefined
         );
 
         // Get embedding statistics
