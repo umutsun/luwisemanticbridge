@@ -180,6 +180,9 @@ class GoogleDriveService {
    */
   async initialize(): Promise<boolean> {
     try {
+      // Initialize OAuth2 client first
+      await this.initOAuth2Client();
+
       // Load config from database
       const configResult = await pool.query(
         "SELECT value FROM settings WHERE key = 'googleDrive.config'"
