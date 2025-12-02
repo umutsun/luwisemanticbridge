@@ -147,6 +147,16 @@ export default function DocumentManagerPage() {
   const [folders, setFolders] = useState<any[]>([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [selectedPhysicalFiles, setSelectedPhysicalFiles] = useState<Set<string>>(new Set());
+
+  // Google Drive states
+  const [showDriveModal, setShowDriveModal] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<any[]>([]);
+  const [driveLoading, setDriveLoading] = useState(false);
+  const [driveImporting, setDriveImporting] = useState(false);
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [selectedDriveFiles, setSelectedDriveFiles] = useState<Set<string>>(new Set());
+  const [drivePageToken, setDrivePageToken] = useState<string | null>(null);
+
   const [stats, setStats] = useState<Stats>({
     documents: {
       total: 0,
@@ -398,6 +408,154 @@ export default function DocumentManagerPage() {
       setFoldersLoading(false);
     }
   };
+
+  // Google Drive functions
+  const checkDriveConnection = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/config`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDriveConnected(data.config?.connected || false);
+      }
+    } catch (error) {
+      console.error('Failed to check Drive connection:', error);
+    }
+  };
+
+  const fetchDriveFiles = async (pageToken?: string) => {
+    setDriveLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const url = new URL(`${API_CONFIG.baseUrl}/api/v2/google-drive/files`);
+      url.searchParams.append('pageSize', '50');
+      if (pageToken) {
+        url.searchParams.append('pageToken', pageToken);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch Drive files');
+      }
+
+      const data = await response.json();
+      setDriveFiles(prev => pageToken ? [...prev, ...data.files] : data.files);
+      setDrivePageToken(data.nextPageToken || null);
+      setDriveConnected(true);
+    } catch (error: any) {
+      console.error('Failed to fetch Drive files:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to load Google Drive files',
+        variant: 'destructive'
+      });
+      if (error.message?.includes('not connected') || error.message?.includes('OAuth')) {
+        setDriveConnected(false);
+      }
+    } finally {
+      setDriveLoading(false);
+    }
+  };
+
+  const importFromDrive = async () => {
+    if (selectedDriveFiles.size === 0) {
+      toast({
+        title: 'No files selected',
+        description: 'Please select files to import',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setDriveImporting(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fileIds: Array.from(selectedDriveFiles)
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: 'Import Complete',
+          description: `Successfully imported ${data.imported?.length || 0} file(s)${data.failed?.length ? `, ${data.failed.length} failed` : ''}`
+        });
+        setSelectedDriveFiles(new Set());
+        setShowDriveModal(false);
+        fetchDocuments(); // Refresh document list
+      } else {
+        throw new Error(data.error || 'Import failed');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Import Failed',
+        description: error.message,
+        variant: 'destructive'
+      });
+    } finally {
+      setDriveImporting(false);
+    }
+  };
+
+  const openDriveFilePicker = () => {
+    setShowDriveModal(true);
+    setDriveFiles([]);
+    setSelectedDriveFiles(new Set());
+    setDrivePageToken(null);
+    fetchDriveFiles();
+  };
+
+  const toggleDriveFileSelection = (fileId: string) => {
+    setSelectedDriveFiles(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId);
+      } else {
+        newSet.add(fileId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllDriveFiles = () => {
+    if (selectedDriveFiles.size === driveFiles.length) {
+      setSelectedDriveFiles(new Set());
+    } else {
+      setSelectedDriveFiles(new Set(driveFiles.map(f => f.id)));
+    }
+  };
+
+  // Check Drive connection on mount
+  useEffect(() => {
+    checkDriveConnection();
+  }, []);
 
   const [processingFolders, setProcessingFolders] = useState<Set<string>>(new Set());
 
@@ -2078,6 +2236,18 @@ export default function DocumentManagerPage() {
                             onCheckedChange={setSaveToDb}
                           />
                         </div>
+
+                        {/* Google Drive Import Button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-3"
+                          onClick={openDriveFilePicker}
+                          disabled={uploading}
+                        >
+                          <HardDrive className="w-3 h-3 mr-2" />
+                          Import from Google Drive
+                        </Button>
                       </div>
                     </div>
 
@@ -3012,6 +3182,132 @@ export default function DocumentManagerPage() {
                 fetchStats();
               }}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Google Drive File Picker Modal */}
+      <Dialog open={showDriveModal} onOpenChange={setShowDriveModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HardDrive className="w-5 h-5" />
+              Import from Google Drive
+            </DialogTitle>
+            <DialogDescription>
+              Select files from your Google Drive to import
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-hidden">
+            {driveLoading && driveFiles.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !driveConnected && driveFiles.length === 0 ? (
+              <div className="text-center py-12">
+                <HardDrive className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground mb-4">
+                  Google Drive is not connected. Please configure it in Settings.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => window.location.href = '/dashboard/settings?tab=advanced'}
+                >
+                  Go to Settings
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Select All */}
+                <div className="flex items-center justify-between mb-4 pb-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={driveFiles.length > 0 && selectedDriveFiles.size === driveFiles.length}
+                      onCheckedChange={selectAllDriveFiles}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {selectedDriveFiles.size} of {driveFiles.length} selected
+                    </span>
+                  </div>
+                </div>
+
+                {/* File List */}
+                <ScrollArea className="h-[400px] pr-4">
+                  <div className="space-y-2">
+                    {driveFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedDriveFiles.has(file.id)
+                            ? 'bg-primary/5 border-primary/30'
+                            : 'hover:bg-muted/50'
+                        }`}
+                        onClick={() => toggleDriveFileSelection(file.id)}
+                      >
+                        <Checkbox
+                          checked={selectedDriveFiles.has(file.id)}
+                          onCheckedChange={() => toggleDriveFileSelection(file.id)}
+                        />
+                        {file.iconLink && (
+                          <img src={file.iconLink} alt="" className="w-5 h-5" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {file.size ? `${(parseInt(file.size) / 1024).toFixed(1)} KB` : 'Unknown size'}
+                            {file.modifiedTime && ` • ${new Date(file.modifiedTime).toLocaleDateString()}`}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {file.mimeType?.split('/').pop() || 'file'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Load More */}
+                  {drivePageToken && (
+                    <div className="pt-4 text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchDriveFiles(drivePageToken)}
+                        disabled={driveLoading}
+                      >
+                        {driveLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        ) : null}
+                        Load More
+                      </Button>
+                    </div>
+                  )}
+                </ScrollArea>
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowDriveModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={importFromDrive}
+              disabled={selectedDriveFiles.size === 0 || driveImporting}
+            >
+              {driveImporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import {selectedDriveFiles.size} File{selectedDriveFiles.size !== 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

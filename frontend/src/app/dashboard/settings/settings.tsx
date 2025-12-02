@@ -5557,7 +5557,7 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="h-12 px-4">
+          <TabsTrigger value="advanced" className="h-12 px-4">
             <span className="text-sm">Advanced</span>
           </TabsTrigger>
         </TabsList>
@@ -5587,7 +5587,7 @@ export default function OptimizedSettingsPage() {
           <ServicesPage />
         </TabsContent>
 
-        <TabsContent value="security">
+        <TabsContent value="advanced">
           <SecuritySettings />
         </TabsContent>
       </Tabs>
