@@ -655,7 +655,7 @@ export default function ChatInterface() {
 
     return (
         <ProtectedRoute>
-            <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 font-sans selection:bg-violet-500/30">
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans selection:bg-violet-500/30">
                 {/* Custom scrollbar styles */}
                 <style>{`
                     .custom-scrollbar::-webkit-scrollbar {
@@ -674,14 +674,14 @@ export default function ChatInterface() {
                 `}</style>
 
                 {/* Modern Glass Header */}
-                <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-white/5">
+                <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
                     <div className="max-w-6xl mx-auto w-full px-4 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-3 cursor-pointer group" onClick={clearChat}>
                             {settingsLoaded && chatbotSettings.logoUrl ? (
                                 <img src={chatbotSettings.logoUrl} alt={chatbotSettings.title} className="w-8 h-8 object-contain" />
                             ) : null}
                             <div>
-                                <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                                <h1 className="text-lg font-bold tracking-tight text-slate-800 dark:text-white">
                                     {settingsLoaded ? chatbotSettings.title : t('chat.title', 'AI Asistan')}
                                 </h1>
                                 {/* Active Model Display */}
@@ -726,7 +726,7 @@ export default function ChatInterface() {
                                         <User className="w-5 h-5" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-slate-200 dark:border-slate-700/50 text-slate-800 dark:text-slate-200 min-w-[200px] shadow-2xl">
+                                <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 min-w-[200px] shadow-lg">
                                     <div className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700/50">
                                         <p className="text-sm font-medium text-slate-900 dark:text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email}</p>
@@ -763,10 +763,8 @@ export default function ChatInterface() {
                             {/* Welcome Message */}
                             {isClient && showSuggestions && messages.length === 0 && (
                                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-6">
-                                    <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-3">
-                                        <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                                            {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
-                                        </span>
+                                    <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-3 text-slate-800 dark:text-white">
+                                        {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                     </h2>
                                     <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto text-sm">
                                         {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
@@ -779,10 +777,10 @@ export default function ChatInterface() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
                                     {isSuggestionsLoading ? (
                                         Array.from({ length: 4 }).map((_, index) => (
-                                            <div key={`skeleton-${index}`} className="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-white/5">
+                                            <div key={`skeleton-${index}`} className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 shadow-sm">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
-                                                    <Skeleton className="h-4 w-3/4 bg-slate-200 dark:bg-slate-800" />
+                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
+                                                    <Skeleton className="h-4 w-3/4 bg-slate-100 dark:bg-slate-700" />
                                                 </div>
                                             </div>
                                         ))
@@ -794,14 +792,13 @@ export default function ChatInterface() {
                                                 animate={{ opacity: 1, scale: 1 }}
                                                 transition={{ delay: index * 0.1 }}
                                                 onClick={() => handleSuggestionClick(question)}
-                                                className="group relative p-4 text-left rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-white/5 hover:border-violet-400 dark:hover:border-violet-500/30 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-300"
+                                                className="group relative p-4 text-left rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 hover:border-violet-400 dark:hover:border-violet-500 hover:shadow-md dark:hover:bg-slate-800 transition-all duration-200 shadow-sm"
                                             >
-                                                <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 via-violet-600/0 to-violet-600/0 group-hover:from-violet-600/5 group-hover:via-transparent group-hover:to-transparent rounded-xl transition-all duration-500"></div>
                                                 <div className="flex items-start gap-3">
-                                                    <div className="mt-1 p-1.5 rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400 group-hover:text-violet-500 dark:group-hover:text-violet-300 group-hover:bg-violet-500/20 transition-colors">
+                                                    <div className="mt-0.5 p-1.5 rounded-lg bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400">
                                                         <Zap className="w-4 h-4" />
                                                     </div>
-                                                    <span className="text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{question}</span>
+                                                    <span className="text-sm text-slate-800 dark:text-slate-200 font-medium">{question}</span>
                                                 </div>
                                             </motion.button>
                                         ))
@@ -825,13 +822,13 @@ export default function ChatInterface() {
                                         )}
 
                                         <div className={`max-w-[85%] ${message.role === 'user' ? 'order-1' : 'order-2'}`}>
-                                            <div className={`p-5 shadow-xl ${message.role === 'user'
+                                            <div className={`p-4 shadow-sm ${message.role === 'user'
                                                 ? message.isFromSource
-                                                    ? 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-100 border border-yellow-400 dark:border-yellow-500/30 rounded-2xl rounded-tr-sm'
-                                                    : 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm'
+                                                    ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 rounded-2xl rounded-tr-sm'
+                                                    : 'bg-violet-600 text-white rounded-2xl rounded-tr-sm'
                                                 : message.isError
-                                                    ? 'bg-red-50 dark:bg-red-500/10 border border-red-300 dark:border-red-500/30 text-red-700 dark:text-red-200 rounded-2xl rounded-tl-sm'
-                                                    : 'bg-white dark:bg-slate-900/80 backdrop-blur-sm border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm'
+                                                    ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 rounded-2xl rounded-tl-sm'
+                                                    : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm'
                                                 }`}>
                                                 {message.role === 'user' && message.isFromSource && (
                                                     <div className="flex items-center gap-2 mb-2 text-yellow-300">
@@ -858,7 +855,7 @@ export default function ChatInterface() {
 
                                                 {/* Sources Section */}
                                                 {message.sources && message.sources.length > 0 && (
-                                                    <div className="mt-6 pt-4 border-t border-slate-200 dark:border-white/10">
+                                                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                                         <div className="flex items-center justify-between mb-3">
                                                             <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
                                                                 <Sparkles className="w-3 h-3 text-violet-400" />
@@ -881,7 +878,7 @@ export default function ChatInterface() {
                                                                                 <div
                                                                                     key={idx}
                                                                                     onClick={() => handleSourceClick(source)}
-                                                                                    className="group p-4 rounded-xl bg-gradient-to-r from-slate-100 dark:from-slate-800/60 to-slate-50 dark:to-slate-800/30 hover:from-violet-100 dark:hover:from-violet-500/15 hover:to-indigo-50 dark:hover:to-indigo-500/10 border border-slate-200 dark:border-white/5 hover:border-violet-400 dark:hover:border-violet-500/30 backdrop-blur-sm transition-all duration-300 cursor-pointer"
+                                                                                    className="group p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer"
                                                                                     title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
                                                                                 >
                                                                                     <div className="flex items-start gap-3">
@@ -905,7 +902,7 @@ export default function ChatInterface() {
 
                                                                                             {/* LLM Summary */}
                                                                                             {source.summary && (
-                                                                                                <div className="mb-2 p-2 rounded bg-violet-100 dark:bg-violet-500/10 border-l-2 border-violet-400 dark:border-violet-500/50">
+                                                                                                <div className="mb-2 p-2 rounded bg-violet-50 dark:bg-violet-900/30 border-l-2 border-violet-400 dark:border-violet-500">
                                                                                                     <p className="text-xs text-violet-700 dark:text-violet-300">💡 {source.summary}</p>
                                                                                                 </div>
                                                                                             )}
@@ -1010,9 +1007,8 @@ export default function ChatInterface() {
                 {/* Floating Input Area */}
                 <div className="fixed bottom-6 left-0 right-0 z-50 px-4">
                     <div className="max-w-3xl mx-auto">
-                        <div className="relative group">
-                            <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl opacity-20 group-hover:opacity-40 blur transition duration-500"></div>
-                            <div className="relative flex items-end gap-2 p-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl">
+                        <div className="relative">
+                            <div className="flex items-end gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-lg">
                                 <Textarea
                                     ref={textareaRef}
                                     value={inputText}
@@ -1026,9 +1022,9 @@ export default function ChatInterface() {
                                     onClick={() => handleSendMessage()}
                                     disabled={!inputText.trim() || isLoading}
                                     size="icon"
-                                    className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-300 ${inputText.trim()
-                                        ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-900/20 hover:shadow-violet-900/40'
-                                        : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                                    className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-200 ${inputText.trim()
+                                        ? 'bg-violet-600 hover:bg-violet-700 text-white'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
                                         }`}
                                 >
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
@@ -1048,7 +1044,7 @@ export default function ChatInterface() {
 
                 {/* Profile Update Dialog */}
                 <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
-                    <DialogContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-slate-200 dark:border-slate-700/50 text-slate-800 dark:text-slate-200 shadow-2xl max-w-md">
+                    <DialogContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 shadow-lg max-w-md">
                         <DialogHeader>
                             <DialogTitle className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                                 <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-500/20">
