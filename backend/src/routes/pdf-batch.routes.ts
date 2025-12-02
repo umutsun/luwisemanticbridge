@@ -1965,6 +1965,16 @@ Return the extracted data as a JSON object with field names as keys. For fields 
       if (val !== null && typeof val === 'object') {
         return JSON.stringify(val);
       }
+      // If string looks like JSON, try to parse and re-stringify to ensure valid JSON
+      if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+        try {
+          const parsed = JSON.parse(val);
+          return JSON.stringify(parsed);
+        } catch {
+          // Not valid JSON, return as-is
+          return val;
+        }
+      }
       return val;
     });
 
