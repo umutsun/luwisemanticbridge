@@ -97,14 +97,16 @@ const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: s
 
 const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
     if (isBoosted) {
-        return 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-500/30';
+        // High contrast yellow for boosted keywords
+        return 'bg-amber-50 dark:bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-400 dark:border-amber-500/40 font-medium';
     }
+    // High contrast colors for better readability in both light and dark themes
     const colors = [
-        'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-500/30',
-        'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/30',
-        'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-500/30',
-        'bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-500/30',
-        'bg-pink-100 dark:bg-pink-500/20 text-pink-700 dark:text-pink-300 border-pink-300 dark:border-pink-500/30'
+        'bg-sky-50 dark:bg-sky-500/20 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500/40',
+        'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border-emerald-400 dark:border-emerald-500/40',
+        'bg-violet-50 dark:bg-violet-500/20 text-violet-800 dark:text-violet-200 border-violet-400 dark:border-violet-500/40',
+        'bg-rose-50 dark:bg-rose-500/20 text-rose-800 dark:text-rose-200 border-rose-400 dark:border-rose-500/40',
+        'bg-teal-50 dark:bg-teal-500/20 text-teal-800 dark:text-teal-200 border-teal-400 dark:border-teal-500/40'
     ];
     const index = keyword.length % colors.length;
     return colors[index];

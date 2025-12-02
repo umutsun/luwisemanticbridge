@@ -213,45 +213,56 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                     <div className="h-6 mb-2"></div> // Maintain spacing
                   )}
 
-                  <div className="flex items-center gap-2 mb-1">
-                    {source.url ? (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium line-clamp-2"
-                      >
-                        {(() => {
-                          let title = source.citation || source.title || '';
-                          // Clean up title - remove source table prefix if it exists
-                          title = title
-                            .replace(/ - ID: \d+/g, '')
-                            .replace(/^sorucevap -\s*/i, '')
-                            .replace(/^ozelgeler -\s*/i, '')
-                            .replace(/^danıştay kararları -\s*/i, '')
-                            .replace(/^makaleler -\s*/i, '')
-                            .replace(/\s*\([^)]*\)$/, '') // Remove category suffixes
-                            .trim();
-                          return title;
-                        })()}
-                      </a>
-                    ) : (
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300 line-clamp-2">
-                        {(() => {
-                          let title = source.citation || source.title || '';
-                          // Clean up title
-                          title = title
-                            .replace(/ - ID: \d+/g, '')
-                            .replace(/^sorucevap -\s*/i, '')
-                            .replace(/^ozelgeler -\s*/i, '')
-                            .replace(/^danıştay kararları -\s*/i, '')
-                            .replace(/^makaleler -\s*/i, '')
-                            .replace(/\s*\([^)]*\)$/, '') // Remove category suffixes
-                            .trim();
-                          return title;
-                        })()}
-                      </span>
-                    )}
+                  <div className="flex items-start gap-2 mb-1">
+                    {(() => {
+                      // Helper to check if string is a URL
+                      const isUrl = (str: string) => str?.startsWith('http://') || str?.startsWith('https://');
+
+                      // Get display title - prefer non-URL values
+                      let displayTitle = '';
+                      const rawTitle = source.citation || source.title || '';
+
+                      if (isUrl(rawTitle)) {
+                        // If title is URL, use excerpt summary or source table name
+                        if (source.excerpt) {
+                          // Take first sentence of excerpt as title
+                          const firstSentence = source.excerpt.split(/[.!?]/)[0]?.trim();
+                          displayTitle = firstSentence?.length > 10 ? firstSentence : source.excerpt.slice(0, 100);
+                        } else {
+                          displayTitle = getSourceTableName(source.sourceTable) + ' Kaynağı';
+                        }
+                      } else {
+                        // Clean up title - remove source table prefix if it exists
+                        displayTitle = rawTitle
+                          .replace(/ - ID: \d+/g, '')
+                          .replace(/^sorucevap -\s*/i, '')
+                          .replace(/^ozelgeler -\s*/i, '')
+                          .replace(/^danıştay kararları -\s*/i, '')
+                          .replace(/^makaleler -\s*/i, '')
+                          .replace(/\s*\([^)]*\)$/, '') // Remove category suffixes
+                          .trim();
+                      }
+
+                      // Always show as clickable link if URL exists
+                      if (source.url) {
+                        return (
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium line-clamp-2"
+                          >
+                            {displayTitle}
+                          </a>
+                        );
+                      } else {
+                        return (
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 line-clamp-2">
+                            {displayTitle}
+                          </span>
+                        );
+                      }
+                    })()}
                   </div>
 
   

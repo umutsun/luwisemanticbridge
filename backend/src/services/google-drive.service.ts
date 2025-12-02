@@ -526,7 +526,8 @@ class GoogleDriveService {
 
         // Save file to physical storage first (like regular upload)
         const docsDir = this.getUploadDirectory();
-        const safeName = name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        // Keep Turkish characters (ğüşıöçĞÜŞİÖÇ) and common file name chars
+        const safeName = name.replace(/[^\w\s\-_.ğüşıöçĞÜŞİÖÇ]/g, '_').replace(/\s+/g, '_');
         const filePath = path.join(docsDir, safeName);
 
         // Write file to disk
