@@ -2615,14 +2615,11 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
             {pdfSelectedFields.size > 0 ? (
               <>
                 {/* Table Name Confirmation */}
-                <div className="flex-shrink-0 mb-4">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
-                    Create Table: {pdfTableName || getDefaultTableName()}
+                <div className="flex-shrink-0 mb-3">
+                  <Label className="text-xs font-medium text-muted-foreground block">
+                    Table: <span className="font-mono text-foreground">{pdfTableName || getDefaultTableName()}</span>
+                    <span className="ml-2 text-muted-foreground/70">({pdfSelectedFields.size} columns)</span>
                   </Label>
-                  <div className="text-xs text-muted-foreground">
-                    This will create a table with {pdfSelectedFields.size} columns from the analyzed data.
-                    Similar documents can be processed in batches using this structure.
-                  </div>
                 </div>
 
                 {/* Two Column Layout: Progress | SQL Schema */}
