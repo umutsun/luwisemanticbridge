@@ -2492,6 +2492,7 @@ export default function DocumentManagerPage() {
                                   // Map processing_status values to display
                                   if (processingStatus) {
                                     switch (processingStatus) {
+                                      case 'pending':
                                       case 'waiting':
                                         status = t('documents.status.waiting');
                                         colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
@@ -2504,8 +2505,14 @@ export default function DocumentManagerPage() {
                                         status = t('documents.status.analyzed');
                                         colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';
                                         break;
+                                      case 'embedded':
+                                        status = t('documents.status.embedded');
+                                        // Purple/violet for embedded - distinct from transformed
+                                        colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
+                                        break;
                                       case 'transformed':
                                         status = t('documents.status.transformed');
+                                        // Emerald/green for transformed - indicates data in DB
                                         colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
                                         break;
                                       case 'failed':
@@ -2521,7 +2528,7 @@ export default function DocumentManagerPage() {
                                     // Fallback to old logic if processing_status is not available
                                     if (isEmbedded) {
                                       status = t('documents.status.embedded');
-                                      colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
+                                      colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
                                     } else if (isOCRProcessed) {
                                       status = t('documents.status.ocrDone');
                                       colorClass = 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400';

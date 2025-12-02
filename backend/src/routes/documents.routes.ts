@@ -1351,13 +1351,16 @@ router.delete('/:id/embeddings', authenticateToken, async (req: AuthenticatedReq
       [id]
     );
 
-    // Update document metadata to remove embedding info
+    // Update document metadata to remove embedding info and reset status to pending
     await lsembPool.query(
-      `UPDATE documents SET metadata = metadata - 'embeddings' WHERE id = $1`,
+      `UPDATE documents
+       SET metadata = metadata - 'embeddings',
+           processing_status = 'pending'
+       WHERE id = $1`,
       [id]
     );
 
-    console.log(`Deleted ${result.rowCount} embeddings for document ${id}`);
+    console.log(`Deleted ${result.rowCount} embeddings for document ${id}, status reset to pending`);
 
     res.json({
       success: true,
