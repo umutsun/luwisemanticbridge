@@ -5098,6 +5098,9 @@ export default function OptimizedSettingsPage() {
           <TabsTrigger value="transform" className="h-12 px-4">
             <span className="text-sm">Transform</span>
           </TabsTrigger>
+          <TabsTrigger value="integrations" className="h-12 px-4">
+            <span className="text-sm">Integrations</span>
+          </TabsTrigger>
           <TabsTrigger value="services" className="h-12 px-4">
             <span className="text-sm">Services</span>
           </TabsTrigger>
@@ -5124,6 +5127,10 @@ export default function OptimizedSettingsPage() {
 
         <TabsContent value="transform">
           <TemplatesManager />
+        </TabsContent>
+
+        <TabsContent value="integrations">
+          <GoogleDriveSettings />
         </TabsContent>
 
         <TabsContent value="services">

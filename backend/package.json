@@ -87,6 +87,7 @@
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
     "framer-motion": "^12.23.12",
+    "googleapis": "^166.0.0",
     "graphql": "^16.11.0",
     "graphql-scalars": "^1.25.0",
     "graphql-subscriptions": "^3.0.0",

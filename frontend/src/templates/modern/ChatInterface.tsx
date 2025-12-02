@@ -756,29 +756,51 @@ export default function ChatInterface() {
                 </header>
 
                 {/* Main Chat Area */}
-                <div className="pt-16 pb-32 max-w-4xl mx-auto w-full px-4">
-                    <ScrollArea className="h-[calc(100vh-12rem)] pr-4 overflow-x-hidden custom-scrollbar">
-                        <div className="space-y-6 py-2">
-                            {/* Welcome Message */}
+                <div className="pt-20 pb-32 max-w-4xl mx-auto w-full px-4">
+                    <ScrollArea className="h-[calc(100vh-13rem)] pr-4 overflow-x-hidden custom-scrollbar">
+                        <div className="space-y-8 py-4">
+                            {/* Welcome Message - Zen Style */}
                             {isClient && showSuggestions && messages.length === 0 && (
-                                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-6">
-                                    <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-3 text-slate-800 dark:text-white">
+                                <motion.div
+                                    initial={{ opacity: 0, y: 30 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                                    className="text-center py-12 mt-4"
+                                >
+                                    {/* Zen decorative element */}
+                                    <motion.div
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ delay: 0.2, duration: 0.5 }}
+                                        className="mb-6"
+                                    >
+                                        <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 dark:from-violet-500/20 dark:to-indigo-500/20 flex items-center justify-center border border-violet-200/50 dark:border-violet-500/20">
+                                            <Bot className="w-8 h-8 text-violet-600 dark:text-violet-400" />
+                                        </div>
+                                    </motion.div>
+
+                                    <h2 className="text-2xl md:text-3xl font-semibold tracking-tight mb-3 text-slate-800 dark:text-white">
                                         {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                     </h2>
-                                    <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto text-sm">
+                                    <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto text-sm leading-relaxed">
                                         {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                     </p>
                                 </motion.div>
                             )}
 
-                            {/* Suggestions Grid */}
+                            {/* Suggestions Grid - Zen Style */}
                             {isClient && showSuggestions && messages.length === 0 && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.3, duration: 0.5 }}
+                                    className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl mx-auto"
+                                >
                                     {isSuggestionsLoading ? (
                                         Array.from({ length: 4 }).map((_, index) => (
-                                            <div key={`skeleton-${index}`} className="p-4 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 shadow-sm">
+                                            <div key={`skeleton-${index}`} className="p-4 rounded-2xl bg-white/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/30 backdrop-blur-sm">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
+                                                    <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 animate-pulse" />
                                                     <Skeleton className="h-4 w-3/4 bg-slate-100 dark:bg-slate-700" />
                                                 </div>
                                             </div>
@@ -787,22 +809,22 @@ export default function ChatInterface() {
                                         memoizedSuggestions.map((question, index) => (
                                             <motion.button
                                                 key={index}
-                                                initial={{ opacity: 0, scale: 0.95 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                transition={{ delay: index * 0.1 }}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.4 + index * 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                                                 onClick={() => handleSuggestionClick(question)}
-                                                className="group relative p-4 text-left rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 hover:border-violet-400 dark:hover:border-violet-500 hover:shadow-md dark:hover:bg-slate-800 transition-all duration-200 shadow-sm"
+                                                className="group relative p-4 text-left rounded-2xl bg-white/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/30 hover:border-violet-400/50 dark:hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 dark:hover:shadow-violet-500/10 transition-all duration-300 backdrop-blur-sm"
                                             >
                                                 <div className="flex items-start gap-3">
-                                                    <div className="mt-0.5 p-1.5 rounded-lg bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400">
+                                                    <div className="mt-0.5 p-2 rounded-xl bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-500/10 dark:to-indigo-500/10 text-violet-600 dark:text-violet-400 group-hover:scale-105 transition-transform duration-300">
                                                         <Zap className="w-4 h-4" />
                                                     </div>
-                                                    <span className="text-sm text-slate-800 dark:text-slate-200 font-medium">{question}</span>
+                                                    <span className="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{question}</span>
                                                 </div>
                                             </motion.button>
                                         ))
                                     )}
-                                </div>
+                                </motion.div>
                             )}
 
                             {/* Messages List */}
