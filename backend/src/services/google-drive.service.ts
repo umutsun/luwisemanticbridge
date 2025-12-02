@@ -528,8 +528,8 @@ class GoogleDriveService {
         } else {
           // Create new document
           const insertResult = await pool.query(
-            `INSERT INTO documents (title, content, file_type, file_size, source, processing_status, metadata)
-             VALUES ($1, $2, $3, $4, 'google_drive', 'pending', $5)
+            `INSERT INTO documents (title, content, file_type, file_size, processing_status, metadata)
+             VALUES ($1, $2, $3, $4, 'pending', $5)
              RETURNING id`,
             [
               name,
@@ -539,6 +539,7 @@ class GoogleDriveService {
               JSON.stringify({
                 google_drive_id: fileId,
                 google_drive_mime: mimeType,
+                source: 'google_drive',
                 imported_at: new Date().toISOString()
               })
             ]
