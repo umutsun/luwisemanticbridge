@@ -5,7 +5,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
 import dataSchemaService from '../services/data-schema.service';
 
 const router = Router();
