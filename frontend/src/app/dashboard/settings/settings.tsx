@@ -4001,8 +4001,8 @@ function SecuritySettings() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
                   <Label>Port</Label>
                   <Input
                     type="number"
@@ -4017,8 +4017,8 @@ function SecuritySettings() {
                     })}
                   />
                 </div>
-                <div>
-                  <Label>Secure</Label>
+                <div className="flex items-center gap-2 pb-2">
+                  <Label className="text-sm">Secure</Label>
                   <Switch
                     checked={tempConfig?.smtp?.secure ?? securityConfig?.smtp?.secure ?? true}
                     onCheckedChange={(checked) => setTempConfig({
@@ -4028,7 +4028,6 @@ function SecuritySettings() {
                         secure: checked
                       }
                     })}
-                    className="mt-2"
                   />
                 </div>
               </div>
