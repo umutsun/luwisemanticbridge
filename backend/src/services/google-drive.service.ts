@@ -10,6 +10,7 @@ import { google, drive_v3 } from 'googleapis';
 import pool from '../config/database';
 import * as fs from 'fs';
 import * as path from 'path';
+import contextualDocumentProcessor from './contextual-document-processor.service';
 
 interface OAuthCredentials {
   clientId: string;
@@ -475,7 +476,31 @@ class GoogleDriveService {
   }
 
   /**
+   * Get upload directory for documents (same logic as documents.routes.ts)
+   */
+  private getUploadDirectory(): string {
+    const uploadDir = process.env.DOCUMENTS_PATH || process.env.UPLOAD_DIR || './docs';
+    const normalizedPath = uploadDir.replace(/\//g, path.sep);
+
+    let fullPath: string;
+    if (path.isAbsolute(normalizedPath)) {
+      fullPath = normalizedPath;
+    } else {
+      // Go up one level from backend to project root
+      fullPath = path.join(process.cwd(), '..', normalizedPath);
+    }
+
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+      console.log(`[GoogleDrive] Created documents directory: ${fullPath}`);
+    }
+
+    return fullPath;
+  }
+
+  /**
    * Import files from Google Drive to documents table
+   * Uses the same processing pipeline as regular file uploads (contextualDocumentProcessor)
    */
   async importFiles(fileIds: string[]): Promise<{
     success: number;
@@ -492,19 +517,38 @@ class GoogleDriveService {
 
     for (const fileId of fileIds) {
       try {
-        // Download file
+        // Download file from Google Drive
         const { content, name, mimeType } = await this.downloadFile(fileId);
+        console.log(`[GoogleDrive] Downloaded: ${name} (${content.length} bytes, ${mimeType})`);
 
         // Determine file type
         const fileType = this.getFileType(mimeType, name);
 
-        // Convert content to text for storage
-        let textContent = '';
-        if (mimeType === 'application/pdf') {
-          // For PDFs, store as base64 for now (will be processed later)
-          textContent = `[PDF Binary - ${content.length} bytes]`;
-        } else {
-          textContent = content.toString('utf-8');
+        // Save file to physical storage first (like regular upload)
+        const docsDir = this.getUploadDirectory();
+        const safeName = name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = path.join(docsDir, safeName);
+
+        // Write file to disk
+        fs.writeFileSync(filePath, content);
+        console.log(`[GoogleDrive] Saved to disk: ${filePath}`);
+
+        // Process file using contextual document processor (same as regular upload)
+        let processedDoc;
+        try {
+          processedDoc = await contextualDocumentProcessor.processFile(filePath, name, mimeType);
+          console.log(`[GoogleDrive] Processed: ${name} - ${processedDoc.content?.length || 0} chars`);
+        } catch (processingError: any) {
+          console.error(`[GoogleDrive] Processing error for ${name}:`, processingError.message);
+          // Fallback - read as text if possible
+          processedDoc = {
+            title: name,
+            content: mimeType.startsWith('text/') ? content.toString('utf-8') : '',
+            chunks: [],
+            metadata: {
+              processingError: processingError.message
+            }
+          };
         }
 
         // Check if already imported (by google_drive_id)
@@ -513,68 +557,65 @@ class GoogleDriveService {
           [fileId]
         );
 
+        const metadata = {
+          google_drive_id: fileId,
+          google_drive_mime: mimeType,
+          source: 'google_drive',
+          imported_at: new Date().toISOString(),
+          ...processedDoc.metadata
+        };
+
+        let docId: number;
+
         if (existingDoc.rows.length > 0) {
           // Update existing document
+          docId = existingDoc.rows[0].id;
           await pool.query(
             `UPDATE documents SET
               content = $1,
+              file_path = $2,
+              file_size = $3,
+              processing_status = $4,
               updated_at = CURRENT_TIMESTAMP,
-              metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{google_drive_updated}', to_jsonb(NOW()::text))
-            WHERE metadata->>'google_drive_id' = $2`,
-            [textContent, fileId]
+              metadata = $5
+            WHERE id = $6`,
+            [
+              processedDoc.content,
+              filePath,
+              content.length,
+              'completed',
+              JSON.stringify(metadata),
+              docId
+            ]
           );
-          result.importedDocs.push({
-            id: existingDoc.rows[0].id,
-            name,
-            driveId: fileId
-          });
+          console.log(`[GoogleDrive] Updated existing document: ${name} (id: ${docId})`);
         } else {
           // Create new document
           const insertResult = await pool.query(
-            `INSERT INTO documents (title, content, file_type, file_size, processing_status, metadata)
-             VALUES ($1, $2, $3, $4, 'pending', $5)
+            `INSERT INTO documents (title, content, file_type, file_size, file_path, processing_status, metadata)
+             VALUES ($1, $2, $3, $4, $5, 'completed', $6)
              RETURNING id`,
             [
               name,
-              textContent,
+              processedDoc.content,
               fileType,
               content.length,
-              JSON.stringify({
-                google_drive_id: fileId,
-                google_drive_mime: mimeType,
-                source: 'google_drive',
-                imported_at: new Date().toISOString()
-              })
+              filePath,
+              JSON.stringify(metadata)
             ]
           );
-          result.importedDocs.push({
-            id: insertResult.rows[0].id,
-            name,
-            driveId: fileId
-          });
+          docId = insertResult.rows[0].id;
+          console.log(`[GoogleDrive] Created new document: ${name} (id: ${docId})`);
         }
 
-        // If PDF, save the actual file for processing
-        if (mimeType === 'application/pdf') {
-          const docsDir = path.join(process.cwd(), 'docs');
-          if (!fs.existsSync(docsDir)) {
-            fs.mkdirSync(docsDir, { recursive: true });
-          }
-          const safeName = name.replace(/[^a-zA-Z0-9.-]/g, '_');
-          const filePath = path.join(docsDir, safeName);
-          fs.writeFileSync(filePath, content);
-
-          // Update document with file path
-          await pool.query(
-            `UPDATE documents SET
-              metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{file_path}', to_jsonb($1))
-            WHERE metadata->>'google_drive_id' = $2`,
-            [filePath, fileId]
-          );
-        }
+        result.importedDocs.push({
+          id: docId,
+          name,
+          driveId: fileId
+        });
 
         result.success++;
-        console.log(`[GoogleDrive] Imported: ${name}`);
+        console.log(`[GoogleDrive] Successfully imported: ${name}`);
       } catch (error: any) {
         result.failed++;
         result.errors.push(`${fileId}: ${error.message}`);
