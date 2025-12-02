@@ -3252,30 +3252,53 @@ export default function DocumentManagerPage() {
 
       {/* Google Drive File Picker Modal */}
       <Dialog open={showDriveModal} onOpenChange={setShowDriveModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <HardDrive className="w-5 h-5" />
-              Import from Google Drive
-            </DialogTitle>
-            <DialogDescription>
-              Select files from your Google Drive to import
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-white/20 dark:border-white/10">
+          {/* Glassmorph Header */}
+          <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 bg-gradient-to-r from-blue-500/5 to-indigo-500/5">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
+                <HardDrive className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium">
+                <button
+                  onClick={() => navigateToPathIndex(-1)}
+                  className="text-foreground/70 hover:text-foreground transition-colors"
+                >
+                  My Drive
+                </button>
+                {driveFolderPath.map((folder, index) => (
+                  <span key={folder.id} className="flex items-center gap-1">
+                    <span className="text-muted-foreground/50">/</span>
+                    <button
+                      onClick={() => navigateToPathIndex(index)}
+                      className={index === driveFolderPath.length - 1
+                        ? 'text-foreground font-semibold'
+                        : 'text-foreground/70 hover:text-foreground transition-colors'}
+                    >
+                      {folder.name}
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
 
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden px-6 py-4">
             {driveLoading && driveFiles.length === 0 ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : !driveConnected && driveFiles.length === 0 ? (
               <div className="text-center py-12">
-                <HardDrive className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <div className="p-4 rounded-full bg-muted/50 w-fit mx-auto mb-4">
+                  <HardDrive className="w-8 h-8 text-muted-foreground" />
+                </div>
                 <p className="text-muted-foreground mb-4">
-                  Google Drive is not connected. Please configure it in Settings.
+                  Google Drive not connected
                 </p>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => window.location.href = '/dashboard/settings?tab=advanced'}
                 >
                   Go to Settings
@@ -3283,45 +3306,22 @@ export default function DocumentManagerPage() {
               </div>
             ) : (
               <>
-                {/* Breadcrumb Navigation */}
-                <div className="flex items-center gap-1 mb-3 pb-2 border-b text-sm">
-                  <button
-                    onClick={() => navigateToPathIndex(-1)}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    My Drive
-                  </button>
-                  {driveFolderPath.map((folder, index) => (
-                    <span key={folder.id} className="flex items-center gap-1">
-                      <span className="text-muted-foreground">/</span>
-                      <button
-                        onClick={() => navigateToPathIndex(index)}
-                        className="text-primary hover:underline"
-                      >
-                        {folder.name}
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
                 {/* Select All (only files) */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
+                {driveFiles.filter(f => isImportableFile(f.mimeType)).length > 0 && (
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border/50">
                     <Checkbox
-                      checked={driveFiles.filter(f => isImportableFile(f.mimeType)).length > 0 &&
-                               selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length}
+                      checked={selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length}
                       onCheckedChange={selectAllDriveFiles}
-                      disabled={driveFiles.filter(f => isImportableFile(f.mimeType)).length === 0}
                     />
-                    <span className="text-sm text-muted-foreground">
-                      {selectedDriveFiles.size} file{selectedDriveFiles.size !== 1 ? 's' : ''} selected
+                    <span className="text-xs text-muted-foreground">
+                      {selectedDriveFiles.size > 0 ? `${selectedDriveFiles.size} selected` : 'Select all'}
                     </span>
                   </div>
-                </div>
+                )}
 
                 {/* File List */}
-                <ScrollArea className="h-[350px] pr-4">
-                  <div className="space-y-1">
+                <ScrollArea className="h-[320px]">
+                  <div className="space-y-0.5">
                     {driveFiles.map((file) => {
                       const isFolder = file.mimeType === 'application/vnd.google-apps.folder';
                       const isSelected = selectedDriveFiles.has(file.id);
@@ -3329,12 +3329,12 @@ export default function DocumentManagerPage() {
                       return (
                         <div
                           key={file.id}
-                          className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
+                          className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-all ${
                             isFolder
-                              ? 'hover:bg-blue-50 dark:hover:bg-blue-950/30 border-transparent'
+                              ? 'hover:bg-blue-500/10 dark:hover:bg-blue-500/20'
                               : isSelected
-                                ? 'bg-primary/5 border-primary/30'
-                                : 'hover:bg-muted/50 border-transparent'
+                                ? 'bg-primary/10 dark:bg-primary/20'
+                                : 'hover:bg-muted/50'
                           }`}
                           onClick={() => {
                             if (isFolder) {
@@ -3349,28 +3349,26 @@ export default function DocumentManagerPage() {
                               checked={isSelected}
                               onCheckedChange={() => toggleDriveFileSelection(file.id, file.mimeType)}
                               onClick={(e) => e.stopPropagation()}
+                              className="shrink-0"
                             />
                           )}
-                          {isFolder && (
-                            <FolderOpen className="w-5 h-5 text-blue-500 ml-1" />
-                          )}
-                          {!isFolder && file.iconLink && (
-                            <img src={file.iconLink} alt="" className="w-5 h-5" />
+                          {isFolder ? (
+                            <FolderOpen className="w-5 h-5 text-blue-500 shrink-0" />
+                          ) : file.iconLink ? (
+                            <img src={file.iconLink} alt="" className="w-5 h-5 shrink-0" />
+                          ) : (
+                            <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
                             <p className={`text-sm truncate ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
                               {file.name}
                             </p>
-                            {!isFolder && (
+                            {!isFolder && file.modifiedTime && (
                               <p className="text-xs text-muted-foreground">
-                                {file.size ? `${(parseInt(file.size) / 1024).toFixed(1)} KB` : ''}
-                                {file.modifiedTime && ` • ${new Date(file.modifiedTime).toLocaleDateString()}`}
+                                {new Date(file.modifiedTime).toLocaleDateString()}
                               </p>
                             )}
                           </div>
-                          <Badge variant="outline" className={`text-xs ${isFolder ? 'bg-blue-50 text-blue-600 border-blue-200' : ''}`}>
-                            {getFileTypeLabel(file.mimeType)}
-                          </Badge>
                         </div>
                       );
                     })}
@@ -3380,7 +3378,7 @@ export default function DocumentManagerPage() {
                   {drivePageToken && (
                     <div className="pt-4 text-center">
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         onClick={() => fetchDriveFiles(currentDriveFolderId, drivePageToken)}
                         disabled={driveLoading}
@@ -3388,7 +3386,7 @@ export default function DocumentManagerPage() {
                         {driveLoading ? (
                           <Loader2 className="w-4 h-4 animate-spin mr-2" />
                         ) : null}
-                        Load More
+                        Load more
                       </Button>
                     </div>
                   )}
@@ -3398,13 +3396,15 @@ export default function DocumentManagerPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between pt-4 border-t">
-            <Button variant="outline" onClick={() => setShowDriveModal(false)}>
+          <div className="flex items-center justify-between px-6 py-4 border-t border-white/10 dark:border-white/5 bg-gradient-to-r from-slate-500/5 to-slate-500/5">
+            <Button variant="ghost" size="sm" onClick={() => setShowDriveModal(false)}>
               Cancel
             </Button>
             <Button
               onClick={importFromDrive}
               disabled={selectedDriveFiles.size === 0 || driveImporting}
+              size="sm"
+              className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white border-0"
             >
               {driveImporting ? (
                 <>
@@ -3414,7 +3414,7 @@ export default function DocumentManagerPage() {
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-2" />
-                  Import {selectedDriveFiles.size} File{selectedDriveFiles.size !== 1 ? 's' : ''}
+                  Import{selectedDriveFiles.size > 0 ? ` (${selectedDriveFiles.size})` : ''}
                 </>
               )}
             </Button>
