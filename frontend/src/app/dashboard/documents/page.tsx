@@ -58,7 +58,8 @@ import {
   FolderOpen,
   MoreHorizontal,
   Sparkles,
-  Play
+  Play,
+  HardDrive
 } from 'lucide-react';
 import {
   Dialog,

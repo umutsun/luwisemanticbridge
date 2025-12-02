@@ -3621,49 +3621,23 @@ function SecuritySettings() {
 
               {/* Google Drive Integration */}
               <div className="border-t pt-4 mt-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h4 className="font-medium flex items-center gap-2">
-                      <HardDrive className="h-4 w-4" />
-                      Google Drive Integration
-                    </h4>
-                    <p className="text-xs text-muted-foreground">
-                      Connect your Google Drive to import documents
-                    </p>
-                  </div>
-                  {driveConfig.connected && (
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                      Connected
-                    </Badge>
-                  )}
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium flex items-center gap-2">
+                    <HardDrive className="h-4 w-4" />
+                    Google Drive Integration
+                    {driveConfig.connected && (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        {driveConfig.userEmail || 'Connected'}
+                      </Badge>
+                    )}
+                  </h4>
                 </div>
 
                 <div className="space-y-3">
                   {/* Connection Status */}
                   {driveConfig.connected ? (
-                    <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <div>
-                            <p className="text-sm font-medium text-green-700 dark:text-green-400">Connected to Google Drive</p>
-                            {driveConfig.userEmail && (
-                              <p className="text-xs text-green-600 dark:text-green-500">{driveConfig.userEmail}</p>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={disconnectGoogleDrive}
-                          disabled={driveSaving}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          {driveSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <XCircle className="h-3 w-3 mr-1" />}
-                          Disconnect
-                        </Button>
-                      </div>
-                    </div>
+                    <></>
                   ) : (
                     <div className="space-y-3">
                       {/* OAuth Configuration */}
@@ -3702,24 +3676,23 @@ function SecuritySettings() {
                             </div>
                             <div>
                               <Label className="text-xs">Redirect URI</Label>
-                              <div className="flex gap-1">
+                              <div className="relative">
                                 <Input
                                   placeholder="https://your-domain.com/api/v2/google-drive/callback"
                                   value={driveOAuthConfig.redirectUri}
                                   onChange={(e) => setDriveOAuthConfig(prev => ({ ...prev, redirectUri: e.target.value }))}
-                                  className="text-xs font-mono"
+                                  className="text-xs font-mono pr-8"
                                 />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="px-2 shrink-0"
+                                <button
+                                  type="button"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                                   onClick={() => {
                                     navigator.clipboard.writeText(driveOAuthConfig.redirectUri);
-                                    toast({ title: 'Copied!', description: 'Redirect URI copied to clipboard' });
+                                    toast({ title: 'Copied!' });
                                   }}
                                 >
                                   <Copy className="h-3 w-3" />
-                                </Button>
+                                </button>
                               </div>
                             </div>
                             <Button
@@ -3765,58 +3738,32 @@ function SecuritySettings() {
 
                   {/* Folder Configuration - Only show when connected */}
                   {driveConfig.connected && (
-                    <>
-                      <div>
-                        <Label className="text-xs">Google Drive Folder (Optional)</Label>
-                        <div className="flex gap-2 mt-1">
+                    <div className="space-y-2">
+                      <div className="flex gap-2 items-end">
+                        <div className="flex-1">
+                          <Label className="text-xs">Folder URL or ID</Label>
                           <Input
-                            placeholder="Folder URL or ID (leave empty for root)"
+                            placeholder="Leave empty for root folder"
                             value={driveFolderUrl}
                             onChange={(e) => setDriveFolderUrl(e.target.value)}
-                            className="flex-1 text-xs"
+                            className="text-xs mt-1"
                           />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={extractDriveFolderId}
-                            disabled={!driveFolderUrl}
-                          >
-                            Extract
-                          </Button>
                         </div>
-                        {driveConfig.folderId && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Folder ID: <span className="font-mono">{driveConfig.folderId}</span>
-                          </p>
-                        )}
-                      </div>
-
-                      {driveConnectionStatus && (
-                        <Alert variant={driveConnectionStatus.success ? 'default' : 'destructive'} className="py-2">
-                          {driveConnectionStatus.success ? (
-                            <CheckCircle className="h-3 w-3" />
-                          ) : (
-                            <XCircle className="h-3 w-3" />
-                          )}
-                          <AlertDescription className="text-xs">
-                            <strong>{driveConnectionStatus.success ? 'Connected' : 'Failed'}</strong>
-                            <span className="ml-1">{driveConnectionStatus.message}</span>
-                            {driveConnectionStatus.folderName && (
-                              <span className="ml-1">- Folder: {driveConnectionStatus.folderName}</span>
-                            )}
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={extractDriveFolderId}
+                          disabled={!driveFolderUrl}
+                        >
+                          Extract
+                        </Button>
                         <Button
                           onClick={testDriveConnection}
                           variant="outline"
                           size="sm"
                           disabled={driveTesting}
                         >
-                          {driveTesting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                          Test Connection
+                          {driveTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                         </Button>
                         <Button
                           onClick={saveDriveFolderId}
@@ -3824,10 +3771,27 @@ function SecuritySettings() {
                           disabled={driveSaving}
                         >
                           {driveSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                          Save Folder
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={disconnectGoogleDrive}
+                          disabled={driveSaving}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <XCircle className="h-3 w-3" />
                         </Button>
                       </div>
-                    </>
+                      {driveConfig.folderId && (
+                        <p className="text-xs text-muted-foreground">
+                          Current: <span className="font-mono">{driveConfig.folderId}</span>
+                        </p>
+                      )}
+                      {driveConnectionStatus && !driveConnectionStatus.success && (
+                        <p className="text-xs text-red-600">{driveConnectionStatus.message}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
