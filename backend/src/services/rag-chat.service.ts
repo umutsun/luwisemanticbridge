@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { semanticSearch, SemanticSearchService } from './semantic-search.service';
 import { LLMManager } from './llm-manager.service';
+import { dataSchemaService } from './data-schema.service';
 import pool from '../config/database';
 import { redis } from '../config/redis';
 import dotenv from 'dotenv';
@@ -2439,29 +2440,56 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
   private async processSourceWithLLM(r: any, idx: number, enableLLMGeneration: boolean, maxQuestionLength: number = 500): Promise<any> {
     const category = this.categorizeSource(r);
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
-
-    // Build proper citation
-    let citation = `[Source ${idx + 1}]`;
-    if (r.metadata) {
-      const parts = [];
-      Object.keys(r.metadata).forEach(key => {
-        const value = r.metadata[key];
-        if (value && typeof value === 'string' && value.trim()) {
-          parts.push(`${key}: ${value}`);
-        }
-      });
-      if (parts.length > 0) {
-        citation = parts.join(' - ');
-      }
-    }
+    const sourceTable = r.source_table || 'documents';
 
     // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
-    const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation));
+    const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || `Source ${idx + 1}`));
     const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
+
+    // Build metadata context for template processing
+    const metadata: Record<string, unknown> = {
+      title: cleanTitle,
+      excerpt: cleanExcerpt,
+      content: r.content || cleanExcerpt,
+      ...r.metadata
+    };
+
+    // Use DataSchema service for citation generation
+    let citation = `[Source ${idx + 1}]`;
+    try {
+      const citationResult = await dataSchemaService.generateCitation(sourceTable, metadata);
+      if (citationResult.text && citationResult.text !== sourceTable) {
+        citation = citationResult.text;
+      }
+    } catch (err) {
+      // Fallback to old citation logic
+      if (r.metadata) {
+        const parts: string[] = [];
+        Object.keys(r.metadata).forEach(key => {
+          const value = r.metadata[key];
+          if (value && typeof value === 'string' && value.trim()) {
+            parts.push(`${key}: ${value}`);
+          }
+        });
+        if (parts.length > 0) {
+          citation = parts.join(' - ');
+        }
+      }
+    }
 
     // Prepare content
     let processedContent = cleanExcerpt;
     let generatedQuestion = this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category, maxQuestionLength);
+
+    // Use DataSchema service for question generation
+    try {
+      const schemaQuestions = await dataSchemaService.generateQuestions(sourceTable, metadata, 1);
+      if (schemaQuestions.length > 0) {
+        generatedQuestion = schemaQuestions[0].text;
+      }
+    } catch (err) {
+      // Keep fallback question
+    }
 
     // Generate LLM content if enabled
     if (enableLLMGeneration) {
@@ -2469,12 +2497,23 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         console.log(` Processing source ${idx + 1} with LLM: ${cleanTitle.substring(0, 30)}...`);
         const llmResult = await this.generateContentAndQuestion(cleanTitle, cleanExcerpt, category);
         processedContent = llmResult.processedContent;
-        generatedQuestion = llmResult.generatedQuestion;
+        // Only override question if LLM provides one
+        if (llmResult.generatedQuestion) {
+          generatedQuestion = llmResult.generatedQuestion;
+        }
         console.log(` Parallel LLM generated content (length: ${processedContent?.length || 0})`);
       } catch (error) {
         console.error(` Parallel LLM processing FAILED for source ${idx + 1}:`, error);
         // Continue with fallback content
       }
+    }
+
+    // Extract tags from schema
+    let tags: string[] = [];
+    try {
+      tags = await dataSchemaService.extractTags(sourceTable, metadata);
+    } catch (err) {
+      // No tags
     }
 
     return {
@@ -2484,13 +2523,14 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       content: processedContent,
       question: generatedQuestion,
       category: category,
-      sourceTable: r.source_table || 'documents',
+      sourceTable: sourceTable,
       citation: citation,
+      tags: tags,
       score: score,
       relevance: score,
       relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
       databaseInfo: {
-        table: r.source_table || 'documents',
+        table: sourceTable,
         id: r.id,
         hasMetadata: !!r.metadata
       },
@@ -2509,6 +2549,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
   private createFallbackResult(r: any, idx: number, maxQuestionLength: number = 500): any {
     const category = this.categorizeSource(r);
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
+    const sourceTable = r.source_table || 'documents';
     const cleanTitle = this.toSentenceCase(this.stripHtml(r.title || `Kaynak ${idx + 1}`));
     const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
 
@@ -2519,13 +2560,14 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       content: cleanExcerpt,
       question: this.generateDynamicQuestion(cleanTitle, cleanExcerpt, category, maxQuestionLength),
       category: category,
-      sourceTable: r.source_table || 'documents',
-      citation: `[Source ${idx + 1}]`,
+      sourceTable: sourceTable,
+      citation: cleanTitle || `[Source ${idx + 1}]`,
+      tags: [],
       score: score,
       relevance: score,
       relevanceText: score > 80 ? 'Yüksek' : score > 60 ? 'Orta' : 'Düşük',
       databaseInfo: {
-        table: r.source_table || 'documents',
+        table: sourceTable,
         id: r.id,
         hasMetadata: !!r.metadata
       },
