@@ -132,7 +132,8 @@ class LocalMetadataExtractorService {
         console.log('[Local Metadata Extractor] Using LLM enhancement with Gemini');
         try {
           const llmResult = await this.extractWithLLM(text, filename, pdfInfo, options);
-          metadata = llmResult.metadata;
+          // Flatten LLM response: {common: {...}, templateData: {...}} -> {...common, templateData: {...}}
+          metadata = this.flattenLLMResponse(llmResult.metadata);
           tokensUsed = llmResult.tokensUsed;
 
           // Override statistics with accurate local calculations (LLM only sees 15k chars)
@@ -152,7 +153,8 @@ class LocalMetadataExtractorService {
             try {
               console.log('[Local Metadata Extractor] Trying DeepSeek as fallback (cheap alternative)');
               const deepseekResult = await this.extractWithDeepSeek(text, filename, pdfInfo, options);
-              metadata = deepseekResult.metadata;
+              // Flatten LLM response: {common: {...}, templateData: {...}} -> {...common, templateData: {...}}
+              metadata = this.flattenLLMResponse(deepseekResult.metadata);
               tokensUsed = deepseekResult.tokensUsed;
 
               // Override statistics with accurate local calculations
@@ -305,6 +307,44 @@ class LocalMetadataExtractorService {
         suggestedTableName: this.suggestTableName(filename, limitedText),
       }
     };
+  }
+
+  /**
+   * Flatten LLM response from grouped structure to flat metadata
+   * Transforms: {common: {summary, keywords, entities...}, templateData: {...}}
+   * To: {summary, keywords, entities..., templateData: {...}}
+   *
+   * This ensures frontend can access fields directly (e.g., metadata.entities)
+   * instead of nested (metadata.common.entities)
+   */
+  private flattenLLMResponse(llmResponse: any): PDFMetadata {
+    // If response doesn't have 'common' key, assume it's already flat
+    if (!llmResponse.common) {
+      console.log('[Flatten] Response already flat or missing common key');
+      return llmResponse as PDFMetadata;
+    }
+
+    console.log('[Flatten] Flattening LLM response with common + templateData structure');
+
+    // Extract common fields and spread them to top level
+    const { common, templateData, ...rest } = llmResponse;
+
+    // Build flattened metadata
+    const flattened: PDFMetadata = {
+      // Spread common fields to top level (summary, keywords, entities, statistics, etc.)
+      ...common,
+      // Keep templateData as-is (nested structure)
+      templateData,
+      // Include any other top-level fields that weren't in common/templateData
+      ...rest
+    };
+
+    // Log what we flattened for debugging
+    if (common.entities) {
+      console.log(`[Flatten] Entities extracted: people=${common.entities.people?.length || 0}, orgs=${common.entities.organizations?.length || 0}`);
+    }
+
+    return flattened;
   }
 
   /**
