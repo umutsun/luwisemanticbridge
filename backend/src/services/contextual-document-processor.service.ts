@@ -77,6 +77,33 @@ export class ContextualDocumentProcessorService {
     return null;
   }
 
+  private async getEmbeddingModel(): Promise<string> {
+    try {
+      const result = await pool.query(
+        "SELECT value FROM settings WHERE key IN ($1, $2, $3) ORDER BY key",
+        ['embedding_model', 'embeddings.model', 'llmSettings.embeddingModel']
+      );
+
+      if (result.rows.length > 0 && result.rows[0].value) {
+        let model = result.rows[0].value;
+        try {
+          const parsed = JSON.parse(model);
+          if (typeof parsed === 'string') {
+            model = parsed;
+          } else if (parsed.model) {
+            model = parsed.model;
+          }
+        } catch {}
+        console.log(`Using embedding model from settings: ${model}`);
+        return model;
+      }
+    } catch (error) {
+      console.error('Error fetching embedding model from settings:', error);
+    }
+
+    return process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002';
+  }
+
   // Document type categorization
   private categorizeDocumentType(filePath: string, mimeType: string): 'tabular' | 'text' | 'structured' {
     const ext = path.extname(filePath).toLowerCase();
@@ -715,7 +742,7 @@ export class ContextualDocumentProcessorService {
         };
       }
 
-      const model = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-ada-002';
+      const model = await this.getEmbeddingModel();
       const response = await openaiClient.embeddings.create({
         model: model,
         input: text

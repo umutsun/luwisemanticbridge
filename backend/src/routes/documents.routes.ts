@@ -1344,29 +1344,30 @@ router.post('/:id/embeddings', authenticateToken, async (req: AuthenticatedReque
 router.delete('/:id/embeddings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
-    
-    // Use contextual processor for deletion
-    const docResult = await lsembPool.query(
-      'SELECT metadata->>\'document_type\' as document_type FROM documents WHERE id = $1',
+
+    // Delete embeddings directly from database
+    const result = await lsembPool.query(
+      'DELETE FROM document_embeddings WHERE document_id = $1 RETURNING id',
       [id]
     );
 
-    const documentType = docResult.rows[0]?.document_type || 'text';
-    await contextualDocumentProcessor.processAndEmbedDocumentEnhanced(
-      parseInt(id),
-      '', // Empty content to trigger deletion
-      '',
-      documentType
+    // Update document metadata to remove embedding info
+    await lsembPool.query(
+      `UPDATE documents SET metadata = metadata - 'embeddings' WHERE id = $1`,
+      [id]
     );
+
+    console.log(`Deleted ${result.rowCount} embeddings for document ${id}`);
 
     res.json({
       success: true,
-      message: 'Embeddings deleted successfully'
+      message: `Deleted ${result.rowCount} embeddings successfully`,
+      deleted: result.rowCount
     });
   } catch (error: any) {
     console.error('Error deleting embeddings:', error);
-    res.status(500).json({ 
-      error: error.message || 'Failed to delete embeddings' 
+    res.status(500).json({
+      error: error.message || 'Failed to delete embeddings'
     });
   }
 });
@@ -1471,7 +1472,7 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
           [docId]
         );
 
-        // Update document with model info and tokens
+        // Update document with model info, tokens and embedding status
         if (embeddingStats.rows.length > 0) {
           const stats = embeddingStats.rows[0];
           await lsembPool.query(
@@ -1481,13 +1482,20 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
                  cost_usd = $3,
                  verified_at = CURRENT_TIMESTAMP,
                  auto_verified = true,
+                 processing_status = 'embedded',
+                 metadata = jsonb_set(
+                   COALESCE(metadata, '{}'::jsonb),
+                   '{embeddings}',
+                   to_jsonb($5::integer)
+                 ),
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = $4`,
             [
               stats.model_name || 'text-embedding-ada-002',
               stats.total_tokens || 0,
               stats.total_cost || 0,
-              docId
+              docId,
+              stats.chunk_count || 1
             ]
           );
         }

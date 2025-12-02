@@ -2354,11 +2354,10 @@ export default function DocumentManagerPage() {
                                 {/* File name and size */}
                                 <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                                   <p
-                                    className="text-sm font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
-                                    style={{ direction: 'rtl', textAlign: 'left' }}
+                                    className="text-sm font-medium flex-1 truncate"
                                     title={file.displayName || file.filename}
                                   >
-                                    <bdi>{file.displayName || file.filename}</bdi>
+                                    {file.displayName || file.filename}
                                   </p>
                                   <span className="text-[10px] text-muted-foreground flex-shrink-0 font-mono">
                                     {formatFileSize(file.size)}
