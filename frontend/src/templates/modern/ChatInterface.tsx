@@ -892,27 +892,27 @@ export default function ChatInterface() {
                                                                                                     {t('chat.source.label', 'Kaynak')} {idx + 1}
                                                                                                 </span>
                                                                                                 {source.sourceType && (
-                                                                                                    <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                                                                                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-500/30">
                                                                                                         {source.sourceType}
                                                                                                     </span>
                                                                                                 )}
                                                                                             </div>
 
                                                                                             {/* Title */}
-                                                                                            <p className="text-sm font-medium text-slate-200 group-hover:text-violet-200 transition-colors mb-2">
+                                                                                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-violet-700 dark:group-hover:text-violet-200 transition-colors mb-2">
                                                                                                 {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                                             </p>
 
                                                                                             {/* LLM Summary */}
                                                                                             {source.summary && (
-                                                                                                <div className="mb-2 p-2 rounded bg-violet-500/10 border-l-2 border-violet-500/50">
-                                                                                                    <p className="text-xs text-violet-300">💡 {source.summary}</p>
+                                                                                                <div className="mb-2 p-2 rounded bg-violet-100 dark:bg-violet-500/10 border-l-2 border-violet-400 dark:border-violet-500/50">
+                                                                                                    <p className="text-xs text-violet-700 dark:text-violet-300">💡 {source.summary}</p>
                                                                                                 </div>
                                                                                             )}
 
                                                                                             {/* Content/Excerpt */}
                                                                                             {(source.content || source.excerpt) && (
-                                                                                                <p className="text-xs text-slate-400 line-clamp-3 mb-3">
+                                                                                                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 mb-3">
                                                                                                     {source.content || source.excerpt}
                                                                                                 </p>
                                                                                             )}
@@ -950,12 +950,12 @@ export default function ChatInterface() {
                                                                                                 [message.id]: Math.min(visibleCount + 5, sortedSources.length)
                                                                                             }));
                                                                                         }}
-                                                                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 hover:border-violet-500/40 transition-all duration-300"
+                                                                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-500/10 hover:bg-violet-200 dark:hover:bg-violet-500/20 border border-violet-300 dark:border-violet-500/20 hover:border-violet-400 dark:hover:border-violet-500/40 transition-all duration-300"
                                                                                     >
-                                                                                        <span className="text-[10px] font-medium text-violet-400 group-hover:text-violet-300">
+                                                                                        <span className="text-[10px] font-medium text-violet-700 dark:text-violet-400 group-hover:text-violet-800 dark:group-hover:text-violet-300">
                                                                                             +{Math.min(5, sortedSources.length - visibleCount)} {t('chat.more', 'daha')}
                                                                                         </span>
-                                                                                        <ChevronDown className="w-3.5 h-3.5 text-violet-400 group-hover:text-violet-300 group-hover:translate-y-0.5 transition-transform" />
+                                                                                        <ChevronDown className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400 group-hover:text-violet-800 dark:group-hover:text-violet-300 group-hover:translate-y-0.5 transition-transform" />
                                                                                     </button>
                                                                                 )}
                                                                                 {canShowLess && (
@@ -966,10 +966,10 @@ export default function ChatInterface() {
                                                                                                 [message.id]: initialCount
                                                                                             }));
                                                                                         }}
-                                                                                        className="group flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/20 hover:border-slate-600/40 transition-all duration-300"
+                                                                                        className="group flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-200 dark:bg-slate-700/30 hover:bg-slate-300 dark:hover:bg-slate-700/50 border border-slate-300 dark:border-slate-600/20 hover:border-slate-400 dark:hover:border-slate-600/40 transition-all duration-300"
                                                                                     >
-                                                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-300 group-hover:-translate-y-0.5 transition-transform" />
-                                                                                        <span className="text-[10px] font-medium text-slate-400 group-hover:text-slate-300">{t('chat.showLess', 'Küçült')}</span>
+                                                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:-translate-y-0.5 transition-transform" />
+                                                                                        <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300">{t('chat.showLess', 'Küçült')}</span>
                                                                                     </button>
                                                                                 )}
                                                                             </div>
@@ -995,8 +995,8 @@ export default function ChatInterface() {
                                         </div>
 
                                         {message.role === 'user' && (
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center">
-                                                <User className="w-5 h-5 text-slate-400" />
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/10 flex items-center justify-center">
+                                                <User className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                                             </div>
                                         )}
                                     </motion.div>
@@ -1012,14 +1012,14 @@ export default function ChatInterface() {
                     <div className="max-w-3xl mx-auto">
                         <div className="relative group">
                             <div className="absolute -inset-0.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl opacity-20 group-hover:opacity-40 blur transition duration-500"></div>
-                            <div className="relative flex items-end gap-2 p-2 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl">
+                            <div className="relative flex items-end gap-2 p-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl">
                                 <Textarea
                                     ref={textareaRef}
                                     value={inputText}
                                     onChange={(e) => setInputText(e.target.value)}
                                     onKeyDown={handleKeyPress}
                                     placeholder={chatbotSettings.placeholder || t('chat.placeholder', 'Sorunuzu yazın...')}
-                                    className="min-h-[50px] max-h-[150px] w-full bg-transparent border-0 focus-visible:ring-0 resize-none py-3 px-4 text-slate-200 placeholder:text-slate-500"
+                                    className="min-h-[50px] max-h-[150px] w-full bg-transparent border-0 focus-visible:ring-0 resize-none py-3 px-4 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                                     disabled={isLoading}
                                 />
                                 <Button
@@ -1028,7 +1028,7 @@ export default function ChatInterface() {
                                     size="icon"
                                     className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-300 ${inputText.trim()
                                         ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-900/20 hover:shadow-violet-900/40'
-                                        : 'bg-slate-800 text-slate-500'
+                                        : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
                                         }`}
                                 >
                                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
@@ -1036,10 +1036,10 @@ export default function ChatInterface() {
                             </div>
                         </div>
                         <div className="flex items-center justify-between mt-3 px-2">
-                            <p className="text-[10px] text-slate-500 font-medium">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-500 font-medium">
                                 {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
                             </p>
-                            <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-500 font-medium tracking-wide uppercase">
                                 {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR.')}
                             </p>
                         </div>
@@ -1048,45 +1048,45 @@ export default function ChatInterface() {
 
                 {/* Profile Update Dialog */}
                 <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
-                    <DialogContent className="bg-slate-900/95 backdrop-blur-xl border-slate-700/50 text-slate-200 shadow-2xl max-w-md">
+                    <DialogContent className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-slate-200 dark:border-slate-700/50 text-slate-800 dark:text-slate-200 shadow-2xl max-w-md">
                         <DialogHeader>
-                            <DialogTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                                <div className="p-2 rounded-lg bg-violet-500/20">
-                                    <Edit3 className="w-4 h-4 text-violet-400" />
+                            <DialogTitle className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                                <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-500/20">
+                                    <Edit3 className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                                 </div>
                                 {t('profile.editTitle', 'Profili Düzenle')}
                             </DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4 pt-2">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-300">{t('profile.name', 'Ad Soyad')}</label>
+                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('profile.name', 'Ad Soyad')}</label>
                                 <Input
                                     value={profileForm.name}
                                     onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
                                     placeholder={t('profile.namePlaceholder', 'Adınızı girin')}
-                                    className="bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-violet-500/50 focus:ring-violet-500/20"
+                                    className="bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/50 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-violet-500/50 focus:ring-violet-500/20"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-300">{t('profile.email', 'E-posta')}</label>
+                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('profile.email', 'E-posta')}</label>
                                 <Input
                                     value={profileForm.email}
                                     disabled
-                                    className="bg-slate-800/30 border-slate-700/30 text-slate-500 cursor-not-allowed"
+                                    className="bg-slate-100 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700/30 text-slate-500 cursor-not-allowed"
                                 />
                                 <p className="text-[10px] text-slate-500">{t('profile.emailHint', 'E-posta değiştirilemez')}</p>
                             </div>
                             {profileError && (
-                                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                                    <X className="w-4 h-4 text-red-400 flex-shrink-0" />
-                                    <p className="text-sm text-red-400">{profileError}</p>
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
+                                    <X className="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0" />
+                                    <p className="text-sm text-red-600 dark:text-red-400">{profileError}</p>
                                 </div>
                             )}
                             <div className="flex gap-3 pt-2">
                                 <Button
                                     variant="ghost"
                                     onClick={() => setShowProfileDialog(false)}
-                                    className="flex-1 bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 border border-slate-700/50"
+                                    className="flex-1 bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700/50"
                                 >
                                     {t('common.cancel', 'İptal')}
                                 </Button>
