@@ -540,61 +540,74 @@ export default function DocumentManagerPage() {
       return;
     }
 
-    // Close modal immediately and show progress like file upload
-    const fileCount = selectedDriveFiles.size;
+    // Get file info for progress display
     const fileIds = Array.from(selectedDriveFiles);
+    const filesToImport = driveFiles.filter(f => fileIds.includes(f.id));
+    const totalFiles = filesToImport.length;
+
+    // Close modal and show progress
     setShowDriveModal(false);
     setUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(0);
+    setCurrentOperation('Starting import...');
 
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setUploading(false);
-        setUploadProgress(0);
-        return;
-      }
-
-      // Simulate progress
-      setUploadProgress(30);
-
-      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ fileIds })
-      });
-
-      setUploadProgress(70);
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setUploadProgress(100);
-        setTimeout(() => {
-          setUploading(false);
-          setUploadProgress(0);
-          toast({
-            title: 'Import Complete',
-            description: `Successfully imported ${data.imported?.length || 0} file(s)${data.failed?.length ? `, ${data.failed.length} failed` : ''}`
-          });
-          setSelectedDriveFiles(new Set());
-          fetchDocuments(); // Refresh document list
-        }, 500);
-      } else {
-        throw new Error(data.error || 'Import failed');
-      }
-    } catch (error: any) {
+    const token = localStorage.getItem('token');
+    if (!token) {
       setUploading(false);
       setUploadProgress(0);
-      toast({
-        title: 'Import Failed',
-        description: error.message,
-        variant: 'destructive'
-      });
+      setCurrentOperation('');
+      return;
     }
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    // Import files one by one for real-time progress
+    for (let i = 0; i < filesToImport.length; i++) {
+      const file = filesToImport[i];
+      const progress = Math.round(((i) / totalFiles) * 100);
+      setUploadProgress(progress);
+      setCurrentOperation(`${file.name}`);
+
+      try {
+        const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ fileIds: [file.id] })
+        });
+
+        const data = await response.json();
+        if (response.ok && data.imported > 0) {
+          successCount++;
+        } else {
+          failedCount++;
+        }
+      } catch (error) {
+        failedCount++;
+      }
+
+      // Update progress after each file
+      setUploadProgress(Math.round(((i + 1) / totalFiles) * 100));
+    }
+
+    // Complete
+    setUploadProgress(100);
+    setCurrentOperation('Complete');
+
+    setTimeout(() => {
+      setUploading(false);
+      setUploadProgress(0);
+      setCurrentOperation('');
+      toast({
+        title: 'Import Complete',
+        description: `Imported ${successCount} file${successCount !== 1 ? 's' : ''}${failedCount > 0 ? `, ${failedCount} failed` : ''}`
+      });
+      setSelectedDriveFiles(new Set());
+      fetchDocuments(); // Refresh document list
+    }, 500);
   };
 
   const openDriveFilePicker = () => {
@@ -3270,33 +3283,28 @@ export default function DocumentManagerPage() {
       {/* Google Drive File Picker Modal */}
       <Dialog open={showDriveModal} onOpenChange={setShowDriveModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-white/20 dark:border-white/10">
-          {/* Glassmorph Header */}
-          <div className="px-6 py-4 border-b border-white/10 dark:border-white/5 bg-gradient-to-r from-blue-500/5 to-indigo-500/5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
-                <HardDrive className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="flex items-center gap-1 text-sm font-medium">
-                <button
-                  onClick={() => navigateToPathIndex(-1)}
-                  className="text-foreground/70 hover:text-foreground transition-colors"
-                >
-                  My Drive
-                </button>
-                {driveFolderPath.map((folder, index) => (
-                  <span key={folder.id} className="flex items-center gap-1">
-                    <span className="text-muted-foreground/50">/</span>
-                    <button
-                      onClick={() => navigateToPathIndex(index)}
-                      className={index === driveFolderPath.length - 1
-                        ? 'text-foreground font-semibold'
-                        : 'text-foreground/70 hover:text-foreground transition-colors'}
-                    >
-                      {folder.name}
-                    </button>
-                  </span>
-                ))}
-              </div>
+          {/* Header - Breadcrumb only */}
+          <div className="px-4 py-2 border-b border-white/10 dark:border-white/5">
+            <div className="flex items-center gap-1 text-sm font-medium">
+              <button
+                onClick={() => navigateToPathIndex(-1)}
+                className="text-foreground/70 hover:text-foreground transition-colors"
+              >
+                My Drive
+              </button>
+              {driveFolderPath.map((folder, index) => (
+                <span key={folder.id} className="flex items-center gap-1">
+                  <span className="text-muted-foreground/50">/</span>
+                  <button
+                    onClick={() => navigateToPathIndex(index)}
+                    className={index === driveFolderPath.length - 1
+                      ? 'text-foreground font-semibold'
+                      : 'text-foreground/70 hover:text-foreground transition-colors'}
+                  >
+                    {folder.name}
+                  </button>
+                </span>
+              ))}
             </div>
           </div>
 
@@ -3363,16 +3371,9 @@ export default function DocumentManagerPage() {
                           ) : (
                             <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                           )}
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm break-words leading-tight ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
-                              {file.name}
-                            </p>
-                            {!isFolder && file.modifiedTime && (
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {new Date(file.modifiedTime).toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
+                          <span className={`flex-1 min-w-0 text-sm truncate ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
+                            {file.name}
+                          </span>
                         </div>
                       );
                     })}
@@ -3400,26 +3401,19 @@ export default function DocumentManagerPage() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-3 border-t border-white/10 dark:border-white/5 bg-gradient-to-r from-slate-500/5 to-slate-500/5">
+          <div className="flex items-center justify-between px-4 py-2 border-t border-white/10 dark:border-white/5">
             <span className="text-xs text-muted-foreground">
-              {selectedDriveFiles.size > 0
-                ? `${selectedDriveFiles.size} file${selectedDriveFiles.size > 1 ? 's' : ''} selected`
-                : `${driveFiles.filter(f => isImportableFile(f.mimeType)).length} file${driveFiles.filter(f => isImportableFile(f.mimeType)).length !== 1 ? 's' : ''}`}
+              {selectedDriveFiles.size}/{driveFiles.filter(f => isImportableFile(f.mimeType)).length}
             </span>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowDriveModal(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={importFromDrive}
-                disabled={selectedDriveFiles.size === 0 || driveImporting}
-                size="sm"
-                className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white border-0"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Import
-              </Button>
-            </div>
+            <Button
+              onClick={importFromDrive}
+              disabled={selectedDriveFiles.size === 0}
+              size="sm"
+              className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white border-0"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
