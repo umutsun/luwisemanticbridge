@@ -243,25 +243,12 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                           .trim();
                       }
 
-                      // Always show as clickable link if URL exists
-                      if (source.url) {
-                        return (
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium line-clamp-2"
-                          >
-                            {displayTitle}
-                          </a>
-                        );
-                      } else {
-                        return (
-                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300 line-clamp-2">
-                            {displayTitle}
-                          </span>
-                        );
-                      }
+                      // Show as plain text (no links for cleaner UI)
+                      return (
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 line-clamp-2">
+                          {displayTitle}
+                        </span>
+                      );
                     })()}
                   </div>
 
