@@ -8,6 +8,7 @@ const ServicesPage = dynamic(() => import('./services/page'), {
   ssr: false,
   loading: () => <div className="flex items-center justify-center h-64">Loading services...</div>
 });
+import GoogleDriveSettings from './google-drive-settings';
 import { useToast } from '../../../hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
