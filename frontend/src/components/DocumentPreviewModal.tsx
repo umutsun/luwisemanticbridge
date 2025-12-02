@@ -2939,8 +2939,8 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </Button>
               )}
 
-              {/* Create Table Tab: Transform button - REMOVED per user request */}
-              {/* {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
+              {/* Create Table Tab: Transform button */}
+              {isPDF && pdfActiveTab === 'transform' && pdfMetadata && pdfSelectedFields.size > 0 && (
                 <Button
                   variant="default"
                   size="sm"
@@ -2964,7 +2964,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     </>
                   )}
                 </Button>
-              )} */}
+              )}
             </div>
           </div>
         </div>

@@ -1740,6 +1740,10 @@ export default function DocumentManagerPage() {
 
           if (data.embedded > 0) {
             embeddedCount++;
+            // Get chunk count from results array
+            const docResult = data.results?.find((r: any) => r.id === doc.id);
+            const chunkCount = docResult?.chunks || 1;
+
             // Update queue status to completed
             setEmbedQueue(prev => prev.map(q =>
               q.id === doc.id ? { ...q, status: 'completed' as const } : q
@@ -1748,7 +1752,19 @@ export default function DocumentManagerPage() {
             // Update document in local state to show embedded status
             setDocuments(prev => prev.map(d =>
               d.id === doc.id
-                ? { ...d, hasEmbeddings: true, metadata: { ...d.metadata, embeddings: data.embeddingCount || 1 } }
+                ? { ...d, hasEmbeddings: true, metadata: { ...d.metadata, embeddings: chunkCount } }
+                : d
+            ));
+          } else if (data.skipped > 0) {
+            // Already embedded, still update local state
+            skippedCount++;
+            setEmbedQueue(prev => prev.map(q =>
+              q.id === doc.id ? { ...q, status: 'completed' as const } : q
+            ));
+            // Mark as embedded since it was skipped (already has embeddings)
+            setDocuments(prev => prev.map(d =>
+              d.id === doc.id
+                ? { ...d, hasEmbeddings: true }
                 : d
             ));
           } else {
