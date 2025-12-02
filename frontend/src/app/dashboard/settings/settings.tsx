@@ -3227,9 +3227,25 @@ function SecuritySettings() {
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getSecuritySettings();
-      setSecurityConfig(data);
-      setTempConfig(data);
+      // Load all categories needed for this settings page
+      const [securityData, advancedData, storageData, crawlerData, smtpData] = await Promise.all([
+        getSettingsCategory('security'),
+        getSettingsCategory('advanced'),
+        getSettingsCategory('storage'),
+        getSettingsCategory('crawler'),
+        getSettingsCategory('smtp')
+      ]);
+
+      const combinedData = {
+        security: securityData?.security || {},
+        advanced: advancedData?.advanced || {},
+        storage: storageData?.storage || {},
+        crawler: crawlerData?.crawler || {},
+        smtp: smtpData?.smtp || {}
+      };
+
+      setSecurityConfig(combinedData);
+      setTempConfig(combinedData);
     } catch (error) {
       console.error('Failed to load security settings:', error);
     } finally {
