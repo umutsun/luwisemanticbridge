@@ -843,13 +843,11 @@ export class DocumentTransformService {
 
   /**
    * Generate table name from filename
+   * Uses utility function that handles Turkish characters properly
    */
   private generateTableName(filename: string): string {
-    return filename
-      .replace(/\.[^/.]+$/, '') // Remove extension
-      .replace(/[^a-z0-9_]/gi, '_') // Replace special chars with underscore
-      .toLowerCase()
-      .substring(0, 63); // PostgreSQL table name limit
+    const { generateTableName } = require('../utils/text-utils');
+    return generateTableName(filename);
   }
 
   /**

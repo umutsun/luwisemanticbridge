@@ -119,10 +119,12 @@ export const dataPipelineResolvers = {
         // Generate table name (use entity name or default)
         const entityName =
           analysis.detectedEntities[0]?.name || 'scraped_data';
-        let tableName = customizations?.tableName || entityName.toLowerCase();
+        const { generateTableName, generateColumnName } = require('../../utils/text-utils');
 
-        // Sanitize table name
-        tableName = tableName.replace(/[^a-z0-9_]/g, '_');
+        // Use utility function that handles Turkish characters properly
+        let tableName = customizations?.tableName
+          ? generateTableName(customizations.tableName)
+          : generateTableName(entityName);
 
         // Build column definitions
         const columns = analysis.fieldTypes.map((field) => {
@@ -132,7 +134,7 @@ export const dataPipelineResolvers = {
           );
 
           return {
-            name: field.fieldName.replace(/[^a-z0-9_]/gi, '_').toLowerCase(),
+            name: generateColumnName(field.fieldName),
             type: customType?.sqlType || field.suggestedSQLType,
             nullable: customType?.nullable !== undefined ? customType.nullable : field.nullable,
             defaultValue: customType?.defaultValue,

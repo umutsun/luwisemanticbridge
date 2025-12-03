@@ -160,6 +160,13 @@ export default function DocumentManagerPage() {
   const [driveFolderPath, setDriveFolderPath] = useState<{id: string; name: string}[]>([]);
   const [currentDriveFolderId, setCurrentDriveFolderId] = useState<string | null>(null);
 
+  // Skipped embeddings states
+  const [showSkippedModal, setShowSkippedModal] = useState(false);
+  const [skippedEmbeddings, setSkippedEmbeddings] = useState<any[]>([]);
+  const [skippedLoading, setSkippedLoading] = useState(false);
+  const [skippedCount, setSkippedCount] = useState(0);
+  const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
+
   const [stats, setStats] = useState<Stats>({
     documents: {
       total: 0,
@@ -189,6 +196,7 @@ export default function DocumentManagerPage() {
     fetchPhysicalFiles();
     fetchFolders();
     fetchBatchSchemas();
+    fetchSkippedCount();
   }, []);
 
   const fetchDocuments = async () => {
@@ -321,6 +329,73 @@ export default function DocumentManagerPage() {
           last_24h_activity: 0
         }
       });
+    }
+  };
+
+  // Fetch skipped embeddings count (for badge display)
+  const fetchSkippedCount = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/skipped?limit=1`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSkippedCount(data.total || 0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch skipped count:', error);
+    }
+  };
+
+  // Fetch skipped embeddings (for modal display)
+  const fetchSkippedEmbeddings = async () => {
+    setSkippedLoading(true);
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/skipped?limit=100`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSkippedEmbeddings(data.records || []);
+        setSkippedCount(data.total || 0);
+        // Auto-select all by default
+        setSelectedSkippedIds(new Set((data.records || []).map((r: any) => r.id)));
+      }
+    } catch (error) {
+      console.error('Failed to fetch skipped embeddings:', error);
+      toast({ title: 'Error', description: 'Failed to fetch skipped embeddings', variant: 'destructive' });
+    } finally {
+      setSkippedLoading(false);
+    }
+  };
+
+  // Delete selected skipped embeddings
+  const handleDeleteSkipped = async () => {
+    if (selectedSkippedIds.size === 0) return;
+
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/skipped`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ids: Array.from(selectedSkippedIds) })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({ title: 'Deleted', description: data.message || `Deleted ${selectedSkippedIds.size} record(s)` });
+        setSkippedEmbeddings(prev => prev.filter(r => !selectedSkippedIds.has(r.id)));
+        setSkippedCount(prev => prev - selectedSkippedIds.size);
+        setSelectedSkippedIds(new Set());
+        if (skippedEmbeddings.length === selectedSkippedIds.size) {
+          setShowSkippedModal(false);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to delete skipped:', error);
+      toast({ title: 'Error', description: 'Failed to delete skipped records', variant: 'destructive' });
     }
   };
 
@@ -2237,6 +2312,27 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
 
+          {/* Skipped Embeddings - Red Pastel (only show if count > 0) */}
+          {skippedCount > 0 && (
+            <Card
+              className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => { fetchSkippedEmbeddings(); setShowSkippedModal(true); }}
+            >
+              <CardContent className="p-4">
+                <div className="text-sm text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Skipped Embeddings
+                </div>
+                <div className="text-2xl font-bold text-red-900 dark:text-red-100">
+                  {skippedCount.toLocaleString()}
+                </div>
+                <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  <span className="opacity-75">Click to review &amp; retry</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* OCR Processed - Purple Pastel */}
           <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
             <CardContent className="p-4">
@@ -3415,6 +3511,121 @@ export default function DocumentManagerPage() {
               Import
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Skipped Embeddings Modal */}
+      <Dialog open={showSkippedModal} onOpenChange={(open) => {
+        setShowSkippedModal(open);
+        if (!open) {
+          setSkippedEmbeddings([]);
+          setSelectedSkippedIds(new Set());
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              Skipped Embeddings ({skippedCount})
+            </DialogTitle>
+            <DialogDescription>
+              These records were skipped during embedding due to missing or invalid content.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-hidden">
+            {skippedLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : skippedEmbeddings.length === 0 ? (
+              <div className="text-center py-12">
+                <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                <p className="text-muted-foreground">No skipped embeddings</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={selectedSkippedIds.size === skippedEmbeddings.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedSkippedIds(new Set(skippedEmbeddings.map((r: any) => r.id)));
+                            } else {
+                              setSelectedSkippedIds(new Set());
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="w-40">Content Preview</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {skippedEmbeddings.map((record: any) => (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedSkippedIds.has(record.id)}
+                            onCheckedChange={(checked) => {
+                              const newSet = new Set(selectedSkippedIds);
+                              if (checked) {
+                                newSet.add(record.id);
+                              } else {
+                                newSet.delete(record.id);
+                              }
+                              setSelectedSkippedIds(newSet);
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {record.source_table}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium max-w-[150px] truncate">
+                          {record.source_name || `ID: ${record.source_id}`}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-red-600 dark:text-red-400">
+                            {record.skip_reason || 'Unknown'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-[150px] truncate">
+                          {record.content_preview || '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </div>
+
+          {/* Footer Actions */}
+          {skippedEmbeddings.length > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
+              <span className="text-sm text-muted-foreground">
+                {selectedSkippedIds.size} of {skippedEmbeddings.length} selected
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDeleteSkipped}
+                  disabled={selectedSkippedIds.size === 0}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Selected
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
