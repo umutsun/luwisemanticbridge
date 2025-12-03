@@ -99,7 +99,7 @@ router.post('/presets/:id/clone', authenticateToken, async (req: AuthenticatedRe
  */
 router.get('/user/schemas', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -118,7 +118,7 @@ router.get('/user/schemas', authenticateToken, async (req: AuthenticatedRequest,
  */
 router.post('/user/schemas', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -155,7 +155,7 @@ router.post('/user/schemas', authenticateToken, async (req: AuthenticatedRequest
  */
 router.put('/user/schemas/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -178,7 +178,7 @@ router.put('/user/schemas/:id', authenticateToken, async (req: AuthenticatedRequ
  */
 router.delete('/user/schemas/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -205,7 +205,7 @@ router.delete('/user/schemas/:id', authenticateToken, async (req: AuthenticatedR
  */
 router.get('/user/settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -224,7 +224,7 @@ router.get('/user/settings', authenticateToken, async (req: AuthenticatedRequest
  */
 router.put('/user/settings', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -244,7 +244,7 @@ router.put('/user/settings', authenticateToken, async (req: AuthenticatedRequest
  */
 router.post('/user/active-schema', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -276,7 +276,7 @@ router.post('/user/active-schema', authenticateToken, async (req: AuthenticatedR
  */
 router.get('/user/active-schema', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
     if (!userId) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
