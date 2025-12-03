@@ -419,7 +419,10 @@ export class RAGChatService {
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
         // Get content - use excerpt, content, or title as fallback
-        let content = this.truncateExcerpt(r.excerpt || r.content || '', 300);
+        // Clean raw metadata content (handles crawler records with listing_id/url format)
+        const rawContent = r.excerpt || r.content || '';
+        const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
+        let content = this.truncateExcerpt(cleanedContent, 300);
         // If still empty after truncation, use title as content
         if (!content || content.trim().length === 0) {
           content = `Bu kaynak "${title}" başlıklı bir belgedir.`;
@@ -694,7 +697,10 @@ export class RAGChatService {
   private formatSourceForContext(result: any, index: number): string {
     const score = result.score || (result.similarity_score * 100) || 0;
     const title = result.title || 'Belge';
-    const excerpt = this.truncateExcerpt(result.excerpt || result.content || '', 400);
+    // Clean raw metadata content (handles crawler records with listing_id/url format)
+    const rawContent = result.excerpt || result.content || '';
+    const cleanedContent = this.cleanRawMetadataContent(rawContent, result.metadata);
+    const excerpt = this.truncateExcerpt(cleanedContent, 400);
 
     // Add metadata info if available
     let metaInfo = '';
@@ -772,6 +778,46 @@ export class RAGChatService {
       .replace(/&quot;/g, '"') // Replace &quot;
       .replace(/&#39;/g, "'") // Replace &#39;
       .replace(/\s+/g, ' ') // Multiple spaces to single space
+      .trim();
+  }
+
+  /**
+   * Detect and clean raw crawler metadata content
+   * Some records contain "listing_id: X\nurl: Y\ntitle: Z" instead of actual description
+   * This extracts usable content from such raw metadata
+   */
+  private cleanRawMetadataContent(content: string, metadata?: Record<string, unknown>): string {
+    if (!content) return '';
+
+    // Detect raw metadata format: starts with "listing_id:" or contains URL pattern at start
+    const isRawMetadata = content.match(/^listing_id:\s*\d+/i) ||
+                          content.match(/^url:\s*https?:\/\//i);
+
+    if (!isRawMetadata) {
+      return content; // Normal content, return as-is
+    }
+
+    // Try to extract title from raw metadata content
+    const titleMatch = content.match(/title:\s*(.+?)(?:\n|$)/i);
+    if (titleMatch && titleMatch[1]) {
+      const extractedTitle = titleMatch[1].trim();
+      // If we have metadata.title, prefer it (usually cleaner)
+      if (metadata?.title && typeof metadata.title === 'string') {
+        return metadata.title;
+      }
+      return extractedTitle;
+    }
+
+    // Fall back to metadata.title if available
+    if (metadata?.title && typeof metadata.title === 'string') {
+      return metadata.title;
+    }
+
+    // Last resort: clean up the raw content by removing URLs and IDs
+    return content
+      .replace(/listing_id:\s*\d+\n?/gi, '')
+      .replace(/url:\s*https?:\/\/[^\s\n]+\n?/gi, '')
+      .replace(/title:\s*/gi, '')
       .trim();
   }
 
@@ -945,7 +991,10 @@ export class RAGChatService {
 
         // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
         const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || citation));
-        const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
+        // Clean raw metadata content (handles crawler records with listing_id/url format)
+        const rawContent = r.excerpt || r.content || '';
+        const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(cleanedContent));
 
         return {
           originalResult: r,
@@ -2100,7 +2149,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           title = title.substring(0, 77) + '...';
         }
 
-        const cleanExcerpt = this.toSentenceCase(this.stripHtml(result.excerpt || result.content || ''));
+        // Clean raw metadata content (handles crawler records with listing_id/url format)
+        const rawContent = result.excerpt || result.content || '';
+        const cleanedContent = this.cleanRawMetadataContent(rawContent, result.metadata);
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(cleanedContent));
 
         // Enable LLM generation for related topics
         let processedContent = cleanExcerpt;
@@ -2239,7 +2291,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           title = title.substring(0, 77) + '...';
         }
 
-        const cleanExcerpt = this.toSentenceCase(this.stripHtml(result.excerpt || result.content || ''));
+        // Clean raw metadata content (handles crawler records with listing_id/url format)
+        const rawContent = result.excerpt || result.content || '';
+        const cleanedContent = this.cleanRawMetadataContent(rawContent, result.metadata);
+        const cleanExcerpt = this.toSentenceCase(this.stripHtml(cleanedContent));
 
         // Generate LLM-processed content and question
         let processedContent = cleanExcerpt;
@@ -2469,7 +2524,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
 
     // Clean HTML from title and excerpt, convert ALL CAPS to sentence case
     const cleanTitle = this.toSentenceCase(this.stripHtml(r.title?.replace(/ \(Part \d+\/\d+\)/g, '') || `Source ${idx + 1}`));
-    const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
+    // Clean raw metadata content (handles crawler records with listing_id/url format)
+    const rawContent = r.excerpt || r.content || '';
+    const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
+    const cleanExcerpt = this.toSentenceCase(this.stripHtml(cleanedContent));
 
     // Build metadata context for template processing
     const metadata: Record<string, unknown> = {
@@ -2576,7 +2634,10 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
     const score = r.score || (r.similarity_score ? Math.round(r.similarity_score * 100) : 50);
     const sourceTable = r.source_table || 'documents';
     const cleanTitle = this.toSentenceCase(this.stripHtml(r.title || `Kaynak ${idx + 1}`));
-    const cleanExcerpt = this.toSentenceCase(this.stripHtml(r.excerpt || r.content || ''));
+    // Clean raw metadata content (handles crawler records with listing_id/url format)
+    const rawContent = r.excerpt || r.content || '';
+    const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
+    const cleanExcerpt = this.toSentenceCase(this.stripHtml(cleanedContent));
 
     return {
       id: r.id,
