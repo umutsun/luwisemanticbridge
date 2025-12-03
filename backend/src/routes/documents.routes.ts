@@ -1852,4 +1852,76 @@ router.post('/table-creation/cancel/:jobId', authenticateToken, async (req: Auth
   }
 });
 
+// Sync document statuses with their actual embedding and transformation states
+router.post('/sync-statuses', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const client = await lsembPool.connect();
+    try {
+      // Get all documents
+      const docsResult = await client.query('SELECT id, file_path FROM documents');
+      const documents = docsResult.rows;
+
+      let updated = 0;
+      const updates = [];
+
+      for (const doc of documents) {
+        const fileExt = path.extname(doc.file_path || '').toLowerCase();
+
+        // Check if document has embeddings
+        const embedResult = await client.query(
+          'SELECT COUNT(*) as count FROM document_embeddings WHERE document_id = $1',
+          [doc.id]
+        );
+        const hasEmbeddings = parseInt(embedResult.rows[0].count) > 0;
+
+        let newStatus = 'waiting';
+
+        // Determine status based on file type and embeddings
+        if (fileExt === '.csv') {
+          // CSV files should be marked as transformed
+          newStatus = 'transformed';
+        } else if (hasEmbeddings) {
+          // Documents with embeddings should be marked as embedded
+          newStatus = 'embedded';
+        } else if (fileExt === '.pdf' || fileExt === '.doc' || fileExt === '.docx') {
+          // Documents that have content but no embeddings are pending
+          newStatus = 'pending';
+        }
+
+        // Update the document status
+        const updateResult = await client.query(
+          'UPDATE documents SET processing_status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, file_path, processing_status',
+          [newStatus, doc.id]
+        );
+
+        if (updateResult.rows.length > 0) {
+          updated++;
+          updates.push({
+            id: doc.id,
+            file_path: doc.file_path,
+            newStatus: newStatus,
+            hasEmbeddings: hasEmbeddings
+          });
+        }
+      }
+
+      console.log(`[DocumentSync] Updated ${updated} document statuses`);
+      res.json({
+        success: true,
+        message: `Updated ${updated} documents`,
+        updated: updates
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('Error syncing document statuses:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to sync document statuses',
+      details: error.message
+    });
+  }
+});
+
 export default router;
