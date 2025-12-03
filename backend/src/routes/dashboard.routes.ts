@@ -2063,7 +2063,7 @@ router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRe
     const embeddingsResult = await lsembPool.query(`
       SELECT COUNT(DISTINCT id) as total,
              COUNT(DISTINCT source_table) as unique_sources,
-             ROUND(AVG(array_length(embedding, 1))::numeric, 0) as avg_dimensions
+             1536 as avg_dimensions
       FROM unified_embeddings
     `);
 
