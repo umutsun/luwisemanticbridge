@@ -9,7 +9,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Database,
   Plus,
@@ -20,9 +19,6 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
-  Building2,
-  Copy,
-  Lock,
   Star,
   Crown
 } from 'lucide-react';
@@ -43,34 +39,17 @@ interface Industry {
   icon: string;
 }
 
-interface IndustryPreset {
+/**
+ * Unified Schema interface - combines presets and user schemas
+ * No distinction between preset and custom - all are treated equally
+ */
+interface UnifiedSchema {
   id: string;
-  industry_code: string;
-  industry_name: string;
-  industry_icon?: string;
-  schema_name: string;
-  schema_display_name: string;
-  schema_description?: string;
-  fields: SchemaField[];
-  templates: {
-    analyze: string;
-    citation: string;
-    questions: string[];
-  };
-  llm_guide?: string;
-  tier: 'free' | 'pro' | 'enterprise';
-  is_active: boolean;
-  sort_order: number;
-}
-
-interface UserSchema {
-  id: string;
-  user_id: string;
   name: string;
   display_name: string;
   description?: string;
-  source_type: 'custom' | 'cloned' | 'imported';
-  source_preset_id?: string;
+  industry_code?: string;
+  industry_name?: string;
   fields: SchemaField[];
   templates: {
     analyze: string;
@@ -80,12 +59,17 @@ interface UserSchema {
   llm_guide?: string;
   is_active: boolean;
   is_default: boolean;
+  is_system?: boolean; // true for presets, false for user-created
+  source_preset_id?: string; // if cloned from preset
+  user_id?: string; // if user-created
+  tier?: 'free' | 'pro' | 'enterprise';
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface UserSettings {
   user_id: string;
   active_schema_id?: string;
-  active_schema_type?: 'preset' | 'custom';
   enable_auto_detect: boolean;
   max_fields_in_citation: number;
   max_questions: number;
@@ -105,52 +89,43 @@ const TIER_ICONS = {
 };
 
 export default function DataSchemaSettings() {
-  // State
+  // State - Unified schema management
   const [industries, setIndustries] = useState<Industry[]>([]);
   const [selectedIndustry, setSelectedIndustry] = useState<string>('all');
-  const [presets, setPresets] = useState<IndustryPreset[]>([]);
-  const [userSchemas, setUserSchemas] = useState<UserSchema[]>([]);
+  const [allSchemas, setAllSchemas] = useState<UnifiedSchema[]>([]); // All schemas (presets + user)
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [cloning, setCloning] = useState<string | null>(null);
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
-  const [selectedSchemaType, setSelectedSchemaType] = useState<'preset' | 'custom'>('preset');
   const [editedSchema, setEditedSchema] = useState<DataSchema | null>(null);
   const [fieldsExpanded, setFieldsExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>('presets');
 
   // Load data on mount
   useEffect(() => {
     loadData();
   }, []);
 
-  // Load presets when industry changes
+  // Filter schemas when industry changes
   useEffect(() => {
-    if (selectedIndustry) {
-      loadPresets(selectedIndustry === 'all' ? undefined : selectedIndustry);
-    }
+    // Filtering happens in the render logic
   }, [selectedIndustry]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [industriesRes, presetsRes, userSchemasRes, settingsRes] = await Promise.all([
+      const [industriesRes, schemasRes, settingsRes] = await Promise.all([
         apiClient.get('/api/v2/data-schema/industries'),
-        apiClient.get('/api/v2/data-schema/presets'),
-        apiClient.get('/api/v2/data-schema/user/schemas'),
+        apiClient.get('/api/v2/data-schema/all-schemas'), // New unified endpoint
         apiClient.get('/api/v2/data-schema/user/settings')
       ]);
 
       setIndustries(industriesRes.data.industries || []);
-      setPresets(presetsRes.data.presets || []);
-      setUserSchemas(userSchemasRes.data.schemas || []);
+      setAllSchemas(schemasRes.data.schemas || []);
       setUserSettings(settingsRes.data.settings || null);
 
       // Select active schema if exists
       if (settingsRes.data.settings?.active_schema_id) {
         setSelectedSchemaId(settingsRes.data.settings.active_schema_id);
-        setSelectedSchemaType(settingsRes.data.settings.active_schema_type || 'preset');
       }
     } catch (error) {
       console.error('Failed to load data:', error);
@@ -160,39 +135,8 @@ export default function DataSchemaSettings() {
     }
   };
 
-  const loadPresets = async (industryCode?: string) => {
-    try {
-      const url = industryCode
-        ? `/api/v2/data-schema/presets?industry=${industryCode}`
-        : '/api/v2/data-schema/presets';
-      const response = await apiClient.get(url);
-      setPresets(response.data.presets || []);
-    } catch (error) {
-      console.error('Failed to load presets:', error);
-    }
-  };
-
-  const handleSelectPreset = (preset: IndustryPreset) => {
-    setSelectedSchemaId(preset.id);
-    setSelectedSchemaType('preset');
-    setEditedSchema({
-      id: preset.id,
-      name: preset.schema_name,
-      displayName: preset.schema_display_name,
-      description: preset.schema_description || '',
-      fields: preset.fields,
-      templates: preset.templates,
-      llmGuide: preset.llm_guide || '',
-      isActive: preset.is_active,
-      isDefault: false,
-      createdAt: '',
-      updatedAt: ''
-    });
-  };
-
-  const handleSelectUserSchema = (schema: UserSchema) => {
+  const handleSelectSchema = (schema: UnifiedSchema) => {
     setSelectedSchemaId(schema.id);
-    setSelectedSchemaType('custom');
     setEditedSchema({
       id: schema.id,
       name: schema.name,
@@ -203,25 +147,9 @@ export default function DataSchemaSettings() {
       llmGuide: schema.llm_guide || '',
       isActive: schema.is_active,
       isDefault: schema.is_default,
-      createdAt: '',
-      updatedAt: ''
+      createdAt: schema.created_at || '',
+      updatedAt: schema.updated_at || ''
     });
-  };
-
-  const handleClonePreset = async (presetId: string) => {
-    try {
-      setCloning(presetId);
-      const response = await apiClient.post(`/api/v2/data-schema/presets/${presetId}/clone`);
-      const newSchema = response.data.schema;
-      setUserSchemas([...userSchemas, newSchema]);
-      toast.success('Şablon kopyalandı');
-      setActiveTab('custom');
-    } catch (error) {
-      console.error('Failed to clone preset:', error);
-      toast.error('Şablon kopyalanamadı');
-    } finally {
-      setCloning(null);
-    }
   };
 
   const handleSetActive = async () => {
@@ -230,13 +158,11 @@ export default function DataSchemaSettings() {
     try {
       setSaving(true);
       await apiClient.post('/api/v2/data-schema/user/active-schema', {
-        schemaId: selectedSchemaId,
-        schemaType: selectedSchemaType
+        schemaId: selectedSchemaId
       });
       setUserSettings(prev => prev ? {
         ...prev,
-        active_schema_id: selectedSchemaId,
-        active_schema_type: selectedSchemaType
+        active_schema_id: selectedSchemaId
       } : null);
       toast.success('Aktif şema ayarlandı');
     } catch (error) {
@@ -247,7 +173,7 @@ export default function DataSchemaSettings() {
     }
   };
 
-  const handleCreateUserSchema = () => {
+  const handleCreateSchema = () => {
     const newSchema: DataSchema = {
       id: '',
       name: 'yeni_sema',
@@ -261,19 +187,17 @@ export default function DataSchemaSettings() {
       updatedAt: ''
     };
     setSelectedSchemaId('new');
-    setSelectedSchemaType('custom');
     setEditedSchema(newSchema);
-    setActiveTab('custom');
   };
 
-  const handleSaveUserSchema = async () => {
+  const handleSaveSchema = async () => {
     if (!editedSchema) return;
 
     try {
       setSaving(true);
       if (selectedSchemaId === 'new' || !editedSchema.id) {
         // Create new
-        const response = await apiClient.post('/api/v2/data-schema/user/schemas', {
+        const response = await apiClient.post('/api/v2/data-schema/schemas', {
           name: editedSchema.name,
           display_name: editedSchema.displayName,
           description: editedSchema.description,
@@ -282,13 +206,13 @@ export default function DataSchemaSettings() {
           llm_guide: editedSchema.llmGuide
         });
         const newSchema = response.data.schema;
-        setUserSchemas([...userSchemas, newSchema]);
+        setAllSchemas([...allSchemas, newSchema]);
         setSelectedSchemaId(newSchema.id);
         setEditedSchema({ ...editedSchema, id: newSchema.id });
         toast.success('Şema oluşturuldu');
       } else {
         // Update existing
-        await apiClient.put(`/api/v2/data-schema/user/schemas/${editedSchema.id}`, {
+        await apiClient.put(`/api/v2/data-schema/schemas/${editedSchema.id}`, {
           name: editedSchema.name,
           display_name: editedSchema.displayName,
           description: editedSchema.description,
@@ -296,8 +220,8 @@ export default function DataSchemaSettings() {
           templates: editedSchema.templates,
           llm_guide: editedSchema.llmGuide
         });
-        setUserSchemas(userSchemas.map(s =>
-          s.id === editedSchema.id ? { ...s, ...editedSchema } as UserSchema : s
+        setAllSchemas(allSchemas.map(s =>
+          s.id === editedSchema.id ? { ...s, name: editedSchema.name, display_name: editedSchema.displayName, description: editedSchema.description, fields: editedSchema.fields, templates: editedSchema.templates, llm_guide: editedSchema.llmGuide } as UnifiedSchema : s
         ));
         toast.success('Şema güncellendi');
       }
@@ -309,12 +233,12 @@ export default function DataSchemaSettings() {
     }
   };
 
-  const handleDeleteUserSchema = async (schemaId: string) => {
+  const handleDeleteSchema = async (schemaId: string) => {
     if (!confirm('Bu şemayı silmek istediğinizden emin misiniz?')) return;
 
     try {
-      await apiClient.delete(`/api/v2/data-schema/user/schemas/${schemaId}`);
-      setUserSchemas(userSchemas.filter(s => s.id !== schemaId));
+      await apiClient.delete(`/api/v2/data-schema/schemas/${schemaId}`);
+      setAllSchemas(allSchemas.filter(s => s.id !== schemaId));
       if (selectedSchemaId === schemaId) {
         setSelectedSchemaId(null);
         setEditedSchema(null);
@@ -379,10 +303,12 @@ export default function DataSchemaSettings() {
     );
   }
 
-  const isPresetSelected = selectedSchemaType === 'preset' && selectedSchemaId;
-  const isUserSchemaSelected = selectedSchemaType === 'custom' && selectedSchemaId;
-  const isActiveSchema = userSettings?.active_schema_id === selectedSchemaId &&
-    userSettings?.active_schema_type === selectedSchemaType;
+  const isActiveSchema = userSettings?.active_schema_id === selectedSchemaId;
+
+  // Filter schemas by industry
+  const filteredSchemas = selectedIndustry === 'all'
+    ? allSchemas
+    : allSchemas.filter(s => s.industry_code === selectedIndustry);
 
   return (
     <div className="grid grid-cols-[35%_65%] gap-6">
@@ -413,143 +339,75 @@ export default function DataSchemaSettings() {
             </Select>
           </div>
 
-          {/* Tabs: Presets / Custom */}
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 h-8">
-              <TabsTrigger value="presets" className="text-xs">
-                <Building2 className="w-3 h-3 mr-1" />
-                Hazır Şablonlar
-              </TabsTrigger>
-              <TabsTrigger value="custom" className="text-xs">
-                <Settings className="w-3 h-3 mr-1" />
-                Özel Şemalar
-              </TabsTrigger>
-            </TabsList>
+          {/* Add New Schema Button */}
+          <Button size="sm" onClick={handleCreateSchema} className="w-full gap-2 h-8">
+            <Plus className="w-3 h-3" />
+            Yeni Şema Ekle
+          </Button>
 
-            {/* Presets Tab */}
-            <TabsContent value="presets" className="mt-3 space-y-2">
-              {presets.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Bu sektörde şablon yok
-                </p>
-              ) : (
-                presets.map(preset => (
-                  <div
-                    key={preset.id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedSchemaId === preset.id && selectedSchemaType === 'preset'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted'
-                    }`}
-                    onClick={() => handleSelectPreset(preset)}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{preset.schema_display_name}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Badge className={`text-[10px] px-1.5 ${TIER_COLORS[preset.tier]}`}>
-                          {TIER_ICONS[preset.tier] && React.createElement(TIER_ICONS[preset.tier]!, { className: 'w-2.5 h-2.5 mr-0.5 inline' })}
-                          {preset.tier}
+          {/* Unified Schema List */}
+          <div className="space-y-2">
+            {filteredSchemas.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Bu sektörde şema yok
+              </p>
+            ) : (
+              filteredSchemas.map(schema => (
+                <div
+                  key={schema.id}
+                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                    selectedSchemaId === schema.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:bg-muted'
+                  }`}
+                  onClick={() => handleSelectSchema(schema)}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-sm">{schema.display_name}</span>
+                    <div className="flex items-center gap-1">
+                      {schema.tier && (
+                        <Badge className={`text-[10px] px-1.5 ${TIER_COLORS[schema.tier]}`}>
+                          {TIER_ICONS[schema.tier] && React.createElement(TIER_ICONS[schema.tier]!, { className: 'w-2.5 h-2.5 mr-0.5 inline' })}
+                          {schema.tier}
                         </Badge>
-                        {userSettings?.active_schema_id === preset.id && (
-                          <Badge variant="default" className="text-[10px] px-1.5">Aktif</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {preset.schema_description}
-                    </p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-muted-foreground">
-                        {preset.fields.length} alan
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs"
-                        onClick={(e) => { e.stopPropagation(); handleClonePreset(preset.id); }}
-                        disabled={cloning === preset.id}
-                      >
-                        {cloning === preset.id ? (
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 mr-1" />
-                            Kopyala
-                          </>
-                        )}
-                      </Button>
+                      )}
+                      {isActiveSchema && selectedSchemaId === schema.id && (
+                        <Badge variant="default" className="text-[10px] px-1.5">Aktif</Badge>
+                      )}
                     </div>
                   </div>
-                ))
-              )}
-            </TabsContent>
-
-            {/* Custom Schemas Tab */}
-            <TabsContent value="custom" className="mt-3 space-y-2">
-              <Button size="sm" onClick={handleCreateUserSchema} className="w-full gap-2 h-8">
-                <Plus className="w-3 h-3" />
-                Yeni Şema Oluştur
-              </Button>
-
-              {userSchemas.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Henüz özel şema yok
-                </p>
-              ) : (
-                userSchemas.map(schema => (
-                  <div
-                    key={schema.id}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedSchemaId === schema.id && selectedSchemaType === 'custom'
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:bg-muted'
-                    }`}
-                    onClick={() => handleSelectUserSchema(schema)}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{schema.display_name}</span>
-                      <div className="flex items-center gap-1">
-                        {schema.source_type === 'cloned' && (
-                          <Badge variant="outline" className="text-[10px] px-1.5">Kopyalandı</Badge>
-                        )}
-                        {userSettings?.active_schema_id === schema.id && userSettings?.active_schema_type === 'custom' && (
-                          <Badge variant="default" className="text-[10px] px-1.5">Aktif</Badge>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {schema.description || schema.name}
-                    </p>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-muted-foreground">
-                        {schema.fields.length} alan
-                      </span>
+                  <p className="text-xs text-muted-foreground line-clamp-1">
+                    {schema.description || schema.name}
+                  </p>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-xs text-muted-foreground">
+                      {schema.fields.length} alan
+                    </span>
+                    {!schema.is_system && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-xs text-red-500 hover:text-red-600"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteUserSchema(schema.id); }}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSchema(schema.id); }}
                       >
                         <Trash2 className="w-3 h-3" />
                       </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-
-              {/* New schema placeholder */}
-              {selectedSchemaId === 'new' && (
-                <div className="p-3 rounded-lg border border-primary bg-primary/5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">Yeni Şema</span>
-                    <Badge variant="outline" className="text-[10px]">Kaydedilmedi</Badge>
+                    )}
                   </div>
                 </div>
-              )}
-            </TabsContent>
-          </Tabs>
+              ))
+            )}
+
+            {/* New schema placeholder */}
+            {selectedSchemaId === 'new' && (
+              <div className="p-3 rounded-lg border border-primary bg-primary/5">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">Yeni Şema</span>
+                  <Badge variant="outline" className="text-[10px]">Kaydedilmedi</Badge>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Settings */}
           {userSettings && (
@@ -611,31 +469,23 @@ export default function DataSchemaSettings() {
                     Aktif Yap
                   </Button>
                 )}
-                {isPresetSelected && (
-                  <Badge variant="secondary" className="gap-1">
-                    <Lock className="w-3 h-3" />
-                    Salt Okunur
-                  </Badge>
-                )}
-                {isUserSchemaSelected && (
-                  <Button
-                    onClick={handleSaveUserSchema}
-                    disabled={saving || !editedSchema?.name || !editedSchema?.displayName}
-                    size="sm"
-                  >
-                    {saving ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                        Kaydediliyor...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-3 h-3 mr-1" />
-                        Kaydet
-                      </>
-                    )}
-                  </Button>
-                )}
+                <Button
+                  onClick={handleSaveSchema}
+                  disabled={saving || !editedSchema?.name || !editedSchema?.displayName}
+                  size="sm"
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                      Kaydediliyor...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3 h-3 mr-1" />
+                      Kaydet
+                    </>
+                  )}
+                </Button>
               </div>
             )}
           </CardTitle>
@@ -652,7 +502,6 @@ export default function DataSchemaSettings() {
                     onChange={(e) => setEditedSchema({ ...editedSchema, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
                     placeholder="vergi_mevzuati"
                     className="mt-1"
-                    disabled={isPresetSelected}
                   />
                 </div>
                 <div>
@@ -662,7 +511,6 @@ export default function DataSchemaSettings() {
                     onChange={(e) => setEditedSchema({ ...editedSchema, displayName: e.target.value })}
                     placeholder="Vergi Mevzuatı"
                     className="mt-1"
-                    disabled={isPresetSelected}
                   />
                 </div>
               </div>

@@ -32,8 +32,69 @@ router.get('/industries', authenticateToken, async (req: Request, res: Response)
 });
 
 /**
+ * GET /api/v2/data-schema/all-schemas
+ * Get unified list of all schemas (presets + user schemas combined)
+ */
+router.get('/all-schemas', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    const industryCode = req.query.industry as string | undefined;
+    const userTier = (req.user as any)?.subscription_tier || 'free';
+
+    // Get presets
+    const presets = await dataSchemaService.getIndustryPresets(industryCode, userTier);
+    const presetSchemas = presets.map(p => ({
+      id: p.id,
+      name: p.schema_name,
+      display_name: p.schema_display_name,
+      description: p.schema_description,
+      industry_code: p.industry_code,
+      industry_name: p.industry_name,
+      fields: p.fields,
+      templates: p.templates,
+      llm_guide: p.llm_guide,
+      is_active: p.is_active,
+      is_default: false,
+      is_system: true,
+      tier: p.tier,
+      created_at: p.created_at,
+      updated_at: p.updated_at
+    }));
+
+    // Get user schemas
+    const userSchemas = userId ? await dataSchemaService.getUserSchemas(userId) : [];
+    const userSchemasFormatted = userSchemas.map(s => ({
+      id: s.id,
+      name: s.name,
+      display_name: s.display_name,
+      description: s.description,
+      industry_code: undefined,
+      industry_name: undefined,
+      fields: s.fields,
+      templates: s.templates,
+      llm_guide: s.llm_guide,
+      is_active: s.is_active,
+      is_default: s.is_default,
+      is_system: false,
+      source_preset_id: s.source_preset_id,
+      user_id: s.user_id,
+      created_at: s.created_at,
+      updated_at: s.updated_at
+    }));
+
+    // Combine and return
+    const allSchemas = [...presetSchemas, ...userSchemasFormatted];
+    res.json({ schemas: allSchemas });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Get all schemas error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/v2/data-schema/presets
  * Get industry presets (optionally filtered by industry)
+ * @deprecated Use /all-schemas instead
  */
 router.get('/presets', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -90,12 +151,100 @@ router.post('/presets/:id/clone', authenticateToken, async (req: AuthenticatedRe
 });
 
 // ============================================
+// UNIFIED SCHEMA OPERATIONS (Both presets and user schemas)
+// ============================================
+
+/**
+ * POST /api/v2/data-schema/schemas
+ * Create a new schema (user schema)
+ */
+router.post('/schemas', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { name, display_name, description, fields, templates, llm_guide } = req.body;
+
+    if (!name || !display_name) {
+      return res.status(400).json({ error: 'name and display_name are required' });
+    }
+
+    const schema = await dataSchemaService.createUserSchema(userId, {
+      name,
+      display_name,
+      description,
+      fields: fields || [],
+      templates: templates || { analyze: '', citation: '', questions: [] },
+      llm_guide
+    });
+
+    if (!schema) {
+      return res.status(500).json({ error: 'Failed to create schema' });
+    }
+
+    res.status(201).json({ schema });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Create schema error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/v2/data-schema/schemas/:id
+ * Update a schema (only user schemas)
+ */
+router.put('/schemas/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const schema = await dataSchemaService.updateUserSchema(req.params.id, userId, req.body);
+    if (!schema) {
+      return res.status(404).json({ error: 'Schema not found or update failed' });
+    }
+
+    res.json({ schema });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Update schema error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/v2/data-schema/schemas/:id
+ * Delete a schema (only user schemas)
+ */
+router.delete('/schemas/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const success = await dataSchemaService.deleteUserSchema(req.params.id, userId);
+    if (!success) {
+      return res.status(404).json({ error: 'Schema not found or delete failed' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Delete schema error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // USER SCHEMAS (User's custom schemas)
 // ============================================
 
 /**
  * GET /api/v2/data-schema/user/schemas
  * Get user's custom schemas
+ * @deprecated Use /all-schemas instead
  */
 router.get('/user/schemas', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -249,16 +398,12 @@ router.post('/user/active-schema', authenticateToken, async (req: AuthenticatedR
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const { schemaId, schemaType } = req.body;
-    if (!schemaId || !schemaType) {
-      return res.status(400).json({ error: 'schemaId and schemaType are required' });
+    const { schemaId } = req.body;
+    if (!schemaId) {
+      return res.status(400).json({ error: 'schemaId is required' });
     }
 
-    if (!['preset', 'custom'].includes(schemaType)) {
-      return res.status(400).json({ error: 'schemaType must be "preset" or "custom"' });
-    }
-
-    const success = await dataSchemaService.setActiveSchema(userId, schemaId, schemaType);
+    const success = await dataSchemaService.setActiveSchema(userId, schemaId);
     if (!success) {
       return res.status(500).json({ error: 'Failed to set active schema' });
     }
