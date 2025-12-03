@@ -25,6 +25,9 @@ interface GraphData {
     embeddedDocuments: number;
     totalEmbeddings: number;
     dataSources: number;
+    crawledItems?: number;
+    totalMessages?: number;
+    vectorDimensions?: number;
   };
 }
 
@@ -40,12 +43,21 @@ export default function DataSourcesGraph() {
   const loadGraphData = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/api/v2/dashboard/graph/data-sources');
-      setGraphData(response.data.graph);
       setError(null);
+      const response = await apiClient.get('/api/v2/dashboard/graph/data-sources');
+
+      if (!response.data?.graph) {
+        throw new Error('Invalid response format: missing graph data');
+      }
+
+      setGraphData(response.data.graph);
     } catch (err: any) {
       console.error('Failed to load graph:', err);
-      setError(err.response?.data?.error || 'Failed to load graph data');
+      const errorMessage =
+        err.response?.data?.error ||
+        err.message ||
+        'Failed to load graph data';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
