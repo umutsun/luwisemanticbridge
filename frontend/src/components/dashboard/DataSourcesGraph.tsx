@@ -94,8 +94,8 @@ export default function DataSourcesGraph() {
   const minY = Math.min(...nodes.map(n => n.position.y)) - padding;
   const maxY = Math.max(...nodes.map(n => n.position.y + nodeHeight)) + padding;
 
-  const svgWidth = Math.max(800, maxX - minX);
-  const svgHeight = Math.max(400, maxY - minY);
+  const svgWidth = Math.max(1200, maxX - minX);
+  const svgHeight = Math.max(600, maxY - minY);
 
   return (
     <Card>
@@ -113,29 +113,50 @@ export default function DataSourcesGraph() {
         </button>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="p-3 bg-muted rounded-lg">
+        {/* Stats - Expanded with all data sources */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
             <p className="text-xs text-muted-foreground mb-1">Documents</p>
             <p className="text-lg font-semibold">{stats.totalDocuments}</p>
-            <p className="text-xs text-green-600">
+            <p className="text-xs text-blue-600">
               {stats.embeddedDocuments} embedded
             </p>
           </div>
-          <div className="p-3 bg-muted rounded-lg">
+          <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+            <p className="text-xs text-muted-foreground mb-1">Web Crawls</p>
+            <p className="text-lg font-semibold">{stats.crawledItems || 0}</p>
+            <p className="text-xs text-green-600">
+              crawled items
+            </p>
+          </div>
+          <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+            <p className="text-xs text-muted-foreground mb-1">Messages</p>
+            <p className="text-lg font-semibold">{stats.totalMessages || 0}</p>
+            <p className="text-xs text-purple-600">
+              chat messages
+            </p>
+          </div>
+          <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
             <p className="text-xs text-muted-foreground mb-1">Embeddings</p>
             <p className="text-lg font-semibold">{stats.totalEmbeddings}</p>
-            <p className="text-xs text-blue-600">
+            <p className="text-xs text-orange-600">
               {stats.dataSources} sources
             </p>
           </div>
-          <div className="p-3 bg-muted rounded-lg md:col-span-2">
-            <p className="text-xs text-muted-foreground mb-1">Embedding Status</p>
-            <div className="flex items-center gap-2">
-              <div className="flex-1">
+          <div className="p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
+            <p className="text-xs text-muted-foreground mb-1">Vector DB</p>
+            <p className="text-lg font-semibold">{stats.vectorDimensions || 1536}</p>
+            <p className="text-xs text-cyan-600">
+              dimensions
+            </p>
+          </div>
+          <div className="p-3 bg-muted rounded-lg">
+            <p className="text-xs text-muted-foreground mb-1">Embedding Progress</p>
+            <div className="flex items-center gap-1">
+              <div className="flex-1 min-h-6">
                 <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-green-500 h-full"
+                    className="bg-green-500 h-full transition-all"
                     style={{
                       width: `${
                         stats.totalDocuments > 0
@@ -146,7 +167,7 @@ export default function DataSourcesGraph() {
                   />
                 </div>
               </div>
-              <span className="text-xs font-semibold">
+              <span className="text-xs font-semibold ml-1">
                 {stats.totalDocuments > 0
                   ? Math.round(
                       (stats.embeddedDocuments / stats.totalDocuments) * 100
@@ -227,13 +248,34 @@ export default function DataSourcesGraph() {
             let icon = null;
 
             if (node.type === 'source') {
-              bgColor = '#dbeafe';
-              textColor = '#1e40af';
-              icon = '📄';
+              // Differentiate source types by node ID
+              if (node.id === 'documents') {
+                bgColor = '#dbeafe';
+                textColor = '#1e40af';
+                icon = '📄';
+              } else if (node.id === 'crawls') {
+                bgColor = '#dcfce7';
+                textColor = '#15803d';
+                icon = '🌐';
+              } else if (node.id === 'messages') {
+                bgColor = '#fce7f3';
+                textColor = '#be185d';
+                icon = '💬';
+              } else {
+                bgColor = '#dbeafe';
+                textColor = '#1e40af';
+                icon = '📄';
+              }
             } else if (node.type === 'process') {
-              bgColor = '#dcfce7';
-              textColor = '#15803d';
-              icon = '⚡';
+              if (node.id === 'vector-db') {
+                bgColor = '#e0e7ff';
+                textColor = '#3730a3';
+                icon = '💾';
+              } else {
+                bgColor = '#fef08a';
+                textColor = '#854d0e';
+                icon = '⚡';
+              }
             } else if (node.type === 'table') {
               bgColor = '#f3e8ff';
               textColor = '#6b21a8';
@@ -347,10 +389,18 @@ export default function DataSourcesGraph() {
         </svg>
 
         {/* Legend */}
-        <div className="grid grid-cols-3 gap-4 text-xs pt-4 border-t">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs pt-4 border-t">
           <div className="flex items-center gap-2">
             <span className="text-xl">📄</span>
-            <span>Source Documents</span>
+            <span>Documents</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🌐</span>
+            <span>Web Crawls</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">💬</span>
+            <span>Messages</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xl">⚡</span>

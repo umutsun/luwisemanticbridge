@@ -2047,7 +2047,7 @@ router.get('/api/v2/unified-embeddings/record-types', async (req: Request, res: 
   }
 });
 
-// Data sources graph visualization
+// Data sources graph visualization with comprehensive data pipeline view
 router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Get data sources (tables)
@@ -2071,12 +2071,38 @@ router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRe
     const docsResult = await lsembPool.query(`
       SELECT COUNT(*) as total,
              COUNT(CASE WHEN processing_status = 'embedded' THEN 1 END) as embedded,
-             COUNT(CASE WHEN processing_status = 'pending' THEN 1 END) as pending
+             COUNT(CASE WHEN processing_status = 'pending' THEN 1 END) as pending,
+             COUNT(CASE WHEN processing_status = 'waiting' THEN 1 END) as waiting
       FROM documents
     `);
 
-    // Prepare graph nodes
+    // Get crawled data
+    const crawlsResult = await lsembPool.query(`
+      SELECT COUNT(*) as total,
+             COUNT(DISTINCT source_url) as unique_sources
+      FROM unified_embeddings
+      WHERE source_table ILIKE '%crawl%' OR source_table ILIKE '%listing%' OR source_table ILIKE '%sahibinden%'
+    `).catch(() => ({ rows: [{ total: 0, unique_sources: 0 }] }));
+
+    // Get messages (from conversations)
+    const messagesResult = await lsembPool.query(`
+      SELECT COUNT(*) as total,
+             COUNT(DISTINCT conversation_id) as conversations
+      FROM messages
+    `).catch(() => ({ rows: [{ total: 0, conversations: 0 }] }));
+
+    // Get vector database stats
+    const vectorDbResult = await lsembPool.query(`
+      SELECT
+        'unified_embeddings' as db_name,
+        COUNT(*) as total_vectors,
+        COUNT(DISTINCT source_table) as unique_sources
+      FROM unified_embeddings
+    `);
+
+    // Prepare graph nodes - comprehensive pipeline view
     const nodes = [
+      // Source layer
       {
         id: 'documents',
         label: 'Documents',
@@ -2084,10 +2110,32 @@ router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRe
         data: {
           total: parseInt(docsResult.rows[0]?.total || 0),
           embedded: parseInt(docsResult.rows[0]?.embedded || 0),
-          pending: parseInt(docsResult.rows[0]?.pending || 0)
+          pending: parseInt(docsResult.rows[0]?.pending || 0),
+          waiting: parseInt(docsResult.rows[0]?.waiting || 0)
         },
         position: { x: 0, y: 0 }
       },
+      {
+        id: 'crawls',
+        label: 'Web Crawls',
+        type: 'source',
+        data: {
+          total: parseInt(crawlsResult.rows[0]?.total || 0),
+          sources: parseInt(crawlsResult.rows[0]?.unique_sources || 0)
+        },
+        position: { x: 0, y: 120 }
+      },
+      {
+        id: 'messages',
+        label: 'Chat Messages',
+        type: 'source',
+        data: {
+          total: parseInt(messagesResult.rows[0]?.total || 0),
+          conversations: parseInt(messagesResult.rows[0]?.conversations || 0)
+        },
+        position: { x: 0, y: 240 }
+      },
+      // Processing layer
       {
         id: 'embeddings',
         label: 'Embeddings',
@@ -2097,31 +2145,65 @@ router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRe
           sources: parseInt(embeddingsResult.rows[0]?.unique_sources || 0),
           dimensions: parseInt(embeddingsResult.rows[0]?.avg_dimensions || 0)
         },
-        position: { x: 250, y: 0 }
+        position: { x: 280, y: 120 }
       },
+      // Vector DB layer
+      {
+        id: 'vector-db',
+        label: 'Vector Database',
+        type: 'process',
+        data: {
+          total: parseInt(vectorDbResult.rows[0]?.total_vectors || 0),
+          sources: parseInt(vectorDbResult.rows[0]?.unique_sources || 0)
+        },
+        position: { x: 560, y: 120 }
+      },
+      // Data sources layer (target tables)
       ...tablesResult.rows.map((row: any, idx: number) => ({
         id: `table_${row.id}`,
         label: row.label,
         type: 'table',
         data: { count: parseInt(row.count) },
-        position: { x: 500 + (idx % 3) * 200, y: Math.floor(idx / 3) * 120 }
+        position: { x: 840 + (idx % 2) * 200, y: (Math.floor(idx / 2)) * 140 }
       }))
     ];
 
-    // Prepare graph edges
+    // Prepare graph edges - complete data flow
     const edges = [
-      // Documents to Embeddings
+      // Source to Processing flows
       {
         id: 'docs_to_embeddings',
         source: 'documents',
         target: 'embeddings',
-        label: 'processed',
+        label: 'process',
         animated: true
       },
-      // Embeddings to data sources
-      ...tablesResult.rows.map((row: any, idx: number) => ({
-        id: `embeddings_to_${row.id}`,
+      {
+        id: 'crawls_to_embeddings',
+        source: 'crawls',
+        target: 'embeddings',
+        label: 'vectorize',
+        animated: true
+      },
+      {
+        id: 'messages_to_embeddings',
+        source: 'messages',
+        target: 'embeddings',
+        label: 'encode',
+        animated: true
+      },
+      // Processing to Vector DB
+      {
+        id: 'embeddings_to_vectordb',
         source: 'embeddings',
+        target: 'vector-db',
+        label: 'store',
+        animated: true
+      },
+      // Vector DB to Data sources
+      ...tablesResult.rows.map((row: any, idx: number) => ({
+        id: `vectordb_to_${row.id}`,
+        source: 'vector-db',
         target: `table_${row.id}`,
         label: `${row.count} records`,
         animated: false
@@ -2137,7 +2219,10 @@ router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRe
           totalDocuments: parseInt(docsResult.rows[0]?.total || 0),
           embeddedDocuments: parseInt(docsResult.rows[0]?.embedded || 0),
           totalEmbeddings: parseInt(embeddingsResult.rows[0]?.total || 0),
-          dataSources: parseInt(embeddingsResult.rows[0]?.unique_sources || 0)
+          dataSources: parseInt(embeddingsResult.rows[0]?.unique_sources || 0),
+          crawledItems: parseInt(crawlsResult.rows[0]?.total || 0),
+          totalMessages: parseInt(messagesResult.rows[0]?.total || 0),
+          vectorDimensions: parseInt(embeddingsResult.rows[0]?.avg_dimensions || 0)
         }
       }
     });

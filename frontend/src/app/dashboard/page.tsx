@@ -14,12 +14,14 @@ import { Switch } from "@/components/ui/switch";
 import {
   Loader2,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  Terminal
 } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
 import DataSourcesGraph from "@/components/dashboard/DataSourcesGraph";
+import ConsoleModal from "@/components/dashboard/ConsoleModal";
 
 interface SystemStatus {
   database: {
@@ -170,6 +172,7 @@ export default function DashboardPage() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showConsoleLog, setShowConsoleLog] = useState(false);
+  const [isConsoleModalOpen, setIsConsoleModalOpen] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [scrapingStatus, setScrapingStatus] = useState<"idle" | "running" | "paused" | "completed">("idle");
 
@@ -1604,11 +1607,26 @@ export default function DashboardPage() {
 
         {/* Data Sources Graph Visualization */}
         <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">Data Sources & Pipeline</h2>
+            <Button
+              onClick={() => setIsConsoleModalOpen(true)}
+              variant="outline"
+              className="gap-2"
+            >
+              <Terminal className="w-4 h-4" />
+              Open Console
+            </Button>
+          </div>
           <DataSourcesGraph />
         </div>
       </div>
 
-
+      {/* Console Modal */}
+      <ConsoleModal
+        isOpen={isConsoleModalOpen}
+        onOpenChange={setIsConsoleModalOpen}
+      />
     </div >
   );
 }
