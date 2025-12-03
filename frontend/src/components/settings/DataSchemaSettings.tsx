@@ -406,7 +406,7 @@ export default function DataSchemaSettings() {
                 <SelectItem value="all">Tüm Sektörler</SelectItem>
                 {industries.map(industry => (
                   <SelectItem key={industry.code} value={industry.code}>
-                    {industry.icon} {industry.name}
+                    {industry.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -445,7 +445,6 @@ export default function DataSchemaSettings() {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm">{preset.industry_icon || '📄'}</span>
                         <span className="font-medium text-sm">{preset.schema_display_name}</span>
                       </div>
                       <div className="flex items-center gap-1">
