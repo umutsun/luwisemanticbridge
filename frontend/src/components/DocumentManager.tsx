@@ -563,6 +563,36 @@ export default function DocumentManager() {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={async () => {
+                              try {
+                                const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
+                                const token = localStorage.getItem('authToken');
+                                const response = await fetch(`${baseUrl}/api/v2/documents/sync-statuses`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                });
+                                if (response.ok) {
+                                  const result = await response.json();
+                                  setSuccess(`Synced ${result.updated.length} documents`);
+                                  await fetchDocuments();
+                                } else {
+                                  setError('Failed to sync document statuses');
+                                }
+                              } catch (error) {
+                                setError('Error syncing statuses');
+                              }
+                            }}
+                            title="Sync document processing statuses"
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Sync Statuses
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => setSelectedDocuments([])}
                           >
                             <X className="h-4 w-4 mr-2" />
