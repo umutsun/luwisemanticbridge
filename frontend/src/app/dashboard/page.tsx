@@ -1607,15 +1607,16 @@ export default function DashboardPage() {
 
         {/* Data Sources Graph Visualization */}
         <div className="mt-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">Data Sources & Pipeline</h2>
+          <div className="flex items-center justify-end mb-4">
             <Button
               onClick={() => setIsConsoleModalOpen(true)}
               variant="outline"
+              size="sm"
               className="gap-2"
+              title="Open system console"
             >
+              Console
               <Terminal className="w-4 h-4" />
-              Open Console
             </Button>
           </div>
           <DataSourcesGraph />
