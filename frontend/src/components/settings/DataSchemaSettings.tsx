@@ -20,7 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   Star,
-  Crown
+  Crown,
+  Lock
 } from 'lucide-react';
 import {
   DataSchema,
@@ -119,17 +120,26 @@ export default function DataSchemaSettings() {
         apiClient.get('/api/v2/data-schema/user/settings')
       ]);
 
-      setIndustries(industriesRes.data.industries || []);
-      setAllSchemas(schemasRes.data.schemas || []);
-      setUserSettings(settingsRes.data.settings || null);
+      // Safely extract data with null checks
+      const industriesData = industriesRes?.data?.industries || [];
+      const schemasData = schemasRes?.data?.schemas || [];
+      const settingsData = settingsRes?.data?.settings || null;
+
+      setIndustries(Array.isArray(industriesData) ? industriesData : []);
+      setAllSchemas(Array.isArray(schemasData) ? schemasData : []);
+      setUserSettings(settingsData);
 
       // Select active schema if exists
-      if (settingsRes.data.settings?.active_schema_id) {
-        setSelectedSchemaId(settingsRes.data.settings.active_schema_id);
+      if (settingsData?.active_schema_id) {
+        setSelectedSchemaId(settingsData.active_schema_id);
       }
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Veriler yüklenemedi');
+      // Set safe defaults on error
+      setIndustries([]);
+      setAllSchemas([]);
+      setUserSettings(null);
     } finally {
       setLoading(false);
     }
@@ -205,7 +215,10 @@ export default function DataSchemaSettings() {
           templates: editedSchema.templates,
           llm_guide: editedSchema.llmGuide
         });
-        const newSchema = response.data.schema;
+        const newSchema = response?.data?.schema || response?.data;
+        if (!newSchema?.id) {
+          throw new Error('Invalid response: missing schema data');
+        }
         setAllSchemas([...allSchemas, newSchema]);
         setSelectedSchemaId(newSchema.id);
         setEditedSchema({ ...editedSchema, id: newSchema.id });
@@ -272,9 +285,14 @@ export default function DataSchemaSettings() {
 
   // Field handlers
   const handleFieldChange = (index: number, field: Partial<SchemaField>) => {
-    if (!editedSchema) return;
+    if (!editedSchema || !editedSchema.fields) return;
+    if (index < 0 || index >= editedSchema.fields.length) {
+      console.warn(`Invalid field index: ${index}, max length: ${editedSchema.fields.length}`);
+      return;
+    }
     const newFields = [...editedSchema.fields];
-    newFields[index] = { ...newFields[index], ...field };
+    const existingField = newFields[index] || {};
+    newFields[index] = { ...existingField, ...field };
     setEditedSchema({ ...editedSchema, fields: newFields });
   };
 
@@ -629,7 +647,7 @@ export default function DataSchemaSettings() {
                   disabled={isSystemSchema}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  {editedSchema.fields.length > 0
+                  {editedSchema?.fields && editedSchema.fields.length > 0
                     ? editedSchema.fields.map(f => `{{${f.key}}}`).join(', ')
                     : 'Önce alan ekleyin'}
                 </p>
