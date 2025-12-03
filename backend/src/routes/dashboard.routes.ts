@@ -2047,4 +2047,107 @@ router.get('/api/v2/unified-embeddings/record-types', async (req: Request, res: 
   }
 });
 
+// Data sources graph visualization
+router.get('/graph/data-sources', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Get data sources (tables)
+    const tablesResult = await lsembPool.query(`
+      SELECT DISTINCT source_table as id, source_table as label, COUNT(*) as count
+      FROM unified_embeddings
+      GROUP BY source_table
+      ORDER BY count DESC
+      LIMIT 20
+    `);
+
+    // Get embedding sources
+    const embeddingsResult = await lsembPool.query(`
+      SELECT COUNT(DISTINCT id) as total,
+             COUNT(DISTINCT source_table) as unique_sources,
+             ROUND(AVG(array_length(embedding, 1))::numeric, 0) as avg_dimensions
+      FROM unified_embeddings
+    `);
+
+    // Get documents
+    const docsResult = await lsembPool.query(`
+      SELECT COUNT(*) as total,
+             COUNT(CASE WHEN processing_status = 'embedded' THEN 1 END) as embedded,
+             COUNT(CASE WHEN processing_status = 'pending' THEN 1 END) as pending
+      FROM documents
+    `);
+
+    // Prepare graph nodes
+    const nodes = [
+      {
+        id: 'documents',
+        label: 'Documents',
+        type: 'source',
+        data: {
+          total: parseInt(docsResult.rows[0]?.total || 0),
+          embedded: parseInt(docsResult.rows[0]?.embedded || 0),
+          pending: parseInt(docsResult.rows[0]?.pending || 0)
+        },
+        position: { x: 0, y: 0 }
+      },
+      {
+        id: 'embeddings',
+        label: 'Embeddings',
+        type: 'process',
+        data: {
+          total: parseInt(embeddingsResult.rows[0]?.total || 0),
+          sources: parseInt(embeddingsResult.rows[0]?.unique_sources || 0),
+          dimensions: parseInt(embeddingsResult.rows[0]?.avg_dimensions || 0)
+        },
+        position: { x: 250, y: 0 }
+      },
+      ...tablesResult.rows.map((row: any, idx: number) => ({
+        id: `table_${row.id}`,
+        label: row.label,
+        type: 'table',
+        data: { count: parseInt(row.count) },
+        position: { x: 500 + (idx % 3) * 200, y: Math.floor(idx / 3) * 120 }
+      }))
+    ];
+
+    // Prepare graph edges
+    const edges = [
+      // Documents to Embeddings
+      {
+        id: 'docs_to_embeddings',
+        source: 'documents',
+        target: 'embeddings',
+        label: 'processed',
+        animated: true
+      },
+      // Embeddings to data sources
+      ...tablesResult.rows.map((row: any, idx: number) => ({
+        id: `embeddings_to_${row.id}`,
+        source: 'embeddings',
+        target: `table_${row.id}`,
+        label: `${row.count} records`,
+        animated: false
+      }))
+    ];
+
+    res.json({
+      success: true,
+      graph: {
+        nodes,
+        edges,
+        stats: {
+          totalDocuments: parseInt(docsResult.rows[0]?.total || 0),
+          embeddedDocuments: parseInt(docsResult.rows[0]?.embedded || 0),
+          totalEmbeddings: parseInt(embeddingsResult.rows[0]?.total || 0),
+          dataSources: parseInt(embeddingsResult.rows[0]?.unique_sources || 0)
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('Graph visualization error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch graph data'
+    });
+  }
+});
+
 export default router;

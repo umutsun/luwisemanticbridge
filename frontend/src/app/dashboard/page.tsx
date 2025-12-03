@@ -19,6 +19,7 @@ import {
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
+import DataSourcesGraph from "@/components/dashboard/DataSourcesGraph";
 
 interface SystemStatus {
   database: {
@@ -1599,6 +1600,11 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Data Sources Graph Visualization */}
+        <div className="mt-8">
+          <DataSourcesGraph />
         </div>
       </div>
 
