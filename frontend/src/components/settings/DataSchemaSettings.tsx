@@ -9,19 +9,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Database,
   Plus,
   Trash2,
   Check,
-  FileText,
-  Tag,
   Save,
   RefreshCw,
-  Sparkles,
-  BookOpen,
-  Settings
+  Settings,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import {
   DataSchema,
@@ -46,6 +43,7 @@ export default function DataSchemaSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editedSchema, setEditedSchema] = useState<DataSchema | null>(null);
+  const [fieldsExpanded, setFieldsExpanded] = useState(false);
 
   // Load schemas on mount
   useEffect(() => {
@@ -201,39 +199,6 @@ export default function DataSchemaSettings() {
     });
   };
 
-  // Question handlers
-  const handleAddQuestion = () => {
-    if (!editedSchema) return;
-    setEditedSchema({
-      ...editedSchema,
-      templates: {
-        ...editedSchema.templates,
-        questions: [...editedSchema.templates.questions, '']
-      }
-    });
-  };
-
-  const handleQuestionChange = (index: number, value: string) => {
-    if (!editedSchema) return;
-    const newQuestions = [...editedSchema.templates.questions];
-    newQuestions[index] = value;
-    setEditedSchema({
-      ...editedSchema,
-      templates: { ...editedSchema.templates, questions: newQuestions }
-    });
-  };
-
-  const handleRemoveQuestion = (index: number) => {
-    if (!editedSchema) return;
-    setEditedSchema({
-      ...editedSchema,
-      templates: {
-        ...editedSchema.templates,
-        questions: editedSchema.templates.questions.filter((_, i) => i !== index)
-      }
-    });
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -355,10 +320,7 @@ export default function DataSchemaSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              Şema Editörü
-            </span>
+            <span>Şema Editörü</span>
             {editedSchema && (
               <div className="flex items-center gap-2">
                 {editedSchema.id && activeSchemaId !== editedSchema.id && (
@@ -399,248 +361,161 @@ export default function DataSchemaSettings() {
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
           {editedSchema ? (
-            <Tabs defaultValue="basic" className="space-y-4">
-              <TabsList>
-                <TabsTrigger value="basic">Temel</TabsTrigger>
-                <TabsTrigger value="fields">Alanlar</TabsTrigger>
-                <TabsTrigger value="templates">Templates</TabsTrigger>
-                <TabsTrigger value="llm">LLM</TabsTrigger>
-              </TabsList>
-
+            <>
               {/* Basic Info */}
-              <TabsContent value="basic" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Şema Adı (teknik)</Label>
-                    <Input
-                      value={editedSchema.name}
-                      onChange={(e) => setEditedSchema({ ...editedSchema, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                      placeholder="vergi_mevzuati"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Görüntüleme Adı</Label>
-                    <Input
-                      value={editedSchema.displayName}
-                      onChange={(e) => setEditedSchema({ ...editedSchema, displayName: e.target.value })}
-                      placeholder="Vergi Mevzuatı"
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Açıklama</Label>
-                  <Textarea
-                    value={editedSchema.description}
-                    onChange={(e) => setEditedSchema({ ...editedSchema, description: e.target.value })}
-                    placeholder="Bu şema hangi tür belgeler için kullanılacak?"
-                    rows={3}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label>Kaynak Tablolar</Label>
+                  <Label>Şema Adı</Label>
                   <Input
-                    value={editedSchema.sourceTables?.join(', ') || ''}
-                    onChange={(e) => setEditedSchema({
-                      ...editedSchema,
-                      sourceTables: e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-                    })}
-                    placeholder="OZELGELER, DANISTAYKARARLARI"
+                    value={editedSchema.name}
+                    onChange={(e) => setEditedSchema({ ...editedSchema, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                    placeholder="vergi_mevzuati"
                     className="mt-1"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Virgülle ayırın, bu tablolardan gelen veriler otomatik bu şemayı kullanır</p>
                 </div>
-              </TabsContent>
-
-              {/* Fields */}
-              <TabsContent value="fields" className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">Belgelerden çıkarılacak alanları tanımlayın</p>
-                  <Button variant="outline" size="sm" onClick={handleAddField}>
-                    <Plus className="w-3 h-3 mr-1" /> Alan Ekle
-                  </Button>
-                </div>
-
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {editedSchema.fields.map((field, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-muted rounded-lg">
-                      <div className="flex-1 grid grid-cols-4 gap-2">
-                        <div>
-                          <Label className="text-xs">Anahtar</Label>
-                          <Input
-                            value={field.key}
-                            onChange={(e) => handleFieldChange(index, { key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                            placeholder="kanun_no"
-                            className="text-sm h-8"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Etiket</Label>
-                          <Input
-                            value={field.label}
-                            onChange={(e) => handleFieldChange(index, { label: e.target.value })}
-                            placeholder="Kanun No"
-                            className="text-sm h-8"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Tip</Label>
-                          <Select
-                            value={field.type}
-                            onValueChange={(value) => handleFieldChange(index, { type: value as FieldType })}
-                          >
-                            <SelectTrigger className="text-sm h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-xs">Format</Label>
-                          <Input
-                            value={field.format || ''}
-                            onChange={(e) => handleFieldChange(index, { format: e.target.value })}
-                            placeholder="DD.MM.YYYY"
-                            className="text-sm h-8"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-1 pt-5">
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            checked={field.showInCitation}
-                            onCheckedChange={(checked) => handleFieldChange(index, { showInCitation: checked })}
-                          />
-                          <FileText className="w-3 h-3 text-muted-foreground" title="Citation" />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Switch
-                            checked={field.showInTags}
-                            onCheckedChange={(checked) => handleFieldChange(index, { showInTags: checked })}
-                          />
-                          <Tag className="w-3 h-3 text-muted-foreground" title="Tag" />
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveField(index)}
-                        className="text-red-600 pt-5"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-
-                  {editedSchema.fields.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Tag className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Henüz alan eklenmemiş</p>
-                      <Button variant="outline" size="sm" onClick={handleAddField} className="mt-2">
-                        <Plus className="w-3 h-3 mr-1" /> İlk Alanı Ekle
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              {/* Templates */}
-              <TabsContent value="templates" className="space-y-4">
                 <div>
-                  <Label>Analiz Prompt'u</Label>
-                  <Textarea
-                    value={editedSchema.templates.analyze}
-                    onChange={(e) => setEditedSchema({
-                      ...editedSchema,
-                      templates: { ...editedSchema.templates, analyze: e.target.value }
-                    })}
-                    placeholder="Bu belgeyi analiz et ve aşağıdaki bilgileri çıkar..."
-                    rows={3}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Belge işlenirken LLM'e gönderilecek prompt</p>
-                </div>
-
-                <div>
-                  <Label>Citation Template</Label>
+                  <Label>Görüntüleme Adı</Label>
                   <Input
-                    value={editedSchema.templates.citation}
-                    onChange={(e) => setEditedSchema({
-                      ...editedSchema,
-                      templates: { ...editedSchema.templates, citation: e.target.value }
-                    })}
-                    placeholder="{{kanun_no}} Md.{{madde_no}} - {{tarih}}"
+                    value={editedSchema.displayName}
+                    onChange={(e) => setEditedSchema({ ...editedSchema, displayName: e.target.value })}
+                    placeholder="Vergi Mevzuatı"
                     className="mt-1"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Değişkenler: {editedSchema.fields.length > 0
-                      ? editedSchema.fields.map(f => `{{${f.key}}}`).join(', ')
-                      : 'Önce alan ekleyin'}
-                  </p>
                 </div>
+              </div>
 
-                <div>
-                  <div className="flex items-center justify-between">
-                    <Label>Takip Soruları</Label>
-                    <Button variant="outline" size="sm" onClick={handleAddQuestion}>
-                      <Plus className="w-3 h-3 mr-1" /> Soru Ekle
+              <div>
+                <Label>Açıklama</Label>
+                <Textarea
+                  value={editedSchema.description}
+                  onChange={(e) => setEditedSchema({ ...editedSchema, description: e.target.value })}
+                  placeholder="Bu şema hangi tür belgeler için kullanılacak?"
+                  rows={2}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Kaynak Tablolar</Label>
+                <Input
+                  value={editedSchema.sourceTables?.join(', ') || ''}
+                  onChange={(e) => setEditedSchema({
+                    ...editedSchema,
+                    sourceTables: e.target.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+                  })}
+                  placeholder="OZELGELER, DANISTAYKARARLARI"
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Virgülle ayırın</p>
+              </div>
+
+              {/* Fields - Collapsible */}
+              <div className="border rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setFieldsExpanded(!fieldsExpanded)}
+                  className="w-full flex items-center justify-between p-3 hover:bg-muted/50"
+                >
+                  <span className="font-medium text-sm">
+                    Alanlar ({editedSchema.fields.length})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleAddField(); }}
+                    >
+                      <Plus className="w-3 h-3" />
                     </Button>
+                    {fieldsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </div>
-                  <div className="space-y-2 mt-2">
-                    {editedSchema.templates.questions.map((question, index) => (
-                      <div key={index} className="flex items-center gap-2">
+                </button>
+                {fieldsExpanded && (
+                  <div className="border-t p-3 space-y-2 max-h-[250px] overflow-y-auto">
+                    {editedSchema.fields.map((field, index) => (
+                      <div key={index} className="flex items-center gap-2 p-2 bg-muted/50 rounded">
                         <Input
-                          value={question}
-                          onChange={(e) => handleQuestionChange(index, e.target.value)}
-                          placeholder="{{madde_no}}. maddenin uygulama esasları nelerdir?"
+                          value={field.key}
+                          onChange={(e) => handleFieldChange(index, { key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                          placeholder="key"
+                          className="h-8 w-24 text-xs"
+                        />
+                        <Input
+                          value={field.label}
+                          onChange={(e) => handleFieldChange(index, { label: e.target.value })}
+                          placeholder="Label"
+                          className="h-8 flex-1 text-xs"
+                        />
+                        <Select
+                          value={field.type}
+                          onValueChange={(value) => handleFieldChange(index, { type: value as FieldType })}
+                        >
+                          <SelectTrigger className="h-8 w-24 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Switch
+                          checked={field.showInCitation}
+                          onCheckedChange={(checked) => handleFieldChange(index, { showInCitation: checked })}
+                          title="Citation'da göster"
                         />
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveQuestion(index)}
-                          className="text-red-600"
+                          onClick={() => handleRemoveField(index)}
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </div>
                     ))}
-                    {editedSchema.templates.questions.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        Henüz takip sorusu eklenmemiş
+                    {editedSchema.fields.length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-2">
+                        Henüz alan yok
                       </p>
                     )}
                   </div>
-                </div>
-              </TabsContent>
+                )}
+              </div>
+
+              {/* Citation Template */}
+              <div>
+                <Label>Citation Template</Label>
+                <Input
+                  value={editedSchema.templates.citation}
+                  onChange={(e) => setEditedSchema({
+                    ...editedSchema,
+                    templates: { ...editedSchema.templates, citation: e.target.value }
+                  })}
+                  placeholder="{{kanun_no}} Md.{{madde_no}} - {{tarih}}"
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {editedSchema.fields.length > 0
+                    ? editedSchema.fields.map(f => `{{${f.key}}}`).join(', ')
+                    : 'Önce alan ekleyin'}
+                </p>
+              </div>
 
               {/* LLM Guide */}
-              <TabsContent value="llm" className="space-y-4">
-                <div>
-                  <Label className="flex items-center gap-2">
-                    <BookOpen className="w-3 h-3" />
-                    LLM Kılavuzu
-                  </Label>
-                  <Textarea
-                    value={editedSchema.llmGuide}
-                    onChange={(e) => setEditedSchema({ ...editedSchema, llmGuide: e.target.value })}
-                    placeholder="Bu veri Türk vergi mevzuatını içermektedir. Kaynaklar arasında..."
-                    rows={10}
-                    className="mt-1 font-mono text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Bu metin sistem prompt'a eklenerek LLM'in veriyi doğru yorumlamasını sağlar
-                  </p>
-                </div>
-              </TabsContent>
-            </Tabs>
+              <div>
+                <Label>LLM Kılavuzu</Label>
+                <Textarea
+                  value={editedSchema.llmGuide}
+                  onChange={(e) => setEditedSchema({ ...editedSchema, llmGuide: e.target.value })}
+                  placeholder="Bu veri hakkında LLM'e rehberlik edecek bilgiler..."
+                  rows={4}
+                  className="mt-1 text-sm"
+                />
+              </div>
+            </>
           ) : (
             <div className="text-center py-12 text-muted-foreground">
               <Database className="w-12 h-12 mx-auto mb-4 opacity-50" />
