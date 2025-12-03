@@ -97,16 +97,16 @@ const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: s
 
 const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
     if (isBoosted) {
-        // High contrast yellow for boosted keywords
-        return 'bg-amber-50 dark:bg-amber-500/20 text-amber-800 dark:text-amber-200 border-amber-400 dark:border-amber-500/40 font-medium';
+        // High contrast yellow for boosted keywords - DARK MODE FIX
+        return 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-100 border-amber-400 dark:border-amber-600 font-medium';
     }
-    // High contrast colors for better readability in both light and dark themes
+    // High contrast colors for better readability in both light and dark themes - DARK MODE FIX
     const colors = [
-        'bg-sky-50 dark:bg-sky-500/20 text-sky-800 dark:text-sky-200 border-sky-400 dark:border-sky-500/40',
-        'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border-emerald-400 dark:border-emerald-500/40',
-        'bg-violet-50 dark:bg-violet-500/20 text-violet-800 dark:text-violet-200 border-violet-400 dark:border-violet-500/40',
-        'bg-rose-50 dark:bg-rose-500/20 text-rose-800 dark:text-rose-200 border-rose-400 dark:border-rose-500/40',
-        'bg-teal-50 dark:bg-teal-500/20 text-teal-800 dark:text-teal-200 border-teal-400 dark:border-teal-500/40'
+        'bg-sky-100 dark:bg-sky-900/60 text-sky-800 dark:text-sky-100 border-sky-400 dark:border-sky-600',
+        'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-100 border-emerald-400 dark:border-emerald-600',
+        'bg-violet-100 dark:bg-violet-900/60 text-violet-800 dark:text-violet-100 border-violet-400 dark:border-violet-600',
+        'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-100 border-rose-400 dark:border-rose-600',
+        'bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-100 border-teal-400 dark:border-teal-600'
     ];
     const index = keyword.length % colors.length;
     return colors[index];
@@ -895,47 +895,32 @@ export default function ChatInterface() {
                                                                                 <div
                                                                                     key={idx}
                                                                                     onClick={() => handleSourceClick(source)}
-                                                                                    className="group p-3 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer"
+                                                                                    className="group p-3 rounded-lg bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-600 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer"
                                                                                     title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
                                                                                 >
                                                                                     <div className="flex items-start gap-3">
                                                                                         <div className="min-w-0 flex-1">
-                                                                                            {/* Source Type & Number */}
+                                                                                            {/* Source Number & Category */}
                                                                                             <div className="flex items-center gap-2 mb-2">
-                                                                                                <span className="text-xs px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-500/30 font-bold">
+                                                                                                <span className="text-xs px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-200 border border-violet-300 dark:border-violet-600 font-bold">
                                                                                                     {idx + 1}
                                                                                                 </span>
-                                                                                                {source.sourceType && (
-                                                                                                    <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-500/30">
-                                                                                                        {source.sourceType}
+                                                                                                {source.category && (
+                                                                                                    <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                                                                                        {source.category}
                                                                                                     </span>
                                                                                                 )}
                                                                                             </div>
 
-                                                                                            {/* Title */}
-                                                                                            <div className="flex items-center gap-2 mb-2">
-                                                                                                <Bot className="w-4 h-4 text-violet-700 dark:text-violet-400 flex-shrink-0" />
-                                                                                                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-violet-700 dark:group-hover:text-violet-200 transition-colors">
-                                                                                                    {source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
+                                                                                            {/* Primary: Natural Language Summary/Excerpt */}
+                                                                                            <div className="mb-2">
+                                                                                                <p className="text-sm text-slate-800 dark:text-slate-100 leading-relaxed line-clamp-3">
+                                                                                                    {source.summary || source.excerpt || source.content || source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                                                 </p>
                                                                                             </div>
 
-                                                                                            {/* LLM Summary */}
-                                                                                            {source.summary && (
-                                                                                                <div className="mb-2 p-2 rounded bg-violet-50 dark:bg-violet-900/30 border-l-2 border-violet-400 dark:border-violet-500">
-                                                                                                    <p className="text-xs text-violet-700 dark:text-violet-300">💡 {source.summary}</p>
-                                                                                                </div>
-                                                                                            )}
-
-                                                                                            {/* Content/Excerpt */}
-                                                                                            {(source.content || source.excerpt) && (
-                                                                                                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-3 mb-3">
-                                                                                                    {source.content || source.excerpt}
-                                                                                                </p>
-                                                                                            )}
-
                                                                                             {/* Keywords */}
-                                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                            <div className="flex flex-wrap items-center gap-1.5">
                                                                                                 {getSemanticKeywords(source).slice(0, 4).map((keyword: string, kidx: number) => {
                                                                                                     const isBoosted = kidx < 2 && lastUserQuery.length > 0;
                                                                                                     return (
@@ -950,7 +935,7 @@ export default function ChatInterface() {
                                                                                                 })}
                                                                                             </div>
                                                                                         </div>
-                                                                                        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-violet-400 flex-shrink-0 transition-colors" />
+                                                                                        <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-violet-500 dark:group-hover:text-violet-400 flex-shrink-0 transition-colors" />
                                                                                     </div>
                                                                                 </div>
                                                                             );
@@ -1003,9 +988,21 @@ export default function ChatInterface() {
                                             {message.role === 'assistant' && (
                                                 <div className="flex justify-start mt-2 px-1">
                                                     <span className="text-[10px] font-medium text-slate-500 tabular-nums">
-                                                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        {message.responseTime && ` • ${(message.responseTime / 1000).toFixed(1)}s`}
-                                                        {message.tokens?.total && ` • ${message.tokens.total.toLocaleString()} tokens`}
+                                                        {message.isStreaming && message.startTime ? (
+                                                            // Show elapsed time during streaming
+                                                            <>
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    {Math.floor((Date.now() - message.startTime) / 1000)}s
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                {message.responseTime && ` • ${(message.responseTime / 1000).toFixed(1)}s`}
+                                                                {message.tokens?.total && ` • ${message.tokens.total.toLocaleString()} tokens`}
+                                                            </>
+                                                        )}
                                                     </span>
                                                 </div>
                                             )}
