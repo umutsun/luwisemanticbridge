@@ -636,7 +636,7 @@ export default function DocumentManager() {
                       <TableBody>
                         {filteredDocuments.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center text-muted-foreground">
+                            <TableCell colSpan={8} className="text-center text-muted-foreground py-2">
                               {t('documentManager.table.noDocuments')}
                             </TableCell>
                           </TableRow>
@@ -646,7 +646,7 @@ export default function DocumentManager() {
                               key={doc.id}
                               className={doc.hasEmbeddings ? 'bg-green-50 dark:bg-green-950/20' : ''}
                             >
-                              <TableCell>
+                              <TableCell className="py-2">
                                 {isAnalyzableFile(doc) ? (
                                   <Checkbox
                                     checked={selectedDocuments.includes(doc.id)}
@@ -660,7 +660,7 @@ export default function DocumentManager() {
                                   />
                                 )}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2">
                                 <div className="max-w-[250px]">
                                   <p className="font-medium truncate">{doc.title}</p>
                                   <p className="text-xs text-muted-foreground truncate">
@@ -668,12 +668,12 @@ export default function DocumentManager() {
                                   </p>
                                 </div>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2">
                                 <Badge variant="outline">
                                   {doc.metadata?.source || 'Manual'}
                                 </Badge>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2">
                                 <div className="flex items-center gap-1">
                                   <Hash className="h-3 w-3" />
                                   <span className="text-sm">
@@ -681,7 +681,7 @@ export default function DocumentManager() {
                                   </span>
                                 </div>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2">
                                 {doc.hasEmbeddings ? (
                                   <div className="flex items-center gap-1 text-green-600">
                                     <CheckCircle className="h-4 w-4" />
@@ -694,7 +694,7 @@ export default function DocumentManager() {
                                   </div>
                                 )}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2">
                                 {(() => {
                                   const status = getAnalyzeStatus(doc);
                                   const template = getAnalyzeTemplate(doc);
@@ -717,7 +717,7 @@ export default function DocumentManager() {
                                   );
                                 })()}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="py-2">
                                 <div className="flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
                                   <span className="text-sm">
@@ -725,7 +725,7 @@ export default function DocumentManager() {
                                   </span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right py-2">
                                 <div className="flex justify-end gap-1">
                                   {!doc.hasEmbeddings && (
                                     <Button
