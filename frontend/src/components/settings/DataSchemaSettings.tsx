@@ -305,6 +305,12 @@ export default function DataSchemaSettings() {
 
   const isActiveSchema = userSettings?.active_schema_id === selectedSchemaId;
 
+  // Get selected schema to check if it's system schema
+  const selectedSchema = selectedSchemaId && selectedSchemaId !== 'new'
+    ? allSchemas.find(s => s.id === selectedSchemaId)
+    : null;
+  const isSystemSchema = selectedSchema?.is_system || false;
+
   // Filter schemas by industry
   const filteredSchemas = selectedIndustry === 'all'
     ? allSchemas
@@ -523,7 +529,7 @@ export default function DataSchemaSettings() {
                   placeholder="Bu şema hangi tür belgeler için kullanılacak?"
                   rows={2}
                   className="mt-1"
-                  disabled={isPresetSelected}
+                  disabled={isSystemSchema}
                 />
               </div>
 
@@ -538,7 +544,7 @@ export default function DataSchemaSettings() {
                     Alanlar ({editedSchema.fields.length})
                   </span>
                   <div className="flex items-center gap-2">
-                    {!isPresetSelected && (
+                    {!isSystemSchema && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -559,19 +565,19 @@ export default function DataSchemaSettings() {
                           onChange={(e) => handleFieldChange(index, { key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
                           placeholder="key"
                           className="h-8 w-24 text-xs"
-                          disabled={isPresetSelected}
+                          disabled={isSystemSchema}
                         />
                         <Input
                           value={field.label}
                           onChange={(e) => handleFieldChange(index, { label: e.target.value })}
                           placeholder="Label"
                           className="h-8 flex-1 text-xs"
-                          disabled={isPresetSelected}
+                          disabled={isSystemSchema}
                         />
                         <Select
                           value={field.type}
                           onValueChange={(value) => handleFieldChange(index, { type: value as FieldType })}
-                          disabled={isPresetSelected}
+                          disabled={isSystemSchema}
                         >
                           <SelectTrigger className="h-8 w-24 text-xs">
                             <SelectValue />
@@ -586,9 +592,9 @@ export default function DataSchemaSettings() {
                           checked={field.showInCitation}
                           onCheckedChange={(checked) => handleFieldChange(index, { showInCitation: checked })}
                           title="Citation'da göster"
-                          disabled={isPresetSelected}
+                          disabled={isSystemSchema}
                         />
-                        {!isPresetSelected && (
+                        {!isSystemSchema && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -620,7 +626,7 @@ export default function DataSchemaSettings() {
                   })}
                   placeholder="{{kanun_no}} Md.{{madde_no}} - {{tarih}}"
                   className="mt-1"
-                  disabled={isPresetSelected}
+                  disabled={isSystemSchema}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
                   {editedSchema.fields.length > 0
@@ -638,24 +644,16 @@ export default function DataSchemaSettings() {
                   placeholder="Bu veri hakkında LLM'e rehberlik edecek bilgiler..."
                   rows={4}
                   className="mt-1 text-sm"
-                  disabled={isPresetSelected}
+                  disabled={isSystemSchema}
                 />
               </div>
 
-              {/* Clone hint for presets */}
-              {isPresetSelected && (
+              {/* System schema info */}
+              {isSystemSchema && (
                 <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
                   <p className="flex items-center gap-2">
                     <Lock className="w-4 h-4" />
-                    Bu hazır bir şablondur ve düzenlenemez.
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 h-auto"
-                      onClick={() => handleClonePreset(selectedSchemaId!)}
-                    >
-                      Kopyalayıp düzenleyebilirsiniz
-                    </Button>
+                    Bu sistem şablonudur ve düzenlenemez.
                   </p>
                 </div>
               )}
