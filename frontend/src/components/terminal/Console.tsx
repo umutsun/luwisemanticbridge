@@ -168,7 +168,10 @@ export const Console: React.FC<ConsoleProps> = ({
     useEffect(() => {
         const connectWebSocket = () => {
             try {
-                const wsUrl = `ws://localhost:8084/ws/logs`;
+                // Construct WebSocket URL based on current host
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                const wsUrl = `${protocol}//${host}/ws/logs`;
                 wsRef.current = new WebSocket(wsUrl);
 
                 wsRef.current.onopen = () => {
