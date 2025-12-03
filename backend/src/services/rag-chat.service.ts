@@ -198,6 +198,9 @@ export class RAGChatService {
   }
 
   private async getSystemPrompt(): Promise<string> {
+    let basePrompt = '';
+    let llmGuide = '';
+
     try {
       // First try to get active prompt from settings table
       const activePromptResult = await pool.query(
@@ -224,26 +227,48 @@ export class RAGChatService {
             ? promptResult.rows[0].value
             : promptResult.rows[0].value;
           console.log(` Using active prompt: ${promptId} with ${tone} tone`);
-          return `${toneInstruction}\n\n${content}`;
+          basePrompt = `${toneInstruction}\n\n${content}`;
         }
       }
 
       // Fallback: Try old chatbot_settings table
-      const oldResult = await pool.query(
-        "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'system_prompt'"
-      );
+      if (!basePrompt) {
+        const oldResult = await pool.query(
+          "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'system_prompt'"
+        );
 
-      if (oldResult.rows[0]?.setting_value) {
-        console.log('️ Using system prompt from old chatbot_settings table');
-        return oldResult.rows[0].setting_value;
+        if (oldResult.rows[0]?.setting_value) {
+          console.log('️ Using system prompt from old chatbot_settings table');
+          basePrompt = oldResult.rows[0].setting_value;
+        }
       }
+
+      // Get LLM Guide from active DataSchema
+      try {
+        llmGuide = await dataSchemaService.getLLMGuide();
+        if (llmGuide) {
+          console.log(` DataSchema LLM Guide loaded (${llmGuide.length} chars)`);
+        }
+      } catch (schemaError) {
+        console.warn('Failed to load DataSchema LLM Guide:', schemaError);
+      }
+
     } catch (error) {
       console.warn('Failed to fetch system prompt from database:', error);
     }
 
     // Generic default system prompt (multi-language, not domain-specific)
-    console.log('️ No active prompt found, using generic default');
-    return `You are a helpful AI assistant. Answer questions based on the provided context information. Structure your response in clear paragraphs.`;
+    if (!basePrompt) {
+      console.log('️ No active prompt found, using generic default');
+      basePrompt = `You are a helpful AI assistant. Answer questions based on the provided context information. Structure your response in clear paragraphs.`;
+    }
+
+    // Combine base prompt with LLM Guide if available
+    if (llmGuide) {
+      return `${basePrompt}\n\n--- DATA CONTEXT ---\n${llmGuide}`;
+    }
+
+    return basePrompt;
   }
 
   /**
