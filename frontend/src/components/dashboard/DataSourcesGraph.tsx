@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RefreshCw, Database, Zap } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api/client';
 
 interface GraphData {
@@ -66,12 +66,6 @@ export default function DataSourcesGraph() {
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="w-4 h-4" />
-            Data Sources Graph
-          </CardTitle>
-        </CardHeader>
         <CardContent className="flex items-center justify-center h-96">
           <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
         </CardContent>
@@ -82,9 +76,6 @@ export default function DataSourcesGraph() {
   if (error) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Data Sources Graph</CardTitle>
-        </CardHeader>
         <CardContent className="flex items-center justify-center h-96 text-red-500">
           {error}
         </CardContent>
@@ -111,20 +102,16 @@ export default function DataSourcesGraph() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Database className="w-4 h-4" />
-          Data Sources & Embeddings
-        </CardTitle>
-        <button
-          onClick={loadGraphData}
-          className="p-2 hover:bg-muted rounded-lg transition"
-          title="Refresh"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={loadGraphData}
+            className="p-2 hover:bg-muted rounded-lg transition"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
         {/* Stats - Expanded with all data sources */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -257,41 +244,33 @@ export default function DataSourcesGraph() {
           {nodes.map(node => {
             let bgColor = '#f1f5f9';
             let textColor = '#1e293b';
-            let icon = null;
 
             if (node.type === 'source') {
               // Differentiate source types by node ID
               if (node.id === 'documents') {
                 bgColor = '#dbeafe';
                 textColor = '#1e40af';
-                icon = '📄';
               } else if (node.id === 'crawls') {
                 bgColor = '#dcfce7';
                 textColor = '#15803d';
-                icon = '🌐';
               } else if (node.id === 'messages') {
                 bgColor = '#fce7f3';
                 textColor = '#be185d';
-                icon = '💬';
               } else {
                 bgColor = '#dbeafe';
                 textColor = '#1e40af';
-                icon = '📄';
               }
             } else if (node.type === 'process') {
               if (node.id === 'vector-db') {
                 bgColor = '#e0e7ff';
                 textColor = '#3730a3';
-                icon = '💾';
               } else {
                 bgColor = '#fef08a';
                 textColor = '#854d0e';
-                icon = '⚡';
               }
             } else if (node.type === 'table') {
               bgColor = '#f3e8ff';
               textColor = '#6b21a8';
-              icon = '📊';
             }
 
             const nodeData = node.data;
@@ -310,23 +289,15 @@ export default function DataSourcesGraph() {
                   strokeWidth="2"
                 />
 
-                {/* Icon */}
+                {/* Label - centered */}
                 <text
-                  x={node.position.x + 10}
-                  y={node.position.y + 20}
-                  fontSize="16"
-                  className="pointer-events-none"
-                >
-                  {icon}
-                </text>
-
-                {/* Label */}
-                <text
-                  x={node.position.x + 10}
-                  y={node.position.y + 40}
+                  x={node.position.x + nodeWidth / 2}
+                  y={node.position.y + nodeHeight / 2 + 2}
                   fontSize="12"
                   fontWeight="600"
                   fill={textColor}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
                   className="pointer-events-none"
                 >
                   {node.label}
@@ -400,29 +371,6 @@ export default function DataSourcesGraph() {
           })}
         </svg>
 
-        {/* Legend */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs pt-4 border-t">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">📄</span>
-            <span>Documents</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🌐</span>
-            <span>Web Crawls</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">💬</span>
-            <span>Messages</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">⚡</span>
-            <span>Embeddings</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">📊</span>
-            <span>Data Tables</span>
-          </div>
-        </div>
       </CardContent>
     </Card>
   );
