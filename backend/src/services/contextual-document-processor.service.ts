@@ -403,7 +403,7 @@ export class ContextualDocumentProcessorService {
       const results: any[] = [];
       const headers: string[] = [];
 
-      fs.createReadStream(filePath)
+      fs.createReadStream(filePath, { encoding: 'utf-8' })
         .pipe(csv())
         .on('headers', (headerList: string[]) => {
           headers.push(...headerList);

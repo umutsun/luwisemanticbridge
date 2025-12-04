@@ -50,6 +50,7 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [loadedRowsCount, setLoadedRowsCount] = useState(10); // Initial preview rows
 
   const rowsPerPage = 50;
 
@@ -147,14 +148,16 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
     return filtered;
   }, [rows, searchTerm, selectedColumn, sortColumn, sortDirection]);
 
-  // Pagination
+  // Pagination or Load More
   const totalPages = Math.ceil(filteredAndSortedRows.length / rowsPerPage);
   const startIndex = (currentPage - 1) * rowsPerPage;
-  const paginatedRows = filteredAndSortedRows.slice(startIndex, startIndex + rowsPerPage);
+  const paginatedRows = filteredAndSortedRows.slice(0, loadedRowsCount); // Show up to loadedRowsCount rows
+  const hasMore = loadedRowsCount < filteredAndSortedRows.length;
 
   // Reset page when filters change
   useMemo(() => {
     setCurrentPage(1);
+    setLoadedRowsCount(10); // Reset to initial preview count when filters change
   }, [searchTerm, selectedColumn, sortColumn]);
 
   const handleSort = (column: string) => {
@@ -302,34 +305,30 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
         </ScrollArea>
       </div>
 
-      {/* Pagination */}
+      {/* Load More */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          {t('tableViewer.showing')} {startIndex + 1}-{Math.min(startIndex + rowsPerPage, filteredAndSortedRows.length)} {t('tableViewer.of')} {filteredAndSortedRows.length} {t('tableViewer.rows')}
+          {t('tableViewer.showing')} {Math.min(loadedRowsCount, filteredAndSortedRows.length)} {t('tableViewer.of')} {filteredAndSortedRows.length} {t('tableViewer.rows')}
         </div>
-        <div className="flex items-center gap-2">
+        {hasMore && (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
+            onClick={() => setLoadedRowsCount(prev => Math.min(prev + 50, filteredAndSortedRows.length))}
           >
-            <ChevronLeft className="h-4 w-4" />
-            {t('tableViewer.previous')}
+            Load More (+50 rows)
           </Button>
-          <span className="text-sm px-3">
-            {t('tableViewer.pageOf', { current: currentPage, total: totalPages })}
-          </span>
+        )}
+        {!hasMore && filteredAndSortedRows.length > 10 && (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
+            onClick={() => setLoadedRowsCount(10)}
           >
-            {t('tableViewer.next')}
-            <ChevronRight className="h-4 w-4" />
+            <Minimize2 className="h-4 w-4 mr-2" />
+            Show Less
           </Button>
-        </div>
+        )}
       </div>
     </div>
   );

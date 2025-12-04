@@ -682,6 +682,7 @@ export default function DocumentManagerPage() {
       });
       setSelectedDriveFiles(new Set());
       fetchDocuments(); // Refresh document list
+      fetchPhysicalFiles(); // Refresh physical files list
     }, 500);
   };
 
@@ -2283,31 +2284,31 @@ export default function DocumentManagerPage() {
         </div>
 
         {/* Stats Cards - Pastel Colors */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-6">
           {/* Total Documents - Blue Pastel */}
           <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-blue-200 dark:border-blue-800">
-            <CardContent className="p-4">
-              <div className="text-sm text-blue-700 dark:text-blue-300 font-medium mb-1">{t('documents.stats.totalDocuments')}</div>
-              <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+            <CardContent className="p-3">
+              <div className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">{t('documents.stats.totalDocuments')}</div>
+              <div className="text-xl font-bold text-blue-900 dark:text-blue-100">
                 {(documents || []).length.toLocaleString()}
               </div>
-              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                <span className="font-mono">+{stats.history?.uploaded_today || 0}</span>
-                <span className="opacity-75 ml-1">{t('documents.stats.today')}</span>
+              <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                <span className="font-mono text-xs">+{stats.history?.uploaded_today || 0}</span>
+                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.today')}</span>
               </div>
             </CardContent>
           </Card>
 
           {/* Embedded - Green Pastel */}
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
-            <CardContent className="p-4">
-              <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.embedded')}</div>
-              <div className="text-2xl font-bold text-green-900 dark:text-green-100">
+            <CardContent className="p-3">
+              <div className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.embedded')}</div>
+              <div className="text-xl font-bold text-green-900 dark:text-green-100">
                 {(documents || []).filter(doc => doc.metadata?.embeddings > 0).length.toLocaleString()}
               </div>
-              <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                <span className="font-mono">{(documents || []).filter(doc => !doc.metadata?.embeddings || doc.metadata.embeddings === 0).length.toLocaleString()}</span>
-                <span className="opacity-75 ml-1">{t('documents.stats.pending')}</span>
+              <div className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                <span className="font-mono text-xs">{(documents || []).filter(doc => !doc.metadata?.embeddings || doc.metadata.embeddings === 0).length.toLocaleString()}</span>
+                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.pending')}</span>
               </div>
             </CardContent>
           </Card>
@@ -2318,16 +2319,16 @@ export default function DocumentManagerPage() {
               className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => { fetchSkippedEmbeddings(); setShowSkippedModal(true); }}
             >
-              <CardContent className="p-4">
-                <div className="text-sm text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  Skipped Embeddings
+              <CardContent className="p-3">
+                <div className="text-xs text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Skipped
                 </div>
-                <div className="text-2xl font-bold text-red-900 dark:text-red-100">
+                <div className="text-xl font-bold text-red-900 dark:text-red-100">
                   {skippedCount.toLocaleString()}
                 </div>
-                <div className="text-xs text-red-600 dark:text-red-400 mt-1">
-                  <span className="opacity-75">Click to review &amp; retry</span>
+                <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">
+                  <span className="opacity-75 text-xs">Review & retry</span>
                 </div>
               </CardContent>
             </Card>
@@ -2335,28 +2336,28 @@ export default function DocumentManagerPage() {
 
           {/* OCR Processed - Purple Pastel */}
           <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
-            <CardContent className="p-4">
-              <div className="text-sm text-purple-700 dark:text-purple-300 font-medium mb-1">{t('documents.stats.ocrProcessed')}</div>
-              <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+            <CardContent className="p-3">
+              <div className="text-xs text-purple-700 dark:text-purple-300 font-medium mb-1">{t('documents.stats.ocrProcessed')}</div>
+              <div className="text-xl font-bold text-purple-900 dark:text-purple-100">
                 {(documents || []).filter(doc => doc.metadata?.ocr_processed === true).length.toLocaleString()}
               </div>
-              <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                <span className="font-mono">{(documents || []).filter(doc => (doc.type || doc.file_type) && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes((doc.type || doc.file_type).toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
-                <span className="opacity-75 ml-1">{t('documents.stats.pending')}</span>
+              <div className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
+                <span className="font-mono text-xs">{(documents || []).filter(doc => (doc.type || doc.file_type) && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes((doc.type || doc.file_type).toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
+                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.pending')}</span>
               </div>
             </CardContent>
           </Card>
 
           {/* Physical Files - Orange Pastel */}
           <Card className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
-            <CardContent className="p-4">
-              <div className="text-sm text-orange-700 dark:text-orange-300 font-medium mb-1">{t('documents.stats.physicalFiles')}</div>
-              <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+            <CardContent className="p-3">
+              <div className="text-xs text-orange-700 dark:text-orange-300 font-medium mb-1">{t('documents.stats.physicalFiles')}</div>
+              <div className="text-xl font-bold text-orange-900 dark:text-orange-100">
                 {physicalFilesStats.total.toLocaleString()}
               </div>
-              <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                <span className="font-mono">{physicalFilesStats.notInDatabase.toLocaleString()}</span>
-                <span className="opacity-75 ml-1">{t('documents.stats.notInDb')}</span>
+              <div className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                <span className="font-mono text-xs">{physicalFilesStats.notInDatabase.toLocaleString()}</span>
+                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.notInDb')}</span>
               </div>
             </CardContent>
           </Card>
@@ -2416,15 +2417,24 @@ export default function DocumentManagerPage() {
                               )}
                             </Button>
                           </label>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={openDriveFilePicker}
-                            disabled={uploading}
-                          >
-                            <HardDrive className="w-3 h-3 mr-2" />
-                            Google Drive
-                          </Button>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={openDriveFilePicker}
+                                  disabled={uploading}
+                                  className="px-3"
+                                >
+                                  <HardDrive className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Google Drive</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
 
                         {/* Save to DB Toggle */}
