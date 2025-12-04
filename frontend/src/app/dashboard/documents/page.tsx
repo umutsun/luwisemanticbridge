@@ -3477,9 +3477,16 @@ export default function DocumentManagerPage() {
                           ) : (
                             <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                           )}
-                          <span className={`flex-1 min-w-0 text-sm truncate ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
-                            {file.name}
-                          </span>
+                          <div className="flex-1 min-w-0 flex items-baseline gap-2">
+                            <span className={`text-sm truncate ${isFolder ? 'font-medium text-blue-600 dark:text-blue-400' : ''}`}>
+                              {file.name}
+                            </span>
+                            {!isFolder && file.size && (
+                              <span className="text-[10px] text-muted-foreground/60 shrink-0">
+                                {(parseInt(file.size) / 1024).toFixed(0)} KB
+                              </span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -3508,9 +3515,23 @@ export default function DocumentManagerPage() {
 
           {/* Footer */}
           <div className="flex items-center justify-between px-4 py-2 border-t border-white/10 dark:border-white/5">
-            <span className="text-xs text-muted-foreground">
-              {selectedDriveFiles.size}/{driveFiles.filter(f => isImportableFile(f.mimeType)).length}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {selectedDriveFiles.size}/{driveFiles.filter(f => isImportableFile(f.mimeType)).length}
+              </span>
+              {driveFiles.filter(f => isImportableFile(f.mimeType)).length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={selectAllDriveFiles}
+                  className="h-6 px-2 text-xs"
+                >
+                  {selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length
+                    ? 'Deselect All'
+                    : 'Select All'}
+                </Button>
+              )}
+            </div>
             <Button
               onClick={importFromDrive}
               disabled={selectedDriveFiles.size === 0}

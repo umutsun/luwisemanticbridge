@@ -434,13 +434,20 @@ class GoogleDriveService {
     }
 
     // Regular file download
+    // For text files (including CSV), ensure proper UTF-8 encoding
+    const responseType = mimeType.startsWith('text/') || mimeType.includes('csv')
+      ? 'text'
+      : 'arraybuffer';
+
     const response = await this.drive!.files.get(
       { fileId, alt: 'media' },
-      { responseType: 'arraybuffer' }
+      { responseType }
     );
 
     return {
-      content: Buffer.from(response.data as ArrayBuffer),
+      content: responseType === 'text'
+        ? Buffer.from(response.data as string, 'utf-8')
+        : Buffer.from(response.data as ArrayBuffer),
       name,
       mimeType
     };
