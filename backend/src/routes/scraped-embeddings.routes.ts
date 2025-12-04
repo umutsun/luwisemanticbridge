@@ -218,4 +218,123 @@ router.get('/scrapers/:scraperName/urls/:encodedUrl/data', async (req: Request, 
   }
 });
 
+/**
+ * POST /generate-embeddings
+ * Generate embeddings for existing scraped_embeddings entries
+ *
+ * Body:
+ * - scraperName: string (optional) - Generate for all entries of a scraper
+ * - ids: number[] (optional) - Generate for specific entry IDs
+ * - onlyMissing: boolean (optional) - Only generate for entries without embeddings (default: true)
+ */
+router.post('/generate-embeddings', async (req: Request, res: Response) => {
+  try {
+    const { scraperName, ids, onlyMissing = true } = req.body;
+
+    if (!scraperName && (!ids || ids.length === 0)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Either scraperName or ids array is required'
+      });
+    }
+
+    console.log(`[Scraped Embeddings API] Generating embeddings:`);
+    console.log(`  - Scraper: ${scraperName || 'N/A'}`);
+    console.log(`  - IDs: ${ids?.length || 'all'}`);
+    console.log(`  - Only missing: ${onlyMissing}`);
+
+    const result = await scrapedEmbeddingsService.generateEmbeddingsForEntries({
+      scraperName,
+      ids,
+      onlyMissing
+    });
+
+    if (result.success) {
+      console.log(`[Scraped Embeddings API] ✓ Embeddings job started: ${result.jobId}`);
+      console.log(`[Scraped Embeddings API]   - Total: ${result.processed}`);
+      console.log(`[Scraped Embeddings API]   - Succeeded: ${result.succeeded}`);
+      console.log(`[Scraped Embeddings API]   - Failed: ${result.failed}`);
+      res.json(result);
+    } else {
+      console.log(`[Scraped Embeddings API] ✗ Generation failed: ${result.error}`);
+      res.status(500).json(result);
+    }
+  } catch (error: any) {
+    console.error('[Scraped Embeddings API] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /progress/:jobId
+ * Get embedding generation progress
+ */
+router.get('/progress/:jobId', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+
+    // Get progress from Redis
+    const redis = req.app.locals.redis;
+    if (!redis) {
+      return res.status(503).json({
+        success: false,
+        error: 'Redis not available'
+      });
+    }
+
+    const progressKey = `scraped_embeddings_progress:${jobId}`;
+    const progressData = await redis.get(progressKey);
+
+    if (!progressData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Progress data not found'
+      });
+    }
+
+    const progress = JSON.parse(progressData);
+    res.json({
+      success: true,
+      progress
+    });
+  } catch (error: any) {
+    console.error('[Scraped Embeddings API] Error getting progress:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /scrapers/:scraperName
+ * Delete all embeddings for a specific scraper
+ */
+router.delete('/scrapers/:scraperName', async (req: Request, res: Response) => {
+  try {
+    const { scraperName } = req.params;
+
+    console.log(`[Scraped Embeddings API] Deleting scraper: ${scraperName}`);
+
+    const result = await scrapedEmbeddingsService.deleteScraperEmbeddings(scraperName);
+
+    if (result.success) {
+      console.log(`[Scraped Embeddings API] ✓ Deleted ${result.deleted} entries`);
+      res.json(result);
+    } else {
+      console.log(`[Scraped Embeddings API] ✗ Delete failed: ${result.error}`);
+      res.status(500).json(result);
+    }
+  } catch (error: any) {
+    console.error('[Scraped Embeddings API] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router;

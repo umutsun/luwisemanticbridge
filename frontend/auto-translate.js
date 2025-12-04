@@ -16,7 +16,7 @@ const path = require('path');
 
 const LOCALES_DIR = path.join(__dirname, '../frontend/public/locales');
 const SOURCE_LANG = 'en'; // Source language (most complete)
-const TARGET_LANGS = ['fr', 'es', 'de', 'zh', 'el', 'th', 'ru', 'ar', 'ja', 'ko'];
+const TARGET_LANGS = ['fr', 'es', 'de', 'zh', 'el', 'th', 'ru', 'ar', 'ja', 'ko', 'tr'];
 
 // Simple translation dictionary for common UI terms
 const COMMON_TRANSLATIONS = {

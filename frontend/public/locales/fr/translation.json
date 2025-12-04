@@ -262,7 +262,10 @@
       "dataTranslations": "[AUTO] Data Translations",
       "systemSettings": "System Paramètres"
     },
-    "profile": "[AUTO] Profile"
+    "profile": "[AUTO] Profile",
+    "status": {
+      "backendDown": "[AUTO] [MISSING] backend Down"
+    }
   },
   "prompts": {
     "title": "Gestion de Chatbot et Prompts",
@@ -351,6 +354,13 @@
       "description": "Le prompt actuellement utilisé",
       "name": "Nom",
       "updated": "Mis à jour"
+    },
+    "general": {
+      "appearance": {
+        "theme": {
+          "primaryColor": "[AUTO] [MISSING] primary Color"
+        }
+      }
     }
   },
   "scraper": {
@@ -454,7 +464,8 @@
       "scraped": "[AUTO] Scraped",
       "data": "[AUTO] Data",
       "messageHistory": "[AUTO] Message History",
-      "messages": "Messages"
+      "messages": "Messages",
+      "title": "[AUTO] [MISSING] title"
     },
     "systemStatus": "État du Système",
     "recentActivity": "Activité Récente",
@@ -466,7 +477,14 @@
     "inactive": "Inactif",
     "connected": "Connecté",
     "disconnected": "Déconnecté",
-    "status": "État",
+    "status": {
+      "0": "É",
+      "1": "t",
+      "2": "a",
+      "3": "t",
+      "unknown": "[AUTO] [MISSING] unknown",
+      "notConfigured": "[AUTO] [MISSING] not Configured"
+    },
     "lastUpdated": "Dernière Mise à Jour",
     "totalSize": "Taille Totale",
     "usedMemory": "Mémoire Utilisée",
@@ -531,7 +549,8 @@
       "connected": "[AUTO] Connected",
       "disconnected": "[AUTO] Disconnected",
       "healthy": "[AUTO] Healthy",
-      "unhealthy": "[AUTO] Unhealthy"
+      "unhealthy": "[AUTO] Unhealthy",
+      "redis": "[AUTO] [MISSING] redis"
     },
     "resourceMonitoring": {
       "title": "[AUTO] Resource Monitoring",
@@ -576,7 +595,8 @@
       "llmModel": "[AUTO] LLM Model",
       "embeddingModel": "[AUTO] Embedding Model",
       "activeProvider": "Actif Provider",
-      "vectorGeneration": "[AUTO] Vector Generation"
+      "vectorGeneration": "[AUTO] Vector Generation",
+      "error": "[MISSING] Erreur"
     },
     "resources": {
       "title": "[AUTO] Resources",
@@ -607,7 +627,140 @@
       "embeddings": "[AUTO] Embeddings",
       "management": "[AUTO] Management",
       "analytics": "[AUTO] Analytics",
-      "detailedReports": "[AUTO] Detailed Reports"
+      "detailedReports": "[AUTO] Detailed Reports",
+      "documentUpload": "[AUTO] [MISSING] document Upload",
+      "threeDocumentsUploaded": "[AUTO] [MISSING] three Documents Uploaded",
+      "databaseBackup": "[AUTO] [MISSING] database Backup",
+      "automaticBackupComplete": "[AUTO] [MISSING] automatic Backup Complete",
+      "searchQuery": "[MISSING] Rechercher Query",
+      "vatRefundConditionsSearched": "[AUTO] [MISSING] vat Refund Conditions Searched"
+    },
+    "setup": {
+      "goToSetup": "[AUTO] [MISSING] go To Setup",
+      "autoRedirect": "[AUTO] [MISSING] auto Redirect"
+    },
+    "console": {
+      "starting": "[AUTO] [MISSING] starting",
+      "postgresqlConnected": "[AUTO] [MISSING] postgresql Connected",
+      "redisActive": "[MISSING] redis Actif",
+      "llmServiceInitialized": "[AUTO] [MISSING] llm Service Initialized",
+      "ragChatStarted": "[AUTO] [MISSING] rag Chat Started",
+      "ocrRouterLoaded": "[AUTO] [MISSING] ocr Router Loaded",
+      "scraperReady": "[AUTO] [MISSING] scraper Ready",
+      "reactRendered": "[AUTO] [MISSING] react Rendered",
+      "dashboardApiConnected": "[MISSING] Tableau de bord Api Connected",
+      "allServicesReady": "[AUTO] [MISSING] all Services Ready",
+      "healthCheckStarted": "[AUTO] [MISSING] health Check Started",
+      "healthCheckCompleted": "[AUTO] [MISSING] health Check Completed",
+      "documentHistoryLoading": "[MISSING] document History Chargement",
+      "documentsLoaded": "[MISSING] Documents Loaded",
+      "scraperSessionsLoading": "[MISSING] scraper Sessions Chargement",
+      "scraperSessionsLoaded": "[AUTO] [MISSING] scraper Sessions Loaded",
+      "helpTitle": "[AUTO] [MISSING] help Title",
+      "systemCommands": "[AUTO] [MISSING] system Commands",
+      "cmdStatus": "[AUTO] [MISSING] cmd Status",
+      "cmdRefresh": "[AUTO] [MISSING] cmd Refresh",
+      "cmdHealth": "[AUTO] [MISSING] cmd Health",
+      "cmdUptime": "[AUTO] [MISSING] cmd Uptime",
+      "dataCommands": "[AUTO] [MISSING] data Commands",
+      "cmdStats": "[AUTO] [MISSING] cmd Stats",
+      "cmdSession": "[AUTO] [MISSING] cmd Session",
+      "cmdEmbeddings": "[AUTO] [MISSING] cmd Embeddings",
+      "cmdExport": "[AUTO] [MISSING] cmd Export",
+      "logCommands": "[AUTO] [MISSING] log Commands",
+      "cmdLogs": "[AUTO] [MISSING] cmd Logs",
+      "cmdTail": "[AUTO] [MISSING] cmd Tail",
+      "cmdSearch": "[MISSING] cmd Rechercher",
+      "apiCommands": "[AUTO] [MISSING] api Commands",
+      "cmdApiTest": "[AUTO] [MISSING] cmd Api Test",
+      "cmdApiEndpoints": "[AUTO] [MISSING] cmd Api Endpoints",
+      "cmdToken": "[AUTO] [MISSING] cmd Token",
+      "consoleCommands": "[AUTO] [MISSING] console Commands",
+      "cmdClear": "[AUTO] [MISSING] cmd Clear",
+      "cmdTheme": "[AUTO] [MISSING] cmd Theme",
+      "cmdTime": "[AUTO] [MISSING] cmd Time",
+      "cmdCalc": "[AUTO] [MISSING] cmd Calc",
+      "consoleCleared": "[AUTO] [MISSING] console Cleared",
+      "systemStatusReport": "[AUTO] [MISSING] system Status Report",
+      "database": "[AUTO] [MISSING] database",
+      "vectorizer": "[AUTO] [MISSING] vectorizer",
+      "redis": "[AUTO] [MISSING] redis",
+      "websocket": "[AUTO] [MISSING] websocket",
+      "lightrag": "[AUTO] [MISSING] lightrag",
+      "semantic": "[AUTO] [MISSING] semantic",
+      "scraper": "[AUTO] [MISSING] scraper",
+      "refreshingData": "[AUTO] [MISSING] refreshing Data",
+      "dataRefreshed": "[AUTO] [MISSING] data Refreshed",
+      "serviceHealthCheck": "[AUTO] [MISSING] service Health Check",
+      "serviceDatabase": "[AUTO] [MISSING] service Database",
+      "serviceRedis": "[AUTO] [MISSING] service Redis",
+      "serviceVectorizer": "[AUTO] [MISSING] service Vectorizer",
+      "serviceLightRAG": "[AUTO] [MISSING] service Light R A G",
+      "serviceSemanticSearch": "[MISSING] service Semantic Rechercher",
+      "serviceScraper": "[AUTO] [MISSING] service Scraper",
+      "systemUptime": "[AUTO] [MISSING] system Uptime",
+      "chatStatistics": "[AUTO] [MISSING] chat Statistics",
+      "totalConversations": "[AUTO] [MISSING] total Conversations",
+      "totalMessages": "[AUTO] [MISSING] total Messages",
+      "avgMessagesPerConversation": "[AUTO] [MISSING] avg Messages Per Conversation",
+      "activeUsers": "[MISSING] Actif Utilisateurs",
+      "today": "[AUTO] [MISSING] today",
+      "sessionInformation": "[AUTO] [MISSING] session Information",
+      "currentSession": "[AUTO] [MISSING] current Session",
+      "average": "[AUTO] [MISSING] average",
+      "sessionDuration": "[AUTO] [MISSING] session Duration",
+      "embeddingStatistics": "[AUTO] [MISSING] embedding Statistics",
+      "migratedData": "[AUTO] [MISSING] migrated Data",
+      "documents": "[MISSING] Documents",
+      "scrapedContent": "[AUTO] [MISSING] scraped Content",
+      "messageHistory": "[AUTO] [MISSING] message History",
+      "totalEmbeddings": "[AUTO] [MISSING] total Embeddings",
+      "noEmbeddingStats": "[AUTO] [MISSING] no Embedding Stats",
+      "model": "[AUTO] [MISSING] model",
+      "filterSetTo": "[AUTO] [MISSING] filter Set To",
+      "recentLogs": "[AUTO] [MISSING] recent Logs",
+      "invalidNumber": "[AUTO] [MISSING] invalid Number",
+      "searchingLogs": "[AUTO] [MISSING] searching Logs",
+      "provideSearchTerm": "[MISSING] provide Rechercher Term",
+      "exportingData": "[AUTO] [MISSING] exporting Data",
+      "dataExported": "[AUTO] [MISSING] data Exported",
+      "testingApi": "[AUTO] [MISSING] testing Api",
+      "apiConnectionSuccess": "[MISSING] api Connection Succès",
+      "responseTime": "[AUTO] [MISSING] response Time",
+      "status": "[AUTO] [MISSING] status",
+      "apiError": "[MISSING] api Erreur",
+      "apiConnectionFailed": "[AUTO] [MISSING] api Connection Failed",
+      "availableEndpoints": "[AUTO] [MISSING] available Endpoints",
+      "apiUsage": "[AUTO] [MISSING] api Usage",
+      "tokenStep1": "[AUTO] [MISSING] token Step1",
+      "tokenStep2": "[AUTO] [MISSING] token Step2",
+      "tokenStep3": "[AUTO] [MISSING] token Step3",
+      "tokenStep4": "[AUTO] [MISSING] token Step4",
+      "invalidTokenAmount": "[AUTO] [MISSING] invalid Token Amount",
+      "themeUsage": "[AUTO] [MISSING] theme Usage",
+      "currentTime": "[AUTO] [MISSING] current Time",
+      "date": "[AUTO] [MISSING] date",
+      "time": "[AUTO] [MISSING] time",
+      "invalidExpression": "[AUTO] [MISSING] invalid Expression",
+      "provideExpression": "[AUTO] [MISSING] provide Expression",
+      "serverStarting": "[AUTO] [MISSING] server Starting",
+      "databaseConnected": "[AUTO] [MISSING] database Connected",
+      "redisConnected": "[AUTO] [MISSING] redis Connected",
+      "nextjsServerStarted": "[AUTO] [MISSING] nextjs Server Started",
+      "readyOnLocalhost": "[AUTO] [MISSING] ready On Localhost",
+      "rateLimitWarning": "[AUTO] [MISSING] rate Limit Warning",
+      "embeddingModelLoaded": "[AUTO] [MISSING] embedding Model Loaded",
+      "compiledSuccessfully": "[AUTO] [MISSING] compiled Successfully",
+      "connectionTimeout": "[AUTO] [MISSING] connection Timeout",
+      "hmrEnabled": "[AUTO] [MISSING] hmr Enabled"
+    },
+    "notifications": {
+      "systemStarted": "[AUTO] [MISSING] system Started",
+      "allServicesStarted": "[AUTO] [MISSING] all Services Started",
+      "newDocumentAdded": "[AUTO] [MISSING] new Document Added",
+      "taxProcedureUpdate": "[AUTO] [MISSING] tax Procedure Update",
+      "storageSpace": "[AUTO] [MISSING] storage Space",
+      "storage80Full": "[AUTO] [MISSING] storage80 Full"
     }
   },
   "users": {
@@ -631,7 +784,9 @@
       "newUsersThisWeek": "New Utilisateurs This Week",
       "newUsersThisMonth": "New Utilisateurs This Month",
       "adminUsers": "Admin Utilisateurs",
-      "regularUsers": "Regular Utilisateurs"
+      "regularUsers": "Regular Utilisateurs",
+      "premiumUsers": "Premium Utilisateurs",
+      "totalTokensUsed": "[AUTO] Total Tokens Used"
     },
     "search": {
       "placeholder": "Rechercher Utilisateurs...",
@@ -651,7 +806,37 @@
       "status": "[AUTO] Status",
       "lastLogin": "[AUTO] Last Login",
       "createdAt": "[AUTO] Created",
-      "actions": "[AUTO] Actions"
+      "actions": "[AUTO] Actions",
+      "title": "[AUTO] User List",
+      "description": "Rechercher and filter Utilisateurs",
+      "searchPlaceholder": "Rechercher Utilisateurs...",
+      "rolePlaceholder": "[AUTO] Select role",
+      "allRoles": "[AUTO] All Roles",
+      "user": "[AUTO] User",
+      "admin": "[AUTO] Admin",
+      "premium": "[AUTO] Premium",
+      "statusPlaceholder": "[AUTO] Select status",
+      "allStatus": "[AUTO] All Statuses",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "suspended": "[AUTO] Suspended",
+      "columns": {
+        "user": "[AUTO] User",
+        "role": "[AUTO] Role",
+        "status": "[AUTO] Status",
+        "subscription": "[AUTO] Subscription",
+        "tokenUsage": "[AUTO] Token Usage",
+        "messages": "Messages",
+        "lastActivity": "[AUTO] Last Activity",
+        "actions": "[AUTO] Actions"
+      },
+      "joined": "[AUTO] Joined:",
+      "noPlan": "[AUTO] No Plan",
+      "left": "[AUTO] left",
+      "sessions": "[AUTO] sessions",
+      "never": "[AUTO] Never",
+      "editUser": "Modifier User",
+      "resetPassword": "[AUTO] Reset Password"
     },
     "actions": {
       "viewDetails": "[AUTO] View Details",
@@ -847,6 +1032,82 @@
       "saving": "[AUTO] Saving...",
       "success": "Paramètres saved successfully",
       "error": "Failed to Enregistrer Paramètres"
+    },
+    "subscriptionManagement": {
+      "title": "[AUTO] Subscription Management",
+      "description": "[AUTO] Manage subscription plans",
+      "addPlan": "Ajouter Plan",
+      "month": "[AUTO] month",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "editPlan": "Modifier Plan",
+      "deletePlan": "Supprimer Plan",
+      "deletePlanConfirm": "Are you sure you want to Supprimer this plan?",
+      "users": "Utilisateurs",
+      "ofAllUsers": "of all Utilisateurs",
+      "tokensPerMonth": "[AUTO] tokens/month",
+      "avgUsage": "[AUTO] Avg. Usage",
+      "tokens": "[AUTO] tokens",
+      "features": "[AUTO] Features",
+      "moreFeatures": "[AUTO] more features"
+    },
+    "dialogs": {
+      "editUser": {
+        "title": "Modifier User",
+        "description": "[AUTO] Update user information",
+        "name": "[AUTO] Name",
+        "email": "[AUTO] Email",
+        "role": "[AUTO] Role",
+        "status": "[AUTO] Status",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "user": "[AUTO] [MISSING] user",
+        "admin": "[AUTO] [MISSING] admin",
+        "premium": "[AUTO] [MISSING] premium",
+        "active": "[MISSING] Actif",
+        "inactive": "[MISSING] Inactif",
+        "suspended": "[AUTO] [MISSING] suspended",
+        "subscriptionPlan": "[AUTO] [MISSING] subscription Plan",
+        "tokenUsage": "[AUTO] [MISSING] token Usage",
+        "totalUsed": "[AUTO] [MISSING] total Used",
+        "monthlyLimit": "[AUTO] [MISSING] monthly Limit",
+        "remaining": "[AUTO] [MISSING] remaining",
+        "messageStatistics": "[AUTO] [MISSING] message Statistics",
+        "totalMessages": "[AUTO] [MISSING] total Messages",
+        "totalSessions": "[AUTO] [MISSING] total Sessions",
+        "saveChanges": "[MISSING] Enregistrer Changes"
+      },
+      "resetPassword": {
+        "title": "[AUTO] Reset Password",
+        "description": "[AUTO] Set a new password for the user",
+        "newPassword": "[AUTO] New Password",
+        "confirmPassword": "[AUTO] Confirm Password",
+        "reset": "[AUTO] Reset",
+        "cancel": "Annuler",
+        "passwordPlaceholder": "[AUTO] [MISSING] password Placeholder",
+        "resetPassword": "[AUTO] [MISSING] reset Password"
+      },
+      "subscriptionPlan": {
+        "title": "[AUTO] Subscription Plan",
+        "editTitle": "Modifier Plan",
+        "addTitle": "Ajouter New Plan",
+        "name": "[AUTO] Plan Name",
+        "price": "[AUTO] Price",
+        "monthlyTokens": "[AUTO] Monthly Tokens",
+        "features": "[AUTO] Features",
+        "addFeature": "Ajouter Feature",
+        "isActive": "Actif",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "planName": "[AUTO] [MISSING] plan Name",
+        "planNamePlaceholder": "[AUTO] [MISSING] plan Name Placeholder",
+        "pricePlaceholder": "[AUTO] [MISSING] price Placeholder",
+        "monthlyTokensPlaceholder": "[AUTO] [MISSING] monthly Tokens Placeholder",
+        "featurePlaceholder": "[AUTO] [MISSING] feature Placeholder",
+        "planIsActive": "[MISSING] plan Is Actif",
+        "updatePlan": "[AUTO] [MISSING] update Plan",
+        "createPlan": "[AUTO] [MISSING] create Plan"
+      }
     }
   },
   "toasts": {
@@ -1182,7 +1443,25 @@
     "createdAt": "[AUTO] Created At",
     "updatedAt": "[AUTO] Updated At",
     "actions": "[AUTO] Actions",
-    "execute": "[AUTO] Execute"
+    "execute": "[AUTO] Execute",
+    "unknown": "[AUTO] [MISSING] unknown",
+    "token": "[AUTO] [MISSING] token",
+    "requiredFields": "[AUTO] [MISSING] required Fields",
+    "stop": "[AUTO] [MISSING] stop",
+    "filters": "[AUTO] [MISSING] filters",
+    "type": "[AUTO] [MISSING] type",
+    "category": "[AUTO] [MISSING] category",
+    "filter": "[AUTO] [MISSING] filter",
+    "url": "[AUTO] [MISSING] url",
+    "total": "[AUTO] [MISSING] total",
+    "cache": "[AUTO] [MISSING] cache",
+    "source": "[AUTO] [MISSING] source",
+    "target": "[AUTO] [MISSING] target",
+    "languages": "[AUTO] [MISSING] languages",
+    "columns": "[AUTO] [MISSING] columns",
+    "errors": "[AUTO] [MISSING] errors",
+    "lastUpdated": "[AUTO] [MISSING] last Updated",
+    "to": "[AUTO] [MISSING] to"
   },
   "chatInput": {
     "defaultPlaceholder": "Rechercher in legal Documents or ask questions...",
@@ -1248,7 +1527,8 @@
       "addToDatabase": "Ajouter to Database",
       "alreadyInDatabase": "[AUTO] Already in Database",
       "deleteFromDisk": "Supprimer from disk & DB",
-      "deleteFromDiskOnly": "Supprimer from disk"
+      "deleteFromDiskOnly": "Supprimer from disk",
+      "filterFiles": "[AUTO] [MISSING] filter Files"
     },
     "search": {
       "searchDocuments": "Rechercher Documents...",
@@ -1500,7 +1780,33 @@
     "rememberMe": "[AUTO] Remember me",
     "forgotPassword": "[AUTO] Forgot password?",
     "noAccount": "[AUTO] Don't have an account?",
-    "signUp": "[AUTO] Sign up"
+    "signUp": "[AUTO] Sign up",
+    "title": "[AUTO] Sign In",
+    "email": "[AUTO] Email",
+    "password": "[AUTO] Password",
+    "signIn": "[AUTO] Sign In",
+    "signingIn": "[AUTO] Signing in...",
+    "success": "Succès",
+    "failed": "[AUTO] Failed",
+    "redirectingToDashboard": "Redirecting to Tableau de bord...",
+    "failedMessage": "[AUTO] Login failed. Please check your credentials.",
+    "loginTitle": "[AUTO] Sign In to Your Account",
+    "systemActive": "SYSTEM Actif",
+    "initializing": "[AUTO] Initializing...",
+    "pleaseWait": "[AUTO] Please wait...",
+    "steps": {
+      "connection": "[AUTO] Establishing connection",
+      "database": "[AUTO] Preparing database",
+      "services": "[AUTO] Starting services",
+      "interface": "Chargement interface"
+    },
+    "details": {
+      "latency": "[AUTO] Latency: 12ms",
+      "tables": "[AUTO] 42 tables loaded",
+      "redisReady": "[AUTO] Redis ready",
+      "components": "[AUTO] Components loaded"
+    },
+    "register": "[AUTO] Sign Up"
   },
   "register": {
     "title": "[AUTO] Create Account",
@@ -1588,7 +1894,8 @@
       "unverified": "[AUTO] Unverified"
     },
     "actions": {
-      "backToHome": "[AUTO] Back to Home"
+      "backToHome": "[AUTO] Back to Home",
+      "changePassword": "[AUTO] Change Password"
     },
     "notifications": {
       "profileUpdated": "[AUTO] Profile information updated successfully",
@@ -1782,7 +2089,8 @@
       "searchLogs": "Rechercher logs...",
       "allLevels": "[AUTO] All Levels",
       "allSources": "[AUTO] All Sources"
-    }
+    },
+    "currentTime": "[AUTO] [MISSING] current Time"
   },
   "dataTranslations": {
     "title": "[AUTO] Data Translations",
@@ -1856,7 +2164,23 @@
       "confirmDeleteSelected": "Are you sure you want to Supprimer {count} jobs?",
       "table": "[AUTO] Table",
       "provider": "[AUTO] Provider",
-      "status": "[AUTO] Status",
+      "status": {
+        "0": "[",
+        "1": "A",
+        "2": "U",
+        "3": "T",
+        "4": "O",
+        "5": "]",
+        "6": " ",
+        "7": "S",
+        "8": "t",
+        "9": "a",
+        "10": "t",
+        "11": "u",
+        "12": "s",
+        "running": "[AUTO] [MISSING] running",
+        "completed": "[AUTO] [MISSING] completed"
+      },
       "progress": "[AUTO] Progress",
       "cost": "[AUTO] Cost",
       "date": "[AUTO] Date",
@@ -1864,7 +2188,10 @@
       "cancel": "Annuler",
       "delete": "Supprimer",
       "noJobsFound": "No jobs found matching Rechercher criteria",
-      "noJobsYet": "[AUTO] No translation jobs yet"
+      "noJobsYet": "[AUTO] No translation jobs yet",
+      "actions": {
+        "cancel": "[MISSING] Annuler"
+      }
     },
     "stats": {
       "title": "[AUTO] Translation Statistics",
@@ -2338,7 +2665,8 @@
       "accessDashboard": "Access Tableau de bord to configure additional Paramètres",
       "uploadDocuments": "Upload Documents to build your knowledge base",
       "startChatting": "[AUTO] Start chatting with your AI assistant",
-      "goToLogin": "[AUTO] Go to Login"
+      "goToLogin": "[AUTO] Go to Login",
+      "back": "[AUTO] [MISSING] back"
     },
     "deploy": {
       "environmentCheck": "[AUTO] Environment Check",
@@ -2392,7 +2720,11 @@
       "admin": "[AUTO] Admin",
       "aiSetup": "[AUTO] AI Setup",
       "settings": "Paramètres",
-      "complete": "[AUTO] Complete"
+      "complete": "[AUTO] Complete",
+      "siteTitle": "[AUTO] [MISSING] site Title",
+      "back": "[AUTO] [MISSING] back",
+      "next": "[AUTO] [MISSING] next",
+      "apiKeyValidatedSuccessfully": "[AUTO] [MISSING] api Key Validated Successfully"
     },
     "errors": {
       "configurationSavedSuccessfully": "[AUTO] Configuration saved successfully!",
@@ -2760,7 +3092,8 @@
     "input": {
       "help": "[AUTO] Press Enter to send, Shift+Enter for new line"
     },
-    "messageCount": "{{count}} Messages"
+    "messageCount": "{{count}} Messages",
+    "messagesLabel": "Messages"
   },
   "systemMonitor": {
     "title": "[AUTO] System Monitor",
@@ -2877,7 +3210,8 @@
       "networkTraffic": "[AUTO] Network Traffic (MB/s)",
       "responseTime": "[AUTO] Response Time (ms)",
       "requestRate": "[AUTO] Request Rate (req/s)",
-      "errorRate": "Erreur Rate (%)"
+      "errorRate": "Erreur Rate (%)",
+      "cacheHitRate": "[AUTO] [MISSING] cache Hit Rate"
     },
     "settings": {
       "title": "Monitor Paramètres",
@@ -2922,7 +3256,9 @@
     "activeWorkflow": {
       "title": "Actif Scraping Workflow",
       "url": "[AUTO] URL",
-      "urlsFound": "[AUTO] URLs found"
+      "urlsFound": "[AUTO] URLs found",
+      "general": "[AUTO] [MISSING] general",
+      "started": "[AUTO] [MISSING] started"
     },
     "createJob": {
       "title": "[AUTO] Create New Job",
@@ -3143,7 +3479,8 @@
     "aiPoweredBadge": "[AUTO] AI-Powered",
     "urlInput": {
       "label": "[AUTO] Website URL",
-      "placeholder": "[AUTO] https://example.com"
+      "placeholder": "[AUTO] https://example.com",
+      "analyze": "[AUTO] [MISSING] analyze"
     },
     "progress": {
       "analyzing": "[AUTO] Analyzing",
@@ -3153,7 +3490,13 @@
         "structure_analysis": "[AUTO] Structure",
         "detecting_content_areas": "[AUTO] Content",
         "identifying_navigation_patterns": "[AUTO] Navigation",
-        "analyzing_page_structure": "[AUTO] AI Analysis"
+        "analyzing_page_structure": "[AUTO] AI Analysis",
+        "robots": "[AUTO] [MISSING] robots",
+        "browser": "[AUTO] [MISSING] browser",
+        "structure": "[AUTO] [MISSING] structure",
+        "content": "[AUTO] [MISSING] content",
+        "navigation": "[AUTO] [MISSING] navigation",
+        "aiAnalysis": "[AUTO] [MISSING] ai Analysis"
       }
     },
     "tabs": {
@@ -3177,14 +3520,18 @@
         "high": "[AUTO] High confidence detection",
         "medium": "[AUTO] Medium confidence detection",
         "low": "[AUTO] Low confidence detection"
-      }
+      },
+      "detected": "[AUTO] [MISSING] detected"
     },
     "selectors": {
       "title": "[AUTO] AI-Powered CSS Selectors",
       "description": "[AUTO] Automatically detected with GPT-4o-mini and validated on live page",
       "coreSelectors": "[AUTO] Core Selectors",
       "ecommerceSelectors": "[AUTO] E-commerce Selectors",
-      "notDetected": "[AUTO] Not detected"
+      "notDetected": "[AUTO] Not detected",
+      "aiPowered": "[AUTO] [MISSING] ai Powered",
+      "aiDescription": "[AUTO] [MISSING] ai Description",
+      "count": "[AUTO] [MISSING] count"
     },
     "entities": {
       "products": "[AUTO] Products",
@@ -3229,7 +3576,8 @@
       "siteCreated": "Succès",
       "siteCreatedDescription": "[AUTO] Site created and configured successfully",
       "createSiteFailed": "[AUTO] Failed to create site"
-    }
+    },
+    "aiPowered": "[AUTO] [MISSING] ai Powered"
   },
   "scraperPage": {
     "title": "[AUTO] Advanced Scraper",
@@ -3250,7 +3598,12 @@
       "createProject": "[AUTO] Create Project",
       "noProjects": "[AUTO] No projects yet",
       "createFirstProject": "[AUTO] Create your first scraping project to get started",
-      "createNewProject": "[AUTO] Create Project"
+      "createNewProject": "[AUTO] Create Project",
+      "subtitle": "[AUTO] [MISSING] subtitle",
+      "sites": "[AUTO] [MISSING] sites",
+      "items": "[AUTO] [MISSING] items",
+      "processed": "[AUTO] [MISSING] processed",
+      "run": "[AUTO] [MISSING] run"
     },
     "configurations": {
       "title": "[AUTO] Site Configurations",
@@ -3285,7 +3638,13 @@
       "realTimeUpdates": "[AUTO] Real-time Updates",
       "realTimeUpdatesDescription": "[AUTO] Live progress notifications",
       "reset": "[AUTO] Reset",
-      "startScraping": "[AUTO] Start Scraping"
+      "startScraping": "[AUTO] Start Scraping",
+      "subtitle": "[AUTO] [MISSING] subtitle",
+      "addSite": "[MISSING] Ajouter Site",
+      "active": "[MISSING] Actif",
+      "inactive": "[MISSING] Inactif",
+      "analyze": "[AUTO] [MISSING] analyze",
+      "categoryPlaceholder": "[AUTO] [MISSING] category Placeholder"
     },
     "scraping": {
       "title": "[AUTO] Scraping Control Center",
@@ -3318,7 +3677,13 @@
       "processWithAI": "[AUTO] Process with AI",
       "viewDetails": "[AUTO] View Details",
       "items": "[AUTO] items",
-      "characters": "[AUTO] characters"
+      "characters": "[AUTO] characters",
+      "subtitle": "[AUTO] [MISSING] subtitle",
+      "controls": "[AUTO] [MISSING] controls",
+      "categoryPlaceholder": "[AUTO] [MISSING] category Placeholder",
+      "realTimeStats": "[AUTO] [MISSING] real Time Stats",
+      "itemsFound": "[AUTO] [MISSING] items Found",
+      "complete": "[AUTO] [MISSING] complete"
     },
     "processing": {
       "title": "[AUTO] AI Processing Center",
@@ -3342,7 +3707,8 @@
       "blogContentAnalysis": "[AUTO] Blog Content Analysis",
       "items": "[AUTO] items",
       "time": "[AUTO] time",
-      "justNow": "[AUTO] Just now"
+      "justNow": "[AUTO] Just now",
+      "subtitle": "[AUTO] [MISSING] subtitle"
     },
     "dialogs": {
       "addNewSite": {
@@ -3402,6 +3768,57 @@
         "realTimeUpdatesDescription": "[AUTO] Live progress notifications",
         "createProject": "[AUTO] Create Project"
       }
+    },
+    "createProjectDialog": {
+      "title": "[AUTO] [MISSING] title",
+      "projectName": "[AUTO] [MISSING] project Name",
+      "projectNamePlaceholder": "[AUTO] [MISSING] project Name Placeholder",
+      "description": "[AUTO] [MISSING] description",
+      "descriptionPlaceholder": "[AUTO] [MISSING] description Placeholder",
+      "defaultCategory": "[AUTO] [MISSING] default Category",
+      "categoryPlaceholder": "[AUTO] [MISSING] category Placeholder",
+      "smartFeatures": "[AUTO] [MISSING] smart Features",
+      "autoProcessWithAI": "[AUTO] [MISSING] auto Process With A I",
+      "autoProcessWithAIDescription": "[AUTO] [MISSING] auto Process With A I Description",
+      "generateEmbeddings": "[AUTO] [MISSING] generate Embeddings",
+      "generateEmbeddingsDescription": "[AUTO] [MISSING] generate Embeddings Description",
+      "realTimeUpdates": "[AUTO] [MISSING] real Time Updates",
+      "realTimeUpdatesDescription": "[AUTO] [MISSING] real Time Updates Description",
+      "cancel": "[MISSING] Annuler",
+      "create": "[AUTO] [MISSING] create"
+    },
+    "addSiteDialog": {
+      "title": "[AUTO] [MISSING] title",
+      "siteName": "[AUTO] [MISSING] site Name",
+      "siteNamePlaceholder": "[AUTO] [MISSING] site Name Placeholder",
+      "url": "[AUTO] [MISSING] url",
+      "urlPlaceholder": "[AUTO] [MISSING] url Placeholder",
+      "category": "[AUTO] [MISSING] category",
+      "categoryPlaceholder": "[AUTO] [MISSING] category Placeholder",
+      "titleSelector": "[AUTO] [MISSING] title Selector",
+      "titleSelectorPlaceholder": "[AUTO] [MISSING] title Selector Placeholder",
+      "titleSelectorDescription": "[AUTO] [MISSING] title Selector Description",
+      "contentSelector": "[AUTO] [MISSING] content Selector",
+      "contentSelectorPlaceholder": "[AUTO] [MISSING] content Selector Placeholder",
+      "contentSelectorDescription": "[AUTO] [MISSING] content Selector Description",
+      "imagesSelector": "[AUTO] [MISSING] images Selector",
+      "imagesSelectorPlaceholder": "[AUTO] [MISSING] images Selector Placeholder",
+      "linksSelector": "[AUTO] [MISSING] links Selector",
+      "linksSelectorPlaceholder": "[AUTO] [MISSING] links Selector Placeholder",
+      "maxPages": "[AUTO] [MISSING] max Pages",
+      "maxPagesDescription": "[AUTO] [MISSING] max Pages Description",
+      "maxDepth": "[AUTO] [MISSING] max Depth",
+      "maxDepthDescription": "[AUTO] [MISSING] max Depth Description",
+      "requestDelay": "[AUTO] [MISSING] request Delay",
+      "requestDelayDescription": "[AUTO] [MISSING] request Delay Description",
+      "domainsOnly": "[AUTO] [MISSING] domains Only",
+      "followExternalLinks": "[AUTO] [MISSING] follow External Links",
+      "respectRobots": "[AUTO] [MISSING] respect Robots",
+      "configurationSummary": "[AUTO] [MISSING] configuration Summary",
+      "previous": "[AUTO] [MISSING] previous",
+      "cancel": "[MISSING] Annuler",
+      "next": "[AUTO] [MISSING] next",
+      "add": "[MISSING] Ajouter"
     }
   },
   "workflowPage": {
@@ -3542,7 +3959,9 @@
       "preparingExport": "[AUTO] Preparing export...",
       "confirmClearAllData": "[AUTO] Are you sure you want to clear all data?",
       "clearingAllData": "[AUTO] Clearing all data...",
-      "executingCommand": "[AUTO] Executing command..."
+      "executingCommand": "[AUTO] Executing command...",
+      "openingAnalytics": "[AUTO] [MISSING] opening Analytics",
+      "viewingDatabase": "[AUTO] [MISSING] viewing Database"
     },
     "noResults": "[AUTO] No commands found",
     "recentCommands": "[AUTO] Recent Commands",
@@ -3613,7 +4032,8 @@
       "fileUpload": "[AUTO] Upload from File (Optional)",
       "supportedFormats": "[AUTO] Supported formats: Text (.txt, .md, .json, .csv), PDF (.pdf), Word (.doc, .docx), Excel (.xls, .xlsx)",
       "addAndProcess": "Ajouter Document and Process",
-      "clear": "[AUTO] Clear"
+      "clear": "[AUTO] Clear",
+      "description": "[AUTO] [MISSING] description"
     },
     "urlImport": {
       "title": "[AUTO] Import from URL",
@@ -3672,7 +4092,8 @@
       "fileUploaded": "[AUTO] File uploaded successfully",
       "fileUploadFailed": "[AUTO] Failed to upload file",
       "contentFetched": "[AUTO] Content fetched successfully",
-      "contentFetchFailed": "[AUTO] Failed to fetch content"
+      "contentFetchFailed": "[AUTO] Failed to fetch content",
+      "fileContentLoaded": "[AUTO] [MISSING] file Content Loaded"
     }
   },
   "csvViewer": {
@@ -3710,5 +4131,236 @@
       "exportFailed": "[AUTO] Failed to export data",
       "noDataAvailable": "[AUTO] No CSV data available"
     }
-  }
+  },
+  "forgotPassword": {
+    "title": "[AUTO] Forgot Password",
+    "description": "[AUTO] Enter your email address to reset your password",
+    "emailLabel": "[AUTO] Email Address",
+    "emailPlaceholder": "[AUTO] Enter your email address",
+    "sendResetLink": "[AUTO] Send Reset Link",
+    "sending": "[AUTO] Sending...",
+    "backToLogin": "[AUTO] Back to login",
+    "success": "[AUTO] Password reset link has been sent to your email address. Please check your email.",
+    "errors": {
+      "requestFailed": "[AUTO] Password reset request failed",
+      "invalidEmail": "[AUTO] Invalid email address",
+      "emailNotFound": "[AUTO] This email address is not registered in the system"
+    }
+  },
+  "operation_type": "[AUTO] [MISSING] operation_type",
+  "authorization": "[AUTO] [MISSING] authorization",
+  "token": "[AUTO] [MISSING] token",
+  "context": "[AUTO] [MISSING] context",
+  "id": "[AUTO] [MISSING] id",
+  "file": "[AUTO] [MISSING] file",
+  "page": "[AUTO] [MISSING] page",
+  "limit": "[AUTO] [MISSING] limit",
+  "table": "[AUTO] [MISSING] table",
+  "alerts": {
+    "sessionFlushed": "[AUTO] [MISSING] session Flushed",
+    "embeddingsGenerationStarted": "[AUTO] [MISSING] embeddings Generation Started",
+    "responseEmbedded": "[AUTO] [MISSING] response Embedded",
+    "batchEmbeddingStarted": "[AUTO] [MISSING] batch Embedding Started",
+    "selectedEmbeddingStarted": "[AUTO] [MISSING] selected Embedding Started",
+    "sessionDeleted": "[AUTO] [MISSING] session Deleted",
+    "selectedSessionsDeleted": "[AUTO] [MISSING] selected Sessions Deleted",
+    "enterQuestion": "[AUTO] [MISSING] enter Question",
+    "queryCompleted": "[AUTO] [MISSING] query Completed",
+    "queryFailed": "[AUTO] [MISSING] query Failed",
+    "connectionError": "[MISSING] connection Erreur",
+    "noResults": "[AUTO] [MISSING] no Results"
+  },
+  "messageTypes": {
+    "questions": "[AUTO] [MISSING] questions",
+    "answers": "[AUTO] [MISSING] answers",
+    "searchResults": "[MISSING] Rechercher Results"
+  },
+  "title": "[AUTO] [MISSING] title",
+  "subtitle": "[AUTO] [MISSING] subtitle",
+  "timeRange": {
+    "last7Days": "[AUTO] [MISSING] last7 Days",
+    "last30Days": "[AUTO] [MISSING] last30 Days",
+    "last90Days": "[AUTO] [MISSING] last90 Days"
+  },
+  "json": "[AUTO] [MISSING] json",
+  "csv": "[AUTO] [MISSING] csv",
+  "tabs": {
+    "overview": "[AUTO] [MISSING] overview",
+    "sessions": "[AUTO] [MISSING] sessions",
+    "topics": "[AUTO] [MISSING] topics",
+    "research": "[AUTO] [MISSING] research",
+    "analytics": "[AUTO] [MISSING] analytics"
+  },
+  "stats": {
+    "totalMessages": "[AUTO] [MISSING] total Messages",
+    "sessionCount": "[AUTO] [MISSING] session Count",
+    "averagePerSession": "[AUTO] [MISSING] average Per Session",
+    "embeddings": "[AUTO] [MISSING] embeddings"
+  },
+  "popularQueries": {
+    "title": "[AUTO] [MISSING] title",
+    "rank": "[AUTO] [MISSING] rank"
+  },
+  "sessions": {
+    "title": "[AUTO] [MISSING] title",
+    "subtitle": "[AUTO] [MISSING] subtitle",
+    "batchActions": {
+      "clear": "[AUTO] [MISSING] clear"
+    },
+    "messages": "[MISSING] Messages",
+    "types": "[AUTO] [MISSING] types",
+    "start": "[AUTO] [MISSING] start",
+    "lastActivity": "[AUTO] [MISSING] last Activity",
+    "lastQuestion": "[AUTO] [MISSING] last Question",
+    "send": "[AUTO] [MISSING] send",
+    "delete": "[MISSING] Supprimer"
+  },
+  "sessionOverview": {
+    "title": "[AUTO] [MISSING] title",
+    "interactions": "[AUTO] [MISSING] interactions",
+    "batchActions": {
+      "clear": "[AUTO] [MISSING] clear",
+      "embedAll": "[AUTO] [MISSING] embed All",
+      "systemEmbeddings": "[AUTO] [MISSING] system Embeddings"
+    },
+    "tokenUsage": {
+      "title": "[AUTO] [MISSING] title"
+    },
+    "embeddings": {
+      "title": "[AUTO] [MISSING] title",
+      "processed": "[AUTO] [MISSING] processed"
+    },
+    "pending": {
+      "title": "[AUTO] [MISSING] title",
+      "description": "[AUTO] [MISSING] description"
+    },
+    "selected": {
+      "title": "[AUTO] [MISSING] title",
+      "messages": "[MISSING] Messages"
+    },
+    "filters": {
+      "filter": "[AUTO] [MISSING] filter",
+      "all": "[AUTO] [MISSING] all",
+      "embedded": "[AUTO] [MISSING] embedded",
+      "notEmbedded": "[AUTO] [MISSING] not Embedded",
+      "sort": "[AUTO] [MISSING] sort",
+      "date": "[AUTO] [MISSING] date",
+      "token": "[AUTO] [MISSING] token",
+      "quality": "[AUTO] [MISSING] quality"
+    }
+  },
+  "conversation": {
+    "title": "[AUTO] [MISSING] title",
+    "subtitle": "[AUTO] [MISSING] subtitle",
+    "user": "[AUTO] [MISSING] user",
+    "token": "[AUTO] [MISSING] token",
+    "alice": "[AUTO] [MISSING] alice",
+    "quality": {
+      "high": "[AUTO] [MISSING] high",
+      "medium": "[AUTO] [MISSING] medium",
+      "low": "[AUTO] [MISSING] low"
+    },
+    "embedded": "[AUTO] [MISSING] embedded",
+    "embed": "[AUTO] [MISSING] embed",
+    "ragSources": "[AUTO] [MISSING] rag Sources",
+    "source": "[AUTO] [MISSING] source"
+  },
+  "userBehavior": {
+    "title": "[AUTO] [MISSING] title",
+    "subtitle": "[AUTO] [MISSING] subtitle",
+    "totalQuestions": "[AUTO] [MISSING] total Questions",
+    "avgQuestionLength": "[AUTO] [MISSING] avg Question Length",
+    "characters": "[AUTO] [MISSING] characters",
+    "avgResponseTime": "[AUTO] [MISSING] avg Response Time",
+    "sessionDuration": "[AUTO] [MISSING] session Duration",
+    "minutes": "[AUTO] [MISSING] minutes",
+    "popularTopics": "[AUTO] [MISSING] popular Topics",
+    "times": "[AUTO] [MISSING] times"
+  },
+  "Lütfen en az bir tablo seçin": "[AUTO] [MISSING] Lütfen en az bir tablo seçin",
+  "modes": {
+    "hybrid": {
+      "title": "[AUTO] [MISSING] title",
+      "description": "[AUTO] [MISSING] description"
+    },
+    "lightrag": {
+      "title": "[AUTO] [MISSING] title",
+      "description": "[AUTO] [MISSING] description"
+    },
+    "semantic": {
+      "title": "[AUTO] [MISSING] title",
+      "description": "[AUTO] [MISSING] description"
+    },
+    "raganything": {
+      "title": "[AUTO] [MISSING] title",
+      "description": "[AUTO] [MISSING] description"
+    }
+  },
+  "askQuestion": "[AUTO] [MISSING] ask Question",
+  "askQuestionDescription": "[AUTO] [MISSING] ask Question Description",
+  "queryMode": "[AUTO] [MISSING] query Mode",
+  "yourQuestion": "[AUTO] [MISSING] your Question",
+  "questionPlaceholder": "[AUTO] [MISSING] question Placeholder",
+  "characters": "[AUTO] [MISSING] characters",
+  "temperature": "[AUTO] [MISSING] temperature",
+  "topK": "[AUTO] [MISSING] top K",
+  "useCache": "[AUTO] [MISSING] use Cache",
+  "querying": "[AUTO] [MISSING] querying",
+  "queryResult": "[AUTO] [MISSING] query Result",
+  "confidence": "[AUTO] [MISSING] confidence",
+  "sources": "[AUTO] [MISSING] sources",
+  "systemStatus": "[AUTO] [MISSING] system Status",
+  "lightrag": "[AUTO] [MISSING] lightrag",
+  "active": "[MISSING] Actif",
+  "inactive": "[MISSING] Inactif",
+  "pgvector": "[AUTO] [MISSING] pgvector",
+  "totalDocuments": "[AUTO] [MISSING] total Documents",
+  "embeddings": "[AUTO] [MISSING] embeddings",
+  "queryModeFeatures": "[AUTO] [MISSING] query Mode Features",
+  "features": {
+    "hybrid": {
+      "title": "[AUTO] [MISSING] title",
+      "items": "[AUTO] [MISSING] items"
+    },
+    "lightrag": {
+      "title": "[AUTO] [MISSING] title",
+      "items": "[AUTO] [MISSING] items"
+    },
+    "semantic": {
+      "title": "[AUTO] [MISSING] title",
+      "items": "[AUTO] [MISSING] items"
+    },
+    "raganything": {
+      "title": "[AUTO] [MISSING] title",
+      "items": "[AUTO] [MISSING] items"
+    }
+  },
+  "exampleQuestions": "[AUTO] [MISSING] example Questions",
+  "examples": "[AUTO] [MISSING] examples",
+  "drive_connected": "[AUTO] [MISSING] drive_connected",
+  "drive_email": "[AUTO] [MISSING] drive_email",
+  "drive_error": "[AUTO] [MISSING] drive_error",
+  "tab": "[AUTO] [MISSING] tab",
+  "Password reset successfully": "[AUTO] [MISSING] Password reset successfully",
+  "from": "[AUTO] [MISSING] from",
+  "email": "[AUTO] [MISSING] email",
+  "password": "[AUTO] [MISSING] password",
+  "socket": {
+    "io-client": "[AUTO] [MISSING] io-client"
+  },
+  "Please select a project and at least one site": "[AUTO] [MISSING] Please select a project and at least one site",
+  "2d": "[AUTO] [MISSING] 2d",
+  "Send": "[AUTO] [MISSING] Send",
+  "Failed to load content": "[AUTO] [MISSING] Failed to load content",
+  "Failed to analyze document": "[AUTO] [MISSING] Failed to analyze document",
+  "Analysis timeout - please try again": "[AUTO] [MISSING] Analysis timeout - please try again",
+  "Error analyzing document": "[MISSING] Erreur analyzing document",
+  "Please select at least one document": "[AUTO] [MISSING] Please select at least one document",
+  "template": "[AUTO] [MISSING] template",
+  "style": "[AUTO] [MISSING] style",
+  "settingsUpdated": "[MISSING] Paramètres Updated",
+  "content-type": "[AUTO] [MISSING] content-type",
+  "auth-token": "[AUTO] [MISSING] auth-token",
+  "asb_token": "[AUTO] [MISSING] asb_token",
+  "Retry-After": "[AUTO] [MISSING] Retry- After"
 }

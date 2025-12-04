@@ -109,6 +109,22 @@ interface ConfigContextType {
   isConfigurationComplete: (config: Config | null) => boolean;
 }
 
+const DEFAULT_CONFIG: Config = {
+  app: { name: 'LSEMB', description: 'AI-Powered Knowledge Management System', version: '1.0.0', locale: 'tr' },
+  database: { host: 'localhost', port: 5432, name: 'lsemb', user: 'postgres', password: 'postgres', ssl: false, maxConnections: 20 },
+  redis: { host: 'localhost', port: 6379, password: '', db: 0 },
+  openai: { apiKey: '', model: 'gpt-4-turbo-preview', embeddingModel: 'text-embedding-3-small', maxTokens: 4096, temperature: 0.7 },
+  anthropic: { apiKey: '', model: 'claude-3-5-sonnet-20241022', maxTokens: 4096 },
+  deepseek: { apiKey: '', baseUrl: 'https://api.deepseek.com', model: 'deepseek-coder' },
+  ollama: { baseUrl: 'http://localhost:11434', model: 'llama2', embeddingModel: 'nomic-embed-text' },
+  huggingface: { apiKey: '', model: 'sentence-transformers/all-MiniLM-L6-v2', endpoint: 'https://api-inference.huggingface.co/models/' },
+  n8n: { url: 'http://localhost:5678', apiKey: '' },
+  scraper: { timeout: 30000, maxConcurrency: 3, userAgent: 'LSEM Web Scraper' },
+  embeddings: { chunkSize: 1000, chunkOverlap: 200, batchSize: 10, provider: 'openai' },
+  dataSource: { useLocalDb: true, localDbPercentage: 100, externalApiPercentage: 0, hybridMode: false, prioritySource: 'local' },
+  llmSettings: { temperature: 0.1, topP: 0.9, maxTokens: 2048, presencePenalty: 0, frequencyPenalty: 0, ragWeight: 95, llmKnowledgeWeight: 5, streamResponse: true, systemPrompt: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver.', activeChatModel: 'openai/gpt-4-turbo-preview', activeEmbeddingModel: 'openai/text-embedding-3-small', responseStyle: 'professional', language: 'tr' }
+};
+
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
@@ -119,7 +135,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
 
-  const fetchConfig = async (authToken?: string) => {
+  const fetchConfig = useCallback(async (authToken?: string) => {
     try {
       setLoading(true);
 
@@ -301,7 +317,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     }
-  };
+  }, [retryCount]);
 
   const updateConfig = async (newConfig: Config) => {
     try {
@@ -365,17 +381,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       // Fetch public chatbot settings instead of using hardcoded values
       fetchPublicChatbotSettings().then((settings) => {
         setConfig({
+          ...DEFAULT_CONFIG,
           app: {
+            ...DEFAULT_CONFIG.app,
             name: settings.name,
             description: settings.description,
-            version: '1.0.0',
-            locale: 'tr'
           }
         });
         setLoading(false);
       });
     }
-  }, []);
+  }, [fetchConfig]);
 
   // Helper function to fetch public chatbot settings for non-authenticated users
   const fetchPublicChatbotSettings = async (): Promise<{ name: string; description: string }> => {
@@ -411,11 +427,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
             // Token removed - fetch public chatbot settings
             fetchPublicChatbotSettings().then((settings) => {
               setConfig({
+                ...DEFAULT_CONFIG,
                 app: {
+                  ...DEFAULT_CONFIG.app,
                   name: settings.name,
                   description: settings.description,
-                  version: '1.0.0',
-                  locale: 'tr'
                 }
               });
               setLoading(false);
@@ -431,11 +447,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
           // Fetch public chatbot settings
           fetchPublicChatbotSettings().then((settings) => {
             setConfig({
+              ...DEFAULT_CONFIG,
               app: {
+                ...DEFAULT_CONFIG.app,
                 name: settings.name,
                 description: settings.description,
-                version: '1.0.0',
-                locale: 'tr'
               }
             });
             setLoading(false);
@@ -449,15 +465,37 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       window.addEventListener('storage', handleTokenChange);
       // Listen for custom token change events (same-tab changes)
       window.addEventListener('tokenChanged', handleTokenChange as EventListener);
-    }
 
-    return () => {
-      if (typeof window !== 'undefined') {
+      // Listen for settings updates
+      const handleSettingsUpdate = (e: Event) => {
+        // Optimistically update config if details are present
+        if (e instanceof CustomEvent && e.detail && e.detail.category === 'app' && e.detail.settings) {
+          setConfig(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              app: {
+                ...prev.app,
+                ...e.detail.settings
+              }
+            };
+          });
+        }
+
+        const token = localStorage.getItem('token');
+        if (token) {
+          fetchConfig(token);
+        }
+      };
+      window.addEventListener('settingsUpdated', handleSettingsUpdate);
+
+      return () => {
         window.removeEventListener('storage', handleTokenChange);
         window.removeEventListener('tokenChanged', handleTokenChange as EventListener);
-      }
-    };
-  }, []);
+        window.removeEventListener('settingsUpdated', handleSettingsUpdate);
+      };
+    }
+  }, [fetchConfig]);
 
   return (
     <ConfigContext.Provider

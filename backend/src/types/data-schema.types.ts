@@ -74,6 +74,15 @@ export interface DataSchema {
   // Source table mapping (hangi tablolara uygulanır)
   sourceTables?: string[];
 
+  // Transform Prompts (Document analizi ve veri çıkarımı)
+  transformPrompts?: TransformPrompt[];
+
+  // Question Generation Patterns (Dinamik soru üretimi)
+  questionPatterns?: QuestionPattern[];
+
+  // Citation Patterns (Kaynak gösterme formatları)
+  citationPatterns?: CitationPattern[];
+
   // Metadata
   isActive: boolean;
   isDefault?: boolean;      // Varsayılan schema mı?
@@ -120,6 +129,44 @@ export interface ProcessedCitation {
 export interface ProcessedQuestion {
   text: string;
   basedOn: string[];  // Hangi alanlara dayalı
+}
+
+// Question Generation Pattern (Dinamik soru üretimi için)
+export interface QuestionPattern {
+  id: string;                       // Unique ID
+  name: string;                     // Pattern adı (Saglik, Emlak, Vergi)
+  priority: number;                 // Yüksek priority = önce kontrol edilir
+  keywords: string[];               // İçerikte aranacak keywords
+  titleKeywords?: string[];         // Title'da aranacak keywords (opsiyonel)
+  defaultQuestion: string;          // Varsayılan soru template'i (kullanılacak: {topic})
+  combinations: Array<{             // Keyword kombinasyonları için özel sorular
+    when: string;                   // İkinci keyword (basvuru, sure, ozellik vb.)
+    question: string;               // Bu durumda sorulacak soru
+  }>;
+}
+
+// Citation Pattern (Citation formatı için)
+export interface CitationPattern {
+  id: string;
+  name: string;
+  format: string;                   // Citation format template
+  fields: string[];                 // Kullanılan field key'leri
+  example?: string;                 // Örnek citation
+}
+
+// Transform Prompt (Document analizi ve veri çıkarımı için)
+export interface TransformPrompt {
+  id: string;                       // Unique ID
+  name: string;                     // Prompt adı (Invoice, Legal, Research vb.)
+  description?: string;             // Açıklama
+  systemPrompt: string;             // LLM system prompt (transformation instructions)
+  targetFields: string[];           // Çıkarılacak field'lar
+  examples?: Array<{                // Örnek input/output
+    input: string;
+    output: any;
+  }>;
+  temperature?: number;             // LLM temperature (default: 0.1)
+  priority?: number;                // Uygulama önceliği
 }
 
 // Varsayılan schema örnekleri

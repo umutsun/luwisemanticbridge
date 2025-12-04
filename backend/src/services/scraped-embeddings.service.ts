@@ -12,6 +12,7 @@ import { createClient, RedisClientType } from 'redis';
 import { lsembPool } from '../config/database.config';
 import { normalizeTurkishChars } from '../utils/text-utils';
 import { EmbeddingService } from './embedding.service';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface CrawlerData {
   url: string;
@@ -42,26 +43,68 @@ export interface ScrapedEmbeddingResult {
 class ScrapedEmbeddingsService {
   private embeddingService: EmbeddingService;
   private redis: RedisClientType | null = null;
+  private progressRedis: RedisClientType | null = null;
 
   constructor() {
     this.embeddingService = new EmbeddingService();
   }
 
   /**
+   * Get Redis client for progress tracking
+   */
+  private async getProgressRedis(): Promise<RedisClientType> {
+    if (this.progressRedis && this.progressRedis.isOpen) {
+      return this.progressRedis;
+    }
+
+    const redisConfig = {
+      socket: {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+      },
+      database: 0 // Progress tracking uses DB 0
+    };
+
+    if (process.env.REDIS_PASSWORD) {
+      (redisConfig as any).password = process.env.REDIS_PASSWORD;
+    }
+
+    this.progressRedis = createClient(redisConfig);
+    await this.progressRedis.connect();
+    return this.progressRedis;
+  }
+
+  /**
+   * Update progress in Redis
+   */
+  private async updateProgress(jobId: string, progress: {
+    status: 'TRANSFORMING' | 'EMBEDDING' | 'COMPLETED' | 'FAILED';
+    stage: string;
+    processed: number;
+    total: number;
+    succeeded?: number;
+    failed?: number;
+    modelName?: string;
+    currentItem?: { id: number; url: string };
+    startedAt?: string;
+    completedAt?: string;
+    error?: string;
+  }): Promise<void> {
+    try {
+      const redis = await this.getProgressRedis();
+      const key = `scraped_embeddings_progress:${jobId}`;
+      await redis.setex(key, 3600, JSON.stringify(progress)); // 1 hour TTL
+    } catch (error: any) {
+      console.error(`[ScrapedEmbeddings] Failed to update progress:`, error.message);
+    }
+  }
+
+  /**
    * Initialize Redis connection
    */
   private async getRedisClient(dbNumber: number = 3): Promise<RedisClientType> {
+    // Always create fresh connection for new database
     if (this.redis && this.redis.isOpen) {
-      // Check if we need to change database
-      const currentDb = await this.redis.clientInfo().then(info => {
-        const match = info.match(/db=(\d+)/);
-        return match ? parseInt(match[1]) : 0;
-      }).catch(() => dbNumber);
-
-      if (currentDb === dbNumber) {
-        return this.redis;
-      }
-
       await this.redis.quit();
     }
 
@@ -416,6 +459,189 @@ class ScrapedEmbeddingsService {
     } catch (error: any) {
       console.error(`[ScrapedEmbeddings] Failed to get stats:`, error.message);
       return null;
+    }
+  }
+
+  /**
+   * Generate embeddings for existing entries
+   */
+  async generateEmbeddingsForEntries(options: {
+    scraperName?: string;
+    ids?: number[];
+    onlyMissing?: boolean;
+  }): Promise<{
+    success: boolean;
+    jobId: string;
+    processed: number;
+    succeeded: number;
+    failed: number;
+    error?: string;
+  }> {
+    const jobId = uuidv4();
+    const startedAt = new Date().toISOString();
+    const modelName = 'text-embedding-3-small';
+
+    try {
+      let query = 'SELECT id, chunk_text, url FROM scraped_embeddings WHERE 1=1';
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (options.scraperName) {
+        query += ` AND scraper_name = $${paramIndex++}`;
+        params.push(options.scraperName);
+      }
+
+      if (options.ids && options.ids.length > 0) {
+        query += ` AND id = ANY($${paramIndex++})`;
+        params.push(options.ids);
+      }
+
+      if (options.onlyMissing !== false) {
+        query += ' AND embedding IS NULL';
+      }
+
+      const result = await lsembPool.query(query, params);
+      const entries = result.rows;
+      const total = entries.length;
+
+      console.log(`[ScrapedEmbeddings] Job ${jobId}: Generating embeddings for ${total} entries`);
+
+      // Initial progress
+      await this.updateProgress(jobId, {
+        status: 'EMBEDDING',
+        stage: 'Starting embedding generation...',
+        processed: 0,
+        total,
+        succeeded: 0,
+        failed: 0,
+        modelName,
+        startedAt
+      });
+
+      let succeeded = 0;
+      let failed = 0;
+
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+
+        try {
+          // Update progress with current item
+          await this.updateProgress(jobId, {
+            status: 'EMBEDDING',
+            stage: `Embedding entry ${i + 1} of ${total}`,
+            processed: i,
+            total,
+            succeeded,
+            failed,
+            modelName,
+            currentItem: { id: entry.id, url: entry.url },
+            startedAt
+          });
+
+          // Generate embedding
+          const embedding = await this.embeddingService.generateEmbedding(entry.chunk_text);
+
+          if (embedding && embedding.length > 0) {
+            // Update entry with embedding
+            const tokensUsed = Math.ceil(entry.chunk_text.length / 4);
+            await lsembPool.query(
+              `UPDATE scraped_embeddings
+               SET embedding = $1,
+                   model_name = $2,
+                   tokens_used = $3,
+                   updated_at = NOW()
+               WHERE id = $4`,
+              [`[${embedding.join(',')}]`, modelName, tokensUsed, entry.id]
+            );
+
+            succeeded++;
+            console.log(`[ScrapedEmbeddings] Job ${jobId}: ✓ Generated embedding for ID ${entry.id} (${succeeded}/${total})`);
+          } else {
+            failed++;
+            console.warn(`[ScrapedEmbeddings] Job ${jobId}: ✗ Failed to generate embedding for ID ${entry.id}: empty result`);
+          }
+        } catch (error: any) {
+          failed++;
+          console.error(`[ScrapedEmbeddings] Job ${jobId}: ✗ Error generating embedding for ID ${entry.id}:`, error.message);
+        }
+      }
+
+      // Final progress
+      const completedAt = new Date().toISOString();
+      await this.updateProgress(jobId, {
+        status: 'COMPLETED',
+        stage: 'Embedding generation complete',
+        processed: total,
+        total,
+        succeeded,
+        failed,
+        modelName,
+        startedAt,
+        completedAt
+      });
+
+      console.log(`[ScrapedEmbeddings] Job ${jobId}: ✓ Complete: ${succeeded} succeeded, ${failed} failed`);
+
+      return {
+        success: true,
+        jobId,
+        processed: total,
+        succeeded,
+        failed
+      };
+    } catch (error: any) {
+      console.error(`[ScrapedEmbeddings] Job ${jobId}: ✗ Failed:`, error.message);
+
+      // Update progress with error
+      await this.updateProgress(jobId, {
+        status: 'FAILED',
+        stage: 'Embedding generation failed',
+        processed: 0,
+        total: 0,
+        modelName,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        error: error.message
+      });
+
+      return {
+        success: false,
+        jobId,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Delete all embeddings for a scraper
+   */
+  async deleteScraperEmbeddings(scraperName: string): Promise<{
+    success: boolean;
+    deleted: number;
+    error?: string;
+  }> {
+    try {
+      const result = await lsembPool.query(
+        'DELETE FROM scraped_embeddings WHERE scraper_name = $1',
+        [scraperName]
+      );
+
+      console.log(`[ScrapedEmbeddings] ✓ Deleted ${result.rowCount || 0} entries for scraper: ${scraperName}`);
+
+      return {
+        success: true,
+        deleted: result.rowCount || 0
+      };
+    } catch (error: any) {
+      console.error(`[ScrapedEmbeddings] ✗ Failed to delete embeddings:`, error.message);
+      return {
+        success: false,
+        deleted: 0,
+        error: error.message
+      };
     }
   }
 

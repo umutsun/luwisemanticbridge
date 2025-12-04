@@ -33,6 +33,7 @@ import {
 } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
 import { toast } from 'sonner';
+import PatternManagement from './PatternManagement';
 
 interface Industry {
   code: string;
@@ -684,6 +685,15 @@ export default function DataSchemaSettings() {
           )}
         </CardContent>
       </Card>
+    </div>
+
+      {/* Pattern Management Section */}
+      {selectedSchemaId && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-4">Pattern Management</h3>
+          <PatternManagement schemaId={selectedSchemaId} />
+        </div>
+      )}
     </div>
   );
 }

@@ -367,8 +367,6 @@ export default function Header() {
       { href: '/dashboard/documents', label: t('header.menu.documents'), icon: FileText },
       { href: '/dashboard/crawls', label: t('header.menu.crawls'), icon: Database },
       { href: '/dashboard/messages', label: t('header.menu.messages'), icon: MessageSquare },
-      { href: '/dashboard/translations', label: t('header.menu.translations'), icon: Languages },
-      { href: '/dashboard/data-translations', label: t('header.menu.dataTranslations'), icon: Languages },
       { href: '/dashboard/settings', label: t('header.menu.systemSettings'), icon: Settings2 }
     ] : [])
   ];
@@ -668,21 +666,7 @@ export default function Header() {
                         </p>
                       </div>
 
-                      {/* Third Row - Translation & System */}
-                      <div className={`p-3 rounded-lg border transition-all ${systemStatus?.translationModel?.active
-                        ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800/60 shadow-sm'
-                        : 'bg-gray-50/80 border-gray-200 dark:bg-gray-950/50 dark:border-gray-800/60'
-                        }`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <div className={`w-2 h-2 rounded-full ${systemStatus?.translationModel?.active ? 'bg-blue-500' : 'bg-gray-400'
-                            }`} />
-                          <p className="text-sm font-medium">{t('dashboard.translations.title')}</p>
-                        </div>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {systemStatus?.translationModel?.model || 'N/A'}
-                        </p>
-                      </div>
-
+                      {/* System Status */}
                       <div className={`p-3 rounded-lg border transition-all ${getOverallStatus() === 'healthy'
                         ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800/60 shadow-sm'
                         : getOverallStatus() === 'degraded'

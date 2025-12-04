@@ -4293,65 +4293,6 @@ function AppSettings() {
               <TemplateSelector />
             </CardContent>
           </Card>
-
-          {/* Chat Branding */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Chat Branding</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Chat Title</Label>
-                <Input
-                  value={tempConfig?.chatTitle || ''}
-                  onChange={(e) => setTempConfig({ ...tempConfig, chatTitle: e.target.value })}
-                  placeholder="AI Assistant"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Chat Logo URL</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={tempConfig?.chatLogoUrl || tempConfig?.logoUrl || ''}
-                    onChange={(e) => setTempConfig({ ...tempConfig, chatLogoUrl: e.target.value })}
-                    placeholder="https://example.com/logo.png"
-                    className="flex-1"
-                  />
-                  {(tempConfig?.chatLogoUrl || tempConfig?.logoUrl) && (
-                    <div className="w-10 h-10 rounded border border-gray-200 dark:border-gray-700 flex items-center justify-center bg-white dark:bg-gray-800 flex-shrink-0">
-                      <img
-                        src={tempConfig?.chatLogoUrl || tempConfig?.logoUrl}
-                        alt="Chat Logo"
-                        className="w-6 h-6 object-contain"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">Logo shown in chat header (uses App logo if not set)</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Primary Color</Label>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    type="color"
-                    value={tempConfig?.primaryColor || '#3b82f6'}
-                    onChange={(e) => setTempConfig({ ...tempConfig, primaryColor: e.target.value })}
-                    className="h-10 w-16 cursor-pointer p-1"
-                  />
-                  <Input
-                    value={tempConfig?.primaryColor || '#3b82f6'}
-                    onChange={(e) => setTempConfig({ ...tempConfig, primaryColor: e.target.value })}
-                    placeholder="#3b82f6"
-                    className="flex-1"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">Main accent color for chat interface</p>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 

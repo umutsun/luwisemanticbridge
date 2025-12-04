@@ -30,21 +30,26 @@ export function normalizeTurkishChars(text: string): string {
 /**
  * Generate a valid PostgreSQL table name from any string
  * - Normalizes Turkish characters to ASCII
- * - Converts to lowercase
+ * - Converts to Title_Case format (e.g., Yeditepe_Hastanesi)
  * - Replaces spaces and special characters with underscores
  * - Removes consecutive underscores
  * - Limits to 63 characters (PostgreSQL limit)
  */
 export function generateTableName(input: string): string {
-  return input
+  const normalized = input
     .replace(/\.[^/.]+$/, '')           // Remove file extension
     .split('')
     .map(char => TURKISH_CHAR_MAP[char] || char)  // Normalize Turkish chars
     .join('')
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '_')        // Replace non-alphanumeric with underscore
+    .replace(/[^a-zA-Z0-9_]/g, '_')     // Replace non-alphanumeric with underscore
     .replace(/_+/g, '_')                 // Remove consecutive underscores
-    .replace(/^_|_$/g, '')               // Remove leading/trailing underscores
+    .replace(/^_|_$/g, '');              // Remove leading/trailing underscores
+
+  // Convert to Title_Case: capitalize first letter of each word separated by underscore
+  return normalized
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('_')
     .substring(0, 63);                   // PostgreSQL table name limit
 }
 

@@ -15,6 +15,7 @@ import { ProgressCircle } from '@/components/ui/progress-circle';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
+import { VectorSpaceGraph } from '@/components/ui/vector-space-graph';
 import {
   Table,
   TableBody,
@@ -1949,56 +1950,52 @@ export default function CrawlerDataPage() {
               </div>
             </div>
 
-            {/* Statistics Cards - Pastel Gradients */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* Total Directories - Yellow Pastel */}
-              <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/20 dark:to-amber-950/20 border-yellow-200 dark:border-yellow-800">
-                <CardContent className="p-4">
-                  <div className="text-sm text-yellow-700 dark:text-yellow-300 font-medium mb-1">
-                    Crawler Sources
-                  </div>
-                  <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">
-                    {stats.totalDirectories}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Total Items - Slate Pastel */}
-              <Card className="bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900/20 dark:to-gray-900/20 border-slate-200 dark:border-slate-700">
-                <CardContent className="p-4">
-                  <div className="text-sm text-slate-600 dark:text-slate-300 font-medium mb-1">
-                    Total Items
-                  </div>
-                  <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                    {stats.totalItems.toLocaleString()}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Selected Items - Pink Pastel */}
-              <Card className="bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-950/20 dark:to-rose-950/20 border-pink-200 dark:border-pink-800">
-                <CardContent className="p-4">
-                  <div className="text-sm text-pink-700 dark:text-pink-300 font-medium mb-1">
-                    Selected Items
-                  </div>
-                  <div className="text-2xl font-bold text-pink-900 dark:text-pink-100">
-                    {stats.selectedItemsCount}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Mapped Items - Green Pastel */}
-              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
-                <CardContent className="p-4">
-                  <div className="text-sm text-green-700 dark:text-green-300 font-medium mb-1">
-                    Mapped Items
-                  </div>
-                  <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-                    {stats.mappedItems.toLocaleString()}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Vector Space Visualization - Zen Style */}
+            <VectorSpaceGraph
+              data={[
+                {
+                  id: 'sources',
+                  label: 'Crawler Sources',
+                  value: stats.totalDirectories,
+                  category: 'Sources',
+                  metadata: {
+                    type: 'Directory Count',
+                    status: 'Active'
+                  }
+                },
+                {
+                  id: 'total',
+                  label: 'Total Items',
+                  value: stats.totalItems,
+                  category: 'Data',
+                  metadata: {
+                    type: 'Total Crawled',
+                    formatted: stats.totalItems.toLocaleString()
+                  }
+                },
+                {
+                  id: 'selected',
+                  label: 'Selected Items',
+                  value: stats.selectedItemsCount,
+                  category: 'Processing',
+                  metadata: {
+                    type: 'Ready to Process',
+                    percentage: stats.totalItems > 0 ? ((stats.selectedItemsCount / stats.totalItems) * 100).toFixed(1) + '%' : '0%'
+                  }
+                },
+                {
+                  id: 'mapped',
+                  label: 'Mapped Items',
+                  value: stats.mappedItems,
+                  category: 'Processed',
+                  metadata: {
+                    type: 'Successfully Mapped',
+                    formatted: stats.mappedItems.toLocaleString()
+                  }
+                }
+              ]}
+              showStats={true}
+            />
 
             {/* Workflow Stepper */}
             <Card>
@@ -2888,7 +2885,7 @@ export default function CrawlerDataPage() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           <div>
                             <p className="text-xs text-muted-foreground">Total Items</p>
-                            <p className="text-lg font-bold text-slate-600 dark:text-slate-300">{selectedItems.size > 0 ? selectedItems.size : crawledItems.length}</p>
+                            <p className="text-lg font-bold text-slate-600 dark:text-slate-300">{selectedItems.size > 0 ? selectedItems.size : totalItemsCount || crawledItems.length}</p>
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Total Fields</p>

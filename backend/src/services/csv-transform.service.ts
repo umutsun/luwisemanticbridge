@@ -77,17 +77,66 @@ class CSVTransformService {
   }
 
   /**
+   * Strip BOM (Byte Order Mark) from buffer
+   * Google Sheets/Excel exports CSV with BOM which breaks Turkish characters
+   */
+  private stripBOM(buffer: Buffer): Buffer {
+    // UTF-8 BOM: EF BB BF
+    if (buffer.length >= 3 &&
+        buffer[0] === 0xEF &&
+        buffer[1] === 0xBB &&
+        buffer[2] === 0xBF) {
+      return buffer.slice(3);
+    }
+    return buffer;
+  }
+
+  /**
    * Parse CSV file and return rows
    */
   private async parseCSV(filePath: string): Promise<Record<string, any>[]> {
     return new Promise((resolve, reject) => {
       const rows: Record<string, any>[] = [];
 
-      fs.createReadStream(filePath, { encoding: 'utf-8' })
+      // Read file and strip BOM before parsing
+      const fileBuffer = fs.readFileSync(filePath);
+      const cleanBuffer = this.stripBOM(fileBuffer);
+      const cleanContent = cleanBuffer.toString('utf-8');
+
+      // Write clean content to temp file
+      const tempFile = filePath + '.temp';
+      fs.writeFileSync(tempFile, cleanContent, 'utf-8');
+
+      fs.createReadStream(tempFile, { encoding: 'utf-8' })
         .pipe(csv())
-        .on('data', (row) => rows.push(row))
-        .on('end', () => resolve(rows))
-        .on('error', (error) => reject(error));
+        .on('data', (row) => {
+          // Additional cleanup: trim whitespace from keys and values
+          const cleanRow: Record<string, any> = {};
+          for (const [key, value] of Object.entries(row)) {
+            const cleanKey = key.trim();
+            const cleanValue = typeof value === 'string' ? value.trim() : value;
+            cleanRow[cleanKey] = cleanValue;
+          }
+          rows.push(cleanRow);
+        })
+        .on('end', () => {
+          // Clean up temp file
+          try {
+            fs.unlinkSync(tempFile);
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          resolve(rows);
+        })
+        .on('error', (error) => {
+          // Clean up temp file on error
+          try {
+            fs.unlinkSync(tempFile);
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          reject(error);
+        });
     });
   }
 
