@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card } from '@/components/ui/card';
-import { RefreshCw, Database, FileText, MessageSquare, Network, TrendingUp } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api/client';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface GraphData {
   nodes: Array<{
@@ -36,7 +34,6 @@ export default function DataSourcesGraph() {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hoveredStat, setHoveredStat] = useState<string | null>(null);
 
   useEffect(() => {
     loadGraphData();
@@ -70,28 +67,19 @@ export default function DataSourcesGraph() {
 
   if (loading) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-amber-500/10 backdrop-blur-xl border border-white/20 dark:border-white/10"
-      >
-        <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:20px_20px]" />
-        <div className="relative flex items-center justify-center h-96">
-          <RefreshCw className="w-8 h-8 animate-spin text-purple-500" />
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-12">
+        <div className="flex items-center justify-center h-64">
+          <RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500/10 to-orange-500/10 backdrop-blur-xl border border-red-500/20 p-6"
-      >
-        <p className="text-red-500 text-center">{error}</p>
-      </motion.div>
+      <div className="bg-white dark:bg-slate-900 rounded-lg border border-red-200 dark:border-red-900 p-6">
+        <p className="text-red-600 dark:text-red-400 text-center text-sm">{error}</p>
+      </div>
     );
   }
 
@@ -104,51 +92,31 @@ export default function DataSourcesGraph() {
     ? Math.round((stats.embeddedDocuments / stats.totalDocuments) * 100)
     : 0;
 
-  // Stats configuration with icons and colors
+  // Minimal stats configuration
   const statsConfig = [
     {
       key: 'documents',
-      icon: FileText,
       label: 'Documents',
       value: stats.totalDocuments,
       subValue: `${stats.embeddedDocuments} embedded`,
-      color: 'from-blue-500 to-cyan-500',
-      bgColor: 'bg-blue-500/10',
-      borderColor: 'border-blue-500/20',
-      iconColor: 'text-blue-500'
     },
     {
       key: 'embeddings',
-      icon: Network,
       label: 'Embeddings',
       value: stats.totalEmbeddings,
       subValue: `${stats.dataSources} sources`,
-      color: 'from-purple-500 to-pink-500',
-      bgColor: 'bg-purple-500/10',
-      borderColor: 'border-purple-500/20',
-      iconColor: 'text-purple-500'
     },
     {
       key: 'messages',
-      icon: MessageSquare,
       label: 'Messages',
       value: stats.totalMessages || 0,
       subValue: 'chat messages',
-      color: 'from-amber-500 to-orange-500',
-      bgColor: 'bg-amber-500/10',
-      borderColor: 'border-amber-500/20',
-      iconColor: 'text-amber-500'
     },
     {
       key: 'progress',
-      icon: TrendingUp,
       label: 'Progress',
       value: `${embeddingProgress}%`,
       subValue: 'completion',
-      color: 'from-green-500 to-emerald-500',
-      bgColor: 'bg-green-500/10',
-      borderColor: 'border-green-500/20',
-      iconColor: 'text-green-500',
       progress: embeddingProgress
     },
   ];
@@ -167,89 +135,46 @@ export default function DataSourcesGraph() {
   const svgHeight = Math.max(500, maxY - minY);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-4"
-    >
-      {/* Stats Grid with Glassmorph */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="space-y-4">
+      {/* Minimal Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {statsConfig.map((stat, index) => (
-          <motion.div
+          <div
             key={stat.key}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            onHoverStart={() => setHoveredStat(stat.key)}
-            onHoverEnd={() => setHoveredStat(null)}
-            className="group relative"
+            className="group relative bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 hover:shadow-sm transition-shadow"
           >
-            <div className={`
-              relative overflow-hidden rounded-xl p-4
-              ${stat.bgColor} backdrop-blur-xl
-              border ${stat.borderColor}
-              transition-all duration-300
-              ${hoveredStat === stat.key ? 'scale-105 shadow-lg' : 'scale-100'}
-            `}>
-              {/* Gradient overlay on hover */}
-              <div className={`
-                absolute inset-0 bg-gradient-to-br ${stat.color}
-                opacity-0 group-hover:opacity-10
-                transition-opacity duration-300
-              `} />
+            <div className="flex flex-col space-y-1">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{stat.label}</p>
+              <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{stat.value}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{stat.subValue}</p>
 
-              <div className="relative flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">{stat.label}</p>
-                  <p className="text-2xl font-bold tracking-tight mb-1">{stat.value}</p>
-                  <p className={`text-xs ${stat.iconColor}/80`}>{stat.subValue}</p>
-                </div>
-                <div className={`
-                  p-2 rounded-lg ${stat.bgColor}
-                  transform group-hover:scale-110 group-hover:rotate-12
-                  transition-all duration-300
-                `}>
-                  <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
-                </div>
-              </div>
-
-              {/* Progress bar for completion stat */}
+              {/* Minimal Progress bar */}
               {stat.progress !== undefined && (
-                <div className="mt-3">
-                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${stat.progress}%` }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                      className={`h-full bg-gradient-to-r ${stat.color}`}
+                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-slate-900 dark:bg-slate-100 rounded-full transition-all duration-700"
+                      style={{ width: `${stat.progress}%` }}
                     />
                   </div>
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
 
-      {/* Graph Visualization with Glassmorph */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50/50 via-white/50 to-slate-100/50 dark:from-slate-900/50 dark:via-slate-800/50 dark:to-slate-900/50 backdrop-blur-xl border border-white/20 dark:border-white/10"
-      >
-        {/* Refresh button */}
-        <div className="absolute top-4 right-4 z-10">
-          <motion.button
-            whileHover={{ scale: 1.1, rotate: 180 }}
-            whileTap={{ scale: 0.9 }}
+      {/* Minimal Graph Visualization */}
+      <div className="relative bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+        {/* Minimal Refresh button */}
+        <div className="absolute top-3 right-3 z-10">
+          <button
             onClick={loadGraphData}
-            className="p-2 rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 shadow-lg hover:shadow-xl transition-all"
+            className="p-1.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
             title="Refresh"
           >
-            <RefreshCw className="w-4 h-4 text-purple-500" />
-          </motion.button>
+            <RefreshCw className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+          </button>
         </div>
 
         <div className="p-6">
@@ -258,46 +183,21 @@ export default function DataSourcesGraph() {
             className="w-full"
             style={{ minHeight: '400px' }}
           >
-            {/* Defs for gradients and markers */}
+            {/* Minimal markers */}
             <defs>
-              {/* Arrow markers with different colors */}
               <marker
-                id="arrowhead-purple"
-                markerWidth="10"
-                markerHeight="10"
-                refX="8"
+                id="arrowhead"
+                markerWidth="8"
+                markerHeight="8"
+                refX="6"
                 refY="3"
                 orient="auto"
               >
-                <polygon points="0 0, 10 3, 0 6" fill="#a855f7" />
+                <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
               </marker>
-              <marker
-                id="arrowhead-blue"
-                markerWidth="10"
-                markerHeight="10"
-                refX="8"
-                refY="3"
-                orient="auto"
-              >
-                <polygon points="0 0, 10 3, 0 6" fill="#3b82f6" />
-              </marker>
-
-              {/* Node gradients */}
-              <linearGradient id="gradient-source" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#6366f1" stopOpacity="0.8" />
-              </linearGradient>
-              <linearGradient id="gradient-process" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.8" />
-              </linearGradient>
-              <linearGradient id="gradient-table" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#f97316" stopOpacity="0.8" />
-              </linearGradient>
             </defs>
 
-            {/* Edges with animation */}
+            {/* Minimal Edges */}
             {edges.map(edge => {
               const sourceNode = nodes.find(n => n.id === edge.source);
               const targetNode = nodes.find(n => n.id === edge.target);
@@ -310,41 +210,25 @@ export default function DataSourcesGraph() {
               const y2 = targetNode.position.y + nodeHeight / 2;
 
               return (
-                <g key={edge.id} className="group">
-                  {/* Edge line */}
+                <g key={edge.id}>
                   <line
                     x1={x1}
                     y1={y1}
                     x2={x2}
                     y2={y2}
-                    stroke={edge.animated ? '#a855f7' : '#94a3b8'}
-                    strokeWidth={edge.animated ? 2.5 : 2}
-                    strokeDasharray={edge.animated ? '8,4' : 'none'}
-                    markerEnd={edge.animated ? 'url(#arrowhead-purple)' : 'url(#arrowhead-blue)'}
-                    className="transition-all duration-300 group-hover:stroke-purple-400"
-                    opacity="0.6"
-                  >
-                    {edge.animated && (
-                      <animate
-                        attributeName="stroke-dashoffset"
-                        from="0"
-                        to="-12"
-                        dur="1s"
-                        repeatCount="indefinite"
-                      />
-                    )}
-                  </line>
-
-                  {/* Edge label */}
+                    stroke="#cbd5e1"
+                    strokeWidth="1.5"
+                    markerEnd="url(#arrowhead)"
+                    opacity="0.5"
+                  />
                   {edge.label && (
                     <text
                       x={(x1 + x2) / 2}
                       y={(y1 + y2) / 2 - 8}
                       textAnchor="middle"
-                      fontSize="10"
-                      fontWeight="500"
-                      fill="currentColor"
-                      className="text-muted-foreground fill-current pointer-events-none opacity-70"
+                      fontSize="9"
+                      fill="#94a3b8"
+                      className="pointer-events-none"
                     >
                       {edge.label}
                     </text>
@@ -353,61 +237,34 @@ export default function DataSourcesGraph() {
               );
             })}
 
-            {/* Nodes */}
+            {/* Minimal Nodes */}
             {nodes.map(node => {
-              let gradientId = 'gradient-source';
-              let strokeColor = '#8b5cf6';
-
-              if (node.type === 'process') {
-                gradientId = 'gradient-process';
-                strokeColor = '#3b82f6';
-              } else if (node.type === 'table') {
-                gradientId = 'gradient-table';
-                strokeColor = '#f59e0b';
-              }
+              let fillColor = '#f8fafc';
+              let textColor = '#1e293b';
 
               return (
-                <g key={node.id} className="group cursor-pointer">
-                  {/* Node shadow */}
-                  <rect
-                    x={node.position.x + 2}
-                    y={node.position.y + 2}
-                    width={nodeWidth}
-                    height={nodeHeight}
-                    rx="12"
-                    fill="black"
-                    opacity="0.1"
-                  />
-
+                <g key={node.id}>
                   {/* Node background */}
                   <rect
                     x={node.position.x}
                     y={node.position.y}
                     width={nodeWidth}
                     height={nodeHeight}
-                    rx="12"
-                    fill={`url(#${gradientId})`}
-                    stroke={strokeColor}
-                    strokeWidth="2"
-                    className="transition-all duration-300 group-hover:stroke-[3]"
-                  >
-                    <animate
-                      attributeName="opacity"
-                      values="0.8;1;0.8"
-                      dur="3s"
-                      repeatCount="indefinite"
-                    />
-                  </rect>
+                    rx="8"
+                    fill={fillColor}
+                    stroke="#cbd5e1"
+                    strokeWidth="1.5"
+                  />
 
                   {/* Node label */}
                   <text
                     x={node.position.x + nodeWidth / 2}
-                    y={node.position.y + nodeHeight / 2}
+                    y={node.position.y + nodeHeight / 2 - 4}
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fontSize="12"
-                    fontWeight="600"
-                    fill="white"
+                    fontSize="11"
+                    fontWeight="500"
+                    fill={textColor}
                     className="pointer-events-none"
                   >
                     {node.label}
@@ -417,14 +274,13 @@ export default function DataSourcesGraph() {
                   {node.data?.count !== undefined && (
                     <text
                       x={node.position.x + nodeWidth / 2}
-                      y={node.position.y + nodeHeight / 2 + 16}
+                      y={node.position.y + nodeHeight / 2 + 12}
                       textAnchor="middle"
-                      fontSize="10"
-                      fill="white"
-                      opacity="0.8"
+                      fontSize="9"
+                      fill="#64748b"
                       className="pointer-events-none"
                     >
-                      {node.data.count} items
+                      {node.data.count}
                     </text>
                   )}
                 </g>
@@ -432,7 +288,7 @@ export default function DataSourcesGraph() {
             })}
           </svg>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
