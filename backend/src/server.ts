@@ -92,6 +92,7 @@ import servicesRoutes from "./routes/services.routes";
 import aiServicesRoutes from "./routes/ai-services.routes";
 import googleDriveRoutes from "./routes/google-drive.routes";
 import dataSchemaRoutes from "./routes/data-schema.routes";
+import csvTransformRoutes from "./routes/csv-transform.routes";
 import websocketLogStreamRoutes from "./api/websocket-log-stream.router";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
@@ -456,6 +457,7 @@ app.use("/api/v2/dashboard", dashboardRoutes);
 app.use("/api/v2/scraper", scraperRoutes);
 app.use("/api/v2/crawler", crawlerRoutes);
 app.use("/api/v2/source", sourceRoutes);
+app.use("/api/v2/csv-transform", csvTransformRoutes);
 app.use("/api/v2/chatbot", chatbotSettingsRoutes);
 app.use("/api/v2/translate", translateRoutes);
 app.use("/api/v2/translation-embeddings", translationEmbeddingsRoutes);
