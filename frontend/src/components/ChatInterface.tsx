@@ -75,17 +75,17 @@ const getSourceTableName = (sourceTable?: string) => {
 };
 
 const getKeywordColor = (keyword: string, isBoosted: boolean = false): string => {
-  // Boosted keywords (from user query) get yellow highlighting - same style as others, no border
+  // Boosted keywords (from user query) get yellow highlighting - improved dark mode contrast
   if (isBoosted) {
-    return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300';
+    return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-amber-900/70 dark:text-amber-100';
   }
 
   const colors = [
-    'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400',
-    'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400',
-    'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-400',
-    'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400',
-    'bg-pink-100 text-pink-700 hover:bg-pink-200 dark:bg-pink-900/30 dark:text-pink-400'
+    'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/70 dark:text-blue-100',
+    'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/70 dark:text-green-100',
+    'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/70 dark:text-purple-100',
+    'bg-orange-100 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/70 dark:text-orange-100',
+    'bg-pink-100 text-pink-700 hover:bg-pink-200 dark:bg-pink-900/70 dark:text-pink-100'
   ];
 
   const index = keyword.length % colors.length;
@@ -561,16 +561,6 @@ export default function ChatInterface() {
     // Add category as tag
     if (source.category && !keywords.includes(source.category as string)) {
       keywords.push(source.category as string);
-    }
-
-    // Add source table as tag, but avoid duplicates
-    if (source.sourceTable) {
-      const tableName = getSourceTableName(source.sourceTable as string);
-
-      // Only add if it's not the same as the category (avoid duplicates)
-      if (!keywords.includes(tableName)) {
-        keywords.push(tableName);
-      }
     }
 
     // Backend should provide keywords
@@ -1239,13 +1229,6 @@ export default function ChatInterface() {
                                               title="Bu konuyla ilgili detaylı araştırma yap"
                                             >
                                               <div className="flex items-start gap-3">
-                                                <div className="flex-shrink-0">
-                                                  <div className="flex flex-col items-center gap-1">
-                                                    <span className="flex items-center justify-center w-7 h-7 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                                                      {idx + 1}
-                                                    </span>
-                                                  </div>
-                                                </div>
                                                 <div className="flex-1 min-w-0">
                                                   {source.sourceType && (
                                                     <div className="flex items-center gap-2 mb-2">
@@ -1312,16 +1295,18 @@ export default function ChatInterface() {
                                                   )}
 
                                                   <div className="flex flex-wrap gap-1 mt-2">
-                                                    {getSemanticKeywords(source).slice(0, 4).map((keyword: string, idx: number) => {
+                                                    {getSemanticKeywords(source).slice(0, 4).map((keyword: string, keywordIdx: number) => {
                                                       // First 2 keywords are from user query (boosted)
-                                                      const isBoosted = idx < 2 && lastUserQuery.length > 0;
+                                                      const isBoosted = keywordIdx < 2 && lastUserQuery.length > 0;
+                                                      // Add source number to the first tag
+                                                      const displayKeyword = keywordIdx === 0 ? `[${idx + 1}] ${keyword}` : keyword;
                                                       return (
                                                         <span
-                                                          key={idx}
+                                                          key={keywordIdx}
                                                           className={`text-xs px-2 py-1 rounded-none font-medium ${getKeywordColor(keyword, isBoosted)}`}
                                                           title={isBoosted ? `🔍 Arama sorgunuzdan: "${keyword}"` : `Anahtar kelime`}
                                                         >
-                                                          {keyword}
+                                                          {displayKeyword}
                                                         </span>
                                                       );
                                                     })}
