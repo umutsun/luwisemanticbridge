@@ -654,54 +654,71 @@ async function streamChatResponse(
     const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || '5');
     const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || '0.014');
 
-    // Perform semantic search
-    let allResults = [];
-    let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+    // Check if citations are disabled (both min and max results are 0)
+    const citationsDisabled = maxResults === 0 && minResults === 0;
+    let formattedSources: any[] = [];
+    let searchResults: any[] = [];
 
-    if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
-      try {
-        const pool = await import('../config/database').then(m => m.default);
-        const result = await pool.query(
-          "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
-        );
-        useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
-      } catch (error) {
-        // Use default
+    if (!citationsDisabled) {
+      // Perform semantic search only if citations are enabled
+      let allResults = [];
+      let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
+
+      if (process.env.USE_UNIFIED_EMBEDDINGS === undefined) {
+        try {
+          const pool = await import('../config/database').then(m => m.default);
+          const result = await pool.query(
+            "SELECT setting_value FROM chatbot_settings WHERE setting_key = 'use_unified_embeddings'"
+          );
+          useUnifiedEmbeddings = result.rows[0]?.setting_value === 'true';
+        } catch (error) {
+          // Use default
+        }
       }
-    }
 
-    if (useUnifiedEmbeddings) {
-      allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
+      if (useUnifiedEmbeddings) {
+        allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
+      } else {
+        allResults = await semanticSearch.hybridSearch(message, maxResults);
+      }
+
+      // Filter and sort results
+      searchResults = allResults
+        .filter(result => {
+          const score = result.score || (result.similarity_score * 100) || 0;
+          return score >= minThreshold;
+        })
+        .sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
+          return scoreB - scoreA;
+        });
+
+      // Limit initial sources to minResults for streaming
+      const initialResults = searchResults.slice(0, minResults);
+
+      // Format sources
+      // Access private method through type assertion
+      formattedSources = await (ragChat as any).formatSources(initialResults);
+
+      // Send search results
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'sources',
+          sources: formattedSources,
+          hasMore: searchResults.length > minResults
+        }));
+      }
     } else {
-      allResults = await semanticSearch.hybridSearch(message, maxResults);
-    }
-
-    // Filter and sort results
-    let searchResults = allResults
-      .filter(result => {
-        const score = result.score || (result.similarity_score * 100) || 0;
-        return score >= minThreshold;
-      })
-      .sort((a, b) => {
-        const scoreA = a.score || (a.similarity_score * 100) || 0;
-        const scoreB = b.score || (b.similarity_score * 100) || 0;
-        return scoreB - scoreA;
-      });
-
-    // Limit initial sources to minResults for streaming
-    const initialResults = searchResults.slice(0, minResults);
-
-    // Format sources
-    // Access private method through type assertion
-    const formattedSources = await (ragChat as any).formatSources(initialResults);
-
-    // Send search results
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'sources',
-        sources: formattedSources,
-        hasMore: searchResults.length > minResults
-      }));
+      // Citations disabled - send empty sources
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'sources',
+          sources: [],
+          hasMore: false,
+          citationsDisabled: true
+        }));
+      }
     }
 
     // Send generating status

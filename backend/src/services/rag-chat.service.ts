@@ -362,43 +362,52 @@ export class RAGChatService {
         '0.5'
       );
 
-      console.log(`️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}`);
+      // Check if citations are disabled
+      const citationsDisabled = maxResults === 0 && minResults === 0;
+      console.log(`️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}, citationsDisabled=${citationsDisabled}`);
 
-      // Use semantic search to find related content
-      let allResults = [];
-      if (useUnifiedEmbeddings) {
-        allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
+      let searchResults: any[] = [];
+      let allResults: any[] = [];
+      let initialDisplayCount = 0;
+
+      if (!citationsDisabled) {
+        // Use semantic search to find related content (only if citations enabled)
+        if (useUnifiedEmbeddings) {
+          allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
+        } else {
+          allResults = await semanticSearch.hybridSearch(message, maxResults);
+        }
+
+        console.log(` DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
+        if (allResults.length > 0) {
+          console.log(` DEBUG: First raw result:`, {
+            title: allResults[0].title,
+            score: allResults[0].score,
+            similarity_score: allResults[0].similarity_score
+          });
+        }
+
+        // Sort by similarity score (no threshold filtering - show all results)
+        searchResults = allResults
+          .sort((a, b) => {
+            const scoreA = a.score || (a.similarity_score * 100) || 0;
+            const scoreB = b.score || (b.similarity_score * 100) || 0;
+            return scoreB - scoreA; // Highest similarity first
+          });
+
+        console.log(`Found ${searchResults.length} total results (sorted by similarity, no threshold filtering)`);
+
+        // For initial display, use minResults
+        initialDisplayCount = Math.min(minResults, searchResults.length);
+        console.log(` Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
+
+        // Ensure we have at least minResults if available
+        if (searchResults.length === 0 && allResults.length > 0) {
+          searchResults = allResults.slice(0, minResults);
+          console.log('Using all available results');
+        }
       } else {
-        allResults = await semanticSearch.hybridSearch(message, maxResults);
-      }
-
-      console.log(` DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
-      if (allResults.length > 0) {
-        console.log(` DEBUG: First raw result:`, {
-          title: allResults[0].title,
-          score: allResults[0].score,
-          similarity_score: allResults[0].similarity_score
-        });
-      }
-
-      // Sort by similarity score (no threshold filtering - show all results)
-      let searchResults = allResults
-        .sort((a, b) => {
-          const scoreA = a.score || (a.similarity_score * 100) || 0;
-          const scoreB = b.score || (b.similarity_score * 100) || 0;
-          return scoreB - scoreA; // Highest similarity first
-        });
-
-      console.log(`Found ${searchResults.length} total results (sorted by similarity, no threshold filtering)`);
-
-      // For initial display, use minResults
-      const initialDisplayCount = Math.min(minResults, searchResults.length);
-      console.log(` Displaying ${initialDisplayCount} initial results (minResults: ${minResults})`);
-
-      // Ensure we have at least minResults if available
-      if (searchResults.length === 0 && allResults.length > 0) {
-        searchResults = allResults.slice(0, minResults);
-        console.log('Using all available results');
+        console.log(' Citations disabled - skipping semantic search for performance');
       }
 
       // 3. Get conversation history with retry

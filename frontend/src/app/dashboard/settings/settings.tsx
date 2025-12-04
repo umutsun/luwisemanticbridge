@@ -2683,11 +2683,11 @@ function RAGSettings() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults} (Default: 5)</Label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Initial number of sources to display</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Initial number of sources to display (0 = citations off)</p>
                     <Slider
                       value={[tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults]}
                       max={20}
-                      min={1}
+                      min={0}
                       step={1}
                       className="mt-2"
                       onValueChange={([value]) => updateRAGSetting('minResults', value)}
@@ -2695,17 +2695,24 @@ function RAGSettings() {
                   </div>
                   <div>
                     <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults} (Default: 15)</Label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sources to fetch from database (shows 7 initially, rest available via "Load More")</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sources to fetch from database (0 = citations off)</p>
                     <Slider
                       value={[tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults]}
                       max={50}
-                      min={7}
+                      min={0}
                       step={1}
                       className="mt-2"
                       onValueChange={([value]) => updateRAGSetting('maxResults', value)}
                     />
                   </div>
                 </div>
+                {(tempRAGConfig?.ragSettings?.minResults === 0 && tempRAGConfig?.ragSettings?.maxResults === 0) && (
+                  <Alert>
+                    <AlertDescription>
+                      ⚡ Citations are <strong>disabled</strong>. The system will skip semantic search and only generate a direct summary response, improving performance significantly.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
 
