@@ -184,7 +184,13 @@ router.post('/schemas', authenticateToken, async (req: AuthenticatedRequest, res
       return res.status(500).json({ error: 'Failed to create schema' });
     }
 
-    res.status(201).json({ schema });
+    // Add is_system flag to response (user-created schemas are never system schemas)
+    const schemaWithFlag = {
+      ...schema,
+      is_system: false
+    };
+
+    res.status(201).json({ schema: schemaWithFlag });
   } catch (error: any) {
     console.error('[DataSchema Routes] Create schema error:', error);
     res.status(500).json({ error: error.message });
@@ -207,7 +213,13 @@ router.put('/schemas/:id', authenticateToken, async (req: AuthenticatedRequest, 
       return res.status(404).json({ error: 'Schema not found or update failed' });
     }
 
-    res.json({ schema });
+    // Add is_system flag to response (user-created schemas are never system schemas)
+    const schemaWithFlag = {
+      ...schema,
+      is_system: false
+    };
+
+    res.json({ schema: schemaWithFlag });
   } catch (error: any) {
     console.error('[DataSchema Routes] Update schema error:', error);
     res.status(500).json({ error: error.message });
