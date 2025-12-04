@@ -152,9 +152,11 @@ export const Console: React.FC<ConsoleProps> = ({
     const [userScrolled, setUserScrolled] = useState(false);
 
     const wsRef = useRef<WebSocket | null>(null);
+    const sseRef = useRef<EventSource | null>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
     const commandInputRef = useRef<HTMLInputElement>(null);
     const consoleContainerRef = useRef<HTMLDivElement>(null);
+    const connectionAttemptRef = useRef(0);
 
     // Available commands for auto-complete
     const availableCommands = [
@@ -164,7 +166,7 @@ export const Console: React.FC<ConsoleProps> = ({
         '/services', '/api', '/token', '/theme', '/time', '/calc'
     ];
 
-    // Initialize WebSocket connection
+    // Initialize connection (WebSocket with SSE fallback)
     useEffect(() => {
         const connectWebSocket = () => {
             try {
@@ -172,11 +174,13 @@ export const Console: React.FC<ConsoleProps> = ({
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.host;
                 const wsUrl = `${protocol}//${host}/ws/logs`;
+
                 wsRef.current = new WebSocket(wsUrl);
+                connectionAttemptRef.current = 0;
 
                 wsRef.current.onopen = () => {
                     setIsConnected(true);
-                    addLog('info', t('terminal.status.connected'), 'system');
+                    addLog('info', 'Connected to console logs via WebSocket', 'system');
                 };
 
                 wsRef.current.onmessage = (event) => {
@@ -190,20 +194,73 @@ export const Console: React.FC<ConsoleProps> = ({
 
                 wsRef.current.onclose = () => {
                     setIsConnected(false);
-                    addLog('warn', t('terminal.status.disconnected'), 'system');
+                    addLog('warn', 'WebSocket disconnected, attempting to reconnect...', 'system');
 
-                    // Attempt to reconnect after 3 seconds
-                    setTimeout(connectWebSocket, 3000);
+                    // Attempt to reconnect after 3 seconds (max 3 attempts)
+                    connectionAttemptRef.current++;
+                    if (connectionAttemptRef.current < 3) {
+                        setTimeout(connectWebSocket, 3000);
+                    } else {
+                        // Fallback to SSE after WebSocket attempts fail
+                        addLog('warn', 'WebSocket failed, switching to SSE streaming...', 'system');
+                        connectSSE();
+                    }
                 };
 
                 wsRef.current.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     addLog('error', 'WebSocket connection error', 'system');
-                    addLog('error', t('terminal.status.wsConnectionError'), 'system');
+
+                    // After first error, try to fallback to SSE
+                    if (connectionAttemptRef.current === 0) {
+                        wsRef.current?.close();
+                    }
                 };
             } catch (error) {
                 console.error('Failed to connect to WebSocket:', error);
-                addLog('error', t('terminal.status.wsConnectionLost'), 'system');
+                addLog('warn', 'WebSocket unavailable, trying SSE...', 'system');
+                setTimeout(connectSSE, 1000);
+            }
+        };
+
+        const connectSSE = () => {
+            try {
+                const apiUrl = `/api/v2/system/stream`;
+                sseRef.current = new EventSource(apiUrl);
+
+                sseRef.current.onopen = () => {
+                    setIsConnected(true);
+                    addLog('info', 'Connected to console logs via SSE', 'system');
+                };
+
+                sseRef.current.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        // Convert SSE format to log format
+                        if (data.type === 'log' || data.message) {
+                            addLog(
+                                data.level || 'info',
+                                data.message || data.data?.message || event.data,
+                                data.source || 'system'
+                            );
+                        }
+                    } catch (error) {
+                        // If not JSON, treat as plain log message
+                        if (event.data && event.data.trim()) {
+                            addLog('info', event.data, 'system');
+                        }
+                    }
+                };
+
+                sseRef.current.onerror = (error) => {
+                    console.error('SSE error:', error);
+                    setIsConnected(false);
+                    addLog('error', 'SSE connection error - console logs unavailable', 'system');
+                    sseRef.current?.close();
+                };
+            } catch (error) {
+                console.error('Failed to connect to SSE:', error);
+                addLog('error', 'Unable to connect to console logs', 'system');
             }
         };
 
@@ -212,6 +269,9 @@ export const Console: React.FC<ConsoleProps> = ({
         return () => {
             if (wsRef.current) {
                 wsRef.current.close();
+            }
+            if (sseRef.current) {
+                sseRef.current.close();
             }
         };
     }, []);
@@ -273,6 +333,23 @@ export const Console: React.FC<ConsoleProps> = ({
         return true;
     });
 
+    // Add log to the logs array (defined early to be used in handlers)
+    const addLog = useCallback((level: ConsoleLog['level'], message: string, source?: string, metadata?: Record<string, unknown>) => {
+        const newLog: ConsoleLog = {
+            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            level,
+            message,
+            source,
+            metadata
+        };
+
+        setLogs(prev => {
+            const updated = [newLog, ...prev];
+            return updated.slice(0, maxLogs);
+        });
+    }, [maxLogs]);
+
     // Handle WebSocket messages
     const handleWebSocketMessage = useCallback((data: Record<string, unknown>) => {
         switch (data.type) {
@@ -331,23 +408,6 @@ export const Console: React.FC<ConsoleProps> = ({
                 console.warn('Unknown WebSocket message type:', data.type);
         }
     }, [addLog]);
-
-    // Add log to the logs array
-    const addLog = useCallback((level: ConsoleLog['level'], message: string, source?: string, metadata?: Record<string, unknown>) => {
-        const newLog: ConsoleLog = {
-            id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            timestamp: new Date().toISOString(),
-            level,
-            message,
-            source,
-            metadata
-        };
-
-        setLogs(prev => {
-            const updated = [newLog, ...prev];
-            return updated.slice(0, maxLogs);
-        });
-    }, [maxLogs]);
 
     // Add command to command history
     const addCommand = useCallback((command: string, result?: Record<string, unknown>, error?: string) => {
