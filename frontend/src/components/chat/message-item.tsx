@@ -22,7 +22,7 @@ function highlightRepeatingKeywords(text: string, keywords: string[]): string {
   // Apply highlighting for each keyword
   keywordPatterns.forEach((pattern) => {
     highlightedText = highlightedText.replace(pattern, (match) => {
-      return `<mark class="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1 py-0.5 rounded font-medium">${match}</mark>`;
+      return `<mark class="bg-slate-200 dark:bg-slate-700/70 text-slate-800 dark:text-slate-100 px-1 py-0.5 rounded font-medium">${match}</mark>`;
     });
   });
 
@@ -50,10 +50,10 @@ export function MessageItem({ message }: MessageItemProps) {
   const getResponseQuality = () => {
     if (isUser || !message.sources) return null;
     const sourceCount = message.sources.length;
-    if (sourceCount >= 5) return { text: 'Çok İyi', color: 'text-green-600', bgColor: 'bg-green-100 dark:bg-green-900/30' };
-    if (sourceCount >= 3) return { text: 'İyi', color: 'text-blue-600', bgColor: 'bg-blue-100 dark:bg-blue-900/30' };
-    if (sourceCount >= 1) return { text: 'Orta', color: 'text-yellow-600', bgColor: 'bg-yellow-100 dark:bg-yellow-900/30' };
-    return { text: 'Düşük', color: 'text-gray-600', bgColor: 'bg-gray-100 dark:bg-gray-900/30' };
+    if (sourceCount >= 5) return { text: 'Çok İyi', color: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-100 dark:bg-green-900/70' };
+    if (sourceCount >= 3) return { text: 'İyi', color: 'text-blue-600 dark:text-blue-400', bgColor: 'bg-blue-100 dark:bg-blue-900/70' };
+    if (sourceCount >= 1) return { text: 'Orta', color: 'text-yellow-600 dark:text-yellow-400', bgColor: 'bg-yellow-100 dark:bg-yellow-900/70' };
+    return { text: 'Düşük', color: 'text-gray-600 dark:text-gray-400', bgColor: 'bg-gray-100 dark:bg-gray-900/70' };
   };
 
   const responseQuality = getResponseQuality();

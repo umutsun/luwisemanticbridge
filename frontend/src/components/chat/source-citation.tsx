@@ -113,27 +113,17 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
               .trim();
           }
 
-          // Source table badge - show only when different from previous
-          const showBadge = index === 0 || source.sourceTable !== sourcesToDisplay[index - 1]?.sourceTable;
-
           return (
             <div
               key={source.id}
-              className="group flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-white/[0.02] transition-colors"
+              className="group flex items-start gap-2 py-2 px-2 rounded-lg hover:bg-white/[0.02] transition-colors"
             >
-              {/* Number - Left side */}
-              <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[11px] font-medium text-purple-400/80 bg-purple-500/10 rounded">
-                {index + 1}
-              </span>
-
               {/* Content */}
               <div className="flex-1 min-w-0">
-                {/* Source Table Badge */}
-                {showBadge && (
-                  <span className="inline-block text-[10px] font-medium text-amber-400/90 bg-amber-500/10 px-1.5 py-0.5 rounded mb-1">
-                    {getSourceTableName(source.sourceTable)}
-                  </span>
-                )}
+                {/* Source Tag with Number - Always shown */}
+                <span className="inline-block text-[10px] font-medium text-amber-400/90 bg-amber-500/70 px-1.5 py-0.5 rounded mb-1">
+                  [{index + 1}] {getSourceTableName(source.sourceTable)}
+                </span>
 
                 {/* Title - Plain text, no link */}
                 <p className="text-sm text-gray-200 leading-snug line-clamp-2">
