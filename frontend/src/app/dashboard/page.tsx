@@ -1272,7 +1272,12 @@ export default function DashboardPage() {
 
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-10">
-        {/* Session Metrics & Token Usage - Moved to Top */}
+        {/* Data Sources Graph Visualization - NOW AT TOP */}
+        <div className="mt-0">
+          <DataSourcesGraph />
+        </div>
+
+        {/* Session Metrics & Token Usage */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Active Sessions */}
           <Card className="border-0 shadow-sm">
@@ -1605,21 +1610,18 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Data Sources Graph Visualization */}
-        <div className="mt-8">
-          <div className="flex items-center justify-end mb-4">
-            <Button
-              onClick={() => setIsConsoleModalOpen(true)}
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              title="Open system console"
-            >
-              Console
-              <Terminal className="w-4 h-4" />
-            </Button>
-          </div>
-          <DataSourcesGraph />
+        {/* Minimal Console Button at Bottom */}
+        <div className="flex items-center justify-center pt-4 pb-2">
+          <Button
+            onClick={() => setIsConsoleModalOpen(true)}
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title="Open system console"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            Console
+          </Button>
         </div>
       </div>
 

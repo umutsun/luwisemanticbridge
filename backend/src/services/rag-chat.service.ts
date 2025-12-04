@@ -2370,8 +2370,28 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         maxQuestionLength = chatbotSettings.maxQuestionLength || 500;
       } catch (e) { /* use default */ }
 
-      // 1. Get interesting content from database (titles + excerpts for context)
-      // Dynamically select from any table that has content in unified_embeddings
+      // 1. Get active source tables (with minimum record count threshold)
+      // This filters out disabled or empty data sources
+      const activeTablesQuery = `
+        SELECT source_table, COUNT(*) as record_count
+        FROM unified_embeddings
+        GROUP BY source_table
+        HAVING COUNT(*) >= 5
+      `;
+
+      const activeTablesResult = await this.pool.query(activeTablesQuery);
+      const activeTables = activeTablesResult.rows.map(row => row.source_table).filter(Boolean);
+
+      console.log(`[SUGGESTIONS] Active data sources (count >= 5):`, activeTables);
+
+      // If no active tables, return empty suggestions
+      if (activeTables.length === 0) {
+        console.log(`[SUGGESTIONS] No active data sources found, returning empty suggestions`);
+        return [];
+      }
+
+      // 2. Get interesting content from database (titles + excerpts for context)
+      // Only select from active tables (filtered by minimum record count)
       const contentQuery = `
         SELECT
           COALESCE(metadata->>'title', LEFT(content, 100)) as title,
@@ -2380,14 +2400,15 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         FROM unified_embeddings
         WHERE (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
           AND LENGTH(COALESCE(metadata->>'title', content)) > 30
+          AND source_table = ANY($1::text[])
         ORDER BY RANDOM()
         LIMIT 50
       `;
 
-      const contentResult = await this.pool.query(contentQuery);
+      const contentResult = await this.pool.query(contentQuery, [activeTables]);
       const generatedQuestions: string[] = [];
 
-      console.log(`[SUGGESTIONS] Processing ${contentResult.rows.length} database entries...`);
+      console.log(`[SUGGESTIONS] Processing ${contentResult.rows.length} database entries from active sources...`);
 
       // Early exit once we have enough questions (for performance)
       const TARGET_QUESTIONS = 8; // Generate 8, pick 4 randomly
