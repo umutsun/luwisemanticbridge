@@ -11,6 +11,7 @@ import pool from '../config/database';
 import * as fs from 'fs';
 import * as path from 'path';
 import contextualDocumentProcessor from './contextual-document-processor.service';
+import { normalizeTurkishChars, generateTableName } from '../utils/text-utils';
 
 interface OAuthCredentials {
   clientId: string;
@@ -533,8 +534,12 @@ class GoogleDriveService {
 
         // Save file to physical storage first (like regular upload)
         const docsDir = this.getUploadDirectory();
-        // Keep Turkish characters (ğüşıöçĞÜŞİÖÇ) and common file name chars
-        const safeName = name.replace(/[^\w\s\-_.ğüşıöçĞÜŞİÖÇ]/g, '_').replace(/\s+/g, '_');
+        // Normalize Turkish characters to ASCII and sanitize filename
+        const normalizedName = normalizeTurkishChars(name);
+        const safeName = normalizedName
+          .replace(/[^\w\s\-_.]/g, '_')  // Replace special chars with underscore
+          .replace(/\s+/g, '_')           // Replace spaces with underscore
+          .replace(/_+/g, '_');           // Remove consecutive underscores
         const filePath = path.join(docsDir, safeName);
 
         // Write file to disk
