@@ -12,6 +12,21 @@ import { createUploadRateLimit } from '../middleware/rate-limit.middleware';
 import { getUploadLimitBytes } from '../middleware/security.middleware';
 import { unifiedEmbeddingsSync } from '../services/unified-embeddings-sync.service';
 
+/**
+ * Strip BOM (Byte Order Mark) from buffer
+ * Google Sheets/Excel exports CSV with BOM which breaks Turkish characters
+ */
+function stripBOM(buffer: Buffer): Buffer {
+  // UTF-8 BOM: EF BB BF
+  if (buffer.length >= 3 &&
+      buffer[0] === 0xEF &&
+      buffer[1] === 0xBB &&
+      buffer[2] === 0xBF) {
+    return buffer.slice(3);
+  }
+  return buffer;
+}
+
 const router = Router();
 
 // Get upload directory from environment or settings
@@ -913,7 +928,10 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
 
     if (['.csv', '.txt', '.json', '.log', '.md'].includes(path.extname(filename).toLowerCase())) {
       // Text-based files - read directly
-      content = fs.readFileSync(filePath, 'utf-8');
+      // Read file and strip BOM for proper UTF-8 encoding
+      const fileBuffer = fs.readFileSync(filePath);
+      const cleanBuffer = stripBOM(fileBuffer);
+      content = cleanBuffer.toString('utf-8');
 
       // For CSV files, parse and provide stats
       if (ext === 'csv') {
