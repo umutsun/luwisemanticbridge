@@ -20,7 +20,6 @@ import {
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
-import ModernDataGraph from "@/components/dashboard/ModernDataGraph";
 // import MinimalConsole from "@/components/dashboard/MinimalConsole";
 import ConsoleModal from "@/components/dashboard/ConsoleModal";
 
@@ -1273,11 +1272,6 @@ export default function DashboardPage() {
 
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-10">
-        {/* Modern Interactive Data Graph */}
-        <div className="mt-0">
-          <ModernDataGraph />
-        </div>
-
         {/* Performance & System Resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* System Information - Real Data */}
