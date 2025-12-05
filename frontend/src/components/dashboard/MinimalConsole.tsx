@@ -28,7 +28,7 @@ export default function MinimalConsole({
 
   useEffect(() => {
     const connectWebSocket = () => {
-      const baseUrl = config.env.backendUrl || 'http://localhost:8083';
+      const baseUrl = config?.env?.backendUrl || 'http://localhost:8083';
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/v2/ws/console';
 
       try {
@@ -78,7 +78,7 @@ export default function MinimalConsole({
         wsRef.current.close();
       }
     };
-  }, [config.env.backendUrl, maxLogs]);
+  }, [config?.env?.backendUrl, maxLogs]);
 
   // Auto-scroll to bottom
   useEffect(() => {
