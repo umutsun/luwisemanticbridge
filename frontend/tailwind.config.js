@@ -48,6 +48,20 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      animation: {
+        'float-slow': 'float 6s ease-in-out infinite',
+        'float-medium': 'float 4s ease-in-out infinite',
+        'float-fast': 'float 3s ease-in-out infinite',
+        'spin-slow': 'spin 8s linear infinite',
+        'spin-reverse': 'spin 8s linear infinite reverse',
+        'bounce-slow': 'bounce 3s infinite',
+      },
+      keyframes: {
+        float: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-20px)' },
+        },
+      },
     },
   },
   plugins: [],

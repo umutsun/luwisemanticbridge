@@ -165,6 +165,24 @@ export default function ModernDataGraph() {
 
   return (
     <div className="relative bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+      {/* 3D Animated Cubes Background */}
+      <div className="absolute inset-0 overflow-hidden opacity-10 dark:opacity-5 pointer-events-none">
+        <div className="absolute top-10 left-10 w-16 h-16 animate-float-slow">
+          <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg transform rotate-45 animate-spin-slow shadow-lg"></div>
+        </div>
+        <div className="absolute top-32 right-20 w-20 h-20 animate-float-medium">
+          <div className="w-full h-full bg-gradient-to-br from-pink-400 to-orange-500 rounded-lg transform rotate-12 animate-pulse shadow-lg"></div>
+        </div>
+        <div className="absolute bottom-20 left-1/4 w-12 h-12 animate-float-fast">
+          <div className="w-full h-full bg-gradient-to-br from-green-400 to-cyan-500 rounded-lg transform -rotate-12 animate-spin-reverse shadow-lg"></div>
+        </div>
+        <div className="absolute bottom-40 right-1/3 w-24 h-24 animate-float-slow">
+          <div className="w-full h-full bg-gradient-to-br from-purple-400 to-blue-500 rounded-lg transform rotate-45 animate-bounce-slow shadow-lg"></div>
+        </div>
+        <div className="absolute top-1/2 right-10 w-14 h-14 animate-float-medium">
+          <div className="w-full h-full bg-gradient-to-br from-yellow-400 to-red-500 rounded-lg transform -rotate-45 animate-pulse shadow-lg"></div>
+        </div>
+      </div>
       {/* Controls */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
         <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 flex items-center gap-2">
