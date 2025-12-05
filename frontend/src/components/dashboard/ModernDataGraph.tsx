@@ -39,8 +39,7 @@ export default function ModernDataGraph() {
 
   useEffect(() => {
     loadGraphData();
-    const interval = setInterval(loadGraphData, 30000);
-    return () => clearInterval(interval);
+    // Auto-refresh disabled per user request
   }, []);
 
   const loadGraphData = async () => {
@@ -149,11 +148,33 @@ export default function ModernDataGraph() {
 
   const getNodeStyle = (node: typeof enhancedNodes[0]) => {
     if (node.type === 'stat') {
+      // Stat node'larına renk gradientleri ekle
+      const gradients: Record<string, { fill: string; stroke: string }> = {
+        'stat-docs': {
+          fill: 'url(#gradient-blue)',
+          stroke: '#3b82f6'
+        },
+        'stat-emb': {
+          fill: 'url(#gradient-green)',
+          stroke: '#10b981'
+        },
+        'stat-msg': {
+          fill: 'url(#gradient-purple)',
+          stroke: '#8b5cf6'
+        },
+        'stat-prog': {
+          fill: 'url(#gradient-orange)',
+          stroke: '#f97316'
+        }
+      };
+
+      const gradient = gradients[node.id] || { fill: '#f8fafc', stroke: '#cbd5e1' };
+
       return {
-        fill: '#f8fafc',
-        stroke: '#cbd5e1',
+        fill: gradient.fill,
+        stroke: gradient.stroke,
         strokeWidth: 2,
-        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.05))'
+        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
       };
     }
     return {
@@ -247,6 +268,24 @@ export default function ModernDataGraph() {
             >
               <polygon points="0 0, 10 3, 0 6" fill="#94a3b8" />
             </marker>
+
+            {/* Gradient Definitions */}
+            <linearGradient id="gradient-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#dbeafe" />
+              <stop offset="100%" stopColor="#bfdbfe" />
+            </linearGradient>
+            <linearGradient id="gradient-green" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#d1fae5" />
+              <stop offset="100%" stopColor="#a7f3d0" />
+            </linearGradient>
+            <linearGradient id="gradient-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#ede9fe" />
+              <stop offset="100%" stopColor="#ddd6fe" />
+            </linearGradient>
+            <linearGradient id="gradient-orange" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#fed7aa" />
+              <stop offset="100%" stopColor="#fdba74" />
+            </linearGradient>
           </defs>
 
           <rect width="2000" height="1000" fill="url(#grid)" />
@@ -314,9 +353,9 @@ export default function ModernDataGraph() {
                   {/* Node content */}
                   <text
                     x={node.position.x + nodeWidth / 2}
-                    y={node.position.y + 28}
+                    y={node.position.y + 24}
                     textAnchor="middle"
-                    fontSize="13"
+                    fontSize="11"
                     fontWeight="600"
                     fill="#1e293b"
                     className="pointer-events-none select-none"
@@ -328,9 +367,9 @@ export default function ModernDataGraph() {
                     <>
                       <text
                         x={node.position.x + nodeWidth / 2}
-                        y={node.position.y + 48}
+                        y={node.position.y + 44}
                         textAnchor="middle"
-                        fontSize="20"
+                        fontSize="18"
                         fontWeight="700"
                         fill="#0f172a"
                         className="pointer-events-none select-none"
@@ -339,9 +378,9 @@ export default function ModernDataGraph() {
                       </text>
                       <text
                         x={node.position.x + nodeWidth / 2}
-                        y={node.position.y + 65}
+                        y={node.position.y + 60}
                         textAnchor="middle"
-                        fontSize="9"
+                        fontSize="8"
                         fill="#64748b"
                         className="pointer-events-none select-none"
                       >
@@ -373,9 +412,9 @@ export default function ModernDataGraph() {
                   {node.data?.count !== undefined && node.type !== 'stat' && (
                     <text
                       x={node.position.x + nodeWidth / 2}
-                      y={node.position.y + 52}
+                      y={node.position.y + 48}
                       textAnchor="middle"
-                      fontSize="14"
+                      fontSize="12"
                       fontWeight="600"
                       fill="#475569"
                       className="pointer-events-none select-none"
