@@ -20,8 +20,8 @@ import {
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
-import DataSourcesGraph from "@/components/dashboard/DataSourcesGraph";
-import MinimalConsole from "@/components/dashboard/MinimalConsole";
+import ModernDataGraph from "@/components/dashboard/ModernDataGraph";
+// import MinimalConsole from "@/components/dashboard/MinimalConsole";
 import ConsoleModal from "@/components/dashboard/ConsoleModal";
 
 interface SystemStatus {
@@ -1273,9 +1273,9 @@ export default function DashboardPage() {
 
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-10">
-        {/* Data Sources Graph Visualization - NOW AT TOP */}
+        {/* Modern Interactive Data Graph */}
         <div className="mt-0">
-          <DataSourcesGraph />
+          <ModernDataGraph />
         </div>
 
         {/* Session Metrics & Token Usage */}
@@ -1611,8 +1611,8 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Minimal System Console - Bottom Card */}
-        <MinimalConsole height={400} maxLogs={100} />
+        {/* Minimal System Console - Temporarily disabled (WebSocket server not running) */}
+        {/* <MinimalConsole height={400} maxLogs={100} /> */}
       </div>
     </div >
   );
