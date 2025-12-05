@@ -1278,9 +1278,6 @@ export default function DashboardPage() {
           <DataSourcesGraph />
         </div>
 
-        {/* Minimal System Console */}
-        <MinimalConsole height={300} maxLogs={100} />
-
         {/* Session Metrics & Token Usage */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Active Sessions */}
@@ -1614,26 +1611,9 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Minimal Console Button at Bottom */}
-        <div className="flex items-center justify-center pt-4 pb-2">
-          <Button
-            onClick={() => setIsConsoleModalOpen(true)}
-            variant="ghost"
-            size="sm"
-            className="gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            title="Open system console"
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            Console
-          </Button>
-        </div>
+        {/* Minimal System Console - Bottom Card */}
+        <MinimalConsole height={400} maxLogs={100} />
       </div>
-
-      {/* Console Modal */}
-      <ConsoleModal
-        isOpen={isConsoleModalOpen}
-        onOpenChange={setIsConsoleModalOpen}
-      />
     </div >
   );
 }
