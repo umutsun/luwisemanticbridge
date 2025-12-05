@@ -35,6 +35,7 @@ export default function ModernDataGraph() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -143,56 +144,76 @@ export default function ModernDataGraph() {
     }
   ];
 
-  const nodeWidth = 160;
-  const nodeHeight = 80;
+  // Dynamic node sizing based on data
+  const getNodeSize = (node: typeof enhancedNodes[0]) => {
+    if (node.type === 'stat') {
+      return { width: 160, height: 80 };
+    }
+    // Size based on count (for data nodes)
+    const count = node.data?.count || 0;
+    const baseSize = 120;
+    const scaleFactor = Math.min(Math.sqrt(count) * 10, 80); // Max +80px
+    const width = baseSize + scaleFactor;
+    const height = (baseSize + scaleFactor) * 0.5;
+    return { width, height };
+  };
+
+  // Get node color based on type and data
+  const getNodeColor = (node: typeof enhancedNodes[0]) => {
+    // Stat nodes have predefined colors
+    const statColors: Record<string, { gradient: string; stroke: string; filter: string; strokeDark: string; strokeLight: string }> = {
+      'stat-docs': { gradient: 'url(#gradient-blue)', stroke: '#06b6d4', filter: 'url(#glow-cyan)', strokeDark: '#06b6d4', strokeLight: '#0891b2' },
+      'stat-emb': { gradient: 'url(#gradient-green)', stroke: '#10b981', filter: 'url(#glow-green)', strokeDark: '#10b981', strokeLight: '#059669' },
+      'stat-msg': { gradient: 'url(#gradient-purple)', stroke: '#d946ef', filter: 'url(#glow-magenta)', strokeDark: '#d946ef', strokeLight: '#a855f7' },
+      'stat-prog': { gradient: 'url(#gradient-orange)', stroke: '#fbbf24', filter: 'url(#glow-yellow)', strokeDark: '#fbbf24', strokeLight: '#f59e0b' }
+    };
+
+    if (node.type === 'stat' && statColors[node.id]) {
+      return statColors[node.id];
+    }
+
+    // Data nodes get different colors based on node type
+    const dataColors: Record<string, { gradient: string; stroke: string; filter: string; strokeDark: string; strokeLight: string }> = {
+      'source': { gradient: 'url(#gradient-source)', stroke: '#06b6d4', filter: 'url(#glow-cyan)', strokeDark: '#06b6d4', strokeLight: '#0891b2' },
+      'process': { gradient: 'url(#gradient-process)', stroke: '#8b5cf6', filter: 'url(#glow-magenta)', strokeDark: '#8b5cf6', strokeLight: '#7c3aed' },
+      'table': { gradient: 'url(#gradient-table)', stroke: '#10b981', filter: 'url(#glow-green)', strokeDark: '#10b981', strokeLight: '#059669' }
+    };
+
+    return dataColors[node.type] || { gradient: '#0f172a', stroke: '#06b6d4', filter: 'url(#glow-cyan)', strokeDark: '#06b6d4', strokeLight: '#0891b2' };
+  };
 
   const getNodeStyle = (node: typeof enhancedNodes[0]) => {
-    if (node.type === 'stat') {
-      // Neon stat node'ları
-      const styles: Record<string, { fill: string; stroke: string; filter: string }> = {
-        'stat-docs': {
-          fill: 'url(#gradient-blue)',
-          stroke: '#06b6d4',
-          filter: 'url(#glow-cyan)'
-        },
-        'stat-emb': {
-          fill: 'url(#gradient-green)',
-          stroke: '#10b981',
-          filter: 'url(#glow-green)'
-        },
-        'stat-msg': {
-          fill: 'url(#gradient-purple)',
-          stroke: '#d946ef',
-          filter: 'url(#glow-magenta)'
-        },
-        'stat-prog': {
-          fill: 'url(#gradient-orange)',
-          stroke: '#fbbf24',
-          filter: 'url(#glow-yellow)'
-        }
-      };
+    const colors = getNodeColor(node);
 
-      const style = styles[node.id] || { fill: '#1e293b', stroke: '#475569', filter: 'none' };
-
-      return {
-        fill: style.fill,
-        stroke: style.stroke,
-        strokeWidth: 2,
-        filter: style.filter
-      };
-    }
     return {
-      fill: '#0f172a',
-      stroke: '#06b6d4',
+      fill: colors.gradient,
+      stroke: colors.stroke,
       strokeWidth: 2,
-      filter: 'url(#glow-cyan)'
+      filter: colors.filter
     };
   };
 
+  // Dynamic particles based on node count
+  const particleCount = enhancedNodes.length;
+  const generateParticles = () => {
+    const particles = [];
+    for (let i = 0; i < Math.min(particleCount * 2, 20); i++) {
+      const colors = ['cyan', 'fuchsia', 'yellow', 'green'];
+      const color = colors[i % colors.length];
+      const top = Math.random() * 100;
+      const left = Math.random() * 100;
+      const delay = Math.random() * 3;
+      particles.push({ color, top, left, delay, id: i });
+    }
+    return particles;
+  };
+
+  const particles = generateParticles();
+
   return (
-    <div className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 rounded-lg border border-cyan-500/20 overflow-hidden shadow-2xl">
+    <div className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950 light:from-blue-50 light:via-slate-50 light:to-cyan-50 rounded-lg border border-cyan-500/20 dark:border-cyan-500/20 light:border-cyan-300/40 overflow-hidden shadow-2xl">
       {/* Animated Grid Background */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none">
+      <div className="absolute inset-0 opacity-20 dark:opacity-20 light:opacity-30 pointer-events-none">
         <div className="absolute inset-0" style={{
           backgroundImage: `
             linear-gradient(to right, rgba(6, 182, 212, 0.1) 1px, transparent 1px),
@@ -202,18 +223,24 @@ export default function ModernDataGraph() {
         }}></div>
       </div>
 
-      {/* Glowing Particles Background */}
-      <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
-        <div className="absolute top-10 left-10 w-2 h-2 rounded-full bg-cyan-400 blur-sm animate-pulse"></div>
-        <div className="absolute top-32 right-20 w-2 h-2 rounded-full bg-fuchsia-400 blur-sm animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-        <div className="absolute bottom-20 left-1/4 w-2 h-2 rounded-full bg-yellow-400 blur-sm animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute bottom-40 right-1/3 w-2 h-2 rounded-full bg-cyan-400 blur-sm animate-pulse" style={{ animationDelay: '1.5s' }}></div>
-        <div className="absolute top-1/2 right-10 w-2 h-2 rounded-full bg-fuchsia-400 blur-sm animate-pulse" style={{ animationDelay: '2s' }}></div>
+      {/* Dynamic Glowing Particles Background */}
+      <div className="absolute inset-0 overflow-hidden opacity-30 dark:opacity-30 light:opacity-50 pointer-events-none">
+        {particles.map((particle) => (
+          <div
+            key={particle.id}
+            className={`absolute w-2 h-2 rounded-full bg-${particle.color}-400 blur-sm animate-pulse`}
+            style={{
+              top: `${particle.top}%`,
+              left: `${particle.left}%`,
+              animationDelay: `${particle.delay}s`
+            }}
+          />
+        ))}
       </div>
       {/* Controls */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <div className="bg-slate-900/80 backdrop-blur-sm rounded-lg border border-cyan-500/30 px-3 py-1.5 flex items-center gap-2 shadow-lg shadow-cyan-500/10">
-          <span className="text-xs text-cyan-400">Zoom</span>
+        <div className="bg-slate-900/80 dark:bg-slate-900/80 light:bg-white/90 backdrop-blur-sm rounded-lg border border-cyan-500/30 dark:border-cyan-500/30 light:border-cyan-400/50 px-3 py-1.5 flex items-center gap-2 shadow-lg shadow-cyan-500/10">
+          <span className="text-xs text-cyan-400 dark:text-cyan-400 light:text-cyan-600">Zoom</span>
           <input
             type="range"
             min="0.5"
@@ -221,22 +248,23 @@ export default function ModernDataGraph() {
             step="0.1"
             value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}
-            className="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+            className="w-20 h-1 bg-slate-700 dark:bg-slate-700 light:bg-slate-200 rounded-lg appearance-none cursor-pointer"
           />
-          <span className="text-xs font-mono text-cyan-300 w-10">{zoom.toFixed(1)}x</span>
+          <span className="text-xs font-mono text-cyan-300 dark:text-cyan-300 light:text-cyan-700 w-10">{zoom.toFixed(1)}x</span>
         </div>
         <button
           onClick={loadGraphData}
-          className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-cyan-500/30 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all shadow-lg shadow-cyan-500/10"
+          className="p-2 rounded-lg bg-slate-900/80 dark:bg-slate-900/80 light:bg-white/90 backdrop-blur-sm border border-cyan-500/30 dark:border-cyan-500/30 light:border-cyan-400/50 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all shadow-lg shadow-cyan-500/10"
           title="Refresh"
         >
-          <RefreshCw className="w-4 h-4 text-cyan-400" />
+          <RefreshCw className="w-4 h-4 text-cyan-400 dark:text-cyan-400 light:text-cyan-600" />
         </button>
       </div>
 
-      {/* Graph Canvas */}
+      {/* Graph Canvas with 3D Perspective */}
       <div
         className="relative w-full h-[600px] cursor-grab active:cursor-grabbing"
+        style={{ perspective: '1200px', perspectiveOrigin: 'center center' }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -247,8 +275,9 @@ export default function ModernDataGraph() {
           ref={svgRef}
           className="w-full h-full"
           style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotateX(5deg) rotateY(2deg)`,
             transformOrigin: 'center',
+            transformStyle: 'preserve-3d',
             transition: isDragging ? 'none' : 'transform 0.1s ease-out'
           }}
         >
@@ -321,6 +350,19 @@ export default function ModernDataGraph() {
               <stop offset="0%" stopColor="#fbbf24" />
               <stop offset="100%" stopColor="#f59e0b" />
             </radialGradient>
+            {/* Data node gradients */}
+            <radialGradient id="gradient-source">
+              <stop offset="0%" stopColor="#06b6d4" />
+              <stop offset="100%" stopColor="#0284c7" />
+            </radialGradient>
+            <radialGradient id="gradient-process">
+              <stop offset="0%" stopColor="#8b5cf6" />
+              <stop offset="100%" stopColor="#7c3aed" />
+            </radialGradient>
+            <radialGradient id="gradient-table">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="100%" stopColor="#047857" />
+            </radialGradient>
           </defs>
 
           <rect width="2000" height="1000" fill="url(#grid)" />
@@ -332,10 +374,13 @@ export default function ModernDataGraph() {
               const targetNode = enhancedNodes.find(n => n.id === edge.target);
               if (!sourceNode || !targetNode) return null;
 
-              const x1 = sourceNode.position.x + nodeWidth / 2;
-              const y1 = sourceNode.position.y + nodeHeight / 2;
-              const x2 = targetNode.position.x + nodeWidth / 2;
-              const y2 = targetNode.position.y + nodeHeight / 2;
+              const sourceSize = getNodeSize(sourceNode);
+              const targetSize = getNodeSize(targetNode);
+
+              const x1 = sourceNode.position.x + sourceSize.width / 2;
+              const y1 = sourceNode.position.y + sourceSize.height / 2;
+              const x2 = targetNode.position.x + targetSize.width / 2;
+              const y2 = targetNode.position.y + targetSize.height / 2;
 
               return (
                 <g key={edge.id}>
@@ -378,31 +423,37 @@ export default function ModernDataGraph() {
           <g>
             {enhancedNodes.map(node => {
               const style = getNodeStyle(node);
+              const size = getNodeSize(node);
+              const colors = getNodeColor(node);
+              const isSelected = selectedNode === node.id;
 
               return (
                 <g
                   key={node.id}
-                  className="transition-transform hover:scale-105"
-                  style={{ transformOrigin: `${node.position.x + nodeWidth/2}px ${node.position.y + nodeHeight/2}px` }}
+                  className="transition-transform hover:scale-105 cursor-pointer"
+                  style={{ transformOrigin: `${node.position.x + size.width/2}px ${node.position.y + size.height/2}px` }}
+                  onClick={() => setSelectedNode(selectedNode === node.id ? null : node.id)}
                 >
                   <rect
                     x={node.position.x}
                     y={node.position.y}
-                    width={nodeWidth}
-                    height={nodeHeight}
+                    width={size.width}
+                    height={size.height}
                     rx="12"
                     {...style}
                     className="transition-all"
+                    strokeWidth={isSelected ? 3 : 2}
+                    opacity={isSelected ? 1 : 0.9}
                   />
 
                   {/* Node content */}
                   <text
-                    x={node.position.x + nodeWidth / 2}
+                    x={node.position.x + size.width / 2}
                     y={node.position.y + 24}
                     textAnchor="middle"
                     fontSize="11"
                     fontWeight="600"
-                    fill={node.type === 'stat' ? '#f1f5f9' : '#06b6d4'}
+                    fill={node.type === 'stat' ? '#f1f5f9' : '#ffffff'}
                     className="pointer-events-none select-none"
                   >
                     {node.label}
@@ -411,7 +462,7 @@ export default function ModernDataGraph() {
                   {node.type === 'stat' && (
                     <>
                       <text
-                        x={node.position.x + nodeWidth / 2}
+                        x={node.position.x + size.width / 2}
                         y={node.position.y + 44}
                         textAnchor="middle"
                         fontSize="18"
@@ -422,7 +473,7 @@ export default function ModernDataGraph() {
                         {node.data.value}
                       </text>
                       <text
-                        x={node.position.x + nodeWidth / 2}
+                        x={node.position.x + size.width / 2}
                         y={node.position.y + 60}
                         textAnchor="middle"
                         fontSize="8"
@@ -435,16 +486,16 @@ export default function ModernDataGraph() {
                         <>
                           <rect
                             x={node.position.x + 16}
-                            y={node.position.y + nodeHeight - 12}
-                            width={nodeWidth - 32}
+                            y={node.position.y + size.height - 12}
+                            width={size.width - 32}
                             height="3"
                             rx="1.5"
                             fill="#1e293b"
                           />
                           <rect
                             x={node.position.x + 16}
-                            y={node.position.y + nodeHeight - 12}
-                            width={(nodeWidth - 32) * (node.data.progress / 100)}
+                            y={node.position.y + size.height - 12}
+                            width={(size.width - 32) * (node.data.progress / 100)}
                             height="3"
                             rx="1.5"
                             fill="#fbbf24"
@@ -457,16 +508,74 @@ export default function ModernDataGraph() {
 
                   {node.data?.count !== undefined && node.type !== 'stat' && (
                     <text
-                      x={node.position.x + nodeWidth / 2}
-                      y={node.position.y + 48}
+                      x={node.position.x + size.width / 2}
+                      y={node.position.y + size.height / 2 + 6}
                       textAnchor="middle"
-                      fontSize="12"
-                      fontWeight="600"
-                      fill="#06b6d4"
+                      fontSize="14"
+                      fontWeight="700"
+                      fill="#ffffff"
                       className="pointer-events-none select-none"
                     >
                       {node.data.count}
                     </text>
+                  )}
+
+                  {/* Tooltip on click */}
+                  {isSelected && (
+                    <g>
+                      <rect
+                        x={node.position.x + size.width + 10}
+                        y={node.position.y}
+                        width="200"
+                        height="auto"
+                        rx="8"
+                        fill="rgba(15, 23, 42, 0.95)"
+                        stroke={colors.stroke}
+                        strokeWidth="1"
+                        filter="url(#glow-cyan)"
+                      />
+                      <text
+                        x={node.position.x + size.width + 20}
+                        y={node.position.y + 20}
+                        fontSize="10"
+                        fontWeight="600"
+                        fill="#f1f5f9"
+                        className="pointer-events-none select-none"
+                      >
+                        {node.label}
+                      </text>
+                      <text
+                        x={node.position.x + size.width + 20}
+                        y={node.position.y + 38}
+                        fontSize="9"
+                        fill="#cbd5e1"
+                        className="pointer-events-none select-none"
+                      >
+                        Type: {node.type}
+                      </text>
+                      {node.data?.count !== undefined && (
+                        <text
+                          x={node.position.x + size.width + 20}
+                          y={node.position.y + 53}
+                          fontSize="9"
+                          fill="#cbd5e1"
+                          className="pointer-events-none select-none"
+                        >
+                          Count: {node.data.count}
+                        </text>
+                      )}
+                      {node.data?.value && (
+                        <text
+                          x={node.position.x + size.width + 20}
+                          y={node.position.y + 68}
+                          fontSize="9"
+                          fill="#cbd5e1"
+                          className="pointer-events-none select-none"
+                        >
+                          Value: {node.data.value}
+                        </text>
+                      )}
+                    </g>
                   )}
                 </g>
               );
@@ -476,9 +585,8 @@ export default function ModernDataGraph() {
       </div>
 
       {/* Instructions */}
-      <div className="absolute bottom-4 left-4 text-xs text-cyan-400/60 space-y-1">
-        <p>• Scroll to zoom • Drag to pan</p>
-        <p>• Hover nodes for details</p>
+      <div className="absolute bottom-4 left-4 text-xs text-cyan-400/60 dark:text-cyan-400/60 light:text-cyan-600/80 space-y-1">
+        <p>• Scroll to zoom • Drag to pan • Click nodes for details</p>
       </div>
     </div>
   );
