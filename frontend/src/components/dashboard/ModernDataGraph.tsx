@@ -148,66 +148,72 @@ export default function ModernDataGraph() {
 
   const getNodeStyle = (node: typeof enhancedNodes[0]) => {
     if (node.type === 'stat') {
-      // Stat node'larına renk gradientleri ekle
-      const gradients: Record<string, { fill: string; stroke: string }> = {
+      // Neon stat node'ları
+      const styles: Record<string, { fill: string; stroke: string; filter: string }> = {
         'stat-docs': {
           fill: 'url(#gradient-blue)',
-          stroke: '#3b82f6'
+          stroke: '#06b6d4',
+          filter: 'url(#glow-cyan)'
         },
         'stat-emb': {
           fill: 'url(#gradient-green)',
-          stroke: '#10b981'
+          stroke: '#10b981',
+          filter: 'url(#glow-green)'
         },
         'stat-msg': {
           fill: 'url(#gradient-purple)',
-          stroke: '#8b5cf6'
+          stroke: '#d946ef',
+          filter: 'url(#glow-magenta)'
         },
         'stat-prog': {
           fill: 'url(#gradient-orange)',
-          stroke: '#f97316'
+          stroke: '#fbbf24',
+          filter: 'url(#glow-yellow)'
         }
       };
 
-      const gradient = gradients[node.id] || { fill: '#f8fafc', stroke: '#cbd5e1' };
+      const style = styles[node.id] || { fill: '#1e293b', stroke: '#475569', filter: 'none' };
 
       return {
-        fill: gradient.fill,
-        stroke: gradient.stroke,
+        fill: style.fill,
+        stroke: style.stroke,
         strokeWidth: 2,
-        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+        filter: style.filter
       };
     }
     return {
-      fill: '#ffffff',
-      stroke: '#e2e8f0',
-      strokeWidth: 1.5
+      fill: '#0f172a',
+      stroke: '#06b6d4',
+      strokeWidth: 2,
+      filter: 'url(#glow-cyan)'
     };
   };
 
   return (
-    <div className="relative bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-      {/* 3D Animated Cubes Background */}
-      <div className="absolute inset-0 overflow-hidden opacity-10 dark:opacity-5 pointer-events-none">
-        <div className="absolute top-10 left-10 w-16 h-16 animate-float-slow">
-          <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg transform rotate-45 animate-spin-slow shadow-lg"></div>
-        </div>
-        <div className="absolute top-32 right-20 w-20 h-20 animate-float-medium">
-          <div className="w-full h-full bg-gradient-to-br from-pink-400 to-orange-500 rounded-lg transform rotate-12 animate-pulse shadow-lg"></div>
-        </div>
-        <div className="absolute bottom-20 left-1/4 w-12 h-12 animate-float-fast">
-          <div className="w-full h-full bg-gradient-to-br from-green-400 to-cyan-500 rounded-lg transform -rotate-12 animate-spin-reverse shadow-lg"></div>
-        </div>
-        <div className="absolute bottom-40 right-1/3 w-24 h-24 animate-float-slow">
-          <div className="w-full h-full bg-gradient-to-br from-purple-400 to-blue-500 rounded-lg transform rotate-45 animate-bounce-slow shadow-lg"></div>
-        </div>
-        <div className="absolute top-1/2 right-10 w-14 h-14 animate-float-medium">
-          <div className="w-full h-full bg-gradient-to-br from-yellow-400 to-red-500 rounded-lg transform -rotate-45 animate-pulse shadow-lg"></div>
-        </div>
+    <div className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 rounded-lg border border-cyan-500/20 overflow-hidden shadow-2xl">
+      {/* Animated Grid Background */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `
+            linear-gradient(to right, rgba(6, 182, 212, 0.1) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(6, 182, 212, 0.1) 1px, transparent 1px)
+          `,
+          backgroundSize: '40px 40px'
+        }}></div>
+      </div>
+
+      {/* Glowing Particles Background */}
+      <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
+        <div className="absolute top-10 left-10 w-2 h-2 rounded-full bg-cyan-400 blur-sm animate-pulse"></div>
+        <div className="absolute top-32 right-20 w-2 h-2 rounded-full bg-fuchsia-400 blur-sm animate-pulse" style={{ animationDelay: '0.5s' }}></div>
+        <div className="absolute bottom-20 left-1/4 w-2 h-2 rounded-full bg-yellow-400 blur-sm animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute bottom-40 right-1/3 w-2 h-2 rounded-full bg-cyan-400 blur-sm animate-pulse" style={{ animationDelay: '1.5s' }}></div>
+        <div className="absolute top-1/2 right-10 w-2 h-2 rounded-full bg-fuchsia-400 blur-sm animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
       {/* Controls */}
       <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 flex items-center gap-2">
-          <span className="text-xs text-slate-500 dark:text-slate-400">Zoom</span>
+        <div className="bg-slate-900/80 backdrop-blur-sm rounded-lg border border-cyan-500/30 px-3 py-1.5 flex items-center gap-2 shadow-lg shadow-cyan-500/10">
+          <span className="text-xs text-cyan-400">Zoom</span>
           <input
             type="range"
             min="0.5"
@@ -215,16 +221,16 @@ export default function ModernDataGraph() {
             step="0.1"
             value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}
-            className="w-20 h-1 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+            className="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer"
           />
-          <span className="text-xs font-mono text-slate-600 dark:text-slate-300 w-10">{zoom.toFixed(1)}x</span>
+          <span className="text-xs font-mono text-cyan-300 w-10">{zoom.toFixed(1)}x</span>
         </div>
         <button
           onClick={loadGraphData}
-          className="p-2 rounded-lg bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          className="p-2 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-cyan-500/30 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all shadow-lg shadow-cyan-500/10"
           title="Refresh"
         >
-          <RefreshCw className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+          <RefreshCw className="w-4 h-4 text-cyan-400" />
         </button>
       </div>
 
@@ -246,16 +252,15 @@ export default function ModernDataGraph() {
             transition: isDragging ? 'none' : 'transform 0.1s ease-out'
           }}
         >
-          {/* Grid pattern */}
+          {/* Definitions */}
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
               <path
                 d="M 40 0 L 0 0 0 40"
                 fill="none"
-                stroke="currentColor"
-                strokeWidth="0.5"
-                className="text-slate-200 dark:text-slate-700"
-                opacity="0.3"
+                stroke="#0ea5e9"
+                strokeWidth="0.3"
+                opacity="0.2"
               />
             </pattern>
             <marker
@@ -266,26 +271,56 @@ export default function ModernDataGraph() {
               refY="3"
               orient="auto"
             >
-              <polygon points="0 0, 10 3, 0 6" fill="#94a3b8" />
+              <polygon points="0 0, 10 3, 0 6" fill="#06b6d4" />
             </marker>
 
-            {/* Gradient Definitions */}
-            <linearGradient id="gradient-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#dbeafe" />
-              <stop offset="100%" stopColor="#bfdbfe" />
-            </linearGradient>
-            <linearGradient id="gradient-green" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#d1fae5" />
-              <stop offset="100%" stopColor="#a7f3d0" />
-            </linearGradient>
-            <linearGradient id="gradient-purple" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ede9fe" />
-              <stop offset="100%" stopColor="#ddd6fe" />
-            </linearGradient>
-            <linearGradient id="gradient-orange" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fed7aa" />
-              <stop offset="100%" stopColor="#fdba74" />
-            </linearGradient>
+            {/* Neon Glow Filters */}
+            <filter id="glow-cyan" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="glow-magenta" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="glow-yellow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+
+            {/* Neon Gradient Definitions */}
+            <radialGradient id="gradient-blue">
+              <stop offset="0%" stopColor="#06b6d4" />
+              <stop offset="100%" stopColor="#0891b2" />
+            </radialGradient>
+            <radialGradient id="gradient-green">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="100%" stopColor="#059669" />
+            </radialGradient>
+            <radialGradient id="gradient-purple">
+              <stop offset="0%" stopColor="#d946ef" />
+              <stop offset="100%" stopColor="#a855f7" />
+            </radialGradient>
+            <radialGradient id="gradient-orange">
+              <stop offset="0%" stopColor="#fbbf24" />
+              <stop offset="100%" stopColor="#f59e0b" />
+            </radialGradient>
           </defs>
 
           <rect width="2000" height="1000" fill="url(#grid)" />
@@ -304,12 +339,21 @@ export default function ModernDataGraph() {
 
               return (
                 <g key={edge.id}>
+                  {/* Glowing background line */}
                   <line
                     x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke="#cbd5e1"
-                    strokeWidth="2"
+                    stroke="#06b6d4"
+                    strokeWidth="3"
+                    opacity="0.3"
+                    filter="url(#glow-cyan)"
+                  />
+                  {/* Main line */}
+                  <line
+                    x1={x1} y1={y1} x2={x2} y2={y2}
+                    stroke="#06b6d4"
+                    strokeWidth="1.5"
                     markerEnd="url(#arrowhead)"
-                    opacity="0.4"
+                    opacity="0.6"
                     className="hover:opacity-100 transition-opacity"
                   />
                   {edge.label && (
@@ -317,9 +361,10 @@ export default function ModernDataGraph() {
                       x={(x1 + x2) / 2}
                       y={(y1 + y2) / 2 - 8}
                       textAnchor="middle"
-                      fontSize="10"
-                      fill="#64748b"
+                      fontSize="9"
+                      fill="#06b6d4"
                       fontWeight="500"
+                      opacity="0.8"
                     >
                       {edge.label}
                     </text>
@@ -357,7 +402,7 @@ export default function ModernDataGraph() {
                     textAnchor="middle"
                     fontSize="11"
                     fontWeight="600"
-                    fill="#1e293b"
+                    fill={node.type === 'stat' ? '#f1f5f9' : '#06b6d4'}
                     className="pointer-events-none select-none"
                   >
                     {node.label}
@@ -371,7 +416,7 @@ export default function ModernDataGraph() {
                         textAnchor="middle"
                         fontSize="18"
                         fontWeight="700"
-                        fill="#0f172a"
+                        fill="#ffffff"
                         className="pointer-events-none select-none"
                       >
                         {node.data.value}
@@ -381,30 +426,31 @@ export default function ModernDataGraph() {
                         y={node.position.y + 60}
                         textAnchor="middle"
                         fontSize="8"
-                        fill="#64748b"
+                        fill="#cbd5e1"
                         className="pointer-events-none select-none"
                       >
                         {node.data.sub}
                       </text>
                       {node.data.progress !== undefined && (
-                        <rect
-                          x={node.position.x + 16}
-                          y={node.position.y + nodeHeight - 12}
-                          width={nodeWidth - 32}
-                          height="3"
-                          rx="1.5"
-                          fill="#e2e8f0"
-                        >
+                        <>
+                          <rect
+                            x={node.position.x + 16}
+                            y={node.position.y + nodeHeight - 12}
+                            width={nodeWidth - 32}
+                            height="3"
+                            rx="1.5"
+                            fill="#1e293b"
+                          />
                           <rect
                             x={node.position.x + 16}
                             y={node.position.y + nodeHeight - 12}
                             width={(nodeWidth - 32) * (node.data.progress / 100)}
                             height="3"
                             rx="1.5"
-                            fill="#0f172a"
+                            fill="#fbbf24"
                             className="transition-all duration-500"
                           />
-                        </rect>
+                        </>
                       )}
                     </>
                   )}
@@ -416,7 +462,7 @@ export default function ModernDataGraph() {
                       textAnchor="middle"
                       fontSize="12"
                       fontWeight="600"
-                      fill="#475569"
+                      fill="#06b6d4"
                       className="pointer-events-none select-none"
                     >
                       {node.data.count}
@@ -430,7 +476,7 @@ export default function ModernDataGraph() {
       </div>
 
       {/* Instructions */}
-      <div className="absolute bottom-4 left-4 text-xs text-slate-400 dark:text-slate-500 space-y-1">
+      <div className="absolute bottom-4 left-4 text-xs text-cyan-400/60 space-y-1">
         <p>• Scroll to zoom • Drag to pan</p>
         <p>• Hover nodes for details</p>
       </div>
