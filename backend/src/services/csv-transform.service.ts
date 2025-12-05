@@ -108,7 +108,7 @@ class CSVTransformService {
       fs.writeFileSync(tempFile, cleanContent, 'utf-8');
 
       fs.createReadStream(tempFile, { encoding: 'utf-8' })
-        .pipe(csv())
+        .pipe(csv({ skipEmptyLines: true, trim: true }))
         .on('data', (row) => {
           // Additional cleanup: trim whitespace from keys and values
           const cleanRow: Record<string, any> = {};
