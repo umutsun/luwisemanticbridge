@@ -21,6 +21,7 @@ import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
 import DataSourcesGraph from "@/components/dashboard/DataSourcesGraph";
+import MinimalConsole from "@/components/dashboard/MinimalConsole";
 import ConsoleModal from "@/components/dashboard/ConsoleModal";
 
 interface SystemStatus {
@@ -1276,6 +1277,9 @@ export default function DashboardPage() {
         <div className="mt-0">
           <DataSourcesGraph />
         </div>
+
+        {/* Minimal System Console */}
+        <MinimalConsole height={300} maxLogs={100} />
 
         {/* Session Metrics & Token Usage */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
