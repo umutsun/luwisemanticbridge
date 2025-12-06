@@ -97,6 +97,7 @@ import scrapedEmbeddingsRoutes from "./routes/scraped-embeddings.routes";
 import patternsRoutes from "./routes/api/v2/patterns.routes";
 import websocketLogStreamRoutes from "./api/websocket-log-stream.router";
 import { initPDFProgressWS } from './services/pdf/pdf-progress-ws.service';
+import importJobService from './services/import-job.service';
 // import debugRoutes from './routes/debug.routes'; // Commented out - file doesn't exist
 import { AuthService } from "./services/auth.service";
 import { SettingsService } from "./services/settings.service";
@@ -823,6 +824,12 @@ if (SERVER.WEBSOCKET.ENABLED && io) {
     (global as any).pdfProgressWSService = pdfProgressWS;
     console.log(' PDF Progress WebSocket Service initialized');
   }
+
+  // Initialize Import Job Service with Socket.IO
+  if (io) {
+    importJobService.setSocketIO(io);
+    console.log(' Import Job Service initialized with Socket.IO');
+  }
 }
 
 // Enhanced error handling middleware
@@ -886,6 +893,10 @@ async function startServer() {
       console.log(" Initializing tables...");
       await initializeLsembDatabase();
       console.log(" Tables: Ready");
+
+      // Run pending migrations
+      const { runAllMigrations } = await import('./utils/run-migration');
+      await runAllMigrations();
 
       // Load payload limits from settings
       console.log(" Loading upload limits from settings...");

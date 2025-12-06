@@ -7,6 +7,7 @@
 import { Router, Request, Response } from 'express';
 import { googleDriveService } from '../services/google-drive.service';
 import { authenticateToken } from '../middleware/auth.middleware';
+import importJobService from '../services/import-job.service';
 
 const router = Router();
 
@@ -185,7 +186,35 @@ router.get('/files', authenticateToken, async (req: Request, res: Response) => {
 });
 
 /**
- * Import selected files from Google Drive
+ * Import selected files from Google Drive with progress tracking (recommended)
+ * Returns job ID immediately, processes files in background
+ */
+router.post('/import-with-progress', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { fileIds } = req.body;
+    const userId = (req as any).user?.userId;
+
+    if (!Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ error: 'fileIds array is required' });
+    }
+
+    const result = await googleDriveService.importFilesWithProgress(fileIds, userId);
+
+    res.json({
+      success: true,
+      jobId: result.jobId,
+      totalFiles: result.totalFiles,
+      message: 'Import started in background. Use WebSocket or polling to track progress.'
+    });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Import with progress error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Import selected files from Google Drive (legacy, synchronous)
+ * For large files, use /import-with-progress instead
  */
 router.post('/import', authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -193,6 +222,13 @@ router.post('/import', authenticateToken, async (req: Request, res: Response) =>
 
     if (!Array.isArray(fileIds) || fileIds.length === 0) {
       return res.status(400).json({ error: 'fileIds array is required' });
+    }
+
+    // For large imports, recommend using /import-with-progress
+    if (fileIds.length > 5) {
+      return res.status(400).json({
+        error: 'For imports with more than 5 files, please use /import-with-progress endpoint for better reliability and progress tracking'
+      });
     }
 
     const result = await googleDriveService.importFiles(fileIds);
@@ -206,6 +242,59 @@ router.post('/import', authenticateToken, async (req: Request, res: Response) =>
     });
   } catch (error: any) {
     console.error('[GoogleDrive Routes] Import error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get import job status
+ */
+router.get('/import-job/:jobId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const jobId = parseInt(req.params.jobId);
+    const job = await importJobService.getJob(jobId);
+
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    res.json(job);
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Get job error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get all import jobs for current user
+ */
+router.get('/import-jobs', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const limit = parseInt(req.query.limit as string) || 20;
+
+    const jobs = userId
+      ? await importJobService.getUserJobs(userId, limit)
+      : await importJobService.getActiveJobs();
+
+    res.json({ jobs });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Get jobs error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Cancel an import job
+ */
+router.post('/import-job/:jobId/cancel', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const jobId = parseInt(req.params.jobId);
+    await importJobService.cancelJob(jobId);
+
+    res.json({ success: true, message: 'Job cancelled' });
+  } catch (error: any) {
+    console.error('[GoogleDrive Routes] Cancel job error:', error);
     res.status(500).json({ error: error.message });
   }
 });

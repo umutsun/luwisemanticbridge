@@ -14,6 +14,7 @@ import * as iconv from 'iconv-lite';
 import * as jschardet from 'jschardet';
 import contextualDocumentProcessor from './contextual-document-processor.service';
 import { normalizeTurkishChars, generateTableName } from '../utils/text-utils';
+import importJobService from './import-job.service';
 
 interface OAuthCredentials {
   clientId: string;
@@ -678,8 +679,186 @@ class GoogleDriveService {
   }
 
   /**
-   * Import files from Google Drive to documents table
+   * Import files with job tracking and progress updates (recommended for large imports)
+   * Returns job ID immediately, processing continues in background
+   */
+  async importFilesWithProgress(fileIds: string[], userId?: string): Promise<{
+    jobId: number;
+    totalFiles: number;
+  }> {
+    // Create job
+    const job = await importJobService.createJob({
+      userId,
+      jobType: 'google_drive',
+      totalFiles: fileIds.length,
+      metadata: { fileIds }
+    });
+
+    // Start import in background (don't await)
+    this.processImportJob(job.id, fileIds, userId).catch(error => {
+      console.error(`[GoogleDrive] Background import job ${job.id} failed:`, error);
+      importJobService.updateJobStatus(job.id, 'failed');
+    });
+
+    return {
+      jobId: job.id,
+      totalFiles: fileIds.length
+    };
+  }
+
+  /**
+   * Process import job in background
+   */
+  private async processImportJob(jobId: number, fileIds: string[], userId?: string): Promise<void> {
+    await importJobService.updateJobStatus(jobId, 'in_progress');
+
+    let processedFiles = 0;
+    let successfulFiles = 0;
+    let failedFiles = 0;
+
+    for (const fileId of fileIds) {
+      try {
+        // Download file from Google Drive
+        const { content, name, mimeType } = await this.downloadFile(fileId);
+        console.log(`[GoogleDrive Job ${jobId}] Downloaded: ${name} (${content.length} bytes, ${mimeType})`);
+
+        await importJobService.updateProgress({
+          jobId,
+          processedFiles,
+          successfulFiles,
+          failedFiles,
+          currentFile: name
+        });
+
+        // Determine file type
+        const fileType = this.getFileType(mimeType, name);
+
+        // Save file to physical storage first
+        const docsDir = this.getUploadDirectory();
+        const normalizedName = normalizeTurkishChars(name);
+        const safeName = normalizedName
+          .replace(/[^\w\s\-_.]/g, '_')
+          .replace(/\s+/g, '_')
+          .replace(/_+/g, '_');
+        const filePath = path.join(docsDir, safeName);
+
+        fs.writeFileSync(filePath, content);
+        console.log(`[GoogleDrive Job ${jobId}] Saved to disk: ${filePath}`);
+
+        // Process file
+        let processedDoc;
+        try {
+          processedDoc = await contextualDocumentProcessor.processFile(filePath, name, mimeType);
+          console.log(`[GoogleDrive Job ${jobId}] Processed: ${name} - ${processedDoc.content?.length || 0} chars`);
+        } catch (processingError: any) {
+          console.error(`[GoogleDrive Job ${jobId}] Processing error for ${name}:`, processingError.message);
+          processedDoc = {
+            title: name,
+            content: mimeType.startsWith('text/') ? content.toString('utf-8') : '',
+            chunks: [],
+            metadata: {
+              processingError: processingError.message
+            }
+          };
+        }
+
+        // Check if already imported (resume logic)
+        const existingDoc = await pool.query(
+          "SELECT id, file_size FROM documents WHERE metadata->>'google_drive_id' = $1",
+          [fileId]
+        );
+
+        const metadata = {
+          google_drive_id: fileId,
+          google_drive_mime: mimeType,
+          source: 'google_drive',
+          imported_at: new Date().toISOString(),
+          import_job_id: jobId,
+          ...processedDoc.metadata
+        };
+
+        let docId: number;
+
+        if (existingDoc.rows.length > 0) {
+          const existingFileSize = existingDoc.rows[0].file_size;
+          const newFileSize = content.length;
+
+          // Resume logic: Skip if file sizes match
+          if (existingFileSize === newFileSize) {
+            docId = existingDoc.rows[0].id;
+            console.log(`[GoogleDrive Job ${jobId}] Skipping ${name} - already imported with same size`);
+            successfulFiles++;
+            processedFiles++;
+            continue;
+          }
+
+          // Update existing document
+          console.log(`[GoogleDrive Job ${jobId}] Updating ${name} - size mismatch`);
+          docId = existingDoc.rows[0].id;
+          await pool.query(
+            `UPDATE documents SET
+              content = $1,
+              file_path = $2,
+              file_size = $3,
+              processing_status = $4,
+              updated_at = CURRENT_TIMESTAMP,
+              metadata = $5
+            WHERE id = $6`,
+            [
+              processedDoc.content,
+              filePath,
+              content.length,
+              'completed',
+              JSON.stringify(metadata),
+              docId
+            ]
+          );
+        } else {
+          // Create new document
+          const insertResult = await pool.query(
+            `INSERT INTO documents (title, content, file_type, file_size, file_path, processing_status, metadata)
+             VALUES ($1, $2, $3, $4, $5, 'completed', $6)
+             RETURNING id`,
+            [
+              name,
+              processedDoc.content,
+              fileType,
+              content.length,
+              filePath,
+              JSON.stringify(metadata)
+            ]
+          );
+          docId = insertResult.rows[0].id;
+          console.log(`[GoogleDrive Job ${jobId}] Created new document: ${name} (id: ${docId})`);
+        }
+
+        successfulFiles++;
+        processedFiles++;
+        console.log(`[GoogleDrive Job ${jobId}] Successfully imported: ${name}`);
+      } catch (error: any) {
+        failedFiles++;
+        processedFiles++;
+        console.error(`[GoogleDrive Job ${jobId}] Failed to import ${fileId}:`, error.message);
+
+        await importJobService.updateProgress({
+          jobId,
+          processedFiles,
+          successfulFiles,
+          failedFiles,
+          currentError: error.message
+        });
+      }
+    }
+
+    // Mark job as completed
+    await importJobService.updateJobStatus(jobId, 'completed');
+    console.log(`[GoogleDrive] Job ${jobId} completed: ${successfulFiles} successful, ${failedFiles} failed`);
+  }
+
+  /**
+   * Import files from Google Drive to documents table (legacy, synchronous)
    * Uses the same processing pipeline as regular file uploads (contextualDocumentProcessor)
+   * @deprecated Use importFilesWithProgress for better UX with large imports
    */
   async importFiles(fileIds: string[]): Promise<{
     success: number;
