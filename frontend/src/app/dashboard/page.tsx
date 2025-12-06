@@ -14,14 +14,11 @@ import { Switch } from "@/components/ui/switch";
 import {
   Loader2,
   CheckCircle,
-  AlertTriangle,
-  Terminal
+  AlertTriangle
 } from "lucide-react";
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
-// import MinimalConsole from "@/components/dashboard/MinimalConsole";
-import ConsoleModal from "@/components/dashboard/ConsoleModal";
 
 interface SystemStatus {
   database: {
@@ -172,7 +169,6 @@ export default function DashboardPage() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showConsoleLog, setShowConsoleLog] = useState(false);
-  const [isConsoleModalOpen, setIsConsoleModalOpen] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [scrapingStatus, setScrapingStatus] = useState<"idle" | "running" | "paused" | "completed">("idle");
 
@@ -1272,6 +1268,143 @@ export default function DashboardPage() {
 
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-10">
+        {/* Session Metrics & Token Usage - Moved to Top */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Active Sessions */}
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="mb-2">
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.activeSession')}</span>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                {chatStats?.overview?.total_conversations || 0}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.currentlyActive')}</div>
+            </CardContent>
+          </Card>
+
+          {/* Total Sessions */}
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="mb-2">
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.totalSession')}</span>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                {chatStats?.overview?.total_conversations || 0}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.today')}: {chatStats?.daily_activity?.[0]?.conversations || 0}</div>
+            </CardContent>
+          </Card>
+
+          {/* Token Usage */}
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="mb-2">
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.tokenUsage')}</span>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                {tokenStats.totalTokensUsed > 0 ? tokenStats.totalTokensUsed.toLocaleString() : '0'}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {t('dashboard.stats.cost')}: ${tokenStats.totalCost.toFixed(4)}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Avg Messages per Session */}
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-6">
+              <div className="mb-2">
+                <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.avgMessagesPerSession')}</span>
+              </div>
+              <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                {chatStats?.avgMessagesPerConversation || 0}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.performanceMetric')}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Embeddings Kaynak Paneli */}
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <div>
+              <h3 className="text-base font-semibold tracking-tight">{t('dashboard.embeddings.resources')}</h3>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              {/* Migrated Data */}
+              <div className="p-5 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.migratedData')}</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.rows')}:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.migrated?.rows?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.embeddings')}:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.migrated?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Documents Embeddings */}
+              <div className="p-5 bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.documents')}</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.documents')}:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.documents?.documents?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.documents?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scraped Embeddings */}
+              <div className="p-5 bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.scraped')}</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.data')}:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.scraped?.data?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.scraped?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Message History Embeddings */}
+              <div className="p-5 bg-orange-50 dark:bg-orange-950/20 border border-orange-100 dark:border-orange-900 rounded-lg">
+                <div className="mb-3">
+                  <h4 className="text-base font-medium">{t('dashboard.embeddings.messageHistory')}</h4>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('dashboard.embeddings.messages')}:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.messages?.messages?.toLocaleString() || '0'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Embeddings:</span>
+                    <span className="font-semibold">{embeddingStats?.by_category?.messages?.embeddings?.toLocaleString() || '0'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Performance & System Resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* System Information - Real Data */}
@@ -1467,10 +1600,9 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Minimal System Console - Temporarily disabled (WebSocket server not running) */}
-        {/* <MinimalConsole height={400} maxLogs={100} /> */}
       </div>
+
+
     </div >
   );
 }
