@@ -62,6 +62,8 @@ import {
   Plus,
   Link,
   X,
+  Edit3,
+  Check,
 } from 'lucide-react';
 import { ProgressCircle } from '@/components/ui/progress-circle';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -105,9 +107,13 @@ export default function DocumentPreviewModal({
 
   const [parsedData, setParsedData] = useState<any>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [originalCsvHeaders, setOriginalCsvHeaders] = useState<string[]>([]); // Original keys for data access
   const [totalRowCount, setTotalRowCount] = useState<number>(0); // Total rows in CSV (for large files)
   const [csvVisibleRows, setCsvVisibleRows] = useState<number>(20); // Paging for CSV preview
   const CSV_ROWS_PER_PAGE = 20; // Load 20 rows at a time
+  const [isEditingHeaders, setIsEditingHeaders] = useState(false);
+  const [editableHeaders, setEditableHeaders] = useState<string[]>([]);
+  const [isSuggestingHeaders, setIsSuggestingHeaders] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sqlPreview, setSqlPreview] = useState<string>('');
   const [graphqlData, setGraphqlData] = useState<GraphQLDocumentPreview | null>(null);
@@ -358,6 +364,11 @@ export default function DocumentPreviewModal({
 
   useEffect(() => {
     if (document) {
+      // Reset header editing states for new document
+      setIsEditingHeaders(false);
+      setEditableHeaders([]);
+      setOriginalCsvHeaders([]);
+
       // Parse content for CSV/JSON
       if (document.content) {
         parseContent();
@@ -566,6 +577,7 @@ export default function DocumentPreviewModal({
             const pairs = firstRecord.split(/,\s*(?![^{]*\})/); // Split by comma but not inside nested objects
             const headers = pairs.map(pair => pair.split('=')[0].trim());
             setCsvHeaders(headers);
+            setOriginalCsvHeaders(headers); // Store original keys for data access
 
             // Parse all records
             const data = recordLines.slice(0, 10).map(line => {
@@ -597,7 +609,9 @@ export default function DocumentPreviewModal({
       // If we couldn't extract from processed format, try to extract from metadata
       console.log('[CSV Parser] Could not extract from processed format, checking metadata...');
       if (document!.metadata?.dataStructure?.headers) {
-        setCsvHeaders(document!.metadata.dataStructure.headers);
+        const metaHeaders = document!.metadata.dataStructure.headers;
+        setCsvHeaders(metaHeaders);
+        setOriginalCsvHeaders(metaHeaders); // Store original keys for data access
         console.log('[CSV Parser] Using headers from metadata');
       }
     }
@@ -636,6 +650,7 @@ export default function DocumentPreviewModal({
 
     const headers = parseCSVLine(lines[0]);
     setCsvHeaders(headers);
+    setOriginalCsvHeaders(headers); // Store original keys for data access
 
     // Count total rows (excluding header)
     const totalRows = lines.length - 1;
@@ -696,6 +711,81 @@ export default function DocumentPreviewModal({
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // Initialize editable headers when csvHeaders changes
+  useEffect(() => {
+    if (csvHeaders.length > 0 && editableHeaders.length === 0) {
+      setEditableHeaders(csvHeaders);
+    }
+  }, [csvHeaders, editableHeaders.length]);
+
+  // Handle header change
+  const handleHeaderChange = (index: number, value: string) => {
+    const newHeaders = [...editableHeaders];
+    newHeaders[index] = value;
+    setEditableHeaders(newHeaders);
+  };
+
+  // Save edited headers
+  const saveEditedHeaders = () => {
+    setCsvHeaders(editableHeaders);
+    setIsEditingHeaders(false);
+    toast({
+      title: 'Başlıklar güncellendi',
+      duration: 2000
+    });
+  };
+
+  // AI suggest headers
+  const suggestHeaders = async () => {
+    if (!parsedData || parsedData.length === 0) return;
+
+    setIsSuggestingHeaders(true);
+    try {
+      // Use originalCsvHeaders for data access since that's how parsed data is keyed
+      const headersForAccess = originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders;
+
+      // Prepare sample data - first 5 rows
+      const sampleData = parsedData.slice(0, 5).map((row: any) => {
+        return headersForAccess.map(h => String(row[h] || ''));
+      });
+
+      const response = await fetch('/api/documents/suggest-headers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          sampleData,
+          columnCount: headersForAccess.length,
+          currentHeaders: editableHeaders.length > 0 ? editableHeaders : csvHeaders
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.headers) {
+        setEditableHeaders(data.headers);
+        setIsEditingHeaders(true);
+        toast({
+          title: 'AI önerisi hazır',
+          description: `${data.provider} ile ${data.headers.length} başlık önerildi`,
+          duration: 3000
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to suggest headers:', error);
+      toast({
+        title: 'Öneri başarısız',
+        description: error.message || 'LLM bağlantı hatası',
+        variant: 'destructive',
+        duration: 3000
+      });
+    } finally {
+      setIsSuggestingHeaders(false);
+    }
   };
 
   const generateSQLPreview = async () => {
@@ -843,20 +933,105 @@ export default function DocumentPreviewModal({
     const displayedRows = parsedData.slice(0, csvVisibleRows);
     const hasMore = parsedData.length > csvVisibleRows;
 
+    // Headers to display (editable or original)
+    const displayHeaders = isEditingHeaders ? editableHeaders : csvHeaders;
+
     return (
       <TooltipProvider delayDuration={300}>
         <div className="flex flex-col h-full overflow-hidden">
+          {/* Header Controls Bar */}
+          <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
+            <span className="text-xs text-muted-foreground">Kolon Başlıkları:</span>
+
+            {/* AI Suggest Button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={suggestHeaders}
+                  disabled={isSuggestingHeaders}
+                >
+                  {isSuggestingHeaders ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>AI ile başlık öner</TooltipContent>
+            </Tooltip>
+
+            {/* Edit/Save Toggle */}
+            {isEditingHeaders ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-green-600"
+                    onClick={saveEditedHeaders}
+                  >
+                    <Check className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Başlıkları kaydet</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => {
+                      setEditableHeaders([...csvHeaders]);
+                      setIsEditingHeaders(true);
+                    }}
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Başlıkları düzenle</TooltipContent>
+              </Tooltip>
+            )}
+
+            {isEditingHeaders && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => {
+                  setIsEditingHeaders(false);
+                  setEditableHeaders([...csvHeaders]);
+                }}
+              >
+                <X className="h-3 w-3 mr-1" />
+                İptal
+              </Button>
+            )}
+          </div>
+
           {/* Fixed Header */}
           <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
             <Table>
               <TableHeader className="bg-gray-50 dark:bg-gray-900">
                 <TableRow>
-                  {csvHeaders.map((header, idx) => (
+                  {displayHeaders.map((header, idx) => (
                     <TableHead
                       key={idx}
-                      className="font-medium text-xs px-3 py-2 whitespace-nowrap"
+                      className="font-medium text-xs px-1 py-1 whitespace-nowrap"
                     >
-                      {header}
+                      {isEditingHeaders ? (
+                        <Input
+                          value={header}
+                          onChange={(e) => handleHeaderChange(idx, e.target.value)}
+                          className="h-7 text-xs min-w-[80px] px-2"
+                        />
+                      ) : (
+                        <span className="px-2">{header}</span>
+                      )}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -873,8 +1048,9 @@ export default function DocumentPreviewModal({
                     key={rowIdx}
                     className="hover:bg-muted/50 transition-colors duration-150"
                   >
-                    {csvHeaders.map((header, colIdx) => {
-                      const cellValue = String(row[header] || '');
+                    {/* Use originalCsvHeaders for data access since that's how parsed data is keyed */}
+                    {(originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders).map((originalHeader, colIdx) => {
+                      const cellValue = String(row[originalHeader] || '');
                       const cleanValue = cellValue
                         .replace(/<[^>]*>/g, '')
                         .replace(/&nbsp;/g, ' ')
@@ -892,7 +1068,7 @@ export default function DocumentPreviewModal({
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <div className="max-w-[200px] truncate cursor-help">
-                                {truncateText(row[header], 50)}
+                                {truncateText(row[originalHeader], 50)}
                               </div>
                             </TooltipTrigger>
                             <TooltipContent

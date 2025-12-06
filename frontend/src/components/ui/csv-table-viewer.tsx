@@ -20,9 +20,12 @@ import {
   Plus,
   Edit3,
   Check,
-  X
+  X,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/lib/api-client';
 
 interface CSVColumn {
   name: string;
@@ -74,6 +77,7 @@ export default function CSVTableViewer({
   const [hasHeaderRow, setHasHeaderRow] = useState(initialHasHeaders);
   const [editableHeaders, setEditableHeaders] = useState<string[]>([]);
   const [isEditingHeaders, setIsEditingHeaders] = useState(false);
+  const [isSuggestingHeaders, setIsSuggestingHeaders] = useState(false);
 
   const rowsPerPage = 50;
 
@@ -173,6 +177,49 @@ export default function CSVTableViewer({
       duration: 2000
     });
   }, [editableHeaders, hasHeaderRow, onHeadersChange, toast, t]);
+
+  // AI suggest headers
+  const suggestHeaders = useCallback(async () => {
+    if (rows.length === 0) return;
+
+    setIsSuggestingHeaders(true);
+    try {
+      // Prepare sample data - first 5 rows
+      const sampleData = rows.slice(0, 5).map(row => {
+        const values: string[] = [];
+        headers.forEach(h => {
+          values.push(String(row[h] || ''));
+        });
+        return values;
+      });
+
+      const response = await apiClient.post('/documents/suggest-headers', {
+        sampleData,
+        columnCount: headers.length,
+        currentHeaders: editableHeaders.length > 0 ? editableHeaders : headers
+      });
+
+      if (response.data.success && response.data.headers) {
+        setEditableHeaders(response.data.headers);
+        setIsEditingHeaders(true); // Enable editing so user can review
+        toast({
+          title: 'AI önerisi hazır',
+          description: `${response.data.provider} ile ${response.data.headers.length} başlık önerildi`,
+          duration: 3000
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to suggest headers:', error);
+      toast({
+        title: 'Öneri başarısız',
+        description: error.message || 'LLM bağlantı hatası',
+        variant: 'destructive',
+        duration: 3000
+      });
+    } finally {
+      setIsSuggestingHeaders(false);
+    }
+  }, [rows, headers, editableHeaders, toast]);
 
   // Filter and sort data
   const filteredAndSortedRows = useMemo(() => {
@@ -283,6 +330,21 @@ export default function CSVTableViewer({
                 className="h-7 px-2 text-xs"
               >
                 {hasHeaderRow ? "H" : "+H"}
+              </Button>
+              {/* AI Suggest headers */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={suggestHeaders}
+                disabled={isSuggestingHeaders || rows.length === 0}
+                className="h-7 w-7 p-0"
+                title="AI ile başlık öner"
+              >
+                {isSuggestingHeaders ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3" />
+                )}
               </Button>
               {/* Edit/Save headers */}
               {isEditingHeaders ? (

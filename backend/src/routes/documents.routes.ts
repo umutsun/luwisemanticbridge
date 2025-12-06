@@ -2121,4 +2121,97 @@ router.post('/sync-statuses', authenticateToken, async (req: AuthenticatedReques
   }
 });
 
+/**
+ * Suggest column headers for CSV data using LLM
+ * POST /api/documents/suggest-headers
+ */
+router.post('/suggest-headers', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { sampleData, columnCount, currentHeaders } = req.body;
+
+    if (!sampleData || !Array.isArray(sampleData) || sampleData.length === 0) {
+      return res.status(400).json({
+        error: 'Sample data is required',
+        message: 'Please provide at least a few rows of sample data'
+      });
+    }
+
+    // Prepare sample data for LLM analysis
+    const sampleRows = sampleData.slice(0, 5); // Use first 5 rows
+    const numColumns = columnCount || (sampleRows[0] ? Object.keys(sampleRows[0]).length : 0);
+
+    // Create data summary for LLM
+    const dataSummary = sampleRows.map((row, idx) => {
+      if (Array.isArray(row)) {
+        return `Row ${idx + 1}: ${row.join(' | ')}`;
+      }
+      return `Row ${idx + 1}: ${Object.values(row).join(' | ')}`;
+    }).join('\n');
+
+    const prompt = `Analyze this CSV data and suggest appropriate column headers in Turkish.
+
+DATA SAMPLE (${numColumns} columns):
+${dataSummary}
+
+${currentHeaders ? `Current headers (may be auto-generated): ${currentHeaders.join(', ')}` : 'No headers provided.'}
+
+Based on the data content, suggest ${numColumns} descriptive column headers.
+Consider:
+- Data types (text, number, date, etc.)
+- Turkish business context
+- Common patterns (ID, Name, Date, Amount, etc.)
+
+IMPORTANT: Return ONLY a JSON array of strings, no other text.
+Example: ["Sıra No", "Ad Soyad", "Tarih", "Tutar"]
+
+Your response (JSON array only):`;
+
+    // Use LLM manager to get suggestions
+    const { LLMManager } = require('../services/llm-manager.service');
+    const llmManager = LLMManager.getInstance();
+
+    const response = await llmManager.generateChatResponse(prompt, {
+      temperature: 0.3,
+      maxTokens: 500,
+      systemPrompt: 'Sen bir veri analisti olarak CSV dosyalarının kolon başlıklarını analiz ediyorsun. Sadece JSON array formatında cevap ver.'
+    });
+
+    // Parse the LLM response
+    let suggestedHeaders: string[] = [];
+    try {
+      // Extract JSON array from response
+      const jsonMatch = response.content.match(/\[[\s\S]*?\]/);
+      if (jsonMatch) {
+        suggestedHeaders = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseError) {
+      console.error('[SuggestHeaders] Failed to parse LLM response:', parseError);
+      // Generate fallback headers
+      suggestedHeaders = Array.from({ length: numColumns }, (_, i) => `Kolon_${i + 1}`);
+    }
+
+    // Ensure we have the right number of headers
+    while (suggestedHeaders.length < numColumns) {
+      suggestedHeaders.push(`Kolon_${suggestedHeaders.length + 1}`);
+    }
+    suggestedHeaders = suggestedHeaders.slice(0, numColumns);
+
+    console.log(`[SuggestHeaders] Suggested ${suggestedHeaders.length} headers using ${response.provider}`);
+
+    res.json({
+      success: true,
+      headers: suggestedHeaders,
+      provider: response.provider,
+      model: response.model
+    });
+
+  } catch (error: any) {
+    console.error('[SuggestHeaders] Error:', error);
+    res.status(500).json({
+      error: 'Failed to suggest headers',
+      message: error.message
+    });
+  }
+});
+
 export default router;
