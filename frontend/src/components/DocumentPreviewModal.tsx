@@ -113,7 +113,6 @@ export default function DocumentPreviewModal({
   const CSV_ROWS_PER_PAGE = 20; // Load 20 rows at a time
   const [isEditingHeaders, setIsEditingHeaders] = useState(false);
   const [editableHeaders, setEditableHeaders] = useState<string[]>([]);
-  const [isSuggestingHeaders, setIsSuggestingHeaders] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [sqlPreview, setSqlPreview] = useState<string>('');
   const [graphqlData, setGraphqlData] = useState<GraphQLDocumentPreview | null>(null);
@@ -737,91 +736,6 @@ export default function DocumentPreviewModal({
     });
   };
 
-  // AI suggest headers
-  const suggestHeaders = async () => {
-    // Check if we have data to analyze
-    if (!parsedData || parsedData.length === 0) {
-      toast({
-        title: 'Veri bulunamadı',
-        description: 'AI önerisi için önce CSV verisi yüklenmelidir',
-        variant: 'destructive',
-        duration: 3000
-      });
-      return;
-    }
-
-    // Use originalCsvHeaders for data access since that's how parsed data is keyed
-    const headersForAccess = originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders;
-
-    if (headersForAccess.length === 0) {
-      toast({
-        title: 'Kolon bulunamadı',
-        description: 'CSV dosyasında kolon başlıkları tespit edilemedi',
-        variant: 'destructive',
-        duration: 3000
-      });
-      return;
-    }
-
-    setIsSuggestingHeaders(true);
-    try {
-      // Prepare sample data - first 5 rows
-      const sampleData = parsedData.slice(0, 5).map((row: any) => {
-        return headersForAccess.map(h => String(row[h] || ''));
-      });
-
-      console.log('[AI Suggest] Sending request with:', {
-        sampleRows: sampleData.length,
-        columnCount: headersForAccess.length,
-        currentHeaders: editableHeaders.length > 0 ? editableHeaders : csvHeaders
-      });
-
-      const response = await fetch('/api/documents/suggest-headers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders()
-        },
-        body: JSON.stringify({
-          sampleData,
-          columnCount: headersForAccess.length,
-          currentHeaders: editableHeaders.length > 0 ? editableHeaders : csvHeaders
-        })
-      });
-
-      const data = await response.json();
-      console.log('[AI Suggest] Response:', data);
-
-      if (data.success && data.headers) {
-        setEditableHeaders(data.headers);
-        setIsEditingHeaders(true);
-        toast({
-          title: 'AI önerisi hazır',
-          description: `${data.provider} ile ${data.headers.length} başlık önerildi`,
-          duration: 3000
-        });
-      } else {
-        // Handle API error response
-        toast({
-          title: 'Öneri başarısız',
-          description: data.error || data.message || 'Beklenmeyen API yanıtı',
-          variant: 'destructive',
-          duration: 3000
-        });
-      }
-    } catch (error: any) {
-      console.error('Failed to suggest headers:', error);
-      toast({
-        title: 'Öneri başarısız',
-        description: error.message || 'LLM bağlantı hatası',
-        variant: 'destructive',
-        duration: 3000
-      });
-    } finally {
-      setIsSuggestingHeaders(false);
-    }
-  };
-
   const generateSQLPreview = async () => {
     if (!document) return;
 
@@ -973,91 +887,24 @@ export default function DocumentPreviewModal({
     return (
       <TooltipProvider delayDuration={300}>
         <div className="flex flex-col h-full overflow-hidden">
-          {/* Fixed Header with integrated controls */}
+          {/* Fixed Header */}
           <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
             <Table>
               <TableHeader className="bg-gray-50 dark:bg-gray-900">
                 <TableRow>
-                  {/* Control icons in first cell */}
-                  <TableHead className="w-[70px] px-1 py-1">
-                    <div className="flex items-center gap-0.5">
-                      {/* AI Suggest Button */}
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={suggestHeaders}
-                            disabled={isSuggestingHeaders}
-                          >
-                            {isSuggestingHeaders ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Sparkles className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>AI ile başlık öner</TooltipContent>
-                      </Tooltip>
-
-                      {/* Edit/Save Toggle */}
-                      {isEditingHeaders ? (
-                        <>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-green-600"
-                                onClick={saveEditedHeaders}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Kaydet</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-muted-foreground"
-                                onClick={() => {
-                                  setIsEditingHeaders(false);
-                                  setEditableHeaders([...csvHeaders]);
-                                }}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>İptal</TooltipContent>
-                          </Tooltip>
-                        </>
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 w-6 p-0"
-                              onClick={() => {
-                                setEditableHeaders([...csvHeaders]);
-                                setIsEditingHeaders(true);
-                              }}
-                            >
-                              <Edit3 className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Başlıkları düzenle</TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </TableHead>
+                  {/* Row number header */}
+                  <TableHead className="w-[50px] px-2 py-1 text-xs text-muted-foreground">#</TableHead>
                   {displayHeaders.map((header, idx) => (
                     <TableHead
                       key={idx}
-                      className="font-medium text-xs px-1 py-1 whitespace-nowrap"
+                      className={`font-medium text-xs px-2 py-1 whitespace-nowrap ${!isEditingHeaders ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                      onClick={() => {
+                        if (!isEditingHeaders) {
+                          setEditableHeaders([...csvHeaders]);
+                          setIsEditingHeaders(true);
+                        }
+                      }}
+                      title={!isEditingHeaders ? 'Tıklayarak başlıkları düzenle' : undefined}
                     >
                       {isEditingHeaders ? (
                         <Input
@@ -1084,8 +931,8 @@ export default function DocumentPreviewModal({
                     key={rowIdx}
                     className="hover:bg-muted/50 transition-colors duration-150"
                   >
-                    {/* Row number cell to match control icons header */}
-                    <TableCell className="w-[70px] px-2 py-1 text-xs text-muted-foreground font-mono">
+                    {/* Row number cell */}
+                    <TableCell className="w-[50px] px-2 py-1 text-xs text-muted-foreground font-mono">
                       {rowIdx + 1}
                     </TableCell>
                     {/* Use originalCsvHeaders for data access since that's how parsed data is keyed */}
@@ -1129,22 +976,57 @@ export default function DocumentPreviewModal({
             </Table>
           </div>
 
-          {/* Fixed Footer: Load More */}
-          {hasMore && (
-            <div className="flex-shrink-0 flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+          {/* Fixed Footer: Edit controls + Load More */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
+            {/* Left: Edit controls */}
+            <div className="flex items-center gap-2">
+              {isEditingHeaders ? (
+                <>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={saveEditedHeaders}
+                    className="h-7 gap-1"
+                  >
+                    <Check className="h-3 w-3" />
+                    Kaydet
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsEditingHeaders(false);
+                      setEditableHeaders([...csvHeaders]);
+                    }}
+                    className="h-7 gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    İptal
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {csvHeaders.length} kolon • {parsedData.length} satır
+                  <span className="ml-2 opacity-60">(başlıklara tıklayarak düzenle)</span>
+                </span>
+              )}
+            </div>
+
+            {/* Right: Load More */}
+            {hasMore && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
-                className="gap-2"
+                className="h-7 gap-2"
               >
-                Daha Fazla Yükle
+                Daha Fazla
                 <span className="text-xs text-muted-foreground">
-                  ({parsedData.length - csvVisibleRows} kaldı)
+                  (+{Math.min(CSV_ROWS_PER_PAGE, parsedData.length - csvVisibleRows)})
                 </span>
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </TooltipProvider>
     );
@@ -2978,13 +2860,13 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
               </TabsList>
 
               <TabsContent value="table" className="mt-0">
-                <div className="h-[360px]">
+                <div className="h-[500px]">
                   {renderCSVTable()}
                 </div>
               </TabsContent>
 
               <TabsContent value="graphql" className="mt-0">
-                <div className="h-[360px]">
+                <div className="h-[500px]">
                   {renderGraphQLTransform()}
                 </div>
               </TabsContent>
