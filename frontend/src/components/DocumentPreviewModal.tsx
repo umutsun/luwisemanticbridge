@@ -739,16 +739,41 @@ export default function DocumentPreviewModal({
 
   // AI suggest headers
   const suggestHeaders = async () => {
-    if (!parsedData || parsedData.length === 0) return;
+    // Check if we have data to analyze
+    if (!parsedData || parsedData.length === 0) {
+      toast({
+        title: 'Veri bulunamadı',
+        description: 'AI önerisi için önce CSV verisi yüklenmelidir',
+        variant: 'destructive',
+        duration: 3000
+      });
+      return;
+    }
+
+    // Use originalCsvHeaders for data access since that's how parsed data is keyed
+    const headersForAccess = originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders;
+
+    if (headersForAccess.length === 0) {
+      toast({
+        title: 'Kolon bulunamadı',
+        description: 'CSV dosyasında kolon başlıkları tespit edilemedi',
+        variant: 'destructive',
+        duration: 3000
+      });
+      return;
+    }
 
     setIsSuggestingHeaders(true);
     try {
-      // Use originalCsvHeaders for data access since that's how parsed data is keyed
-      const headersForAccess = originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders;
-
       // Prepare sample data - first 5 rows
       const sampleData = parsedData.slice(0, 5).map((row: any) => {
         return headersForAccess.map(h => String(row[h] || ''));
+      });
+
+      console.log('[AI Suggest] Sending request with:', {
+        sampleRows: sampleData.length,
+        columnCount: headersForAccess.length,
+        currentHeaders: editableHeaders.length > 0 ? editableHeaders : csvHeaders
       });
 
       const response = await fetch('/api/documents/suggest-headers', {
@@ -765,6 +790,7 @@ export default function DocumentPreviewModal({
       });
 
       const data = await response.json();
+      console.log('[AI Suggest] Response:', data);
 
       if (data.success && data.headers) {
         setEditableHeaders(data.headers);
@@ -772,6 +798,14 @@ export default function DocumentPreviewModal({
         toast({
           title: 'AI önerisi hazır',
           description: `${data.provider} ile ${data.headers.length} başlık önerildi`,
+          duration: 3000
+        });
+      } else {
+        // Handle API error response
+        toast({
+          title: 'Öneri başarısız',
+          description: data.error || data.message || 'Beklenmeyen API yanıtı',
+          variant: 'destructive',
           duration: 3000
         });
       }
