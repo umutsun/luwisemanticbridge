@@ -13,6 +13,7 @@ import { getUploadLimitBytes } from '../middleware/security.middleware';
 import { unifiedEmbeddingsSync } from '../services/unified-embeddings-sync.service';
 import * as iconv from 'iconv-lite';
 import * as jschardet from 'jschardet';
+import * as ExcelJS from 'exceljs';
 
 /**
  * Strip BOM (Byte Order Mark) from buffer
@@ -1032,7 +1033,81 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
     let preview = '';
     let metadata: any = {};
 
-    if (['.csv', '.txt', '.json', '.log', '.md', '.doc', '.docx'].includes(path.extname(filename).toLowerCase())) {
+    const fileExt = path.extname(filename).toLowerCase();
+
+    if (['.xlsx', '.xls'].includes(fileExt)) {
+      // Excel files - parse with ExcelJS and convert to CSV-like format
+      try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(filePath);
+
+        const sheet = workbook.worksheets[0]; // Get first sheet
+        if (!sheet) {
+          content = '';
+          preview = '';
+        } else {
+          const rows: string[][] = [];
+          const headers: string[] = [];
+
+          sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            const rowValues: string[] = [];
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+              let value = '';
+              if (cell.value !== null && cell.value !== undefined) {
+                if (typeof cell.value === 'object' && 'result' in cell.value) {
+                  // Formula cell - use result
+                  value = String(cell.value.result || '');
+                } else if (typeof cell.value === 'object' && 'text' in cell.value) {
+                  // Rich text cell
+                  value = String(cell.value.text || '');
+                } else {
+                  value = String(cell.value);
+                }
+              }
+              rowValues.push(value);
+            });
+
+            if (rowNumber === 1) {
+              headers.push(...rowValues);
+            }
+            rows.push(rowValues);
+          });
+
+          // Convert to CSV format for display
+          content = rows.map(row => row.join(',')).join('\n');
+          preview = rows.slice(0, 11).map(row => row.join(',')).join('\n');
+
+          // Add CSV-like stats for table viewer
+          const dataRows = rows.slice(1);
+          const columnIsNumeric = new Array(headers.length).fill(true);
+
+          dataRows.slice(0, 10).forEach(row => {
+            row.forEach((val, idx) => {
+              if (columnIsNumeric[idx] && val && isNaN(Number(val))) {
+                columnIsNumeric[idx] = false;
+              }
+            });
+          });
+
+          metadata.csvStats = {
+            totalRows: dataRows.length,
+            totalColumns: headers.length,
+            headers: headers,
+            numericColumns: headers.filter((_, idx) => columnIsNumeric[idx]),
+            columnTypes: headers.map((name, idx) => ({
+              name,
+              type: columnIsNumeric[idx] ? 'numeric' : 'text'
+            }))
+          };
+          metadata.sheetName = sheet.name;
+          metadata.sheetCount = workbook.worksheets.length;
+        }
+      } catch (excelError: any) {
+        console.error('Error parsing Excel file:', excelError);
+        content = '[Error reading Excel file]';
+        preview = content;
+      }
+    } else if (['.csv', '.txt', '.json', '.log', '.md', '.doc', '.docx'].includes(fileExt)) {
       // Text-based files - read directly with encoding detection
       const fileBuffer = fs.readFileSync(filePath);
       content = decodeBufferToUTF8(fileBuffer);
