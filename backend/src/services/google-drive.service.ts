@@ -735,9 +735,9 @@ class GoogleDriveService {
           };
         }
 
-        // Check if already imported (by google_drive_id)
+        // Check if already imported (by google_drive_id) and get file_size for resume logic
         const existingDoc = await pool.query(
-          "SELECT id FROM documents WHERE metadata->>'google_drive_id' = $1",
+          "SELECT id, file_size FROM documents WHERE metadata->>'google_drive_id' = $1",
           [fileId]
         );
 
@@ -752,7 +752,25 @@ class GoogleDriveService {
         let docId: number;
 
         if (existingDoc.rows.length > 0) {
-          // Update existing document
+          const existingFileSize = existingDoc.rows[0].file_size;
+          const newFileSize = content.length;
+
+          // Resume logic: Skip if file sizes match (already fully imported)
+          if (existingFileSize === newFileSize) {
+            docId = existingDoc.rows[0].id;
+            console.log(`[GoogleDrive] Skipping ${name} - already imported with same size (${existingFileSize} bytes)`);
+
+            result.importedDocs.push({
+              id: docId,
+              name,
+              driveId: fileId
+            });
+            result.success++;
+            continue; // Skip to next file
+          }
+
+          // File size differs - update (resume incomplete import or file changed)
+          console.log(`[GoogleDrive] Updating ${name} - size mismatch (existing: ${existingFileSize}, new: ${newFileSize})`);
           docId = existingDoc.rows[0].id;
           await pool.query(
             `UPDATE documents SET
