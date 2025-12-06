@@ -105,8 +105,19 @@ function decodeBufferToUTF8(buffer: Buffer): string {
     console.log(`[Encoding] Failed to decode with ${normalizedEncoding}, trying fallbacks`);
   }
 
-  // Try common Turkish encodings as fallback
-  const turkishEncodings = ['win1254', 'iso-8859-9', 'utf-8', 'win1252', 'iso-8859-1'];
+  // Check for common mojibake patterns that indicate wrong encoding
+  // İ (0xDD in Win-1254) → Ý in Latin-1, ı (0xFD in Win-1254) → ý in Latin-1
+  const utf8Attempt = cleanBuffer.toString('utf-8');
+  const hasTurkishMojibake = /[ÝýÞþ]/.test(utf8Attempt); // Ý=İ, ý=ı, Þ=Ş, þ=ş in mojibake
+
+  // If mojibake detected, prioritize Windows-1254
+  const turkishEncodings = hasTurkishMojibake
+    ? ['win1254', 'iso-8859-9', 'win1252', 'iso-8859-1', 'utf-8']
+    : ['win1254', 'iso-8859-9', 'utf-8', 'win1252', 'iso-8859-1'];
+
+  if (hasTurkishMojibake) {
+    console.log('[Encoding] Turkish mojibake detected (Ý/ý patterns), prioritizing win1254');
+  }
 
   for (const enc of turkishEncodings) {
     try {
@@ -116,7 +127,7 @@ function decodeBufferToUTF8(buffer: Buffer): string {
         if (!decoded.includes('�') && !decoded.includes('\uFFFD')) {
           // Additional check: look for valid Turkish chars or common patterns
           const hasTurkish = /[üşğıöçÜŞĞİÖÇ]/.test(decoded);
-          const hasReplacementOrBroken = /[\uFFFD�]|Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä/.test(decoded);
+          const hasReplacementOrBroken = /[\uFFFD�]|Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä|Ý|ý/.test(decoded);
 
           if (hasTurkish && !hasReplacementOrBroken) {
             console.log(`[Encoding] Successfully decoded with ${enc}`);
