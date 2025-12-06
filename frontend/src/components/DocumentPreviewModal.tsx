@@ -911,7 +911,7 @@ export default function DocumentPreviewModal({
       return <div className="text-muted-foreground text-center py-8">No data available</div>;
     }
 
-    const truncateText = (text: string, maxLength: number = 60) => {
+    const truncateText = (text: string, maxLength: number = 120) => {
       if (!text) return '';
       let str = String(text);
 
@@ -939,85 +939,87 @@ export default function DocumentPreviewModal({
     return (
       <TooltipProvider delayDuration={300}>
         <div className="flex flex-col h-full overflow-hidden">
-          {/* Header Controls Bar */}
-          <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
-            <span className="text-xs text-muted-foreground">Kolon Başlıkları:</span>
-
-            {/* AI Suggest Button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={suggestHeaders}
-                  disabled={isSuggestingHeaders}
-                >
-                  {isSuggestingHeaders ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>AI ile başlık öner</TooltipContent>
-            </Tooltip>
-
-            {/* Edit/Save Toggle */}
-            {isEditingHeaders ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-green-600"
-                    onClick={saveEditedHeaders}
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Başlıkları kaydet</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    onClick={() => {
-                      setEditableHeaders([...csvHeaders]);
-                      setIsEditingHeaders(true);
-                    }}
-                  >
-                    <Edit3 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Başlıkları düzenle</TooltipContent>
-              </Tooltip>
-            )}
-
-            {isEditingHeaders && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-muted-foreground"
-                onClick={() => {
-                  setIsEditingHeaders(false);
-                  setEditableHeaders([...csvHeaders]);
-                }}
-              >
-                <X className="h-3 w-3 mr-1" />
-                İptal
-              </Button>
-            )}
-          </div>
-
-          {/* Fixed Header */}
+          {/* Fixed Header with integrated controls */}
           <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
             <Table>
               <TableHeader className="bg-gray-50 dark:bg-gray-900">
                 <TableRow>
+                  {/* Control icons in first cell */}
+                  <TableHead className="w-[70px] px-1 py-1">
+                    <div className="flex items-center gap-0.5">
+                      {/* AI Suggest Button */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={suggestHeaders}
+                            disabled={isSuggestingHeaders}
+                          >
+                            {isSuggestingHeaders ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>AI ile başlık öner</TooltipContent>
+                      </Tooltip>
+
+                      {/* Edit/Save Toggle */}
+                      {isEditingHeaders ? (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-green-600"
+                                onClick={saveEditedHeaders}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Kaydet</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground"
+                                onClick={() => {
+                                  setIsEditingHeaders(false);
+                                  setEditableHeaders([...csvHeaders]);
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>İptal</TooltipContent>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => {
+                                setEditableHeaders([...csvHeaders]);
+                                setIsEditingHeaders(true);
+                              }}
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Başlıkları düzenle</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </TableHead>
                   {displayHeaders.map((header, idx) => (
                     <TableHead
                       key={idx}
@@ -1027,7 +1029,7 @@ export default function DocumentPreviewModal({
                         <Input
                           value={header}
                           onChange={(e) => handleHeaderChange(idx, e.target.value)}
-                          className="h-7 text-xs min-w-[80px] px-2"
+                          className="h-6 text-xs min-w-[80px] px-2"
                         />
                       ) : (
                         <span className="px-2">{header}</span>
@@ -1048,6 +1050,10 @@ export default function DocumentPreviewModal({
                     key={rowIdx}
                     className="hover:bg-muted/50 transition-colors duration-150"
                   >
+                    {/* Row number cell to match control icons header */}
+                    <TableCell className="w-[70px] px-2 py-1 text-xs text-muted-foreground font-mono">
+                      {rowIdx + 1}
+                    </TableCell>
                     {/* Use originalCsvHeaders for data access since that's how parsed data is keyed */}
                     {(originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders).map((originalHeader, colIdx) => {
                       const cellValue = String(row[originalHeader] || '');
@@ -1063,17 +1069,17 @@ export default function DocumentPreviewModal({
                       return (
                         <TableCell
                           key={colIdx}
-                          className="px-3 py-2 text-xs"
+                          className="px-2 py-1 text-xs"
                         >
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="max-w-[200px] truncate cursor-help">
-                                {truncateText(row[originalHeader], 50)}
+                              <div className="max-w-[300px] truncate cursor-help">
+                                {truncateText(row[originalHeader], 100)}
                               </div>
                             </TooltipTrigger>
                             <TooltipContent
                               side="top"
-                              className="max-w-md break-words bg-popover text-popover-foreground border border-border shadow-lg"
+                              className="max-w-lg break-words bg-popover text-popover-foreground border border-border shadow-lg"
                             >
                               <div className="text-xs leading-relaxed whitespace-pre-wrap">
                                 {cleanValue}
