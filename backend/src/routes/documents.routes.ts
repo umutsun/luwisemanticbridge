@@ -11,6 +11,8 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.midd
 import { createUploadRateLimit } from '../middleware/rate-limit.middleware';
 import { getUploadLimitBytes } from '../middleware/security.middleware';
 import { unifiedEmbeddingsSync } from '../services/unified-embeddings-sync.service';
+import * as iconv from 'iconv-lite';
+import * as jschardet from 'jschardet';
 
 /**
  * Strip BOM (Byte Order Mark) from buffer
@@ -24,7 +26,104 @@ function stripBOM(buffer: Buffer): Buffer {
       buffer[2] === 0xBF) {
     return buffer.slice(3);
   }
+  // UTF-16 LE BOM: FF FE
+  if (buffer.length >= 2 &&
+      buffer[0] === 0xFF &&
+      buffer[1] === 0xFE) {
+    return buffer.slice(2);
+  }
+  // UTF-16 BE BOM: FE FF
+  if (buffer.length >= 2 &&
+      buffer[0] === 0xFE &&
+      buffer[1] === 0xFF) {
+    return buffer.slice(2);
+  }
   return buffer;
+}
+
+/**
+ * Decode buffer to UTF-8 string with automatic encoding detection
+ * Handles Turkish characters properly regardless of source encoding
+ */
+function decodeBufferToUTF8(buffer: Buffer): string {
+  // First strip any BOM
+  const cleanBuffer = stripBOM(buffer);
+
+  // Detect encoding using jschardet
+  const detected = jschardet.detect(cleanBuffer);
+  const encoding = detected.encoding || 'UTF-8';
+  const confidence = detected.confidence || 0;
+
+  console.log(`[Encoding] Detected: ${encoding} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+
+  // Map common encoding names to iconv-lite compatible names
+  const encodingMap: Record<string, string> = {
+    'ascii': 'utf-8',
+    'ASCII': 'utf-8',
+    'UTF-8': 'utf-8',
+    'utf-8': 'utf-8',
+    'ISO-8859-1': 'iso-8859-1',
+    'ISO-8859-9': 'iso-8859-9', // Turkish
+    'windows-1252': 'win1252',
+    'windows-1254': 'win1254', // Turkish Windows
+    'WINDOWS-1252': 'win1252',
+    'WINDOWS-1254': 'win1254',
+    'MacRoman': 'macroman',
+    'UTF-16LE': 'utf-16le',
+    'UTF-16BE': 'utf-16be',
+  };
+
+  const normalizedEncoding = encodingMap[encoding] || encoding.toLowerCase();
+
+  // If already UTF-8 with high confidence, just convert
+  if ((normalizedEncoding === 'utf-8' || normalizedEncoding === 'ascii') && confidence > 0.8) {
+    return cleanBuffer.toString('utf-8');
+  }
+
+  // Try to decode with detected encoding
+  try {
+    if (iconv.encodingExists(normalizedEncoding)) {
+      const decoded = iconv.decode(cleanBuffer, normalizedEncoding);
+      // Verify Turkish characters are preserved
+      if (decoded.includes('ü') || decoded.includes('ş') || decoded.includes('ğ') ||
+          decoded.includes('ı') || decoded.includes('ö') || decoded.includes('ç') ||
+          decoded.includes('Ü') || decoded.includes('Ş') || decoded.includes('Ğ') ||
+          decoded.includes('İ') || decoded.includes('Ö') || decoded.includes('Ç')) {
+        console.log('[Encoding] Turkish characters found, using detected encoding');
+        return decoded;
+      }
+    }
+  } catch (e) {
+    console.log(`[Encoding] Failed to decode with ${normalizedEncoding}, trying fallbacks`);
+  }
+
+  // Try common Turkish encodings as fallback
+  const turkishEncodings = ['win1254', 'iso-8859-9', 'utf-8', 'win1252', 'iso-8859-1'];
+
+  for (const enc of turkishEncodings) {
+    try {
+      if (iconv.encodingExists(enc)) {
+        const decoded = iconv.decode(cleanBuffer, enc);
+        // Check if Turkish characters are properly decoded (not replacement chars)
+        if (!decoded.includes('�') && !decoded.includes('\uFFFD')) {
+          // Additional check: look for valid Turkish chars or common patterns
+          const hasTurkish = /[üşğıöçÜŞĞİÖÇ]/.test(decoded);
+          const hasReplacementOrBroken = /[\uFFFD�]|Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä/.test(decoded);
+
+          if (hasTurkish && !hasReplacementOrBroken) {
+            console.log(`[Encoding] Successfully decoded with ${enc}`);
+            return decoded;
+          }
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  // Last resort: UTF-8
+  console.log('[Encoding] Using UTF-8 as last resort');
+  return cleanBuffer.toString('utf-8');
 }
 
 const router = Router();
@@ -926,12 +1025,10 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
     let preview = '';
     let metadata: any = {};
 
-    if (['.csv', '.txt', '.json', '.log', '.md'].includes(path.extname(filename).toLowerCase())) {
-      // Text-based files - read directly
-      // Read file and strip BOM for proper UTF-8 encoding
+    if (['.csv', '.txt', '.json', '.log', '.md', '.doc', '.docx'].includes(path.extname(filename).toLowerCase())) {
+      // Text-based files - read directly with encoding detection
       const fileBuffer = fs.readFileSync(filePath);
-      const cleanBuffer = stripBOM(fileBuffer);
-      content = cleanBuffer.toString('utf-8');
+      content = decodeBufferToUTF8(fileBuffer);
 
       // For CSV files, parse and provide stats
       if (ext === 'csv') {

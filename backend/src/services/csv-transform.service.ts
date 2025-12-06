@@ -9,6 +9,8 @@ import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
 import axios from 'axios';
+import * as iconv from 'iconv-lite';
+import * as jschardet from 'jschardet';
 import { dataSchemaService } from './data-schema.service';
 import { getDatabaseSettings } from '../config/database.config';
 import { Pool } from 'pg';
@@ -88,7 +90,90 @@ class CSVTransformService {
         buffer[2] === 0xBF) {
       return buffer.slice(3);
     }
+    // UTF-16 LE BOM: FF FE
+    if (buffer.length >= 2 &&
+        buffer[0] === 0xFF &&
+        buffer[1] === 0xFE) {
+      return buffer.slice(2);
+    }
+    // UTF-16 BE BOM: FE FF
+    if (buffer.length >= 2 &&
+        buffer[0] === 0xFE &&
+        buffer[1] === 0xFF) {
+      return buffer.slice(2);
+    }
     return buffer;
+  }
+
+  /**
+   * Decode buffer to UTF-8 with automatic encoding detection
+   * Handles Turkish characters properly
+   */
+  private decodeToUTF8(buffer: Buffer): string {
+    const cleanBuffer = this.stripBOM(buffer);
+
+    // Detect encoding
+    const detected = jschardet.detect(cleanBuffer);
+    const encoding = detected.encoding || 'UTF-8';
+    const confidence = detected.confidence || 0;
+
+    console.log(`[CSV Transform] Encoding detected: ${encoding} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+
+    // Map encoding names
+    const encodingMap: Record<string, string> = {
+      'ascii': 'utf-8',
+      'ASCII': 'utf-8',
+      'UTF-8': 'utf-8',
+      'ISO-8859-1': 'iso-8859-1',
+      'ISO-8859-9': 'iso-8859-9',
+      'windows-1252': 'win1252',
+      'windows-1254': 'win1254',
+      'WINDOWS-1252': 'win1252',
+      'WINDOWS-1254': 'win1254',
+    };
+
+    const normalizedEncoding = encodingMap[encoding] || encoding.toLowerCase();
+
+    // If already UTF-8 with high confidence, just convert
+    if ((normalizedEncoding === 'utf-8' || normalizedEncoding === 'ascii') && confidence > 0.8) {
+      return cleanBuffer.toString('utf-8');
+    }
+
+    // Try detected encoding first
+    try {
+      if (iconv.encodingExists(normalizedEncoding)) {
+        const decoded = iconv.decode(cleanBuffer, normalizedEncoding);
+        if (/[üşğıöçÜŞĞİÖÇ]/.test(decoded) && !/[\uFFFD�]/.test(decoded)) {
+          console.log(`[CSV Transform] Successfully decoded with ${normalizedEncoding}`);
+          return decoded;
+        }
+      }
+    } catch (e) {
+      // Continue to fallbacks
+    }
+
+    // Try Turkish encodings as fallback
+    for (const enc of ['win1254', 'iso-8859-9', 'win1252', 'iso-8859-1']) {
+      try {
+        if (iconv.encodingExists(enc)) {
+          const decoded = iconv.decode(cleanBuffer, enc);
+          if (!decoded.includes('�') && !decoded.includes('\uFFFD')) {
+            const hasTurkish = /[üşğıöçÜŞĞİÖÇ]/.test(decoded);
+            const hasBroken = /Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä/.test(decoded);
+            if (hasTurkish && !hasBroken) {
+              console.log(`[CSV Transform] Successfully decoded with fallback: ${enc}`);
+              return decoded;
+            }
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    // Last resort: UTF-8
+    console.log('[CSV Transform] Using UTF-8 as last resort');
+    return cleanBuffer.toString('utf-8');
   }
 
   /**
@@ -98,17 +183,16 @@ class CSVTransformService {
     return new Promise((resolve, reject) => {
       const rows: Record<string, any>[] = [];
 
-      // Read file and strip BOM before parsing
+      // Read file with encoding detection
       const fileBuffer = fs.readFileSync(filePath);
-      const cleanBuffer = this.stripBOM(fileBuffer);
-      const cleanContent = cleanBuffer.toString('utf-8');
+      const cleanContent = this.decodeToUTF8(fileBuffer);
 
-      // Write clean content to temp file
+      // Write clean UTF-8 content to temp file
       const tempFile = filePath + '.temp';
       fs.writeFileSync(tempFile, cleanContent, 'utf-8');
 
       fs.createReadStream(tempFile, { encoding: 'utf-8' })
-        .pipe(csv({ encoding: 'utf8', skipEmptyLines: true, trim: true }))
+        .pipe(csv())
         .on('data', (row) => {
           // Additional cleanup: trim whitespace from keys and values
           const cleanRow: Record<string, any> = {};

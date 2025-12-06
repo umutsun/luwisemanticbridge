@@ -10,6 +10,8 @@ import { google, drive_v3 } from 'googleapis';
 import pool from '../config/database';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as iconv from 'iconv-lite';
+import * as jschardet from 'jschardet';
 import contextualDocumentProcessor from './contextual-document-processor.service';
 import { normalizeTurkishChars, generateTableName } from '../utils/text-utils';
 
@@ -434,24 +436,102 @@ class GoogleDriveService {
       };
     }
 
-    // Regular file download
-    // For text files (including CSV), ensure proper UTF-8 encoding
-    const responseType = mimeType.startsWith('text/') || mimeType.includes('csv')
-      ? 'text'
-      : 'arraybuffer';
-
+    // Regular file download - always use arraybuffer for proper encoding handling
     const response = await this.drive!.files.get(
       { fileId, alt: 'media' },
-      { responseType }
+      { responseType: 'arraybuffer' }
     );
 
+    let content = Buffer.from(response.data as ArrayBuffer);
+
+    // For text files, detect and convert encoding to UTF-8
+    if (mimeType.startsWith('text/') || mimeType.includes('csv')) {
+      content = this.ensureUTF8Encoding(content);
+    }
+
     return {
-      content: responseType === 'text'
-        ? Buffer.from(response.data as string, 'utf-8')
-        : Buffer.from(response.data as ArrayBuffer),
+      content,
       name,
       mimeType
     };
+  }
+
+  /**
+   * Ensure buffer is properly encoded as UTF-8
+   * Handles Turkish characters and various source encodings
+   */
+  private ensureUTF8Encoding(buffer: Buffer): Buffer {
+    // Strip BOM if present
+    let cleanBuffer = buffer;
+    if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+      cleanBuffer = buffer.slice(3);
+    } else if (buffer.length >= 2 && buffer[0] === 0xFF && buffer[1] === 0xFE) {
+      cleanBuffer = buffer.slice(2);
+    } else if (buffer.length >= 2 && buffer[0] === 0xFE && buffer[1] === 0xFF) {
+      cleanBuffer = buffer.slice(2);
+    }
+
+    // Detect encoding
+    const detected = jschardet.detect(cleanBuffer);
+    const encoding = detected.encoding || 'UTF-8';
+    const confidence = detected.confidence || 0;
+
+    console.log(`[GoogleDrive] Encoding detected: ${encoding} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+
+    // Map encoding names
+    const encodingMap: Record<string, string> = {
+      'ascii': 'utf-8',
+      'ASCII': 'utf-8',
+      'UTF-8': 'utf-8',
+      'ISO-8859-1': 'iso-8859-1',
+      'ISO-8859-9': 'iso-8859-9',
+      'windows-1252': 'win1252',
+      'windows-1254': 'win1254',
+      'WINDOWS-1252': 'win1252',
+      'WINDOWS-1254': 'win1254',
+    };
+
+    const normalizedEncoding = encodingMap[encoding] || encoding.toLowerCase();
+
+    // If already UTF-8 with high confidence, return as-is
+    if ((normalizedEncoding === 'utf-8' || normalizedEncoding === 'ascii') && confidence > 0.8) {
+      return cleanBuffer;
+    }
+
+    // Try detected encoding first
+    try {
+      if (iconv.encodingExists(normalizedEncoding)) {
+        const decoded = iconv.decode(cleanBuffer, normalizedEncoding);
+        if (/[üşğıöçÜŞĞİÖÇ]/.test(decoded) && !/[\uFFFD�]/.test(decoded)) {
+          console.log(`[GoogleDrive] Successfully decoded with ${normalizedEncoding}`);
+          return Buffer.from(decoded, 'utf-8');
+        }
+      }
+    } catch (e) {
+      // Continue to fallbacks
+    }
+
+    // Try Turkish encodings as fallback
+    for (const enc of ['win1254', 'iso-8859-9', 'win1252', 'iso-8859-1']) {
+      try {
+        if (iconv.encodingExists(enc)) {
+          const decoded = iconv.decode(cleanBuffer, enc);
+          if (!decoded.includes('�') && !decoded.includes('\uFFFD')) {
+            const hasTurkish = /[üşğıöçÜŞĞİÖÇ]/.test(decoded);
+            const hasBroken = /Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä/.test(decoded);
+            if (hasTurkish && !hasBroken) {
+              console.log(`[GoogleDrive] Successfully decoded with fallback: ${enc}`);
+              return Buffer.from(decoded, 'utf-8');
+            }
+          }
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    // Return as-is if nothing works
+    return cleanBuffer;
   }
 
   /**
