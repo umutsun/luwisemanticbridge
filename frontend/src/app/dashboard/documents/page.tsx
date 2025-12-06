@@ -160,6 +160,13 @@ export default function DocumentManagerPage() {
   const [driveFolderPath, setDriveFolderPath] = useState<{id: string; name: string}[]>([]);
   const [currentDriveFolderId, setCurrentDriveFolderId] = useState<string | null>(null);
 
+  // Google Drive import job tracking (background job system)
+  const [driveImportJobId, setDriveImportJobId] = useState<number | null>(null);
+  const [driveImportProgress, setDriveImportProgress] = useState(0);
+  const [driveImportProcessed, setDriveImportProcessed] = useState(0);
+  const [driveImportTotal, setDriveImportTotal] = useState(0);
+  const [driveImportCurrentFile, setDriveImportCurrentFile] = useState('');
+
   // Skipped embeddings states
   const [showSkippedModal, setShowSkippedModal] = useState(false);
   const [skippedEmbeddings, setSkippedEmbeddings] = useState<any[]>([]);
@@ -615,75 +622,76 @@ export default function DocumentManagerPage() {
       return;
     }
 
-    // Get file info for progress display
+    // Get file IDs
     const fileIds = Array.from(selectedDriveFiles);
-    const filesToImport = driveFiles.filter(f => fileIds.includes(f.id));
-    const totalFiles = filesToImport.length;
 
     // Close modal and show progress
     setShowDriveModal(false);
+    setDriveImporting(true);
     setUploading(true);
     setUploadProgress(0);
-    setCurrentOperation('Starting import...');
+    setCurrentOperation('Initializing import...');
 
     const token = localStorage.getItem('token');
     if (!token) {
-      setUploading(false);
-      setUploadProgress(0);
-      setCurrentOperation('');
-      return;
-    }
-
-    let successCount = 0;
-    let failedCount = 0;
-
-    // Import files one by one for real-time progress
-    for (let i = 0; i < filesToImport.length; i++) {
-      const file = filesToImport[i];
-      const progress = Math.round(((i) / totalFiles) * 100);
-      setUploadProgress(progress);
-      setCurrentOperation(`${file.name}`);
-
-      try {
-        const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ fileIds: [file.id] })
-        });
-
-        const data = await response.json();
-        if (response.ok && data.imported > 0) {
-          successCount++;
-        } else {
-          failedCount++;
-        }
-      } catch (error) {
-        failedCount++;
-      }
-
-      // Update progress after each file
-      setUploadProgress(Math.round(((i + 1) / totalFiles) * 100));
-    }
-
-    // Complete
-    setUploadProgress(100);
-    setCurrentOperation('Complete');
-
-    setTimeout(() => {
+      setDriveImporting(false);
       setUploading(false);
       setUploadProgress(0);
       setCurrentOperation('');
       toast({
-        title: 'Import Complete',
-        description: `Imported ${successCount} file${successCount !== 1 ? 's' : ''}${failedCount > 0 ? `, ${failedCount} failed` : ''}`
+        title: 'Authentication Required',
+        description: 'Please log in to import files',
+        variant: 'destructive'
       });
-      setSelectedDriveFiles(new Set());
-      fetchDocuments(); // Refresh document list
-      fetchPhysicalFiles(); // Refresh physical files list
-    }, 500);
+      return;
+    }
+
+    try {
+      console.log('[GoogleDrive] Starting background import for', fileIds.length, 'files');
+
+      // Use new background job endpoint
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import-with-progress`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ fileIds })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.jobId) {
+        console.log('[GoogleDrive] Background import job started:', data.jobId);
+
+        // Set job ID to trigger WebSocket listener
+        setDriveImportJobId(data.jobId);
+        setDriveImportTotal(data.totalFiles || fileIds.length);
+        setCurrentOperation('Import started...');
+
+        // Clear selected files
+        setSelectedDriveFiles(new Set());
+
+        toast({
+          title: 'Import Started',
+          description: `Importing ${data.totalFiles || fileIds.length} files in background. Progress will be shown below.`,
+        });
+      } else {
+        throw new Error(data.error || 'Failed to start import job');
+      }
+    } catch (error: any) {
+      console.error('[GoogleDrive] Import failed:', error);
+      setDriveImporting(false);
+      setUploading(false);
+      setUploadProgress(0);
+      setCurrentOperation('');
+
+      toast({
+        title: 'Import Failed',
+        description: error.message || 'An error occurred while starting the import',
+        variant: 'destructive'
+      });
+    }
   };
 
   const openDriveFilePicker = () => {
@@ -1750,6 +1758,109 @@ export default function DocumentManagerPage() {
       socket.disconnect();
     };
   }, [batchJobId]);
+
+  // WebSocket for Google Drive import job progress
+  useEffect(() => {
+    if (!driveImportJobId) return;
+
+    console.log('[GoogleDrive WebSocket] Setting up connection for job:', driveImportJobId);
+
+    const token = localStorage.getItem('token');
+    const socket = io(API_CONFIG.baseUrl, {
+      auth: { token },
+      transports: ['websocket'],
+      reconnectionAttempts: 5,
+      timeout: 10000
+    });
+
+    socket.on('connect', () => {
+      console.log('[GoogleDrive WebSocket] ✅ Connected for import job:', driveImportJobId);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('[GoogleDrive WebSocket] ❌ Connection error:', error);
+    });
+
+    socket.on('import:job:progress', (data: any) => {
+      console.log('[GoogleDrive WebSocket] 📊 Progress update:', data);
+
+      if (data.jobId !== driveImportJobId) return; // Ignore other jobs
+
+      // Update progress states
+      if (data.progress !== undefined) {
+        setDriveImportProgress(data.progress);
+        setUploadProgress(data.progress);
+      }
+
+      if (data.processedFiles !== undefined) {
+        setDriveImportProcessed(data.processedFiles);
+      }
+
+      if (data.totalFiles !== undefined) {
+        setDriveImportTotal(data.totalFiles);
+      }
+
+      if (data.currentFile) {
+        setDriveImportCurrentFile(data.currentFile);
+        setCurrentOperation(data.currentFile);
+      }
+
+      // Refresh documents list incrementally
+      if (data.processedFiles && data.processedFiles > 0) {
+        fetchDocuments();
+      }
+    });
+
+    socket.on('import:job:status', (data: any) => {
+      console.log('[GoogleDrive WebSocket] 📢 Status update:', data);
+
+      if (data.jobId !== driveImportJobId) return;
+
+      if (data.status === 'completed') {
+        setDriveImportJobId(null);
+        setDriveImporting(false);
+        setUploading(false);
+        setUploadProgress(100);
+        setCurrentOperation('Complete');
+
+        setTimeout(() => {
+          setUploadProgress(0);
+          setCurrentOperation('');
+          setDriveImportProgress(0);
+          setDriveImportProcessed(0);
+          setDriveImportTotal(0);
+          setDriveImportCurrentFile('');
+        }, 2000);
+
+        // Refresh all data
+        Promise.all([fetchDocuments(), fetchPhysicalFiles(), fetchStats()]);
+
+        toast({
+          title: 'Import Complete',
+          description: `Successfully imported ${data.successfulFiles || driveImportTotal} files from Google Drive`
+        });
+      } else if (data.status === 'failed') {
+        setDriveImportJobId(null);
+        setDriveImporting(false);
+        setUploading(false);
+        setUploadProgress(0);
+        setCurrentOperation('');
+
+        // Still refresh to show any partial imports
+        Promise.all([fetchDocuments(), fetchPhysicalFiles(), fetchStats()]);
+
+        toast({
+          title: 'Import Failed',
+          description: 'An error occurred during the import process',
+          variant: 'destructive'
+        });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [driveImportJobId]);
 
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
