@@ -6,7 +6,7 @@
  * OAuth credentials can be configured from Settings UI.
  */
 
-import { google, drive_v3 } from 'googleapis';
+import { google, drive_v3, sheets_v4 } from 'googleapis';
 import pool from '../config/database';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -42,6 +42,7 @@ interface DriveFile {
 
 class GoogleDriveService {
   private drive: drive_v3.Drive | null = null;
+  private sheets: sheets_v4.Sheets | null = null;
   private config: GoogleDriveConfig | null = null;
   private oauth2Client: any = null;
   private oauthCredentials: OAuthCredentials | null = null;
@@ -237,6 +238,9 @@ class GoogleDriveService {
       // Initialize Drive API
       this.drive = google.drive({ version: 'v3', auth: this.oauth2Client });
 
+      // Initialize Sheets API for spreadsheet access
+      this.sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+
       console.log('[GoogleDrive] Service initialized successfully');
       return true;
     } catch (error: any) {
@@ -368,8 +372,11 @@ class GoogleDriveService {
       query += ` and (
         mimeType = 'application/pdf' or
         mimeType = 'application/vnd.google-apps.document' or
+        mimeType = 'application/vnd.google-apps.spreadsheet' or
         mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or
+        mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or
         mimeType = 'application/msword' or
+        mimeType = 'application/vnd.ms-excel' or
         mimeType = 'text/plain' or
         mimeType = 'text/csv' or
         mimeType = 'application/json' or
@@ -422,7 +429,18 @@ class GoogleDriveService {
     const mimeType = metadata.data.mimeType!;
     const name = metadata.data.name!;
 
-    // Handle Google Docs files (need to export)
+    // Handle Google Spreadsheet files - use Sheets API for proper data with headers
+    if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+      console.log('[GoogleDrive] Downloading Google Spreadsheet via Sheets API:', name);
+      const csvContent = await this.downloadSpreadsheetAsCSV(fileId);
+      return {
+        content: Buffer.from(csvContent, 'utf-8'),
+        name: this.addExportExtension(name, 'text/csv'),
+        mimeType: 'text/csv'
+      };
+    }
+
+    // Handle other Google Docs files (need to export)
     if (mimeType.startsWith('application/vnd.google-apps.')) {
       const exportMimeType = this.getExportMimeType(mimeType);
       const response = await this.drive!.files.export(
@@ -454,6 +472,72 @@ class GoogleDriveService {
       name,
       mimeType
     };
+  }
+
+  /**
+   * Download Google Spreadsheet data using Sheets API
+   * Returns CSV string with headers guaranteed
+   */
+  private async downloadSpreadsheetAsCSV(spreadsheetId: string): Promise<string> {
+    if (!this.sheets) {
+      throw new Error('Sheets API not initialized');
+    }
+
+    try {
+      // Get spreadsheet metadata to find first sheet
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: 'sheets.properties'
+      });
+
+      const firstSheet = spreadsheet.data.sheets?.[0];
+      const sheetName = firstSheet?.properties?.title || 'Sheet1';
+
+      console.log(`[GoogleDrive] Reading sheet: ${sheetName}`);
+
+      // Get all values from the sheet
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: sheetName,
+        valueRenderOption: 'FORMATTED_VALUE',
+        dateTimeRenderOption: 'FORMATTED_STRING'
+      });
+
+      const values = response.data.values;
+      if (!values || values.length === 0) {
+        console.log('[GoogleDrive] Spreadsheet is empty');
+        return '';
+      }
+
+      console.log(`[GoogleDrive] Read ${values.length} rows, ${values[0]?.length || 0} columns`);
+
+      // Convert to CSV format
+      const csvRows = values.map(row => {
+        return row.map(cell => {
+          const cellStr = String(cell ?? '');
+          // Escape quotes and wrap in quotes if contains comma, quote, or newline
+          if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+            return `"${cellStr.replace(/"/g, '""')}"`;
+          }
+          return cellStr;
+        }).join(',');
+      });
+
+      const csvContent = csvRows.join('\n');
+      console.log(`[GoogleDrive] Generated CSV: ${csvContent.length} chars, first row: ${csvRows[0]?.substring(0, 100)}`);
+
+      return csvContent;
+    } catch (error: any) {
+      console.error('[GoogleDrive] Failed to read spreadsheet:', error.message);
+      // Fallback to export API
+      console.log('[GoogleDrive] Falling back to export API...');
+      const response = await this.drive!.files.export(
+        { fileId: spreadsheetId, mimeType: 'text/csv' },
+        { responseType: 'arraybuffer' }
+      );
+      const buffer = Buffer.from(response.data as ArrayBuffer);
+      return this.ensureUTF8Encoding(buffer).toString('utf-8');
+    }
   }
 
   /**
