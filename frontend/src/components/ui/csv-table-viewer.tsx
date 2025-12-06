@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,7 +16,11 @@ import {
   BarChart3,
   FileText,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Plus,
+  Edit3,
+  Check,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -38,9 +42,23 @@ interface CSVViewerProps {
       columnTypes: CSVColumn[];
     };
   };
+  /** Enable header editing mode */
+  editable?: boolean;
+  /** Callback when headers are changed */
+  onHeadersChange?: (headers: string[], hasHeaderRow: boolean) => void;
+  /** Initial state - does the data have headers? */
+  initialHasHeaders?: boolean;
 }
 
-export default function CSVTableViewer({ data, title, className = "", metadata }: CSVViewerProps) {
+export default function CSVTableViewer({
+  data,
+  title,
+  className = "",
+  metadata,
+  editable = false,
+  onHeadersChange,
+  initialHasHeaders = true
+}: CSVViewerProps) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const defaultTitle = title || t('tableViewer.title');
@@ -50,36 +68,57 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [loadedRowsCount, setLoadedRowsCount] = useState(10); // Initial preview rows
+  const [loadedRowsCount, setLoadedRowsCount] = useState(10);
+
+  // Header editing state
+  const [hasHeaderRow, setHasHeaderRow] = useState(initialHasHeaders);
+  const [editableHeaders, setEditableHeaders] = useState<string[]>([]);
+  const [isEditingHeaders, setIsEditingHeaders] = useState(false);
 
   const rowsPerPage = 50;
 
   // Parse CSV data
-  const { headers, rows, stats } = useMemo(() => {
-    if (!data) return { headers: [], rows: [], stats: null };
+  const { headers, rows, stats, rawLines } = useMemo(() => {
+    if (!data) return { headers: [], rows: [], stats: null, rawLines: [] };
 
     try {
       const lines = data.split('\n').filter(line => line.trim());
-      if (lines.length === 0) return { headers: [], rows: [], stats: null };
+      if (lines.length === 0) return { headers: [], rows: [], stats: null, rawLines: [] };
 
-      // Parse headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      // If no header row, generate Column_1, Column_2, etc.
+      let parsedHeaders: string[];
+      let dataStartIndex: number;
+
+      if (hasHeaderRow) {
+        parsedHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        dataStartIndex = 1;
+      } else {
+        // Count columns from first data row
+        const firstRowCols = lines[0].split(',').length;
+        parsedHeaders = Array.from({ length: firstRowCols }, (_, i) => `Column_${i + 1}`);
+        dataStartIndex = 0;
+      }
+
+      // Use editable headers if available
+      const finalHeaders = editableHeaders.length === parsedHeaders.length
+        ? editableHeaders
+        : parsedHeaders;
 
       // Parse rows
-      const rows = lines.slice(1).map((line, index) => {
+      const rows = lines.slice(dataStartIndex).map((line, index) => {
         const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
         const row: Record<string, string | number> = { _id: index + 1 };
-        headers.forEach((header, i) => {
+        finalHeaders.forEach((header, i) => {
           row[header] = values[i] || '';
         });
         return row;
       });
 
-      // Calculate stats if not provided
+      // Calculate stats
       const stats = metadata?.csvStats || {
         totalRows: rows.length,
-        totalColumns: headers.length,
-        columnTypes: headers.map(header => {
+        totalColumns: finalHeaders.length,
+        columnTypes: finalHeaders.map(header => {
           const values = rows.map(row => row[header]);
           const numericValues = values.filter(v => !isNaN(parseFloat(String(v))) && String(v) !== '');
 
@@ -92,12 +131,48 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
         })
       };
 
-      return { headers, rows, stats };
+      return { headers: finalHeaders, rows, stats, rawLines: lines };
     } catch (error) {
       console.error('Error parsing CSV:', error);
-      return { headers: [], rows: [], stats: null };
+      return { headers: [], rows: [], stats: null, rawLines: [] };
     }
-  }, [data, metadata]);
+  }, [data, metadata, hasHeaderRow, editableHeaders]);
+
+  // Initialize editable headers when data changes
+  useEffect(() => {
+    if (headers.length > 0 && editableHeaders.length === 0) {
+      setEditableHeaders(headers);
+    }
+  }, [headers]);
+
+  // Handle header change
+  const handleHeaderChange = useCallback((index: number, value: string) => {
+    const newHeaders = [...editableHeaders];
+    newHeaders[index] = value;
+    setEditableHeaders(newHeaders);
+  }, [editableHeaders]);
+
+  // Toggle header row mode
+  const toggleHeaderRow = useCallback(() => {
+    const newHasHeader = !hasHeaderRow;
+    setHasHeaderRow(newHasHeader);
+    setEditableHeaders([]); // Reset to trigger re-parse
+    if (onHeadersChange) {
+      onHeadersChange([], newHasHeader);
+    }
+  }, [hasHeaderRow, onHeadersChange]);
+
+  // Save headers
+  const saveHeaders = useCallback(() => {
+    setIsEditingHeaders(false);
+    if (onHeadersChange) {
+      onHeadersChange(editableHeaders, hasHeaderRow);
+    }
+    toast({
+      title: t('tableViewer.headersSaved') || 'Headers saved',
+      duration: 2000
+    });
+  }, [editableHeaders, hasHeaderRow, onHeadersChange, toast, t]);
 
   // Filter and sort data
   const filteredAndSortedRows = useMemo(() => {
@@ -196,13 +271,50 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
             <span>{filteredAndSortedRows.length.toLocaleString()} {t('tableViewer.filtered')}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {editable && (
+            <>
+              {/* Toggle header row */}
+              <Button
+                variant={hasHeaderRow ? "default" : "outline"}
+                size="sm"
+                onClick={toggleHeaderRow}
+                title={hasHeaderRow ? "Data has headers" : "No headers - click to add"}
+                className="h-7 px-2 text-xs"
+              >
+                {hasHeaderRow ? "H" : "+H"}
+              </Button>
+              {/* Edit/Save headers */}
+              {isEditingHeaders ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={saveHeaders}
+                  className="h-7 w-7 p-0"
+                  title="Save headers"
+                >
+                  <Check className="h-3 w-3" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditingHeaders(true)}
+                  className="h-7 w-7 p-0"
+                  title="Edit headers"
+                >
+                  <Edit3 className="h-3 w-3" />
+                </Button>
+              )}
+            </>
+          )}
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() => setIsFullscreen(!isFullscreen)}
+            className="h-7 w-7 p-0"
           >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            {isFullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
           </Button>
         </div>
       </div>
@@ -256,24 +368,30 @@ export default function CSVTableViewer({ data, title, className = "", metadata }
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
-                <th className="w-16 p-2 text-left font-medium">#</th>
+                <th className="w-12 p-1 text-left font-medium text-xs">#</th>
                 {headers.map((header, index) => (
                   <th
                     key={index}
-                    className="p-2 text-left font-medium cursor-pointer hover:bg-muted/80 transition-colors"
-                    onClick={() => handleSort(header)}
+                    className={`p-1 text-left font-medium ${!isEditingHeaders ? 'cursor-pointer hover:bg-muted/80' : ''} transition-colors`}
+                    onClick={() => !isEditingHeaders && handleSort(header)}
                   >
-                    <div className="flex items-center gap-1">
-                      <span>{header}</span>
-                      {sortColumn === header && (
-                        <span className="text-xs">
-                          {sortDirection === 'asc' ? '↑' : '↓'}
-                        </span>
-                      )}
-                      <Badge variant="outline" className="ml-1 text-xs">
-                        {stats.columnTypes[index]?.type === 'numeric' ? t('tableViewer.numericType') : t('tableViewer.textType')}
-                      </Badge>
-                    </div>
+                    {isEditingHeaders && editable ? (
+                      <Input
+                        value={editableHeaders[index] || ''}
+                        onChange={(e) => handleHeaderChange(index, e.target.value)}
+                        className="h-6 px-1 py-0 text-xs font-medium min-w-[60px]"
+                        placeholder={`Col ${index + 1}`}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs">{header}</span>
+                        {sortColumn === header && (
+                          <span className="text-xs opacity-60">
+                            {sortDirection === 'asc' ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </th>
                 ))}
               </tr>
