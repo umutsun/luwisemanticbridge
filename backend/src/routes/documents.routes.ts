@@ -11,6 +11,7 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.midd
 import { createUploadRateLimit } from '../middleware/rate-limit.middleware';
 import { getUploadLimitBytes } from '../middleware/security.middleware';
 import { unifiedEmbeddingsSync } from '../services/unified-embeddings-sync.service';
+import importJobService from '../services/import-job.service';
 import * as iconv from 'iconv-lite';
 import * as jschardet from 'jschardet';
 import * as ExcelJS from 'exceljs';
@@ -2224,5 +2225,202 @@ Your response (JSON array only):`;
     });
   }
 });
+
+/**
+ * Upload file with background processing and progress tracking
+ * Returns job ID immediately, processes file in background
+ */
+router.post('/upload-with-progress', createUploadRateLimit.middleware, upload.single('file'), authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { originalname, size, mimetype, path: filePath } = req.file;
+    const userId = req.user?.userId;
+
+    console.log(`[Upload Job] File uploaded: ${originalname} (${size} bytes)`);
+
+    // Create import job
+    const job = await importJobService.createJob({
+      userId,
+      jobType: 'local_upload',
+      totalFiles: 1,
+      metadata: {
+        filename: originalname,
+        size,
+        mimetype,
+        filePath
+      }
+    });
+
+    // Process file in background
+    processFileInBackground(job.id, filePath, originalname, mimetype, size).catch(err => {
+      console.error(`[Upload Job ${job.id}] Background processing failed:`, err);
+    });
+
+    res.json({
+      success: true,
+      jobId: job.id,
+      message: 'File upload started. Processing in background.'
+    });
+  } catch (error: any) {
+    console.error('[Upload with progress] Error:', error);
+    if (req.file?.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.error('[Upload with progress] Cleanup error:', cleanupError);
+      }
+    }
+    res.status(500).json({
+      error: error.message || 'Failed to upload document'
+    });
+  }
+});
+
+/**
+ * Background file processing function
+ */
+async function processFileInBackground(
+  jobId: number,
+  filePath: string,
+  originalname: string,
+  mimetype: string,
+  size: number
+): Promise<void> {
+  try {
+    console.log(`[Upload Job ${jobId}] Starting background processing...`);
+
+    await importJobService.updateJobStatus(jobId, 'in_progress');
+    await importJobService.updateProgress({
+      jobId,
+      processedFiles: 0,
+      successfulFiles: 0,
+      failedFiles: 0,
+      currentFile: originalname
+    });
+
+    // Check for existing document
+    const existingCheck = await lsembPool.query(
+      'SELECT id, title, file_path FROM documents WHERE title = $1',
+      [originalname]
+    );
+
+    if (existingCheck.rows.length > 0) {
+      const oldFilePath = existingCheck.rows[0].file_path;
+      if (oldFilePath && oldFilePath !== filePath && fs.existsSync(oldFilePath)) {
+        try {
+          fs.unlinkSync(oldFilePath);
+          console.log(`[Upload Job ${jobId}] Deleted old file: ${oldFilePath}`);
+        } catch (err) {
+          console.warn(`[Upload Job ${jobId}] Could not delete old file:`, err);
+        }
+      }
+    }
+
+    // Process file
+    let processedDoc;
+    try {
+      processedDoc = await contextualDocumentProcessor.processFile(filePath, originalname, mimetype);
+    } catch (err) {
+      console.error(`[Upload Job ${jobId}] Contextual processor failed, trying fallback:`, err);
+      try {
+        processedDoc = await documentProcessor.processFile(filePath, originalname, mimetype);
+      } catch (fallbackErr) {
+        console.error(`[Upload Job ${jobId}] Fallback processor failed:`, fallbackErr);
+        processedDoc = {
+          title: originalname,
+          content: '',
+          chunks: [],
+          metadata: {
+            error: 'Processing failed',
+            needsOCR: mimetype.includes('pdf'),
+            size: size
+          }
+        };
+      }
+    }
+
+    const ext = path.extname(originalname).toLowerCase().replace('.', '');
+    const fileType = ext || processedDoc.metadata?.type || 'text';
+
+    const cleanMetadata = (obj: any): any => {
+      if (typeof obj === 'string') {
+        return obj.replace(/\0/g, '').replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
+      } else if (Array.isArray(obj)) {
+        return obj.map(cleanMetadata);
+      } else if (obj && typeof obj === 'object') {
+        const cleaned: any = {};
+        for (const key in obj) {
+          cleaned[key] = cleanMetadata(obj[key]);
+        }
+        return cleaned;
+      }
+      return obj;
+    };
+
+    const cleanedMetadata = cleanMetadata({
+      ...processedDoc.metadata,
+      originalName: originalname,
+      mimeType: mimetype,
+      uploadDate: new Date(),
+      chunks: processedDoc.chunks.length,
+    });
+
+    // Save to database
+    await lsembPool.query(
+      `INSERT INTO documents (
+        filename, title, content, file_type, size, file_path, metadata,
+        original_filename, upload_count, created_at, updated_at
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, NOW(), NOW())
+       ON CONFLICT (filename)
+       DO UPDATE SET
+         content = EXCLUDED.content,
+         file_type = EXCLUDED.file_type,
+         size = EXCLUDED.size,
+         file_path = EXCLUDED.file_path,
+         metadata = EXCLUDED.metadata,
+         original_filename = EXCLUDED.original_filename,
+         updated_at = NOW(),
+         upload_count = COALESCE(documents.upload_count, 0) + 1,
+         transform_status = 'pending',
+         transform_progress = 0
+       RETURNING *`,
+      [
+        originalname,
+        originalname,
+        (processedDoc.content || '').substring(0, 100000),
+        fileType,
+        size,
+        filePath,
+        JSON.stringify(cleanedMetadata),
+        originalname
+      ]
+    );
+
+    console.log(`[Upload Job ${jobId}] File processed and saved successfully`);
+
+    await importJobService.updateProgress({
+      jobId,
+      processedFiles: 1,
+      successfulFiles: 1,
+      failedFiles: 0
+    });
+
+    await importJobService.updateJobStatus(jobId, 'completed');
+  } catch (error: any) {
+    console.error(`[Upload Job ${jobId}] Processing error:`, error);
+    await importJobService.updateProgress({
+      jobId,
+      processedFiles: 1,
+      successfulFiles: 0,
+      failedFiles: 1,
+      currentError: error.message
+    });
+    await importJobService.updateJobStatus(jobId, 'failed');
+  }
+}
 
 export default router;
