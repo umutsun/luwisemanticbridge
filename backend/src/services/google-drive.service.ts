@@ -493,9 +493,16 @@ class GoogleDriveService {
 
     const normalizedEncoding = encodingMap[encoding] || encoding.toLowerCase();
 
-    // If already UTF-8 with high confidence, return as-is
+    // If detected as UTF-8 or ASCII with high confidence, try it first but verify
     if ((normalizedEncoding === 'utf-8' || normalizedEncoding === 'ascii') && confidence > 0.8) {
-      return cleanBuffer;
+      const utf8Result = cleanBuffer.toString('utf-8');
+      // Check for broken characters that indicate wrong encoding
+      const hasBrokenChars = /[\uFFFD�]|Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä|Ãœ|Å|Ã‡|Ã–|Ä°/.test(utf8Result);
+      if (!hasBrokenChars) {
+        console.log('[GoogleDrive] UTF-8 decode successful, no broken characters');
+        return cleanBuffer;
+      }
+      console.log('[GoogleDrive] UTF-8 has broken characters, trying Turkish encodings...');
     }
 
     // Try detected encoding first

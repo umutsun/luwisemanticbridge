@@ -75,9 +75,16 @@ function decodeBufferToUTF8(buffer: Buffer): string {
 
   const normalizedEncoding = encodingMap[encoding] || encoding.toLowerCase();
 
-  // If already UTF-8 with high confidence, just convert
+  // If detected as UTF-8 or ASCII with high confidence, try it first but verify
   if ((normalizedEncoding === 'utf-8' || normalizedEncoding === 'ascii') && confidence > 0.8) {
-    return cleanBuffer.toString('utf-8');
+    const utf8Result = cleanBuffer.toString('utf-8');
+    // Check for broken characters that indicate wrong encoding
+    const hasBrokenChars = /[\uFFFD�]|Ã¼|Ã¶|Ã§|Ã°|Ä±|Å|Ä|Ãœ|Å|Ã‡|Ã–|Ä°/.test(utf8Result);
+    if (!hasBrokenChars) {
+      console.log('[Encoding] UTF-8 decode successful, no broken characters');
+      return utf8Result;
+    }
+    console.log('[Encoding] UTF-8 has broken characters, trying Turkish encodings...');
   }
 
   // Try to decode with detected encoding

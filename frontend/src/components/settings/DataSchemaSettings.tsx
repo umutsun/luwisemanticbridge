@@ -336,6 +336,7 @@ export default function DataSchemaSettings() {
     : allSchemas.filter(s => s.industry_code === selectedIndustry);
 
   return (
+    <>
     <div className="grid grid-cols-[35%_65%] gap-6">
       {/* Schema List - Left Column */}
       <Card>
@@ -694,6 +695,6 @@ export default function DataSchemaSettings() {
           <PatternManagement schemaId={selectedSchemaId} />
         </div>
       )}
-    </div>
+    </>
   );
 }
