@@ -40,6 +40,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop trigger if exists (for re-runs)
+DROP TRIGGER IF EXISTS trigger_import_jobs_updated_at ON import_jobs;
+
 CREATE TRIGGER trigger_import_jobs_updated_at
   BEFORE UPDATE ON import_jobs
   FOR EACH ROW
