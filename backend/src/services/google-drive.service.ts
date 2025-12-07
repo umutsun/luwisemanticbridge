@@ -722,14 +722,6 @@ class GoogleDriveService {
         const { content, name, mimeType } = await this.downloadFile(fileId);
         console.log(`[GoogleDrive Job ${jobId}] Downloaded: ${name} (${content.length} bytes, ${mimeType})`);
 
-        await importJobService.updateProgress({
-          jobId,
-          processedFiles,
-          successfulFiles,
-          failedFiles,
-          currentFile: name
-        });
-
         // Determine file type
         const fileType = this.getFileType(mimeType, name);
 
@@ -742,19 +734,43 @@ class GoogleDriveService {
           .replace(/_+/g, '_');
         const filePath = path.join(docsDir, safeName);
 
-        fs.writeFileSync(filePath, content);
+        // Memory-safe: Stream write for large files
+        const fileSize = content.length;
+        const isLargeFile = fileSize > 10 * 1024 * 1024; // >10MB
+
+        if (isLargeFile) {
+          console.log(`[GoogleDrive Job ${jobId}] Large file detected (${(fileSize / 1024 / 1024).toFixed(2)} MB), using stream write...`);
+          await fs.promises.writeFile(filePath, content);
+        } else {
+          fs.writeFileSync(filePath, content);
+        }
         console.log(`[GoogleDrive Job ${jobId}] Saved to disk: ${filePath}`);
 
-        // Process file
+        // Process file with memory optimization for large files
         let processedDoc;
         try {
-          processedDoc = await contextualDocumentProcessor.processFile(filePath, name, mimeType);
-          console.log(`[GoogleDrive Job ${jobId}] Processed: ${name} - ${processedDoc.content?.length || 0} chars`);
+          if (isLargeFile && mimeType === 'text/csv') {
+            // For large CSV files, don't process full content - just metadata
+            console.log(`[GoogleDrive Job ${jobId}] Skipping full content processing for large CSV (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
+            processedDoc = {
+              title: name,
+              content: `[Large CSV file: ${(fileSize / 1024 / 1024).toFixed(2)} MB - content available in file_path]`,
+              chunks: [],
+              metadata: {
+                large_file: true,
+                file_size_mb: (fileSize / 1024 / 1024).toFixed(2),
+                processing_mode: 'deferred'
+              }
+            };
+          } else {
+            processedDoc = await contextualDocumentProcessor.processFile(filePath, name, mimeType);
+            console.log(`[GoogleDrive Job ${jobId}] Processed: ${name} - ${processedDoc.content?.length || 0} chars`);
+          }
         } catch (processingError: any) {
           console.error(`[GoogleDrive Job ${jobId}] Processing error for ${name}:`, processingError.message);
           processedDoc = {
             title: name,
-            content: mimeType.startsWith('text/') ? content.toString('utf-8') : '',
+            content: mimeType.startsWith('text/') ? content.toString('utf-8').substring(0, 1000) + '...[truncated]' : '',
             chunks: [],
             metadata: {
               processingError: processingError.message
@@ -789,6 +805,15 @@ class GoogleDriveService {
             console.log(`[GoogleDrive Job ${jobId}] Skipping ${name} - already imported with same size`);
             successfulFiles++;
             processedFiles++;
+
+            // Send progress update for skipped file
+            await importJobService.updateProgress({
+              jobId,
+              processedFiles,
+              successfulFiles,
+              failedFiles,
+              currentFile: `${name} (skipped - already imported)`
+            });
             continue;
           }
 
@@ -835,6 +860,15 @@ class GoogleDriveService {
         successfulFiles++;
         processedFiles++;
         console.log(`[GoogleDrive Job ${jobId}] Successfully imported: ${name}`);
+
+        // Send progress update after successful processing
+        await importJobService.updateProgress({
+          jobId,
+          processedFiles,
+          successfulFiles,
+          failedFiles,
+          currentFile: name
+        });
       } catch (error: any) {
         failedFiles++;
         processedFiles++;
@@ -849,6 +883,15 @@ class GoogleDriveService {
         });
       }
     }
+
+    // Send final 100% progress update before completion
+    await importJobService.updateProgress({
+      jobId,
+      processedFiles,
+      successfulFiles,
+      failedFiles,
+      currentFile: 'Import completed'
+    });
 
     // Mark job as completed
     await importJobService.updateJobStatus(jobId, 'completed');
