@@ -1676,9 +1676,12 @@ export default function DocumentManagerPage() {
 
     const socket = io(API_CONFIG.baseUrl, {
       auth: { token },
-      transports: ['websocket'],
-      reconnectionAttempts: 5,
-      timeout: 10000
+      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
+      reconnectionAttempts: 10,
+      timeout: 30000,
+      upgrade: true,
+      rememberUpgrade: false,
+      path: '/socket.io/'
     });
 
     socket.on('connect', () => {
@@ -1804,13 +1807,74 @@ export default function DocumentManagerPage() {
 
     const socket = io(API_CONFIG.baseUrl, {
       auth: { token },
-      transports: ['websocket'],
-      reconnectionAttempts: 5,
-      timeout: 10000
+      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
+      reconnectionAttempts: 10,
+      timeout: 30000,
+      upgrade: true,
+      rememberUpgrade: false,
+      path: '/socket.io/'
     });
+
+    // Fallback polling for import progress (if WebSocket fails)
+    let pollingInterval: NodeJS.Timeout | null = null;
+    let wsConnected = false;
+
+    const startPolling = () => {
+      if (pollingInterval) return;
+      console.log('[GoogleDrive] 🔄 Starting fallback polling for job:', driveImportJobId);
+
+      pollingInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import-job/${driveImportJobId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const job = await response.json();
+            console.log('[GoogleDrive Polling] 📊 Job status:', job);
+
+            // Update progress
+            if (job.progress !== undefined) {
+              setDriveImportProgress(job.progress);
+              setUploadProgress(job.progress);
+            }
+            if (job.processed_files !== undefined) {
+              setDriveImportProcessed(job.processed_files);
+            }
+            if (job.total_files !== undefined) {
+              setDriveImportTotal(job.total_files);
+            }
+            if (job.metadata?.currentFile) {
+              setDriveImportCurrentFile(job.metadata.currentFile);
+              setCurrentOperation(job.metadata.currentFile);
+            }
+
+            // Check completion
+            if (job.status === 'completed' || job.status === 'failed') {
+              if (pollingInterval) clearInterval(pollingInterval);
+              setDriveImportJobId(null);
+              setDriveImporting(false);
+              setUploading(false);
+
+              if (job.status === 'completed') {
+                setUploadProgress(100);
+                setCurrentOperation('Complete');
+                toast({ title: 'Import Complete', description: `Imported ${job.successful_files || 0} files` });
+              } else {
+                toast({ title: 'Import Failed', variant: 'destructive' });
+              }
+
+              Promise.all([fetchDocuments(), fetchPhysicalFiles(), fetchStats()]);
+            }
+          }
+        } catch (err) {
+          console.error('[GoogleDrive Polling] Error:', err);
+        }
+      }, 2000); // Poll every 2 seconds
+    };
 
     socket.on('connect', () => {
       console.log('[GoogleDrive WebSocket] ✅ Connected for import job:', driveImportJobId);
+      wsConnected = true;
 
       // Join user-specific room to receive import job events
       if (userId) {
@@ -1818,11 +1882,17 @@ export default function DocumentManagerPage() {
         console.log('[GoogleDrive WebSocket] 📢 Joined user room:', userId);
       } else {
         console.warn('[GoogleDrive WebSocket] ⚠️ No userId found, cannot join user room');
+        // Start polling if no userId (can't join room)
+        startPolling();
       }
     });
 
     socket.on('connect_error', (error) => {
       console.error('[GoogleDrive WebSocket] ❌ Connection error:', error);
+      // Start polling as fallback if WebSocket fails
+      if (!wsConnected) {
+        startPolling();
+      }
     });
 
     socket.on('import:job:progress', (data: any) => {
@@ -1903,6 +1973,9 @@ export default function DocumentManagerPage() {
 
     return () => {
       socket.disconnect();
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
     };
   }, [driveImportJobId]);
 
