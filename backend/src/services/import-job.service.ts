@@ -229,6 +229,30 @@ class ImportJobService {
   }
 
   /**
+   * Recover stale jobs (in_progress jobs left behind after restart)
+   * Should be called on server startup
+   */
+  async recoverStaleJobs(): Promise<number> {
+    const result = await pool.query(
+      `UPDATE import_jobs
+       SET status = 'failed',
+           metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{error}',
+             '"Job interrupted by server restart"'::jsonb
+           ),
+           completed_at = CURRENT_TIMESTAMP
+       WHERE status IN ('pending', 'in_progress')
+       RETURNING id`
+    );
+
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[ImportJob] Recovered ${result.rowCount} stale jobs (marked as failed)`);
+    }
+    return result.rowCount || 0;
+  }
+
+  /**
    * Map database row to ImportJob
    */
   private mapToImportJob(row: any): ImportJob {

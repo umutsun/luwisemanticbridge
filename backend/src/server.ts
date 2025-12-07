@@ -829,6 +829,11 @@ if (SERVER.WEBSOCKET.ENABLED && io) {
   if (io) {
     importJobService.setSocketIO(io);
     console.log(' Import Job Service initialized with Socket.IO');
+
+    // Recover stale jobs (jobs left in pending/in_progress after restart)
+    importJobService.recoverStaleJobs().catch(err => {
+      console.error('[ImportJob] Failed to recover stale jobs:', err);
+    });
   }
 }
 
