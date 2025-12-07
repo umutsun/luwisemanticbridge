@@ -1660,7 +1660,22 @@ export default function DocumentManagerPage() {
 
     console.log('[WebSocket] Setting up connection for job:', batchJobId);
 
+    const token = localStorage.getItem('token');
+
+    // Decode JWT token to get userId
+    let userId: string | null = null;
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userId = payload.userId || payload.sub || payload.id;
+        console.log('[WebSocket] Extracted userId:', userId);
+      } catch (e) {
+        console.error('[WebSocket] Failed to decode token:', e);
+      }
+    }
+
     const socket = io(API_CONFIG.baseUrl, {
+      auth: { token },
       transports: ['websocket'],
       reconnectionAttempts: 5,
       timeout: 10000
@@ -1668,6 +1683,14 @@ export default function DocumentManagerPage() {
 
     socket.on('connect', () => {
       console.log('[WebSocket] ✅ Connected for batch job:', batchJobId);
+
+      // Join user-specific room to receive job events
+      if (userId) {
+        socket.emit('join', userId);
+        console.log('[WebSocket] 📢 Joined user room:', userId);
+      } else {
+        console.warn('[WebSocket] ⚠️ No userId found, cannot join user room');
+      }
     });
 
     socket.on('connect_error', (error) => {
@@ -1766,6 +1789,19 @@ export default function DocumentManagerPage() {
     console.log('[GoogleDrive WebSocket] Setting up connection for job:', driveImportJobId);
 
     const token = localStorage.getItem('token');
+
+    // Decode JWT token to get userId
+    let userId: string | null = null;
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userId = payload.userId || payload.sub || payload.id;
+        console.log('[GoogleDrive WebSocket] Extracted userId:', userId);
+      } catch (e) {
+        console.error('[GoogleDrive WebSocket] Failed to decode token:', e);
+      }
+    }
+
     const socket = io(API_CONFIG.baseUrl, {
       auth: { token },
       transports: ['websocket'],
@@ -1775,6 +1811,14 @@ export default function DocumentManagerPage() {
 
     socket.on('connect', () => {
       console.log('[GoogleDrive WebSocket] ✅ Connected for import job:', driveImportJobId);
+
+      // Join user-specific room to receive import job events
+      if (userId) {
+        socket.emit('join', userId);
+        console.log('[GoogleDrive WebSocket] 📢 Joined user room:', userId);
+      } else {
+        console.warn('[GoogleDrive WebSocket] ⚠️ No userId found, cannot join user room');
+      }
     });
 
     socket.on('connect_error', (error) => {
