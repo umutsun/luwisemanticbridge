@@ -708,7 +708,7 @@ class GoogleDriveService {
 
   /**
    * Process import job in background - OPTIMIZED for fast CSV downloads
-   * Simply downloads files to docs/ folder, no heavy processing
+   * Downloads to docs/ folder + minimal DB tracking for UI visibility
    */
   private async processImportJob(jobId: number, fileIds: string[], userId?: string): Promise<void> {
     await importJobService.updateJobStatus(jobId, 'in_progress');
@@ -741,6 +741,28 @@ class GoogleDriveService {
         } else {
           fs.writeFileSync(filePath, content);
         }
+
+        // Determine file type
+        const fileType = this.getFileType(mimeType, name);
+
+        // Minimal DB tracking for UI (upsert to handle re-imports)
+        const metadata = {
+          google_drive_id: fileId,
+          source: 'google_drive',
+          imported_at: new Date().toISOString(),
+          import_job_id: jobId
+        };
+
+        await pool.query(
+          `INSERT INTO documents (title, file_path, file_size, file_type, processing_status, metadata)
+           VALUES ($1, $2, $3, $4, 'completed', $5)
+           ON CONFLICT ((metadata->>'google_drive_id'))
+           DO UPDATE SET
+             file_path = $2,
+             file_size = $3,
+             updated_at = CURRENT_TIMESTAMP`,
+          [name, filePath, content.length, fileType, JSON.stringify(metadata)]
+        );
 
         successfulFiles++;
         processedFiles++;
