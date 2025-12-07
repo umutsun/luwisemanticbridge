@@ -1676,11 +1676,11 @@ export default function DocumentManagerPage() {
 
     const socket = io(API_CONFIG.baseUrl, {
       auth: { token },
-      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
+      transports: ['websocket', 'polling'], // Try WebSocket first, then fallback to polling
       reconnectionAttempts: 10,
-      timeout: 30000,
+      timeout: 60000, // Increased to 60s for slow connections
       upgrade: true,
-      rememberUpgrade: false,
+      rememberUpgrade: true, // Remember successful WebSocket upgrade
       path: '/socket.io/'
     });
 
@@ -1807,11 +1807,11 @@ export default function DocumentManagerPage() {
 
     const socket = io(API_CONFIG.baseUrl, {
       auth: { token },
-      transports: ['polling', 'websocket'], // Try polling first, then upgrade to websocket
+      transports: ['websocket', 'polling'], // Try WebSocket first, then fallback to polling
       reconnectionAttempts: 10,
-      timeout: 30000,
+      timeout: 60000, // Increased to 60s for slow connections
       upgrade: true,
-      rememberUpgrade: false,
+      rememberUpgrade: true, // Remember successful WebSocket upgrade
       path: '/socket.io/'
     });
 
@@ -3617,6 +3617,8 @@ export default function DocumentManagerPage() {
       {/* Google Drive File Picker Modal */}
       <Dialog open={showDriveModal} onOpenChange={setShowDriveModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] p-0 gap-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-white/20 dark:border-white/10">
+          {/* Screen reader title */}
+          <DialogTitle className="sr-only">Google Drive File Picker</DialogTitle>
           {/* Header - Breadcrumb only */}
           <div className="px-4 py-2 border-b border-white/10 dark:border-white/5">
             <div className="flex items-center gap-1 text-sm font-medium">
