@@ -707,7 +707,8 @@ class GoogleDriveService {
   }
 
   /**
-   * Process import job in background
+   * Process import job in background - OPTIMIZED for fast CSV downloads
+   * Simply downloads files to docs/ folder, no heavy processing
    */
   private async processImportJob(jobId: number, fileIds: string[], userId?: string): Promise<void> {
     await importJobService.updateJobStatus(jobId, 'in_progress');
@@ -716,17 +717,16 @@ class GoogleDriveService {
     let successfulFiles = 0;
     let failedFiles = 0;
 
+    // Prepare upload directory once
+    const docsDir = this.getUploadDirectory();
+
     for (const fileId of fileIds) {
       try {
         // Download file from Google Drive
         const { content, name, mimeType } = await this.downloadFile(fileId);
-        console.log(`[GoogleDrive Job ${jobId}] Downloaded: ${name} (${content.length} bytes, ${mimeType})`);
+        console.log(`[GoogleDrive Job ${jobId}] Downloaded: ${name} (${(content.length / 1024).toFixed(1)} KB)`);
 
-        // Determine file type
-        const fileType = this.getFileType(mimeType, name);
-
-        // Save file to physical storage first
-        const docsDir = this.getUploadDirectory();
+        // Sanitize filename for filesystem
         const normalizedName = normalizeTurkishChars(name);
         const safeName = normalizedName
           .replace(/[^\w\s\-_.]/g, '_')
@@ -734,134 +734,19 @@ class GoogleDriveService {
           .replace(/_+/g, '_');
         const filePath = path.join(docsDir, safeName);
 
-        // Memory-safe: Stream write for large files
+        // Fast write to disk (async for files >1MB, sync for small files)
         const fileSize = content.length;
-        const isLargeFile = fileSize > 10 * 1024 * 1024; // >10MB
-
-        if (isLargeFile) {
-          console.log(`[GoogleDrive Job ${jobId}] Large file detected (${(fileSize / 1024 / 1024).toFixed(2)} MB), using stream write...`);
+        if (fileSize > 1024 * 1024) { // >1MB
           await fs.promises.writeFile(filePath, content);
         } else {
           fs.writeFileSync(filePath, content);
         }
-        console.log(`[GoogleDrive Job ${jobId}] Saved to disk: ${filePath}`);
-
-        // Process file with memory optimization for large files
-        let processedDoc;
-        try {
-          if (isLargeFile && mimeType === 'text/csv') {
-            // For large CSV files, don't process full content - just metadata
-            console.log(`[GoogleDrive Job ${jobId}] Skipping full content processing for large CSV (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
-            processedDoc = {
-              title: name,
-              content: `[Large CSV file: ${(fileSize / 1024 / 1024).toFixed(2)} MB - content available in file_path]`,
-              chunks: [],
-              metadata: {
-                large_file: true,
-                file_size_mb: (fileSize / 1024 / 1024).toFixed(2),
-                processing_mode: 'deferred'
-              }
-            };
-          } else {
-            processedDoc = await contextualDocumentProcessor.processFile(filePath, name, mimeType);
-            console.log(`[GoogleDrive Job ${jobId}] Processed: ${name} - ${processedDoc.content?.length || 0} chars`);
-          }
-        } catch (processingError: any) {
-          console.error(`[GoogleDrive Job ${jobId}] Processing error for ${name}:`, processingError.message);
-          processedDoc = {
-            title: name,
-            content: mimeType.startsWith('text/') ? content.toString('utf-8').substring(0, 1000) + '...[truncated]' : '',
-            chunks: [],
-            metadata: {
-              processingError: processingError.message
-            }
-          };
-        }
-
-        // Check if already imported (resume logic)
-        const existingDoc = await pool.query(
-          "SELECT id, file_size FROM documents WHERE metadata->>'google_drive_id' = $1",
-          [fileId]
-        );
-
-        const metadata = {
-          google_drive_id: fileId,
-          google_drive_mime: mimeType,
-          source: 'google_drive',
-          imported_at: new Date().toISOString(),
-          import_job_id: jobId,
-          ...processedDoc.metadata
-        };
-
-        let docId: number;
-
-        if (existingDoc.rows.length > 0) {
-          const existingFileSize = existingDoc.rows[0].file_size;
-          const newFileSize = content.length;
-
-          // Resume logic: Skip if file sizes match
-          if (existingFileSize === newFileSize) {
-            docId = existingDoc.rows[0].id;
-            console.log(`[GoogleDrive Job ${jobId}] Skipping ${name} - already imported with same size`);
-            successfulFiles++;
-            processedFiles++;
-
-            // Send progress update for skipped file
-            await importJobService.updateProgress({
-              jobId,
-              processedFiles,
-              successfulFiles,
-              failedFiles,
-              currentFile: `${name} (skipped - already imported)`
-            });
-            continue;
-          }
-
-          // Update existing document
-          console.log(`[GoogleDrive Job ${jobId}] Updating ${name} - size mismatch`);
-          docId = existingDoc.rows[0].id;
-          await pool.query(
-            `UPDATE documents SET
-              content = $1,
-              file_path = $2,
-              file_size = $3,
-              processing_status = $4,
-              updated_at = CURRENT_TIMESTAMP,
-              metadata = $5
-            WHERE id = $6`,
-            [
-              processedDoc.content,
-              filePath,
-              content.length,
-              'completed',
-              JSON.stringify(metadata),
-              docId
-            ]
-          );
-        } else {
-          // Create new document
-          const insertResult = await pool.query(
-            `INSERT INTO documents (title, content, file_type, file_size, file_path, processing_status, metadata)
-             VALUES ($1, $2, $3, $4, $5, 'completed', $6)
-             RETURNING id`,
-            [
-              name,
-              processedDoc.content,
-              fileType,
-              content.length,
-              filePath,
-              JSON.stringify(metadata)
-            ]
-          );
-          docId = insertResult.rows[0].id;
-          console.log(`[GoogleDrive Job ${jobId}] Created new document: ${name} (id: ${docId})`);
-        }
 
         successfulFiles++;
         processedFiles++;
-        console.log(`[GoogleDrive Job ${jobId}] Successfully imported: ${name}`);
+        console.log(`[GoogleDrive Job ${jobId}] ✅ Saved: ${safeName} (${processedFiles}/${fileIds.length})`);
 
-        // Send progress update after successful processing
+        // Send progress update
         await importJobService.updateProgress({
           jobId,
           processedFiles,
@@ -872,7 +757,7 @@ class GoogleDriveService {
       } catch (error: any) {
         failedFiles++;
         processedFiles++;
-        console.error(`[GoogleDrive Job ${jobId}] Failed to import ${fileId}:`, error.message);
+        console.error(`[GoogleDrive Job ${jobId}] ❌ Failed: ${fileId} - ${error.message}`);
 
         await importJobService.updateProgress({
           jobId,
@@ -884,7 +769,7 @@ class GoogleDriveService {
       }
     }
 
-    // Send final 100% progress update before completion
+    // Send final 100% progress update
     await importJobService.updateProgress({
       jobId,
       processedFiles,
@@ -895,7 +780,7 @@ class GoogleDriveService {
 
     // Mark job as completed
     await importJobService.updateJobStatus(jobId, 'completed');
-    console.log(`[GoogleDrive] Job ${jobId} completed: ${successfulFiles} successful, ${failedFiles} failed`);
+    console.log(`[GoogleDrive] Job ${jobId} completed: ${successfulFiles}/${fileIds.length} successful, ${failedFiles} failed`);
   }
 
   /**
