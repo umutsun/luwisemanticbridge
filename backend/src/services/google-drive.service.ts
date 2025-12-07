@@ -745,7 +745,7 @@ class GoogleDriveService {
         // Determine file type
         const fileType = this.getFileType(mimeType, name);
 
-        // Minimal DB tracking for UI (upsert to handle re-imports)
+        // Minimal DB tracking for UI (check if exists, then insert or update)
         const metadata = {
           google_drive_id: fileId,
           source: 'google_drive',
@@ -753,16 +753,33 @@ class GoogleDriveService {
           import_job_id: jobId
         };
 
-        await pool.query(
-          `INSERT INTO documents (title, file_path, file_size, file_type, processing_status, metadata)
-           VALUES ($1, $2, $3, $4, 'completed', $5)
-           ON CONFLICT ((metadata->>'google_drive_id'))
-           DO UPDATE SET
-             file_path = $2,
-             file_size = $3,
-             updated_at = CURRENT_TIMESTAMP`,
-          [name, filePath, content.length, fileType, JSON.stringify(metadata)]
+        // Check if document already exists
+        const existing = await pool.query(
+          "SELECT id FROM documents WHERE metadata->>'google_drive_id' = $1",
+          [fileId]
         );
+
+        if (existing.rows.length > 0) {
+          // Update existing
+          await pool.query(
+            `UPDATE documents SET
+               title = $1,
+               file_path = $2,
+               file_size = $3,
+               file_type = $4,
+               processing_status = 'completed',
+               updated_at = CURRENT_TIMESTAMP
+             WHERE id = $5`,
+            [name, filePath, content.length, fileType, existing.rows[0].id]
+          );
+        } else {
+          // Insert new
+          await pool.query(
+            `INSERT INTO documents (title, file_path, file_size, file_type, processing_status, metadata)
+             VALUES ($1, $2, $3, $4, 'completed', $5)`,
+            [name, filePath, content.length, fileType, JSON.stringify(metadata)]
+          );
+        }
 
         successfulFiles++;
         processedFiles++;
