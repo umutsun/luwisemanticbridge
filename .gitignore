@@ -360,6 +360,7 @@ n8n-custom/
 ecosystem.config.js
 ecosystem.production.js
 /*.py
+/python/
 /*.sh
 /*.bat
 /*.ps1
