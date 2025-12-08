@@ -54,6 +54,9 @@ langchain-openai==0.0.5
 # ffmpeg-python==0.2.0
 # openai>=1.0.0  # For Whisper API mode
 
+# YouTube Support
+yt-dlp==2024.8.6
+
 # API Documentation
 pydantic==2.5.2
 python-jose[cryptography]==3.3.0

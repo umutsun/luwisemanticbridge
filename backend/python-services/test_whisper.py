@@ -25,17 +25,17 @@ def print_test(name: str):
 
 def print_pass(message: str):
     """Print pass message"""
-    print(f"{GREEN}✅ PASS: {message}{RESET}")
+    print(f"{GREEN}[PASS] {message}{RESET}")
 
 
 def print_fail(message: str):
     """Print fail message"""
-    print(f"{RED}❌ FAIL: {message}{RESET}")
+    print(f"{RED}[FAIL] {message}{RESET}")
 
 
 def print_info(message: str):
     """Print info message"""
-    print(f"{YELLOW}ℹ️  INFO: {message}{RESET}")
+    print(f"{YELLOW}[INFO] {message}{RESET}")
 
 
 async def test_service_instance_caching():
