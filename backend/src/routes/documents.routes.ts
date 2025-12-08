@@ -1280,6 +1280,27 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
       if (ext === 'csv') {
         const lines = content.split('\n').filter(line => line.trim());
 
+        // Auto-detect delimiter (comma, semicolon, or tab)
+        const detectDelimiter = (line: string): string => {
+          const delimiters = [',', ';', '\t'];
+          const counts = delimiters.map(d => {
+            let count = 0;
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+              if (line[i] === '"') inQuotes = !inQuotes;
+              if (line[i] === d && !inQuotes) count++;
+            }
+            return { delimiter: d, count };
+          });
+
+          // Return delimiter with highest count (minimum 1)
+          const best = counts.reduce((a, b) => b.count > a.count ? b : a);
+          return best.count > 0 ? best.delimiter : ','; // Default to comma
+        };
+
+        const delimiter = detectDelimiter(lines[0] || '');
+        console.log(` Detected delimiter: "${delimiter}" (${delimiter === '\t' ? 'TAB' : delimiter === ';' ? 'SEMICOLON' : 'COMMA'})`);
+
         // Proper CSV parsing function that handles quoted fields
         const parseCSVLine = (line: string): string[] => {
           const result: string[] = [];
@@ -1303,7 +1324,7 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
                 // End of quoted field
                 inQuotes = false;
               }
-            } else if (char === ',' && !inQuotes) {
+            } else if (char === delimiter && !inQuotes) {
               // Field delimiter outside quotes
               result.push(current);
               current = '';
