@@ -2932,10 +2932,6 @@ export default function DocumentManagerPage() {
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-1 flex flex-col">
                 <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FolderOpen className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      <span className="text-gray-900 dark:text-white font-semibold">docs</span>
-                    </CardTitle>
                     <div className="flex items-center gap-3">
                       {physicalFilesFilter !== 'folders' && physicalFiles.length > 0 && (
                         <Checkbox
@@ -2944,10 +2940,14 @@ export default function DocumentManagerPage() {
                           aria-label="Select all files"
                         />
                       )}
-                      <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                        {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
-                      </div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <FolderOpen className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        <span className="text-gray-900 dark:text-white font-semibold">docs</span>
+                      </CardTitle>
                     </div>
+                    <Badge variant="outline" className="px-3 py-1 text-xs font-medium">
+                      {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-col overflow-hidden p-4 flex-1">
