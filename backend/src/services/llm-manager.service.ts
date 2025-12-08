@@ -1,4 +1,5 @@
 import { lsembPool } from '../config/database.config';
+import { Pool } from 'pg';
 import { OpenAI } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -17,8 +18,13 @@ export interface LLMProvider {
   client?: any;
 }
 
+export interface LLMManagerDependencies {
+  pool?: Pool;
+}
+
 export class LLMManager {
   private static instance: LLMManager;
+  private pool: Pool;
   private providers: Map<string, LLMProvider> = new Map();
   private defaultProvider: string = '';  // NO hardcoded default - MUST come from database
   private actualModel: string = '';  // NO hardcoded default - MUST come from database
@@ -47,7 +53,11 @@ export class LLMManager {
     return LLMManager.instance;
   }
 
-  constructor() {
+  constructor(deps?: LLMManagerDependencies) {
+    // Support dependency injection for testing while maintaining backward compatibility
+    // Explicitly check for undefined to allow null pools for testing
+    this.pool = (deps !== undefined && deps.pool !== undefined) ? deps.pool : lsembPool;
+
     this.initializeProviders();
 
     if (process.env.EMBEDDING_PROVIDER) {
@@ -116,12 +126,12 @@ export class LLMManager {
   private async loadSettingsFromDatabase(): Promise<void> {
     try {
       // Check if database is available
-      if (!lsembPool) {
+      if (!this.pool) {
         console.warn('️ Database not initialized, using default settings');
         return;
       }
 
-      const result = await lsembPool.query(`
+      const result = await this.pool.query(`
         SELECT key, value
         FROM settings
         WHERE key IN (
@@ -207,7 +217,7 @@ export class LLMManager {
 
         // Update database to prevent future issues
         try {
-          await lsembPool.query(
+          await this.pool.query(
             'UPDATE settings SET value = $1 WHERE key = $2',
             [`${extractedProvider}/${fixedModel}`, 'llmSettings.activeChatModel']
           );
@@ -235,7 +245,7 @@ export class LLMManager {
 
         // Also update the database setting to prevent future issues
         try {
-          await lsembPool.query(
+          await this.pool.query(
             'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
             ['anthropic/claude-3-5-sonnet-20241022', 'llmSettings.activeChatModel']
           );
@@ -1269,16 +1279,16 @@ export class LLMManager {
         
         // Fix in database immediately
         try {
-          await lsembPool.query(
+          await this.pool.query(
             'UPDATE chatbot_settings SET setting_value = $1 WHERE setting_key = $2',
             [`anthropic/${newModel}`, 'llmSettings.activeChatModel']
           );
-          
-          await lsembPool.query(
+
+          await this.pool.query(
             'UPDATE settings SET value = $1 WHERE key = $2',
             [`anthropic/${newModel}`, 'activeChatModel']
           );
-          
+
           console.log(' EMERGENCY: Fixed Claude model in database');
         } catch (dbError) {
           console.error(' EMERGENCY: Failed to fix Claude model in database:', dbError);
