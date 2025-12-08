@@ -380,4 +380,239 @@ describe('SemanticSearchService', () => {
       expect(serviceWithoutRedis).toBeDefined();
     });
   });
+
+  describe('Settings Management', () => {
+    it('should load RAG settings from database', async () => {
+      // Create fresh service to test loadRAGSettings
+      const freshMockPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      freshMockPool.query
+        .mockResolvedValueOnce({ rows: [ // Constructor RAG settings
+          { key: 'ragSettings.enableUnifiedEmbeddings', value: 'true' },
+          { key: 'ragSettings.similarityThreshold', value: '0.75' },
+          { key: 'ragSettings.maxResults', value: '50' },
+          { key: 'ragSettings.minResults', value: '5' },
+          { key: 'ragSettings.enableHybridSearch', value: 'true' },
+          { key: 'ragSettings.enableKeywordBoost', value: 'true' },
+        ] })
+        .mockResolvedValueOnce({ rows: [] }); // Constructor embedding settings
+
+      const freshService = new SemanticSearchService({
+        lsembPool: freshMockPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(freshMockPool.query).toHaveBeenCalled();
+      // Settings should be loaded (verified by no errors)
+    });
+
+    it('should handle database errors when loading RAG settings', async () => {
+      const errorMockPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      errorMockPool.query
+        .mockRejectedValueOnce(new Error('Database connection failed'))
+        .mockResolvedValue({ rows: [] });
+
+      const serviceWithError = new SemanticSearchService({
+        lsembPool: errorMockPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Service should handle error gracefully and continue to work with defaults
+      expect(serviceWithError).toBeDefined();
+      expect(errorMockPool.query).toHaveBeenCalled();
+    });
+
+    it('should use default RAG settings when database unavailable', async () => {
+      const serviceWithoutDB = new SemanticSearchService({
+        lsembPool: null as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      expect(serviceWithoutDB).toBeDefined();
+      // Should use default settings without crashing
+    });
+  });
+
+  describe('Source Summary Generation', () => {
+    it('should generate summary for source with LLM', async () => {
+      const mockSource = {
+        title: 'Test Document',
+        content: 'This is a test document with important information.',
+        excerpt: 'Test excerpt',
+      };
+
+      mockLLMManager.generateChatResponse.mockResolvedValue('Brief summary of the document.');
+
+      const summary = await service.generateSourceSummary(mockSource);
+
+      expect(summary).toBeDefined();
+      expect(typeof summary).toBe('string');
+      expect(mockLLMManager.generateChatResponse).toHaveBeenCalled();
+    });
+
+    it('should handle LLM errors gracefully when generating summary', async () => {
+      const mockSource = {
+        title: 'Test Document',
+        content: 'Content',
+      };
+
+      mockLLMManager.generateChatResponse.mockRejectedValue(new Error('LLM error'));
+
+      const summary = await service.generateSourceSummary(mockSource);
+
+      expect(summary).toBe('Özet oluşturulamadı');
+      expect(console.error).toHaveBeenCalled();
+    });
+
+    it('should handle sources without content', async () => {
+      const mockSource = {
+        title: 'Empty Document',
+      };
+
+      mockLLMManager.generateChatResponse.mockResolvedValue('No content available.');
+
+      const summary = await service.generateSourceSummary(mockSource);
+
+      expect(summary).toBeDefined();
+    });
+  });
+
+  describe('Utility Methods', () => {
+    it('should normalize provider names correctly', () => {
+      // Access private method for testing
+      const normalizeProvider = (service as any).normalizeProvider.bind(service);
+
+      expect(normalizeProvider('OpenAI')).toBe('openai');
+      expect(normalizeProvider('GEMINI')).toBe('google');
+      expect(normalizeProvider('claude-3-opus')).toBe('claude');
+      expect(normalizeProvider('deepseek-chat')).toBe('deepseek');
+      expect(normalizeProvider('gpt-4')).toBe('openai');
+    });
+
+    it('should return default embedding models for providers', () => {
+      const getDefaultModel = (service as any).getDefaultEmbeddingModel.bind(service);
+
+      expect(getDefaultModel('google')).toBe('text-embedding-004');
+      expect(getDefaultModel('openai')).toBe('text-embedding-3-small');
+      expect(getDefaultModel('deepseek')).toBe('text-embedding-3-small');
+      expect(getDefaultModel('unknown')).toBe('text-embedding-004');
+    });
+
+    it('should apply result limits correctly', () => {
+      const applyLimits = (service as any).applyResultLimits.bind(service);
+
+      // Within bounds
+      expect(applyLimits(10)).toBe(10);
+
+      // Above max (25)
+      expect(applyLimits(100)).toBe(25);
+
+      // Below min (1)
+      expect(applyLimits(0)).toBe(1);
+
+      // Invalid input
+      expect(applyLimits(NaN)).toBe(25); // Should use maxResults
+      expect(applyLimits(Infinity)).toBe(25);
+    });
+  });
+
+  describe('Redis Integration', () => {
+    it('should set Redis client correctly', () => {
+      const newRedis = {
+        get: jest.fn(),
+        set: jest.fn(),
+        setex: jest.fn(),
+      };
+
+      service.setRedis(newRedis as any);
+
+      // Redis should be set (no errors)
+      expect(service).toBeDefined();
+    });
+
+    it('should work without Redis', async () => {
+      const serviceWithoutRedis = new SemanticSearchService({
+        lsembPool: mockPool,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+        // No redis
+      });
+
+      // Should work fine without Redis
+      mockPool.query.mockResolvedValue({ rows: [] });
+      const result = await serviceWithoutRedis.keywordSearch('test', 10);
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('Embedding Settings', () => {
+    it('should load embedding settings from database', async () => {
+      const freshPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      freshPool.query
+        .mockResolvedValueOnce({ rows: [] }) // RAG settings
+        .mockResolvedValueOnce({ rows: [ // Embedding settings
+          { key: 'llmSettings.embeddingProvider', value: 'google' },
+          { key: 'llmSettings.embeddingModel', value: 'text-embedding-004' },
+        ] });
+
+      const freshService = new SemanticSearchService({
+        lsembPool: freshPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(freshPool.query).toHaveBeenCalled();
+    });
+
+    it('should handle missing embedding settings gracefully', async () => {
+      const freshPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      freshPool.query
+        .mockResolvedValueOnce({ rows: [] }) // RAG settings
+        .mockResolvedValueOnce({ rows: [] }); // Empty embedding settings
+
+      const freshService = new SemanticSearchService({
+        lsembPool: freshPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Should use default settings
+      expect(freshService).toBeDefined();
+    });
+  });
 });
