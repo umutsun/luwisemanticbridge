@@ -73,8 +73,8 @@ module.exports = {
       env: {
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'production',
-        ENVIRONMENT: 'production',
-        DATABASE_URL: 'postgresql://postgres:Semsiye!22@localhost:5432/lsemb'
+        ENVIRONMENT: 'production'
+        // DATABASE_URL loaded from .env.lsemb via celery_app.py
       },
       error_file: './logs/worker-error.log',
       out_file: './logs/worker-out.log',

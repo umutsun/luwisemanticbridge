@@ -3,10 +3,13 @@ Celery Application Configuration
 Redis DB 2 for LSEMB import jobs
 """
 import os
+from pathlib import Path
 from celery import Celery
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env.lsemb from project root (multi-tenant setup)
+env_path = Path(__file__).parent.parent.parent / '.env.lsemb'
+load_dotenv(dotenv_path=env_path)
 
 # Celery app with Redis broker (DB 2)
 celery_app = Celery(
