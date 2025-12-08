@@ -346,28 +346,6 @@ export default function CSVTableViewer({
                   <Sparkles className="h-3 w-3" />
                 )}
               </Button>
-              {/* Edit/Save headers */}
-              {isEditingHeaders ? (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={saveHeaders}
-                  className="h-7 w-7 p-0"
-                  title="Save headers"
-                >
-                  <Check className="h-3 w-3" />
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsEditingHeaders(true)}
-                  className="h-7 w-7 p-0"
-                  title="Edit headers"
-                >
-                  <Edit3 className="h-3 w-3" />
-                </Button>
-              )}
             </>
           )}
           <Button
@@ -490,25 +468,55 @@ export default function CSVTableViewer({
         <div className="text-sm text-muted-foreground">
           {t('tableViewer.showing')} {Math.min(loadedRowsCount, filteredAndSortedRows.length)} {t('tableViewer.of')} {filteredAndSortedRows.length} {t('tableViewer.rows')}
         </div>
-        {hasMore && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setLoadedRowsCount(prev => Math.min(prev + 50, filteredAndSortedRows.length))}
-          >
-            Load More (+50 rows)
-          </Button>
-        )}
-        {!hasMore && filteredAndSortedRows.length > 10 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setLoadedRowsCount(10)}
-          >
-            <Minimize2 className="h-4 w-4 mr-2" />
-            Show Less
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {editable && (
+            <>
+              {/* Edit/Save headers */}
+              {isEditingHeaders ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={saveHeaders}
+                  className="h-8 gap-1"
+                  title="Save headers"
+                >
+                  <Check className="h-3 w-3" />
+                  <span className="text-xs">Save</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditingHeaders(true)}
+                  className="h-8 gap-1"
+                  title="Edit headers"
+                >
+                  <Edit3 className="h-3 w-3" />
+                  <span className="text-xs">Edit</span>
+                </Button>
+              )}
+            </>
+          )}
+          {hasMore && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLoadedRowsCount(prev => Math.min(prev + 50, filteredAndSortedRows.length))}
+            >
+              Load More (+50 rows)
+            </Button>
+          )}
+          {!hasMore && filteredAndSortedRows.length > 10 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLoadedRowsCount(10)}
+            >
+              <Minimize2 className="h-4 w-4 mr-2" />
+              Show Less
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
