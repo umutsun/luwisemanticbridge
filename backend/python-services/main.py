@@ -17,10 +17,19 @@ import uvicorn
 from loguru import logger
 from dotenv import load_dotenv
 
-# Load environment variables from backend/.env
-# This works for all projects (emlakai, bookie, vergilex, lsemb)
-env_path = Path(__file__).parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
+# Load environment variables from .env file
+# Multi-tenant setup: Try .env.lsemb first (tenant-specific), fallback to backend/.env
+env_lsemb_path = Path(__file__).parent.parent.parent / '.env.lsemb'
+env_default_path = Path(__file__).parent.parent / '.env'
+
+if env_lsemb_path.exists():
+    load_dotenv(dotenv_path=env_lsemb_path)
+    print(f"[INFO] Loaded environment from {env_lsemb_path}")
+elif env_default_path.exists():
+    load_dotenv(dotenv_path=env_default_path)
+    print(f"[INFO] Loaded environment from {env_default_path}")
+else:
+    print("[WARNING] No .env file found")
 
 # Get tenant-specific app name
 APP_NAME = os.getenv("APP_NAME", "LSEMB")

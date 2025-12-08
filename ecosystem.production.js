@@ -54,8 +54,8 @@ module.exports = {
         PYTHON_SERVICE_PORT: '8004',
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'production',
-        ENVIRONMENT: 'production',
-        DATABASE_URL: 'postgresql://postgres:Semsiye!22@91.99.229.96:5432/lsemb'
+        ENVIRONMENT: 'production'
+        // DATABASE_URL loaded from .env.lsemb via main.py
       },
       error_file: './logs/python-error.log',
       out_file: './logs/python-out.log',

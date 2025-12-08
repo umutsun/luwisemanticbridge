@@ -358,6 +358,7 @@ n8n-custom/
 !README.md
 /*.js
 ecosystem.config.js
+ecosystem.production.js
 /*.py
 /*.sh
 /*.bat
