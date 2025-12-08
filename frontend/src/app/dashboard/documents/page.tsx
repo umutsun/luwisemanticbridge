@@ -1826,7 +1826,7 @@ export default function DocumentManagerPage() {
       pollingInterval = setInterval(async () => {
         try {
           const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import-job/${driveImportJobId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
           });
           if (response.ok) {
             const job = await response.json();
