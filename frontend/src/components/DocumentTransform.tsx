@@ -1,169 +1,67 @@
 /**
  * Document Transform Component
  * Handles CSV/JSON upload, preview, and transformation to source_db
+ * Refactored to use graphql-request (project standard)
  */
 
-import React, { useState } from 'react';
-import { useMutation, useQuery } from '@apollo/client';
-import { gql } from '@apollo/client';
-
-// GraphQL Queries & Mutations
-const GET_DOCUMENTS = gql`
-  query GetDocuments($limit: Int, $offset: Int, $status: TransformStatus, $fileType: String) {
-    documents(limit: $limit, offset: $offset, status: $status, fileType: $fileType) {
-      items {
-        id
-        filename
-        fileType
-        fileSize
-        rowCount
-        columnHeaders
-        dataQualityScore
-        transformStatus
-        transformProgress
-        targetTableName
-        createdAt
-      }
-      total
-      hasMore
-    }
-  }
-`;
-
-const GET_DOCUMENT_PREVIEW = gql`
-  query GetDocumentPreview($documentId: ID!) {
-    documentPreview(documentId: $documentId) {
-      documentId
-      filename
-      fileType
-      rowCount
-      columnHeaders
-      sampleRows
-      dataQuality {
-        score
-        issues {
-          severity
-          description
-          suggestion
-        }
-        warnings
-      }
-      suggestedTableName
-      isValid
-    }
-  }
-`;
-
-const TRANSFORM_DOCUMENTS = gql`
-  mutation TransformDocuments(
-    $documentIds: [ID!]!
-    $sourceDbId: String!
-    $tableName: String
-    $batchSize: Int
-    $enableEmbedding: Boolean
-  ) {
-    transformDocumentsToSourceDb(
-      documentIds: $documentIds
-      sourceDbId: $sourceDbId
-      tableName: $tableName
-      batchSize: $batchSize
-      enableEmbedding: $enableEmbedding
-    ) {
-      jobId
-      message
-      documentsProcessed
-    }
-  }
-`;
-
-const GET_TRANSFORM_PROGRESS = gql`
-  query GetTransformProgress($jobId: String!) {
-    transformProgress(jobId: $jobId) {
-      jobId
-      documentId
-      status
-      progress
-      rowsProcessed
-      totalRows
-      errors
-      embeddingEnabled
-      embeddingStatus
-      embeddingProgress
-      chunksProcessed
-      totalChunks
-    }
-  }
-`;
-
-interface Document {
-  id: string;
-  filename: string;
-  fileType: string;
-  fileSize: number;
-  rowCount: number;
-  columnHeaders: string[];
-  dataQualityScore: number;
-  transformStatus: string;
-  transformProgress: number;
-  targetTableName?: string;
-  createdAt: string;
-}
-
-interface DocumentPreview {
-  documentId: string;
-  filename: string;
-  fileType: string;
-  rowCount: number;
-  columnHeaders: string[];
-  sampleRows: any[];
-  dataQuality: {
-    score: number;
-    issues: any[];
-    warnings: string[];
-  };
-  suggestedTableName: string;
-  isValid: boolean;
-}
+import React, { useState, useEffect } from 'react';
+import { executeQuery } from '@/lib/graphql/client';
+import { GET_DOCUMENTS, type Document, type DocumentsResponse } from '@/lib/graphql/documents.queries';
+import { useDocumentTransform, useDocumentPreview } from '@/hooks/useDocumentTransform';
+import CSVModalViewer from './ui/csv-modal-viewer';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
+import { Loader2, FileSpreadsheet, Database, Eye } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export const DocumentTransform: React.FC = () => {
+  const { toast } = useToast();
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
-  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
-  const [transformJobId, setTransformJobId] = useState<string | null>(null);
   const [customTableName, setCustomTableName] = useState<string>('');
-  const [enableEmbedding, setEnableEmbedding] = useState<boolean>(false);
+  const [csvModalOpen, setCsvModalOpen] = useState<boolean>(false);
+
+  // Documents list state
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState<boolean>(false);
+
+  // Use custom hooks
+  const { preview, fetchPreview } = useDocumentPreview();
+  const { loading: transforming, progress, startTransform } = useDocumentTransform();
 
   // Fetch documents list
-  const { data: documentsData, loading: documentsLoading, refetch: refetchDocuments } = useQuery(
-    GET_DOCUMENTS,
-    {
-      variables: { limit: 50, offset: 0 },
-      pollInterval: 5000, // Refresh every 5 seconds
+  const fetchDocuments = async () => {
+    setDocumentsLoading(true);
+    try {
+      const response = await executeQuery<{ documents: DocumentsResponse }>(
+        GET_DOCUMENTS,
+        { limit: 50, offset: 0 }
+      );
+      setDocuments(response.documents.items);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to fetch documents',
+        variant: 'destructive',
+      });
+    } finally {
+      setDocumentsLoading(false);
     }
-  );
+  };
 
-  // Fetch document preview
-  const { data: previewData, loading: previewLoading } = useQuery(GET_DOCUMENT_PREVIEW, {
-    variables: { documentId: previewDocId },
-    skip: !previewDocId,
-  });
+  // Initial fetch and polling
+  useEffect(() => {
+    fetchDocuments();
 
-  // Fetch transform progress
-  const { data: progressData } = useQuery(GET_TRANSFORM_PROGRESS, {
-    variables: { jobId: transformJobId },
-    skip: !transformJobId,
-    pollInterval: 2000, // Poll every 2 seconds
-  });
-
-  // Transform mutation
-  const [transformDocuments, { loading: transforming }] = useMutation(TRANSFORM_DOCUMENTS, {
-    onCompleted: (data) => {
-      setTransformJobId(data.transformDocumentsToSourceDb.jobId);
-      alert(`Transform started! Job ID: ${data.transformDocumentsToSourceDb.jobId}`);
-    },
-    onError: (error) => {
-      alert(`Transform failed: ${error.message}`);
-    },
-  });
+    // Poll every 5 seconds
+    const interval = setInterval(fetchDocuments, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSelectDocument = (docId: string) => {
     setSelectedDocuments((prev) =>
@@ -171,242 +69,299 @@ export const DocumentTransform: React.FC = () => {
     );
   };
 
-  const handlePreview = (docId: string) => {
-    setPreviewDocId(docId);
+  const handlePreview = async (docId: string) => {
+    try {
+      await fetchPreview(docId);
+      setCsvModalOpen(true);
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err.message || 'Failed to load preview',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleTransform = () => {
+  const handleTransform = async () => {
     if (selectedDocuments.length === 0) {
-      alert('Please select at least one document');
+      toast({
+        title: 'No documents selected',
+        description: 'Please select at least one document',
+        variant: 'destructive',
+      });
       return;
     }
 
-    const tableName = customTableName || undefined;
-
-    transformDocuments({
-      variables: {
+    try {
+      const result = await startTransform({
         documentIds: selectedDocuments,
         sourceDbId: 'source_database',
-        tableName,
+        tableName: customTableName || undefined,
         batchSize: 100,
-        enableEmbedding,
-      },
-    });
+      });
+
+      toast({
+        title: 'Transform started',
+        description: `Job ID: ${result.jobId}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: 'Transform failed',
+        description: err.message || 'Failed to start transformation',
+        variant: 'destructive',
+      });
+    }
   };
 
-  const documents: Document[] = documentsData?.documents?.items || [];
-  const preview: DocumentPreview | null = previewData?.documentPreview || null;
-  const progress = progressData?.transformProgress || [];
+  // Convert parsed data to CSV format for CSVModalViewer
+  const convertToCSV = (headers: string[], rows: any[]): string => {
+    if (!headers || !rows || rows.length === 0) return '';
+
+    const csvRows = [
+      headers.join(','),
+      ...rows.map(row =>
+        headers.map(h => {
+          const value = String(row[h] || '');
+          return value.includes(',') ? `"${value}"` : value;
+        }).join(',')
+      )
+    ];
+
+    return csvRows.join('\n');
+  };
 
   return (
-    <div className="document-transform-container">
-      <h1>Document Transform</h1>
-      <p>Upload CSV/JSON files and transform them into PostgreSQL tables</p>
-
-      {/* Documents List */}
-      <div className="documents-section">
-        <h2>Documents ({documents.length})</h2>
-
-        {documentsLoading ? (
-          <div>Loading documents...</div>
-        ) : (
-          <table className="documents-table">
-            <thead>
-              <tr>
-                <th>Select</th>
-                <th>Filename</th>
-                <th>Type</th>
-                <th>Rows</th>
-                <th>Quality</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {documents.map((doc) => (
-                <tr key={doc.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedDocuments.includes(doc.id)}
-                      onChange={() => handleSelectDocument(doc.id)}
-                      disabled={doc.transformStatus === 'COMPLETED'}
-                    />
-                  </td>
-                  <td>{doc.filename}</td>
-                  <td>{doc.fileType}</td>
-                  <td>{doc.rowCount?.toLocaleString()}</td>
-                  <td>{(doc.dataQualityScore * 100).toFixed(1)}%</td>
-                  <td>
-                    <span className={`status-badge status-${doc.transformStatus.toLowerCase()}`}>
-                      {doc.transformStatus}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${doc.transformProgress}%` }}
-                      />
-                      <span className="progress-text">{doc.transformProgress}%</span>
-                    </div>
-                  </td>
-                  <td>
-                    <button onClick={() => handlePreview(doc.id)}>Preview</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        {/* Batch Actions */}
-        <div className="batch-actions">
-          <input
-            type="text"
-            placeholder="Custom table name (optional)"
-            value={customTableName}
-            onChange={(e) => setCustomTableName(e.target.value)}
-          />
-          <label className="embed-toggle" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '16px' }}>
-            <input
-              type="checkbox"
-              checked={enableEmbedding}
-              onChange={(e) => setEnableEmbedding(e.target.checked)}
-              style={{ width: '18px', height: '18px' }}
-            />
-            <span>Enable Embeddings</span>
-            <span style={{ fontSize: '12px', color: '#666' }}>(Store in document_embeddings)</span>
-          </label>
-          <button
-            onClick={handleTransform}
-            disabled={selectedDocuments.length === 0 || transforming}
-          >
-            {transforming ? 'Transforming...' : `Transform ${selectedDocuments.length} Document(s)${enableEmbedding ? ' + Embed' : ''}`}
-          </button>
+    <div className="container mx-auto py-8 px-4 max-w-7xl">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <Database className="w-8 h-8 text-primary" />
+          <h1 className="text-3xl font-bold">Document Transform</h1>
         </div>
+        <p className="text-muted-foreground">Upload CSV/JSON files and transform them into PostgreSQL tables</p>
       </div>
 
-      {/* Preview Modal */}
-      {preview && (
-        <div className="preview-modal">
-          <div className="preview-content">
-            <h2>Preview: {preview.filename}</h2>
-
-            <div className="preview-info">
-              <p><strong>File Type:</strong> {preview.fileType}</p>
-              <p><strong>Total Rows:</strong> {preview.rowCount.toLocaleString()}</p>
-              <p><strong>Quality Score:</strong> {(preview.dataQuality.score * 100).toFixed(1)}%</p>
-              <p><strong>Suggested Table:</strong> {preview.suggestedTableName}</p>
-              <p><strong>Valid:</strong> {preview.isValid ? '✅ Yes' : '❌ No'}</p>
+      {/* Documents List Card */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Documents ({documents.length})
+            </span>
+            <Badge variant="outline">{selectedDocuments.length} selected</Badge>
+          </CardTitle>
+          <CardDescription>
+            Select documents to transform into database tables
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {documentsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              <span className="ml-3 text-muted-foreground">Loading documents...</span>
             </div>
-
-            {/* Column Headers */}
-            <div className="column-headers">
-              <h3>Columns ({preview.columnHeaders.length})</h3>
-              <div className="columns-list">
-                {preview.columnHeaders.map((col, idx) => (
-                  <span key={idx} className="column-badge">{col}</span>
+          ) : documents.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No documents found</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">Select</TableHead>
+                  <TableHead>Filename</TableHead>
+                  <TableHead className="w-24">Type</TableHead>
+                  <TableHead className="w-28 text-right">Rows</TableHead>
+                  <TableHead className="w-24 text-right">Quality</TableHead>
+                  <TableHead className="w-32">Status</TableHead>
+                  <TableHead className="w-32">Progress</TableHead>
+                  <TableHead className="w-24">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {documents.map((doc) => (
+                  <TableRow key={doc.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedDocuments.includes(doc.id)}
+                        onCheckedChange={() => handleSelectDocument(doc.id)}
+                        disabled={doc.transformStatus === 'COMPLETED'}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">{doc.filename}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-xs">
+                        {doc.fileType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {doc.rowCount?.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <Badge variant="outline" className="text-xs">
+                        {((doc.dataQualityScore || 0) * 100).toFixed(1)}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          doc.transformStatus === 'COMPLETED' ? 'success' :
+                          doc.transformStatus === 'FAILED' ? 'error' :
+                          'secondary'
+                        }
+                        className="text-xs"
+                      >
+                        {doc.transformStatus}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Progress value={doc.transformProgress} className="h-2" />
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {doc.transformProgress}%
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePreview(doc.id)}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Preview
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          )}
+
+          {/* Batch Actions */}
+          {documents.length > 0 && (
+            <div className="mt-6 flex flex-wrap items-end gap-4 pt-4 border-t">
+              <div className="flex-1 min-w-[200px]">
+                <Label htmlFor="tableName" className="text-sm mb-2 block">
+                  Custom Table Name (optional)
+                </Label>
+                <Input
+                  id="tableName"
+                  type="text"
+                  placeholder="e.g., customer_data"
+                  value={customTableName}
+                  onChange={(e) => setCustomTableName(e.target.value)}
+                />
               </div>
+
+              <Button
+                onClick={handleTransform}
+                disabled={selectedDocuments.length === 0 || transforming}
+                size="lg"
+                className="min-w-[200px]"
+              >
+                {transforming ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Transforming...
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4 mr-2" />
+                    Transform {selectedDocuments.length} Document(s)
+                  </>
+                )}
+              </Button>
             </div>
+          )}
+        </CardContent>
+      </Card>
 
-            {/* Sample Data (Last 10 rows) */}
-            <div className="sample-data">
-              <h3>Sample Data (Last 10 rows)</h3>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    {preview.columnHeaders.map((col, idx) => (
-                      <th key={idx}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.sampleRows.map((row, idx) => (
-                    <tr key={idx}>
-                      {preview.columnHeaders.map((col, colIdx) => (
-                        <td key={colIdx}>{JSON.stringify(row[col])}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Data Quality Issues */}
-            {preview.dataQuality.issues.length > 0 && (
-              <div className="quality-issues">
-                <h3>Data Quality Issues</h3>
-                {preview.dataQuality.issues.map((issue, idx) => (
-                  <div key={idx} className={`issue issue-${issue.severity.toLowerCase()}`}>
-                    <strong>{issue.severity}:</strong> {issue.description}
-                    {issue.suggestion && <p>💡 {issue.suggestion}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button onClick={() => setPreviewDocId(null)}>Close Preview</button>
-          </div>
-        </div>
+      {/* CSV Modal Viewer */}
+      {preview && csvModalOpen && (
+        <CSVModalViewer
+          isOpen={csvModalOpen}
+          onClose={() => {
+            setCsvModalOpen(false);
+          }}
+          data={convertToCSV(preview.columnHeaders, preview.sampleRows)}
+          title={`Preview: ${preview.filename}`}
+          filename={preview.filename}
+          metadata={{
+            csvStats: {
+              totalRows: preview.rowCount,
+              totalColumns: preview.columnHeaders.length,
+              columnTypes: preview.columnHeaders.map(col => ({
+                name: col,
+                type: 'text' as const,
+                uniqueValues: 0,
+                nullCount: 0
+              }))
+            }
+          }}
+        />
       )}
 
       {/* Transform Progress */}
       {progress.length > 0 && (
-        <div className="transform-progress">
-          <h2>Transform Progress</h2>
-          {progress.map((p: any) => (
-            <div key={p.documentId} className="progress-item">
-              <p><strong>Document:</strong> {p.documentId}</p>
-              <p><strong>Status:</strong> {p.status}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Transform Progress
+            </CardTitle>
+            <CardDescription>
+              Real-time progress updates for document transformation
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {progress.map((p) => (
+              <Card key={p.documentId} className="border-2">
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{p.filename}</p>
+                        <Badge
+                          variant={
+                            p.status === 'COMPLETED' ? 'success' :
+                            p.status === 'FAILED' ? 'error' :
+                            'secondary'
+                          }
+                          className="mt-1"
+                        >
+                          {p.status}
+                        </Badge>
+                      </div>
+                    </div>
 
-              {/* Table Transform Progress */}
-              <div className="progress-section">
-                <p style={{ fontSize: '12px', color: '#666' }}>Table Transform:</p>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${p.progress}%` }} />
-                  <span className="progress-text">
-                    {p.rowsProcessed} / {p.totalRows} rows ({p.progress}%)
-                  </span>
-                </div>
-              </div>
+                    {/* Table Transform Progress */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Table Transform</span>
+                        <span className="font-medium tabular-nums">
+                          {p.rowsProcessed} / {p.totalRows} rows ({p.progress}%)
+                        </span>
+                      </div>
+                      <Progress value={p.progress} className="h-2" />
+                    </div>
 
-              {/* Embedding Progress (if enabled) */}
-              {p.embeddingEnabled && (
-                <div className="progress-section" style={{ marginTop: '8px' }}>
-                  <p style={{ fontSize: '12px', color: '#666' }}>
-                    Embedding: <span style={{
-                      color: p.embeddingStatus === 'completed' ? 'green' :
-                             p.embeddingStatus === 'failed' ? 'red' : 'orange'
-                    }}>{p.embeddingStatus || 'pending'}</span>
-                  </p>
-                  <div className="progress-bar" style={{ backgroundColor: '#e0e0e0' }}>
-                    <div
-                      className="progress-fill"
-                      style={{
-                        width: `${p.embeddingProgress || 0}%`,
-                        backgroundColor: p.embeddingStatus === 'failed' ? '#f44336' : '#4caf50'
-                      }}
-                    />
-                    <span className="progress-text">
-                      {p.chunksProcessed || 0} / {p.totalChunks || 0} chunks ({p.embeddingProgress || 0}%)
-                    </span>
+                    {/* Errors */}
+                    {p.error && (
+                      <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
+                        <p className="text-sm font-medium text-destructive mb-2">Error:</p>
+                        <p className="text-sm text-destructive/80">{p.error}</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-
-              {p.errors && p.errors.length > 0 && (
-                <div className="errors">
-                  {p.errors.map((err: string, idx: number) => (
-                    <p key={idx} className="error">{err}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
