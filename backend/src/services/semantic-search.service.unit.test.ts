@@ -8,10 +8,10 @@ describe('SemanticSearchService', () => {
   let mockLLMManager: any;
   let mockRedis: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Create mock dependencies
     mockPool = {
-      query: jest.fn().mockResolvedValue({ rows: [] }),
+      query: jest.fn(),
       connect: jest.fn(),
       end: jest.fn(),
       on: jest.fn(),
@@ -50,6 +50,22 @@ describe('SemanticSearchService', () => {
     jest.spyOn(console, 'warn').mockImplementation();
     jest.spyOn(console, 'error').mockImplementation();
 
+    // Setup default mock responses for constructor initialization
+    // Constructor calls loadRAGSettings() and loadEmbeddingSettings()
+    mockPool.query
+      .mockResolvedValueOnce({ rows: [ // RAG settings for constructor
+        { key: 'ragSettings.enableUnifiedEmbeddings', value: 'true' },
+        { key: 'ragSettings.enableDocumentEmbeddings', value: 'true' },
+        { key: 'ragSettings.enableScrapeEmbeddings', value: 'true' },
+        { key: 'ragSettings.enableMessageEmbeddings', value: 'true' },
+        { key: 'ragSettings.enableHybridSearch', value: 'true' },
+      ] })
+      .mockResolvedValueOnce({ rows: [ // Embedding settings for constructor
+        { key: 'llmSettings.embeddingProvider', value: 'openai' },
+        { key: 'llmSettings.embeddingModel', value: 'text-embedding-3-small' },
+      ] })
+      .mockResolvedValue({ rows: [] }); // Default for any other queries
+
     // Create service with mocked dependencies
     const dependencies: SemanticSearchDependencies = {
       lsembPool: mockPool,
@@ -59,6 +75,9 @@ describe('SemanticSearchService', () => {
     };
 
     service = new SemanticSearchService(dependencies);
+
+    // Wait a bit for constructor async operations to complete
+    await new Promise(resolve => setTimeout(resolve, 10));
   });
 
   afterEach(() => {
@@ -185,14 +204,6 @@ describe('SemanticSearchService', () => {
   });
 
   describe('semanticSearch', () => {
-    beforeEach(() => {
-      // Reset all mocks for fresh state
-      jest.clearAllMocks();
-
-      // Setup default mock responses for service initialization queries
-      mockPool.query.mockResolvedValue({ rows: [] });
-    });
-
     it('should perform semantic search with embeddings', async () => {
       const mockEmbedding = Array.from({ length: 768 }, () => Math.random());
       const mockResults = {
@@ -201,10 +212,10 @@ describe('SemanticSearchService', () => {
             id: '1',
             title: 'Similar Document',
             excerpt: 'Content excerpt',
-            source_table: 'documents',
+            source_table: 'document_embeddings',
             source_id: '1',
             metadata: { title: 'Similar Document' },
-            record_type: 'documents',
+            record_type: 'document_embeddings',
             similarity_score: 0.92,
             keyword_boost: 0,
             priority_boost: 0,
@@ -213,13 +224,17 @@ describe('SemanticSearchService', () => {
       };
 
       // Setup mock chain for semantic search flow
+      // Note: RAG and embedding settings are already loaded in constructor via beforeEach
+      // Query order in semanticSearch():
+      // 1. Embedding count check
+      // 2. refreshUnifiedRecordTypes() -> loadUnifiedRecordTypes()
+      // 3. refreshSourceTableWeights() -> loadSourceTableWeights()
+      // 4. Main search query
       mockPool.query
-        .mockResolvedValueOnce({ rows: [] }) // RAG settings
-        .mockResolvedValueOnce({ rows: [] }) // Embedding settings
-        .mockResolvedValueOnce({ rows: [{ record_type: 'documents' }] }) // Record types
-        .mockResolvedValueOnce({ rows: [] }) // Source table weights
-        .mockResolvedValueOnce({ rows: [{ count: '100' }] }) // Embedding count check
-        .mockResolvedValueOnce(mockResults); // Main search query
+        .mockResolvedValueOnce({ rows: [{ count: '100' }] }) // 1. Embedding count check
+        .mockResolvedValueOnce({ rows: [{ record_type: 'document_embeddings' }] }) // 2. Record types
+        .mockResolvedValueOnce({ rows: [] }) // 3. Source table weights
+        .mockResolvedValueOnce(mockResults); // 4. Main search query
 
       mockLLMManager.generateEmbedding.mockResolvedValue(mockEmbedding);
 
@@ -231,12 +246,8 @@ describe('SemanticSearchService', () => {
     });
 
     it('should fall back to keyword search when no embeddings exist', async () => {
-      // Setup mock chain: RAG settings, embedding settings, record types, weights, then embedding count
+      // Setup mock chain - settings are already loaded in constructor
       mockPool.query
-        .mockResolvedValueOnce({ rows: [] }) // RAG settings
-        .mockResolvedValueOnce({ rows: [] }) // Embedding settings
-        .mockResolvedValueOnce({ rows: [] }) // Record types
-        .mockResolvedValueOnce({ rows: [] }) // Source table weights
         .mockResolvedValueOnce({ rows: [{ count: '0' }] }) // Empty embedding count
         .mockResolvedValueOnce({ // Keyword search results
           rows: [
@@ -260,13 +271,12 @@ describe('SemanticSearchService', () => {
 
     it('should handle search errors and fall back to keyword search', async () => {
       // Setup mock chain for semantic search that will fail at embedding generation
+      // Note: RAG and embedding settings are already loaded in constructor via beforeEach
+      // When embedding fails, refreshUnifiedRecordTypes and refreshSourceTableWeights are SKIPPED
+      // Query order: embedding count → keyword search fallback (record types & weights are skipped!)
       mockPool.query
-        .mockResolvedValueOnce({ rows: [] }) // RAG settings
-        .mockResolvedValueOnce({ rows: [] }) // Embedding settings
-        .mockResolvedValueOnce({ rows: [] }) // Record types
-        .mockResolvedValueOnce({ rows: [] }) // Source table weights
-        .mockResolvedValueOnce({ rows: [{ count: '100' }] }) // Embedding count (has embeddings)
-        .mockResolvedValueOnce({ // Keyword search fallback
+        .mockResolvedValueOnce({ rows: [{ count: '100' }] }) // 1. Embedding count (has embeddings)
+        .mockResolvedValueOnce({ // 2. Keyword search fallback (no record types/weights queries!)
           rows: [
             {
               id: '1',

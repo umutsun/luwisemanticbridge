@@ -6,7 +6,8 @@ const csv = require('csv-parser');
 import mammoth from 'mammoth';
 import { Readable } from 'stream';
 import OpenAI from 'openai';
-import pool from '../config/database';
+import defaultPool from '../config/database';
+import { Pool } from 'pg';
 
 interface ProcessedDocument {
   title: string;
@@ -21,16 +22,25 @@ interface ChunkMetadata {
   document_id: number;
   document_title: string;
   chunk_size: number;
+  model_used?: string;
+  tokens_used?: number;
+}
+
+export interface DocumentProcessorDependencies {
+  pool?: Pool;
+  openai?: OpenAI | null;
 }
 
 export class DocumentProcessorService {
+  private pool: Pool;
   private openai: OpenAI | null;
   private chunkSize: number = 1000;
   private chunkOverlap: number = 200;
 
-  constructor() {
-    // Initialize OpenAI client lazily when needed
-    this.openai = null;
+  constructor(dependencies?: DocumentProcessorDependencies) {
+    // Dependency Injection: Allow mocking for tests
+    this.pool = dependencies?.pool || defaultPool;
+    this.openai = dependencies?.openai !== undefined ? dependencies.openai : null;
   }
 
   private async getOpenAIClient(): Promise<OpenAI | null> {
@@ -40,7 +50,7 @@ export class DocumentProcessorService {
 
     try {
       // Get API key from settings table
-      const result = await pool.query(
+      const result = await this.pool.query(
         'SELECT value FROM settings WHERE key = $1',
         ['openai.apiKey']
       );
@@ -447,7 +457,7 @@ export class DocumentProcessorService {
 
   async processAndEmbedDocument(documentId: number, content: string, title: string): Promise<void> {
     try {
-      await pool.query(`
+      await this.pool.query(`
         CREATE TABLE IF NOT EXISTS document_embeddings (
           id SERIAL PRIMARY KEY,
           document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
@@ -458,7 +468,7 @@ export class DocumentProcessorService {
         )
       `);
 
-      const chunks = this.createChunks(content, metadata.type);
+      const chunks = this.createChunks(content);
       let totalTokensUsed = 0;
       let modelName = 'text-embedding-ada-002';
       let embeddingDimension = 1536;
@@ -481,7 +491,7 @@ export class DocumentProcessorService {
           tokens_used: result.tokens
         };
 
-        await pool.query(
+        await this.pool.query(
           `INSERT INTO document_embeddings (document_id, chunk_text, embedding, metadata, model_name, tokens_used, embedding_dimension)` +
            `VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
@@ -497,7 +507,7 @@ export class DocumentProcessorService {
       }
       
       // Update document metadata with embedding stats
-      await pool.query(
+      await this.pool.query(
         `UPDATE documents ` +
          `SET metadata = jsonb_set(` +
            `COALESCE(metadata, '{}')::jsonb, ` +
@@ -524,7 +534,7 @@ export class DocumentProcessorService {
       );
 
       // Update model usage tracking
-      await pool.query(
+      await this.pool.query(
         `INSERT INTO embedding_model_usage (model_name, total_tokens_used, total_embeddings, avg_tokens_per_embedding)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (model_name)
@@ -547,7 +557,7 @@ export class DocumentProcessorService {
     try {
       const embeddingResult = await this.createEmbeddings(query);
 
-      const result = await pool.query(
+      const result = await this.pool.query(
         `SELECT ` +
           `de.id,
           de.document_id,
@@ -577,19 +587,19 @@ export class DocumentProcessorService {
   async deleteDocumentEmbeddings(documentId: number): Promise<void> {
     try {
       // Get token usage before deleting
-      const tokenResult = await pool.query(
+      const tokenResult = await this.pool.query(
         'SELECT SUM(tokens_used) as total_tokens, model_name FROM document_embeddings WHERE document_id = $1 GROUP BY model_name',
         [documentId]
       );
 
       // Delete embeddings
-      await pool.query(
+      await this.pool.query(
         'DELETE FROM document_embeddings WHERE document_id = $1',
         [documentId]
       );
 
       // Update document metadata
-      await pool.query(
+      await this.pool.query(
         `UPDATE documents ` +
          `SET metadata = jsonb_set(` +
            `COALESCE(metadata, '{}')::jsonb, ` +
@@ -602,7 +612,7 @@ export class DocumentProcessorService {
 
       // Update model usage tracking (subtract tokens)
       for (const row of tokenResult.rows) {
-        await pool.query(
+        await this.pool.query(
           `UPDATE embedding_model_usage
            SET total_tokens_used = GREATEST(0, total_tokens_used - $1),
                total_embeddings = GREATEST(0, total_embeddings - (SELECT COUNT(*) FROM document_embeddings WHERE model_name = $2)),
