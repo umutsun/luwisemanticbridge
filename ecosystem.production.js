@@ -9,6 +9,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 8083,
+        PYTHON_SERVICE_URL: 'http://localhost:8004',
         ENABLE_WEBSOCKET: 'true',
         WEBSOCKET_PORT: '8083',
         WEBSOCKET_PATH: '/socket.io',
