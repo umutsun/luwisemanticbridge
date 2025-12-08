@@ -1057,6 +1057,108 @@ router.post('/physical-files/bulk-delete', authenticateToken, async (req: Authen
   }
 });
 
+// Bulk add physical files to database - REQUIRES AUTHENTICATION
+router.post('/physical-files/bulk-add-to-database', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { filePaths } = req.body;
+
+    if (!filePaths || !Array.isArray(filePaths) || filePaths.length === 0) {
+      return res.status(400).json({ error: 'File paths array is required' });
+    }
+
+    let filesAdded = 0;
+    let filesSkipped = 0;
+    const errors: string[] = [];
+
+    for (const filePath of filePaths) {
+      try {
+        // Check if file already exists in database
+        const existsInDb = await lsembPool.query(
+          'SELECT id FROM documents WHERE file_path = $1',
+          [filePath]
+        );
+
+        if (existsInDb.rowCount > 0) {
+          filesSkipped++;
+          continue;
+        }
+
+        // Check if file exists on disk
+        if (!fs.existsSync(filePath)) {
+          errors.push(`File not found: ${filePath}`);
+          continue;
+        }
+
+        // Read file
+        const stats = fs.statSync(filePath);
+        const ext = path.extname(filePath).toLowerCase().substring(1);
+        const filename = path.basename(filePath);
+
+        // Determine file type
+        const fileType = ['pdf', 'docx', 'doc', 'txt', 'md', 'csv', 'xlsx', 'xls'].includes(ext) ? ext : 'other';
+
+        // Process document (extract content)
+        let content = '';
+        let metadata: any = {
+          source: 'physical_file',
+          added_at: new Date().toISOString()
+        };
+
+        try {
+          const processedDoc = await processDocument(filePath);
+          content = processedDoc.content || '';
+
+          // Merge metadata
+          if (processedDoc.metadata) {
+            metadata = { ...metadata, ...processedDoc.metadata };
+          }
+        } catch (procError: any) {
+          console.warn(`⚠️ Failed to process ${filename}: ${procError.message}`);
+          content = `[Processing failed: ${procError.message}]`;
+        }
+
+        // Clean metadata - remove sensitive info
+        const cleanedMetadata = { ...metadata };
+        if (cleanedMetadata.credentials) delete cleanedMetadata.credentials;
+        if (cleanedMetadata.tokens) delete cleanedMetadata.tokens;
+
+        // Insert into database
+        const result = await lsembPool.query(
+          `INSERT INTO documents (title, content, type, size, file_path, metadata)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, title, type, size`,
+          [
+            filename,
+            content.substring(0, 100000),
+            ext,
+            stats.size,
+            filePath,
+            JSON.stringify(cleanedMetadata)
+          ]
+        );
+
+        filesAdded++;
+      } catch (err: any) {
+        errors.push(`Failed to add ${filePath}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      addedCount: filesAdded,
+      skippedCount: filesSkipped,
+      totalRequested: filePaths.length,
+      message: `Successfully added ${filesAdded} file(s) to database${filesSkipped > 0 ? `, ${filesSkipped} already existed` : ''}`,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error: any) {
+    console.error('Error in bulk add to database:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to bulk add files to database'
+    });
+  }
+});
+
 // Preview physical file content - REQUIRES AUTHENTICATION
 // NOTE: This route MUST come before /:id to avoid route matching issues
 router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {

@@ -1081,6 +1081,55 @@ export default function DocumentManagerPage() {
     }
   };
 
+  const handleBulkAddToDatabase = async () => {
+    if (selectedPhysicalFiles.size === 0) {
+      toast({
+        title: t('documents.toast.error'),
+        description: 'No files selected',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const filePaths = Array.from(selectedPhysicalFiles);
+
+      const response = await fetch(getApiUrl('physicalFiles/bulk-add-to-database'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePaths })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Bulk add to database failed');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: t('documents.toast.success'),
+        description: `${result.addedCount} file(s) added to database${result.skippedCount > 0 ? `, ${result.skippedCount} already existed` : ''}`
+      });
+
+      // Clear selection and refresh
+      setSelectedPhysicalFiles(new Set());
+      setSelectAllPhysicalFiles(false);
+      fetchPhysicalFiles();
+      fetchDocuments();
+    } catch (error: any) {
+      toast({
+        title: t('documents.toast.error'),
+        description: error.message || 'Failed to add files to database',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
@@ -3117,6 +3166,22 @@ export default function DocumentManagerPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
+                          {/* Bulk Add to Database Button */}
+                          <ConfirmTooltip
+                            onConfirm={handleBulkAddToDatabase}
+                            message={`Add ${selectedPhysicalFiles.size} selected file(s) to database?`}
+                            side="top"
+                          >
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-blue-500/10 transition-colors"
+                              title={`Add ${selectedPhysicalFiles.size} selected file(s) to database`}
+                            >
+                              <Database className="w-4 h-4 text-blue-600" />
+                            </Button>
+                          </ConfirmTooltip>
+
                           {/* Bulk Delete Button */}
                           <ConfirmTooltip
                             onConfirm={handleBulkDeletePhysicalFiles}
