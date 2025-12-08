@@ -44,7 +44,6 @@ import {
   Eye,
   EyeOff,
   X,
-  X,
   Trash2,
   Plus,
   HardDrive,
