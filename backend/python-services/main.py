@@ -17,8 +17,9 @@ import uvicorn
 from loguru import logger
 from dotenv import load_dotenv
 
-# Load environment variables from .env.lsemb (or .env.emlakai, .env.bookie, etc.)
-env_path = Path(__file__).parent.parent.parent / '.env.lsemb'
+# Load environment variables from backend/.env
+# This works for all projects (emlakai, bookie, vergilex, lsemb)
+env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 # Get tenant-specific app name
