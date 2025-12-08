@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { provider: string } }
+  { params }: { params: Promise<{ provider: string }> }
 ) {
   try {
-    const { provider } = params;
+    const { provider } = await params;
 
     // Forward the request to backend
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
@@ -25,11 +25,12 @@ export async function GET(
     return NextResponse.json(data);
   } catch (error: any) {
     console.error('API validation models proxy error:', error);
+    const { provider } = await params;
     return NextResponse.json(
       {
         success: false,
         error: error.message || 'Failed to get models',
-        provider: params.provider
+        provider
       },
       { status: 500 }
     );

@@ -392,13 +392,23 @@ describe('SemanticSearchService', () => {
       };
 
       freshMockPool.query
-        .mockResolvedValueOnce({ rows: [ // Constructor RAG settings
-          { key: 'ragSettings.enableUnifiedEmbeddings', value: 'true' },
+        .mockResolvedValueOnce({ rows: [ // Constructor RAG settings - comprehensive test data
           { key: 'ragSettings.similarityThreshold', value: '0.75' },
           { key: 'ragSettings.maxResults', value: '50' },
           { key: 'ragSettings.minResults', value: '5' },
           { key: 'ragSettings.enableHybridSearch', value: 'true' },
           { key: 'ragSettings.enableKeywordBoost', value: 'true' },
+          { key: 'parallel_llm_count', value: '3' },
+          { key: 'parallel_llm_batch_size', value: '10' },
+          { key: 'ragSettings.enableMessageEmbeddings', value: 'true' },
+          { key: 'ragSettings.enableDocumentEmbeddings', value: 'true' },
+          { key: 'ragSettings.enableScrapeEmbeddings', value: 'false' },
+          { key: 'ragSettings.enableUnifiedEmbeddings', value: 'true' },
+          { key: 'ragSettings.unifiedEmbeddingsPriority', value: '1' },
+          { key: 'ragSettings.databasePriority', value: '2' },
+          { key: 'ragSettings.documentsPriority', value: '3' },
+          { key: 'ragSettings.chatPriority', value: '4' },
+          { key: 'ragSettings.webPriority', value: '5' },
         ] })
         .mockResolvedValueOnce({ rows: [] }); // Constructor embedding settings
 
@@ -408,10 +418,10 @@ describe('SemanticSearchService', () => {
         llmManager: mockLLMManager,
       });
 
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(freshMockPool.query).toHaveBeenCalled();
-      // Settings should be loaded (verified by no errors)
+      // Settings should be loaded and processed (all 16 settings exercised)
     });
 
     it('should handle database errors when loading RAG settings', async () => {
