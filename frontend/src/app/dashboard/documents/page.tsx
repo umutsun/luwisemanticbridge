@@ -1101,36 +1101,27 @@ export default function DocumentManagerPage() {
       setBulkAddProgress({ current: 0, total });
 
       const token = localStorage.getItem('token');
-      let addedCount = 0;
-      let skippedCount = 0;
 
-      // Process files one by one to track progress
-      for (let i = 0; i < filePaths.length; i++) {
-        try {
-          const response = await fetch(getApiUrl('physicalFiles/add-to-database'), {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ filePath: filePaths[i] })
-          });
+      // Send all files in one bulk request
+      const response = await fetch(getApiUrl('physical-files/bulk-add-to-database'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePaths })
+      });
 
-          if (response.ok) {
-            addedCount++;
-          } else {
-            const errorData = await response.json();
-            if (errorData.code === 'ALREADY_EXISTS') {
-              skippedCount++;
-            }
-          }
-        } catch (err) {
-          console.error(`Failed to add file ${filePaths[i]}:`, err);
-        }
+      setBulkAddProgress({ current: total, total });
 
-        // Update progress
-        setBulkAddProgress({ current: i + 1, total });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add files to database');
       }
+
+      const result = await response.json();
+      const addedCount = result.addedCount || 0;
+      const skippedCount = result.skippedCount || 0;
 
       toast({
         title: t('documents.toast.success'),
