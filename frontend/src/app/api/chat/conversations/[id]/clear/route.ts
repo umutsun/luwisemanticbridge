@@ -17,7 +17,7 @@ function getAuthToken(request: NextRequest): string | null {
 // POST /api/chat/conversations/[id]/clear - Clear conversation messages
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = getAuthToken(request);
@@ -28,7 +28,7 @@ export async function POST(
       );
     }
 
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
     const backendUrl = `${ASB_API_URL}/api/v2/chat/conversations/${conversationId}/clear`;
     console.log('[API Route] Clearing conversation:', backendUrl);
 
