@@ -680,7 +680,7 @@ class GoogleDriveService {
 
   /**
    * Import files with job tracking and progress updates (recommended for large imports)
-   * Returns job ID immediately, processing continues in background
+   * Returns job ID immediately, processing continues in Python Celery worker
    */
   async importFilesWithProgress(fileIds: string[], userId?: string): Promise<{
     jobId: number;
@@ -694,9 +694,9 @@ class GoogleDriveService {
       metadata: { fileIds }
     });
 
-    // Start import in background (don't await)
-    this.processImportJob(job.id, fileIds, userId).catch(error => {
-      console.error(`[GoogleDrive] Background import job ${job.id} failed:`, error);
+    // Enqueue job to Python Celery worker (don't await)
+    this.enqueuePythonImport(job.id, fileIds).catch(error => {
+      console.error(`[GoogleDrive] Failed to enqueue job ${job.id}:`, error);
       importJobService.updateJobStatus(job.id, 'failed');
     });
 
@@ -707,119 +707,60 @@ class GoogleDriveService {
   }
 
   /**
-   * Process import job in background - OPTIMIZED for fast CSV downloads
-   * Downloads to docs/ folder + minimal DB tracking for UI visibility
+   * Enqueue import job to Python Celery worker
+   * Delegates processing to Python microservice for better performance
    */
-  private async processImportJob(jobId: number, fileIds: string[], userId?: string): Promise<void> {
-    await importJobService.updateJobStatus(jobId, 'in_progress');
-
-    let processedFiles = 0;
-    let successfulFiles = 0;
-    let failedFiles = 0;
-
-    // Prepare upload directory once
-    const docsDir = this.getUploadDirectory();
-
-    for (const fileId of fileIds) {
-      try {
-        // Download file from Google Drive
-        const { content, name, mimeType } = await this.downloadFile(fileId);
-        console.log(`[GoogleDrive Job ${jobId}] Downloaded: ${name} (${(content.length / 1024).toFixed(1)} KB)`);
-
-        // Sanitize filename for filesystem
-        const normalizedName = normalizeTurkishChars(name);
-        const safeName = normalizedName
-          .replace(/[^\w\s\-_.]/g, '_')
-          .replace(/\s+/g, '_')
-          .replace(/_+/g, '_');
-        const filePath = path.join(docsDir, safeName);
-
-        // Fast write to disk (async for files >1MB, sync for small files)
-        const fileSize = content.length;
-        if (fileSize > 1024 * 1024) { // >1MB
-          await fs.promises.writeFile(filePath, content);
-        } else {
-          fs.writeFileSync(filePath, content);
-        }
-
-        // Determine file type
-        const fileType = this.getFileType(mimeType, name);
-
-        // Minimal DB tracking for UI (check if exists, then insert or update)
-        const metadata = {
-          google_drive_id: fileId,
-          source: 'google_drive',
-          imported_at: new Date().toISOString(),
-          import_job_id: jobId
-        };
-
-        // Check if document already exists
-        const existing = await pool.query(
-          "SELECT id FROM documents WHERE metadata->>'google_drive_id' = $1",
-          [fileId]
-        );
-
-        if (existing.rows.length > 0) {
-          // Update existing
-          await pool.query(
-            `UPDATE documents SET
-               title = $1,
-               file_path = $2,
-               file_size = $3,
-               file_type = $4,
-               processing_status = 'completed',
-               updated_at = CURRENT_TIMESTAMP
-             WHERE id = $5`,
-            [name, filePath, content.length, fileType, existing.rows[0].id]
-          );
-        } else {
-          // Insert new
-          await pool.query(
-            `INSERT INTO documents (title, file_path, file_size, file_type, processing_status, metadata)
-             VALUES ($1, $2, $3, $4, 'completed', $5)`,
-            [name, filePath, content.length, fileType, JSON.stringify(metadata)]
-          );
-        }
-
-        successfulFiles++;
-        processedFiles++;
-        console.log(`[GoogleDrive Job ${jobId}] ✅ Saved: ${safeName} (${processedFiles}/${fileIds.length})`);
-
-        // Send progress update
-        await importJobService.updateProgress({
-          jobId,
-          processedFiles,
-          successfulFiles,
-          failedFiles,
-          currentFile: name
-        });
-      } catch (error: any) {
-        failedFiles++;
-        processedFiles++;
-        console.error(`[GoogleDrive Job ${jobId}] ❌ Failed: ${fileId} - ${error.message}`);
-
-        await importJobService.updateProgress({
-          jobId,
-          processedFiles,
-          successfulFiles,
-          failedFiles,
-          currentError: error.message
-        });
+  private async enqueuePythonImport(jobId: number, fileIds: string[]): Promise<void> {
+    try {
+      // Get OAuth credentials from config
+      const config = await this.getConfig();
+      if (!config || !this.oauth2Client) {
+        throw new Error('Google Drive not connected');
       }
+
+      // Get current token (may refresh automatically)
+      const tokens = this.oauth2Client.credentials;
+      if (!tokens.access_token) {
+        throw new Error('No access token available');
+      }
+
+      // Prepare credentials dict for Python
+      const credentialsDict = {
+        token: tokens.access_token,
+        refresh_token: tokens.refresh_token || config.refreshToken,
+        token_uri: 'https://oauth2.googleapis.com/token',
+        client_id: this.oauthCredentials?.clientId,
+        client_secret: this.oauthCredentials?.clientSecret,
+        scopes: ['https://www.googleapis.com/auth/drive.readonly']
+      };
+
+      // Get docs directory
+      const docsDir = this.getUploadDirectory();
+
+      // Call Python microservice to enqueue Celery task
+      const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8002';
+      const response = await fetch(`${pythonServiceUrl}/api/python/import/google-drive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: jobId,
+          file_ids: fileIds,
+          credentials: credentialsDict,
+          docs_dir: docsDir
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Python service error: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log(`[GoogleDrive] Job ${jobId} enqueued to Python worker, task ID: ${result.task_id}`);
+    } catch (error: any) {
+      console.error(`[GoogleDrive] Failed to enqueue Python import:`, error.message);
+      throw error;
     }
-
-    // Send final 100% progress update
-    await importJobService.updateProgress({
-      jobId,
-      processedFiles,
-      successfulFiles,
-      failedFiles,
-      currentFile: 'Import completed'
-    });
-
-    // Mark job as completed
-    await importJobService.updateJobStatus(jobId, 'completed');
-    console.log(`[GoogleDrive] Job ${jobId} completed: ${successfulFiles}/${fileIds.length} successful, ${failedFiles} failed`);
   }
 
   /**

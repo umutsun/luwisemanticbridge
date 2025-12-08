@@ -29,7 +29,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -105,6 +105,12 @@ app.include_router(
     tags=["whisper"],
     dependencies=[Depends(verify_api_key)]
 )
+app.include_router(
+    import_router,
+    prefix="/api/python/import",
+    tags=["import"]
+    # No API key required for internal service-to-service calls
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -127,6 +133,7 @@ async def root():
             "crawl": "/api/python/crawl",
             "pgai": "/api/python/pgai",
             "whisper": "/api/python/whisper",
+            "import": "/api/python/import",
             "docs": "/docs"
         }
     }
