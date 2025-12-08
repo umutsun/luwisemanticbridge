@@ -1,6 +1,7 @@
 """
-LSEMB Python Microservices
+Python Microservices
 Main FastAPI Application
+Multi-tenant architecture supporting EmlakAI, Bookie, Vergilex, LSEMB
 """
 
 import os
@@ -16,9 +17,12 @@ import uvicorn
 from loguru import logger
 from dotenv import load_dotenv
 
-# Load environment variables from .env.lsemb
+# Load environment variables from .env.lsemb (or .env.emlakai, .env.bookie, etc.)
 env_path = Path(__file__).parent.parent.parent / '.env.lsemb'
 load_dotenv(dotenv_path=env_path)
+
+# Get tenant-specific app name
+APP_NAME = os.getenv("APP_NAME", "LSEMB")
 
 # Configure logging
 logger.remove()
@@ -34,7 +38,7 @@ from routers import crawl_router, pgai_router, health_router, whisper_router, im
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    logger.info("🚀 Starting LSEMB Python Services...")
+    logger.info(f"🚀 Starting {APP_NAME} Python Services...")
 
     # Initialize services
     from services.database import init_db
@@ -51,7 +55,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
-    logger.info("🔄 Shutting down LSEMB Python Services...")
+    logger.info(f"🔄 Shutting down {APP_NAME} Python Services...")
     from services.database import close_db
     from services.redis_client import close_redis
 
@@ -61,7 +65,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="LSEMB Python Services",
+    title=f"{APP_NAME} Python Services",
     description="Python microservices for advanced AI capabilities",
     version="1.0.0",
     lifespan=lifespan
@@ -125,7 +129,8 @@ async def global_exception_handler(request, exc):
 @app.get("/")
 async def root():
     return {
-        "service": "LSEMB Python Services",
+        "service": f"{APP_NAME} Python Services",
+        "tenant": os.getenv("TENANT_ID", "unknown"),
         "status": "running",
         "version": "1.0.0",
         "endpoints": {
