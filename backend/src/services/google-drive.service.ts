@@ -682,7 +682,7 @@ class GoogleDriveService {
    * Import files with job tracking and progress updates (recommended for large imports)
    * Returns job ID immediately, processing continues in Python Celery worker
    */
-  async importFilesWithProgress(fileIds: string[], userId?: string): Promise<{
+  async importFilesWithProgress(fileIds: string[], userId?: string, saveToDb: boolean = true): Promise<{
     jobId: number;
     totalFiles: number;
   }> {
@@ -691,11 +691,11 @@ class GoogleDriveService {
       userId,
       jobType: 'google_drive',
       totalFiles: fileIds.length,
-      metadata: { fileIds }
+      metadata: { fileIds, saveToDb }
     });
 
     // Enqueue job to Python Celery worker (don't await)
-    this.enqueuePythonImport(job.id, fileIds).catch(error => {
+    this.enqueuePythonImport(job.id, fileIds, saveToDb).catch(error => {
       console.error(`[GoogleDrive] Failed to enqueue job ${job.id}:`, error);
       importJobService.updateJobStatus(job.id, 'failed');
     });
@@ -710,7 +710,7 @@ class GoogleDriveService {
    * Enqueue import job to Python Celery worker
    * Delegates processing to Python microservice for better performance
    */
-  private async enqueuePythonImport(jobId: number, fileIds: string[]): Promise<void> {
+  private async enqueuePythonImport(jobId: number, fileIds: string[], saveToDb: boolean = true): Promise<void> {
     try {
       // Get OAuth credentials from config
       const config = await this.getConfig();
@@ -746,7 +746,8 @@ class GoogleDriveService {
           job_id: jobId,
           file_ids: fileIds,
           credentials: credentialsDict,
-          docs_dir: docsDir
+          docs_dir: docsDir,
+          save_to_db: saveToDb
         })
       });
 

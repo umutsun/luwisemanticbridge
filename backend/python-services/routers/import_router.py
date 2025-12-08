@@ -17,6 +17,7 @@ class GoogleDriveImportRequest(BaseModel):
     file_ids: List[str]
     credentials: Dict[str, Any]
     docs_dir: str
+    save_to_db: bool = True
 
 
 class ImportJobResponse(BaseModel):
@@ -49,7 +50,8 @@ async def enqueue_google_drive_import(
             job_id=request.job_id,
             file_ids=request.file_ids,
             credentials_dict=request.credentials,
-            docs_dir=request.docs_dir
+            docs_dir=request.docs_dir,
+            save_to_db=request.save_to_db
         )
 
         logger.info(f"[Import API] Job {request.job_id} enqueued with task ID: {task.id}")

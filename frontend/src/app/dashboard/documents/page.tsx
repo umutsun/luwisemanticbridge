@@ -656,7 +656,7 @@ export default function DocumentManagerPage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ fileIds })
+        body: JSON.stringify({ fileIds, saveToDb })
       });
 
       const data = await response.json();

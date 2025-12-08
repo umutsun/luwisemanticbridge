@@ -15,7 +15,6 @@ import { ProgressCircle } from '@/components/ui/progress-circle';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { VectorSpaceGraph } from '@/components/ui/vector-space-graph';
 import {
   Table,
   TableBody,
@@ -1949,53 +1948,6 @@ export default function CrawlerDataPage() {
                 </p>
               </div>
             </div>
-
-            {/* Vector Space Visualization - Zen Style */}
-            <VectorSpaceGraph
-              data={[
-                {
-                  id: 'sources',
-                  label: 'Crawler Sources',
-                  value: stats.totalDirectories,
-                  category: 'Sources',
-                  metadata: {
-                    type: 'Directory Count',
-                    status: 'Active'
-                  }
-                },
-                {
-                  id: 'total',
-                  label: 'Total Items',
-                  value: stats.totalItems,
-                  category: 'Data',
-                  metadata: {
-                    type: 'Total Crawled',
-                    formatted: stats.totalItems.toLocaleString()
-                  }
-                },
-                {
-                  id: 'selected',
-                  label: 'Selected Items',
-                  value: stats.selectedItemsCount,
-                  category: 'Processing',
-                  metadata: {
-                    type: 'Ready to Process',
-                    percentage: stats.totalItems > 0 ? ((stats.selectedItemsCount / stats.totalItems) * 100).toFixed(1) + '%' : '0%'
-                  }
-                },
-                {
-                  id: 'mapped',
-                  label: 'Mapped Items',
-                  value: stats.mappedItems,
-                  category: 'Processed',
-                  metadata: {
-                    type: 'Successfully Mapped',
-                    formatted: stats.mappedItems.toLocaleString()
-                  }
-                }
-              ]}
-              showStats={true}
-            />
 
             {/* Workflow Stepper */}
             <Card>

@@ -191,14 +191,14 @@ router.get('/files', authenticateToken, async (req: Request, res: Response) => {
  */
 router.post('/import-with-progress', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { fileIds } = req.body;
+    const { fileIds, saveToDb = true } = req.body;
     const userId = (req as any).user?.userId;
 
     if (!Array.isArray(fileIds) || fileIds.length === 0) {
       return res.status(400).json({ error: 'fileIds array is required' });
     }
 
-    const result = await googleDriveService.importFilesWithProgress(fileIds, userId);
+    const result = await googleDriveService.importFilesWithProgress(fileIds, userId, saveToDb);
 
     res.json({
       success: true,

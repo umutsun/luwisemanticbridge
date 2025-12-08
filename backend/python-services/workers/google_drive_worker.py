@@ -193,7 +193,8 @@ def import_google_drive_files(
     job_id: int,
     file_ids: List[str],
     credentials_dict: Dict[str, Any],
-    docs_dir: str
+    docs_dir: str,
+    save_to_db: bool = True
 ):
     """
     Celery task to import files from Google Drive
@@ -203,6 +204,7 @@ def import_google_drive_files(
         file_ids: List of Google Drive file IDs
         credentials_dict: OAuth2 credentials dictionary
         docs_dir: Target directory for downloaded files
+        save_to_db: Whether to save file metadata to database (default: True)
     """
     async def _run():
         print(f"[GoogleDrive Worker] Starting job {job_id} with {len(file_ids)} files")
@@ -256,20 +258,22 @@ def import_google_drive_files(
                 # Determine file type
                 file_type = get_file_type(mime_type, filename)
 
-                # Save to database
-                await save_document_to_db(
-                    filename=filename,
-                    file_path=file_path,
-                    file_size=file_size,
-                    file_type=file_type,
-                    google_drive_id=file_id,
-                    job_id=job_id
-                )
+                # Save to database (if enabled)
+                if save_to_db:
+                    await save_document_to_db(
+                        filename=filename,
+                        file_path=file_path,
+                        file_size=file_size,
+                        file_type=file_type,
+                        google_drive_id=file_id,
+                        job_id=job_id
+                    )
+                    print(f"[GoogleDrive Worker] ✅ Saved to DB and disk: {safe_filename} ({processed}/{total})")
+                else:
+                    print(f"[GoogleDrive Worker] ✅ Saved to disk only: {safe_filename} ({processed}/{total})")
 
                 successful += 1
                 processed += 1
-
-                print(f"[GoogleDrive Worker] ✅ Saved: {safe_filename} ({processed}/{total})")
 
                 # Update progress
                 await update_job_progress(
