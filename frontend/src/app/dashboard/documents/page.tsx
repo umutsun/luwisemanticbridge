@@ -975,6 +975,112 @@ export default function DocumentManagerPage() {
     }
   };
 
+  // Physical files selection handlers
+  const [selectAllPhysicalFiles, setSelectAllPhysicalFiles] = useState(false);
+
+  const handleSelectAllPhysicalFiles = () => {
+    const filteredFiles = physicalFiles.filter(file => {
+      // Apply same filters as display
+      if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+        return false;
+      }
+      if (physicalFilesFilter !== 'all') {
+        const fileExt = file.ext.toLowerCase();
+        if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+          return false;
+        }
+        if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    if (selectAllPhysicalFiles) {
+      setSelectedPhysicalFiles(new Set());
+    } else {
+      setSelectedPhysicalFiles(new Set(filteredFiles.map(file => file.path)));
+    }
+    setSelectAllPhysicalFiles(!selectAllPhysicalFiles);
+  };
+
+  const handleSelectPhysicalFile = (filePath: string) => {
+    const newSelected = new Set(selectedPhysicalFiles);
+    if (newSelected.has(filePath)) {
+      newSelected.delete(filePath);
+    } else {
+      newSelected.add(filePath);
+    }
+    setSelectedPhysicalFiles(newSelected);
+
+    // Update select all state
+    const filteredFiles = physicalFiles.filter(file => {
+      if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+        return false;
+      }
+      if (physicalFilesFilter !== 'all') {
+        const fileExt = file.ext.toLowerCase();
+        if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+          return false;
+        }
+        if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+    setSelectAllPhysicalFiles(newSelected.size === filteredFiles.length && filteredFiles.length > 0);
+  };
+
+  const handleBulkDeletePhysicalFiles = async () => {
+    if (selectedPhysicalFiles.size === 0) {
+      toast({
+        title: t('documents.toast.error'),
+        description: 'No files selected',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const filePaths = Array.from(selectedPhysicalFiles);
+
+      const response = await fetch(getApiUrl('physicalFiles/bulk-delete'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ filePaths })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Bulk delete failed');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: t('documents.toast.success'),
+        description: `${result.deletedCount} file(s) deleted successfully`
+      });
+
+      // Clear selection and refresh
+      setSelectedPhysicalFiles(new Set());
+      setSelectAllPhysicalFiles(false);
+      fetchPhysicalFiles();
+      fetchDocuments();
+    } catch (error: any) {
+      toast({
+        title: t('documents.toast.error'),
+        description: error.message || 'Failed to delete files',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
@@ -2767,8 +2873,17 @@ export default function DocumentManagerPage() {
                       <FolderOpen className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                       <span className="text-gray-900 dark:text-white font-semibold">docs</span>
                     </CardTitle>
-                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                      {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
+                    <div className="flex items-center gap-3">
+                      {physicalFilesFilter !== 'folders' && physicalFiles.length > 0 && (
+                        <Checkbox
+                          checked={selectAllPhysicalFiles}
+                          onCheckedChange={handleSelectAllPhysicalFiles}
+                          aria-label="Select all files"
+                        />
+                      )}
+                      <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                        {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -2921,8 +3036,20 @@ export default function DocumentManagerPage() {
                             .map((file) => (
                               <div
                                 key={file.path}
-                                className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
+                                className={`flex items-center gap-2 p-3 transition-colors group ${
+                                  selectedPhysicalFiles.has(file.path)
+                                    ? 'bg-blue-50 dark:bg-blue-950/30'
+                                    : 'hover:bg-muted/50'
+                                }`}
                               >
+                                {/* Checkbox */}
+                                <Checkbox
+                                  checked={selectedPhysicalFiles.has(file.path)}
+                                  onCheckedChange={() => handleSelectPhysicalFile(file.path)}
+                                  aria-label={`Select ${file.filename}`}
+                                  className="flex-shrink-0"
+                                />
+
                                 {/* Actions on the left - always visible */}
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   {/* DB icon - always visible, disabled if already in DB */}
@@ -2978,6 +3105,37 @@ export default function DocumentManagerPage() {
                       )
                     )}
                   </ScrollArea>
+
+                  {/* Action Bar - Shows when files are selected */}
+                  {selectedPhysicalFiles.size > 0 && (
+                    <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 mt-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">
+                            {selectedPhysicalFiles.size} {selectedPhysicalFiles.size === 1 ? 'file' : 'files'} selected
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
+                          {/* Bulk Delete Button */}
+                          <ConfirmTooltip
+                            onConfirm={handleBulkDeletePhysicalFiles}
+                            message={`Delete ${selectedPhysicalFiles.size} selected file(s)?`}
+                            side="top"
+                          >
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
+                              title={`Delete ${selectedPhysicalFiles.size} selected file(s)`}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </ConfirmTooltip>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

@@ -1007,6 +1007,56 @@ router.delete('/physical-files', authenticateToken, async (req: AuthenticatedReq
   }
 });
 
+// Bulk delete physical files - REQUIRES AUTHENTICATION
+router.post('/physical-files/bulk-delete', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { filePaths } = req.body;
+
+    if (!filePaths || !Array.isArray(filePaths) || filePaths.length === 0) {
+      return res.status(400).json({ error: 'File paths array is required' });
+    }
+
+    let filesDeleted = 0;
+    let databaseDeleted = 0;
+    const errors: string[] = [];
+
+    for (const filePath of filePaths) {
+      try {
+        // Delete from database
+        const dbResult = await lsembPool.query(
+          'DELETE FROM documents WHERE file_path = $1 RETURNING id',
+          [filePath]
+        );
+        if (dbResult.rowCount > 0) {
+          databaseDeleted++;
+        }
+
+        // Delete physical file
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          filesDeleted++;
+        }
+      } catch (err: any) {
+        errors.push(`Failed to delete ${filePath}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      deletedCount: filesDeleted,
+      databaseDeletedCount: databaseDeleted,
+      totalRequested: filePaths.length,
+      message: `Successfully deleted ${filesDeleted} file(s)`,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error: any) {
+    console.error('Error in bulk delete physical files:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to bulk delete physical files'
+    });
+  }
+});
+
 // Preview physical file content - REQUIRES AUTHENTICATION
 // NOTE: This route MUST come before /:id to avoid route matching issues
 router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
