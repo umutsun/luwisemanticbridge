@@ -17,7 +17,7 @@ function getAuthToken(request: NextRequest): string | null {
 // GET /api/chat/conversations/[id] - Get specific conversation
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = getAuthToken(request);
@@ -28,7 +28,7 @@ export async function GET(
       );
     }
 
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
     const backendUrl = `${ASB_API_URL}/api/v2/chat/conversations/${conversationId}`;
     console.log('[API Route] Fetching conversation:', backendUrl);
 
@@ -68,7 +68,7 @@ export async function GET(
 // PUT /api/chat/conversations/[id] - Update conversation title
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = getAuthToken(request);
@@ -79,7 +79,7 @@ export async function PUT(
       );
     }
 
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
     const body = await request.json();
     const { title } = body;
 
@@ -123,7 +123,7 @@ export async function PUT(
 // DELETE /api/chat/conversations/[id] - Delete conversation
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = getAuthToken(request);
@@ -134,7 +134,7 @@ export async function DELETE(
       );
     }
 
-    const conversationId = params.id;
+    const { id: conversationId } = await params;
     const backendUrl = `${ASB_API_URL}/api/v2/chat/conversations/${conversationId}`;
     console.log('[API Route] Deleting conversation:', backendUrl);
 
