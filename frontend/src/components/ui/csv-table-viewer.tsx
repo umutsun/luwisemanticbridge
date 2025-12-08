@@ -461,13 +461,13 @@ export default function CSVTableViewer({
             <tbody>
               {paginatedRows.map((row, index) => (
                 <tr key={index} className="border-b hover:bg-muted/20">
-                  <td className="p-2 text-muted-foreground font-mono text-xs">
+                  <td className="py-3 px-2 text-muted-foreground font-mono text-xs">
                     {startIndex + index + 1}
                   </td>
                   {headers.map((header, colIndex) => (
                     <td
                       key={colIndex}
-                      className={`p-2 max-w-xs truncate ${stats.columnTypes[colIndex]?.type === 'numeric'
+                      className={`py-3 px-2 max-w-xs truncate ${stats.columnTypes[colIndex]?.type === 'numeric'
                         ? 'text-right font-mono'
                         : 'text-left'
                         }`}

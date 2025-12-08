@@ -2860,13 +2860,13 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
               </TabsList>
 
               <TabsContent value="table" className="mt-0">
-                <div className="h-[500px]">
+                <div className="h-[420px]">
                   {renderCSVTable()}
                 </div>
               </TabsContent>
 
               <TabsContent value="graphql" className="mt-0">
-                <div className="h-[500px]">
+                <div className="h-[420px]">
                   {renderGraphQLTransform()}
                 </div>
               </TabsContent>
