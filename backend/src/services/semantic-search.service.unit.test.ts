@@ -542,6 +542,53 @@ describe('SemanticSearchService', () => {
       expect(applyLimits(NaN)).toBe(25); // Should use maxResults
       expect(applyLimits(Infinity)).toBe(25);
     });
+
+    it('should parse boolean settings correctly', () => {
+      const parseBool = (service as any).parseBooleanSetting.bind(service);
+
+      // Boolean values
+      expect(parseBool(true)).toBe(true);
+      expect(parseBool(false)).toBe(false);
+
+      // Number values
+      expect(parseBool(1)).toBe(true);
+      expect(parseBool(0)).toBe(false);
+      expect(parseBool(42)).toBe(true);
+
+      // String values - truthy
+      expect(parseBool('true')).toBe(true);
+      expect(parseBool('TRUE')).toBe(true);
+      expect(parseBool('1')).toBe(true);
+      expect(parseBool('yes')).toBe(true);
+      expect(parseBool('on')).toBe(true);
+      expect(parseBool('  True  ')).toBe(true); // with whitespace
+
+      // String values - falsy
+      expect(parseBool('false')).toBe(false);
+      expect(parseBool('FALSE')).toBe(false);
+      expect(parseBool('0')).toBe(false);
+      expect(parseBool('no')).toBe(false);
+      expect(parseBool('off')).toBe(false);
+      expect(parseBool('  false  ')).toBe(false); // with whitespace
+
+      // Invalid values
+      expect(parseBool('invalid')).toBeUndefined();
+      expect(parseBool(null)).toBeUndefined();
+      expect(parseBool(undefined)).toBeUndefined();
+      expect(parseBool({})).toBeUndefined();
+    });
+
+    it('should return parallel LLM count', () => {
+      const count = service.getParallelLLMCount();
+      expect(typeof count).toBe('number');
+      expect(count).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should return parallel LLM batch size', () => {
+      const batchSize = service.getParallelLLMBatchSize();
+      expect(typeof batchSize).toBe('number');
+      expect(batchSize).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('Redis Integration', () => {
