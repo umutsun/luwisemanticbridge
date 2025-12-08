@@ -156,6 +156,36 @@ describe('SemanticSearchService', () => {
 
       await expect(service.generateEmbedding('test text')).rejects.toThrow('Embedding generation failed: API Error');
     });
+
+    it('should clean old embedding cache entries', async () => {
+      const mockEmbedding = Array.from({ length: 768 }, () => Math.random());
+
+      mockPool.query.mockResolvedValue({
+        rows: [
+          { key: 'llmSettings.embeddingProvider', value: 'openai' },
+        ],
+      } as any);
+      mockLLMManager.generateEmbedding.mockResolvedValue(mockEmbedding);
+
+      // Generate embeddings to populate cache
+      await service.generateEmbedding('query1');
+      await service.generateEmbedding('query2');
+
+      // Access private cache and set old timestamp
+      const cacheTimestamps = (service as any).embeddingCacheTimestamps;
+      const firstKey = Array.from(cacheTimestamps.keys())[0];
+      if (firstKey) {
+        const oldTimestamp = Date.now() - 400000; // Older than 5min TTL
+        cacheTimestamps.set(firstKey, oldTimestamp);
+
+        // Trigger cleanup
+        const cleanCache = (service as any).cleanEmbeddingCache.bind(service);
+        cleanCache();
+
+        // Verify log message about cleanup
+        expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Cleaned'));
+      }
+    });
   });
 
   describe('keywordSearch', () => {
