@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from loguru import logger
+from .worker_router import ensure_worker_running
 
 router = APIRouter()
 
@@ -41,6 +42,9 @@ async def enqueue_google_drive_import(
     """
     try:
         logger.info(f"[Import API] Enqueueing Google Drive import job {request.job_id} with {len(request.file_ids)} files")
+
+        # Ensure Celery worker is running (auto-start if needed)
+        await ensure_worker_running()
 
         # Import worker and enqueue task
         from workers.google_drive_worker import import_google_drive_files
