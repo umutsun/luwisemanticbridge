@@ -625,4 +625,165 @@ describe('SemanticSearchService', () => {
       expect(freshService).toBeDefined();
     });
   });
+
+  describe('Public Refresh Methods', () => {
+    it('should refresh RAG settings on demand', async () => {
+      const freshPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      // Initial queries for constructor
+      freshPool.query
+        .mockResolvedValueOnce({ rows: [] }) // Constructor RAG settings
+        .mockResolvedValueOnce({ rows: [] }) // Constructor embedding settings
+        // Refresh call
+        .mockResolvedValueOnce({ rows: [
+          { key: 'ragSettings.similarityThreshold', value: '0.8' }
+        ] });
+
+      const freshService = new SemanticSearchService({
+        lsembPool: freshPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Clear previous calls
+      freshPool.query.mockClear();
+
+      // Call refresh
+      await freshService.refreshRAGSettingsNow();
+
+      expect(freshPool.query).toHaveBeenCalled();
+    });
+
+    it('should refresh source table weights on demand', async () => {
+      const freshPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      // Initial queries for constructor
+      freshPool.query
+        .mockResolvedValueOnce({ rows: [] }) // Constructor RAG settings
+        .mockResolvedValueOnce({ rows: [] }) // Constructor embedding settings
+        // Refresh call
+        .mockResolvedValueOnce({ rows: [
+          { key: 'sourceTableWeights.documents', value: '1.0' }
+        ] });
+
+      const freshService = new SemanticSearchService({
+        lsembPool: freshPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Clear previous calls
+      freshPool.query.mockClear();
+
+      // Call refresh
+      await freshService.refreshSourceTableWeightsNow();
+
+      expect(freshPool.query).toHaveBeenCalled();
+    });
+
+    it('should get unified record types', async () => {
+      const freshPool = {
+        query: jest.fn(),
+        connect: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+
+      // Initial queries for constructor
+      freshPool.query
+        .mockResolvedValueOnce({ rows: [] }) // Constructor RAG settings
+        .mockResolvedValueOnce({ rows: [] }) // Constructor embedding settings
+        // getUnifiedRecordTypes call
+        .mockResolvedValueOnce({ rows: [
+          { source_table: 'documents' },
+          { source_table: 'messages' },
+          { source_table: 'web_scrapes' }
+        ] });
+
+      const freshService = new SemanticSearchService({
+        lsembPool: freshPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Call getUnifiedRecordTypes
+      const types = await freshService.getUnifiedRecordTypes();
+
+      expect(Array.isArray(types)).toBe(true);
+      expect(freshPool.query).toHaveBeenCalled();
+    });
+
+    it('should get popular searches from Redis', async () => {
+      const mockRedis = {
+        get: jest.fn(),
+        set: jest.fn(),
+        setex: jest.fn(),
+        zrevrange: jest.fn().mockResolvedValue([
+          'query1', '10',
+          'query2', '5',
+          'query3', '3'
+        ]),
+      };
+
+      service.setRedis(mockRedis as any);
+
+      const searches = await service.getPopularSearches(10, '24h');
+
+      expect(searches).toBeDefined();
+      expect(Array.isArray(searches)).toBe(true);
+      expect(mockRedis.zrevrange).toHaveBeenCalledWith('search:popular:24h', 0, 9, 'WITHSCORES');
+
+      if (searches.length > 0) {
+        expect(searches[0]).toHaveProperty('query');
+        expect(searches[0]).toHaveProperty('count');
+        expect(searches[0].query).toBe('query1');
+        expect(searches[0].count).toBe(10);
+      }
+    });
+
+    it('should return empty array when Redis not available for popular searches', async () => {
+      // Service without Redis
+      const freshService = new SemanticSearchService({
+        lsembPool: mockPool as any,
+        customerPool: mockCustomerPool,
+        llmManager: mockLLMManager,
+      });
+
+      const searches = await freshService.getPopularSearches(10);
+
+      expect(searches).toEqual([]);
+    });
+
+    it('should handle Redis errors gracefully when getting popular searches', async () => {
+      const mockRedis = {
+        get: jest.fn(),
+        set: jest.fn(),
+        setex: jest.fn(),
+        zrevrange: jest.fn().mockRejectedValue(new Error('Redis error')),
+      };
+
+      service.setRedis(mockRedis as any);
+
+      const searches = await service.getPopularSearches(10);
+
+      expect(searches).toEqual([]);
+      expect(console.error).toHaveBeenCalled();
+    });
+  });
 });
