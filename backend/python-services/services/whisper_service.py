@@ -58,7 +58,11 @@ class WhisperService:
         self.api_key = api_key
         self.initial_prompt = initial_prompt
         self.model = None
-        self.device = "cuda" if (WHISPER_AVAILABLE and torch.cuda.is_available()) else "cpu"
+        # Only check device for local mode
+        if mode == "local":
+            self.device = "cuda" if (WHISPER_AVAILABLE and torch.cuda.is_available()) else "cpu"
+        else:
+            self.device = None
 
         if mode == "api":
             if not OPENAI_AVAILABLE:
@@ -91,7 +95,8 @@ class WhisperService:
         language: str = "tr",
         task: str = "transcribe",
         temperature: float = 0.0,
-        initial_prompt: Optional[str] = None
+        initial_prompt: Optional[str] = None,
+        file_extension: str = ".webm"
     ) -> Dict[str, Any]:
         """
         Transcribe audio to text (API or Local)
@@ -102,6 +107,7 @@ class WhisperService:
             task: "transcribe" or "translate" (to English)
             temperature: Sampling temperature (0-1)
             initial_prompt: Optional prompt to guide the transcription
+            file_extension: Audio file extension (e.g., .mp3, .wav, .m4a, .webm)
 
         Returns:
             Dict with transcription results
@@ -110,8 +116,8 @@ class WhisperService:
             # Use default prompt if not provided
             prompt = initial_prompt or self.initial_prompt
 
-            # Save audio to temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+            # Save audio to temporary file with proper extension
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_audio:
                 temp_audio.write(audio_data)
                 temp_audio_path = temp_audio.name
 
@@ -181,22 +187,33 @@ class WhisperService:
     async def transcribe_with_timestamps(
         self,
         audio_data: bytes,
-        language: str = "tr"
+        language: str = "tr",
+        file_extension: str = ".webm"
     ) -> Dict[str, Any]:
         """
-        Transcribe audio with word-level timestamps
+        Transcribe audio with word-level timestamps (Local mode only)
 
         Args:
             audio_data: Audio file bytes
             language: Language code
+            file_extension: Audio file extension (e.g., .mp3, .wav, .m4a, .webm)
 
         Returns:
             Dict with transcription and timestamps
         """
         try:
+            # Check if API mode - timestamps not supported
+            if self.mode == "api":
+                return {
+                    "success": False,
+                    "error": "Word-level timestamps are not supported in API mode. Use local mode for this feature.",
+                    "text": "",
+                    "segments": []
+                }
+
             model = self.load_model()
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_audio:
                 temp_audio.write(audio_data)
                 temp_audio_path = temp_audio.name
 
@@ -250,33 +267,41 @@ class WhisperService:
         }
 
 
-# Global instance (lazy loaded)
-_whisper_service: Optional[WhisperService] = None
+# Global instance cache (key: (model_name, mode))
+_whisper_service_cache: Dict[tuple, WhisperService] = {}
 
 def get_whisper_service(
     model_name: str = "base",
     mode: str = "local",
     api_key: Optional[str] = None,
-    initial_prompt: Optional[str] = None
+    initial_prompt: Optional[str] = None,
+    force_recreate: bool = False
 ) -> WhisperService:
     """
     Get or create Whisper service instance
+    Service is cached per (model_name, mode) combination
 
     Args:
         model_name: Model name (whisper-1 for API, tiny/base/small/medium/large for local)
         mode: "api" or "local"
         api_key: OpenAI API key (for API mode)
         initial_prompt: Default prompt for transcriptions
+        force_recreate: Force recreation of service instance
 
     Returns:
         WhisperService instance
     """
-    global _whisper_service
-    if _whisper_service is None:
-        _whisper_service = WhisperService(
+    global _whisper_service_cache
+
+    cache_key = (model_name, mode)
+
+    # Recreate if not exists or force_recreate is True
+    if cache_key not in _whisper_service_cache or force_recreate:
+        _whisper_service_cache[cache_key] = WhisperService(
             model_name=model_name,
             mode=mode,
             api_key=api_key,
             initial_prompt=initial_prompt
         )
-    return _whisper_service
+
+    return _whisper_service_cache[cache_key]

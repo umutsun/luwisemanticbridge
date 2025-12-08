@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
-import { lsembPool } from '../config/database.config';
+import { lsembPool as defaultLsembPool } from '../config/database.config';
 import { LLMManager } from './llm-manager.service';
 import Redis from 'ioredis';
 import crypto from 'crypto';
@@ -15,9 +15,20 @@ interface EmbeddingSettings {
   googleApiKey?: string;
 }
 
+/**
+ * Dependencies for SemanticSearchService (Dependency Injection)
+ */
+export interface SemanticSearchDependencies {
+  lsembPool?: Pool;
+  customerPool?: Pool;
+  llmManager?: LLMManager;
+  redis?: Redis;
+}
+
 export class SemanticSearchService {
-  private pool = lsembPool;  // lsembPool kullan
+  private pool: Pool;  // lsembPool kullan
   private customerPool: Pool;
+  private llmManager: LLMManager;
   private embeddingSettings: EmbeddingSettings = {
     provider: 'openai',
     model: 'text-embedding-3-small'
@@ -72,7 +83,7 @@ export class SemanticSearchService {
    */
   private async verifyVectorIndex(): Promise<void> {
     try {
-      const result = await lsembPool.query(`
+      const result = await this.pool.query(`
         SELECT
           i.indexname,
           i.indexdef,
@@ -119,7 +130,7 @@ export class SemanticSearchService {
    */
   async generateSourceSummary(source: any): Promise<string> {
     try {
-      const llmManager = LLMManager.getInstance();
+      const llmManager = this.llmManager;
 
       const prompt = `
         Aşağıdaki kaynak içeriğini kısaca özetleyin (maksimum 1 cümle):
@@ -149,12 +160,12 @@ export class SemanticSearchService {
    */
   private async loadUnifiedRecordTypes(): Promise<void> {
     try {
-      if (!lsembPool) {
+      if (!this.pool) {
         console.warn('[SemanticSearch] Database not initialized, cannot load record types');
         return;
       }
 
-      const result = await lsembPool.query(`
+      const result = await this.pool.query(`
         SELECT DISTINCT COALESCE(
           metadata->>'table',
           metadata->>'_sourceTable',
@@ -196,12 +207,12 @@ export class SemanticSearchService {
    */
   private async loadSourceTableWeights(): Promise<void> {
     try {
-      if (!lsembPool) {
+      if (!this.pool) {
         console.warn('[SemanticSearch] Database not initialized, cannot load source table weights');
         return;
       }
 
-      const result = await lsembPool.query(
+      const result = await this.pool.query(
         `SELECT value FROM settings WHERE key = $1`,
         ['search.sourceTableWeights']
       );
@@ -245,10 +256,14 @@ export class SemanticSearchService {
   private redis?: Redis;
   private readonly SEARCH_CACHE_TTL = 600; // 10 minutes
 
-  constructor() {
-    this.customerPool = new Pool({
+  constructor(dependencies?: SemanticSearchDependencies) {
+    // Dependency Injection: Allow mocking for tests
+    this.pool = dependencies?.lsembPool || defaultLsembPool;
+    this.customerPool = dependencies?.customerPool || new Pool({
       connectionString: process.env.DATABASE_URL || `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || ''}@${process.env.POSTGRES_HOST || 'localhost'}:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'lsemb'}`
     });
+    this.llmManager = dependencies?.llmManager || LLMManager.getInstance();
+    this.redis = dependencies?.redis;
 
     // Check vector index on startup
     this.verifyVectorIndex().catch(error => {
@@ -354,12 +369,12 @@ export class SemanticSearchService {
   private async loadRAGSettings(): Promise<void> {
     try {
       // Check if database is available
-      if (!lsembPool) {
+      if (!this.pool) {
         console.warn('[SemanticSearch] Database not initialized, using default RAG settings');
         return;
       }
 
-      const result = await lsembPool.query(
+      const result = await this.pool.query(
         `SELECT key, value FROM settings WHERE key IN (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
         )`,
@@ -547,7 +562,7 @@ export class SemanticSearchService {
   private async loadEmbeddingSettings(): Promise<void> {
     try {
       // Check if database is available
-      if (!lsembPool) {
+      if (!this.pool) {
         console.warn('[SemanticSearch] Database not initialized, using default embedding settings');
         // Default to Google embeddings for compatibility
         const provider = 'google';
@@ -562,7 +577,7 @@ export class SemanticSearchService {
       }
 
       // Get embedding provider and model from settings, fall back to Google if not set
-      const result = await lsembPool.query(
+      const result = await this.pool.query(
         'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
         [
           'embedding_provider', 'embedding_model', 'openai_api_key', 'google_api_key',
@@ -640,8 +655,7 @@ export class SemanticSearchService {
 
   private syncEmbeddingConfigWithLLM(): void {
     try {
-      const llmManager = LLMManager.getInstance();
-      llmManager.updateEmbeddingConfig({
+      this.llmManager.updateEmbeddingConfig({
         provider: this.embeddingSettings.provider,
         model: this.embeddingSettings.model
       });
@@ -658,7 +672,6 @@ export class SemanticSearchService {
   async generateEmbedding(text: string): Promise<number[]> {
     try {
       await this.refreshEmbeddingSettings();
-      const llmManager = LLMManager.getInstance();
 
       // Create cache key
       const cacheKey = `${text}_${this.embeddingSettings.provider}_${this.embeddingSettings.model}`;
@@ -676,7 +689,7 @@ export class SemanticSearchService {
       const embeddingModel = this.embeddingSettings.model;
 
       console.log(`[SemanticSearch] Generating embedding using ${embeddingProvider} (${embeddingModel})`);
-      const embedding = await llmManager.generateEmbedding(text, {
+      const embedding = await this.llmManager.generateEmbedding(text, {
         provider: embeddingProvider,
         model: embeddingModel
       });
@@ -949,12 +962,12 @@ export class SemanticSearchService {
       `;
 
       try {
-        if (lsembPool) {
-          const result = await lsembPool.query(searchQuery, [query, effectiveLimit]);
+        if (this.pool) {
+          const result = await this.pool.query(searchQuery, [query, effectiveLimit]);
           allResults = [...allResults, ...result.rows];
           console.log(`[SemanticSearch] Found ${result.rows.length} keyword results`);
         } else {
-          console.log('[SemanticSearch] lsembPool not available, keyword search disabled');
+          console.log('[SemanticSearch] Database pool not available, keyword search disabled');
         }
       } catch (error) {
         console.log('[SemanticSearch] unified_embeddings table not accessible for keyword search');
@@ -1004,12 +1017,12 @@ export class SemanticSearchService {
 
       const effectiveLimit = this.applyResultLimits(limit);
 
-      if (!lsembPool) {
-        console.log('[SemanticSearch] lsembPool not available, using keyword search fallback');
+      if (!this.pool) {
+        console.log('[SemanticSearch] Database pool not available, using keyword search fallback');
         return this.keywordSearch(query, effectiveLimit);
       }
 
-      const embeddingCheck = await lsembPool.query(`
+      const embeddingCheck = await this.pool.query(`
         SELECT COUNT(*) as count
         FROM unified_embeddings
         WHERE embedding IS NOT NULL
@@ -1219,7 +1232,7 @@ export class SemanticSearchService {
         actualKeywordBoost: useKeywordBoost
       });
 
-      const result = await lsembPool.query(searchQuery, [
+      const result = await this.pool.query(searchQuery, [
         JSON.stringify(queryEmbedding),
         this.similarityThreshold,
         keywordPattern,

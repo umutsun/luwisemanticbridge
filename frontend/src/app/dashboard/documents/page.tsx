@@ -3204,6 +3204,22 @@ export default function DocumentManagerPage() {
                               )}
                             </Button>
                           </ConfirmTooltip>
+
+                          {/* Bulk Delete Button */}
+                          <ConfirmTooltip
+                            onConfirm={() => handleBulkDeletePhysicalFiles(Array.from(selectedPhysicalFiles))}
+                            message={`Delete ${selectedPhysicalFiles.size} selected file(s)?`}
+                            side="top"
+                          >
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 hover:bg-red-500/10 transition-colors"
+                              title={`Delete ${selectedPhysicalFiles.size} selected file(s)`}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </ConfirmTooltip>
                         </div>
                       </div>
                     </div>

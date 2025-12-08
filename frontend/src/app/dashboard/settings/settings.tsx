@@ -28,13 +28,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../../../components/ui/badge';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
 import { Spinner } from '../../../components/ui/spinner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { ConfirmTooltip } from '../../../components/ui/confirm-tooltip';
 import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  DollarSign,
   TrendingUp,
   Save,
   Sparkles,
@@ -45,9 +44,7 @@ import {
   Eye,
   EyeOff,
   X,
-  Calendar,
-  Clock,
-  Zap,
+  X,
   Trash2,
   Plus,
   HardDrive,
@@ -56,11 +53,9 @@ import {
 } from 'lucide-react';
 import {
   getSettingsCategory,
-  updateAppSettings,
   getLLMSettings,
   getRAGSettings,
   getDatabaseSettings,
-  getSecuritySettings,
   getTranslationSettings,
   getAppSettingsOnly,
   updateSettingsCategory
@@ -68,17 +63,11 @@ import {
 import { API_CONFIG } from '../../../lib/config';
 import { chatTemplates } from '@/templates/registry';
 
-// Component for each settings category
-function CategoryTab({ category, children }: { category: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[50%_50%] gap-6 w-full">
-      {children}
-    </div>
-  );
-}
+
 
 // Optimized LLM Settings Component
 function LLMSettings() {
+  const { t } = useTranslation();
   const [llmConfig, setLlmConfig] = useState<any>({});
   const [tempConfig, setTempConfig] = useState<any>({});
   const [loading, setLoading] = useState(false);
@@ -1168,7 +1157,7 @@ function LLMSettings() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>API Provider Configuration</CardTitle>
+              <CardTitle>{t('settings.llm.providerConfigTitle')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {Object.entries({
@@ -1207,7 +1196,7 @@ function LLMSettings() {
                         <Input
                           type={visibleKeys[provider] ? "text" : "password"}
                           value={data.key === '••••••••' ? '' : data.key || ''}
-                          placeholder="Enter API key"
+                          placeholder={t('settings.llm.enterApiKey')}
                           className="flex-1 pr-20"
                           onChange={(e) => {
                             const newConfig = { ...tempConfig };
@@ -1288,7 +1277,7 @@ function LLMSettings() {
               })}
 
               <p className="text-xs text-muted-foreground mt-6 pt-6 border-t">
-                Her provider için API key girin ve yeşil onay butonu görene kadar test edin.
+                {t('settings.llm.validateKeyHelp')}
               </p>
             </CardContent>
           </Card>
@@ -1297,11 +1286,11 @@ function LLMSettings() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>API Documentation</CardTitle>
+                <CardTitle>{t('settings.llm.apiDocsTitle')}</CardTitle>
                 <div className="flex items-center gap-2">
                   <div className={`h-2 w-2 rounded-full ${swaggerActive ? 'bg-green-500' : 'bg-red-500'}`} />
                   <span className="text-sm text-muted-foreground">
-                    {swaggerActive ? 'Active' : 'Inactive'}
+                    {swaggerActive ? t('settings.llm.active') : t('settings.llm.inactive')}
                   </span>
                 </div>
               </div>
@@ -1309,7 +1298,7 @@ function LLMSettings() {
             <CardContent>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Explore and test your API endpoints using the interactive Swagger documentation.
+                  {t('settings.llm.apiDocsDescription')}
                 </p>
                 <div className="flex flex-col gap-2">
                   <Button
@@ -1326,7 +1315,7 @@ function LLMSettings() {
                     >
                       <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10zm1-17h-2v8h2V5zm0 10h-2v2h2v-2z" />
                     </svg>
-                    Open Swagger UI
+                    {t('settings.llm.openSwagger')}
                   </Button>
                   <Button
                     variant="outline"
@@ -1348,7 +1337,7 @@ function LLMSettings() {
                 </div>
                 {!swaggerActive && (
                   <div className="text-sm text-destructive mt-2">
-                    Swagger documentation is not available. Please check your backend configuration.
+                    {t('settings.llm.swaggerUnavailable')}
                   </div>
                 )}
               </div>
@@ -1361,14 +1350,14 @@ function LLMSettings() {
           {/* Active Provider Selections */}
           <Card>
             <CardHeader>
-              <CardTitle>Active Service Providers</CardTitle>
+              <CardTitle>{t('settings.llm.activeServiceProvidersTitle')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Active LLM Provider Selection */}
               <div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Label>LLM Provider</Label>
-                  <Label>LLM Model</Label>
+                  <Label>{t('settings.llm.llmProviderLabel')}</Label>
+                  <Label>{t('settings.llm.llmModelLabel')}</Label>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <Select
@@ -1394,27 +1383,27 @@ function LLMSettings() {
                           await updateSettingsCategory('llm', updatedConfig);
                           setLlmConfig(updatedConfig);
                           toast({
-                            title: "Success",
-                            description: "LLM provider updated successfully",
+                            title: t('common.success'),
+                            description: t('settings.llm.providerUpdatedSuccess'),
                           });
                         } catch (error) {
                           toast({
-                            title: "Error",
-                            description: "Failed to update provider",
+                            title: t('common.error'),
+                            description: t('settings.llm.providerUpdateFailed'),
                             variant: "destructive",
                           });
                         }
                       } else {
                         toast({
-                          title: "Provider Not Validated",
-                          description: `Please validate the ${value} API key first`,
+                          title: t('settings.llm.providerNotValidated'),
+                          description: t('settings.llm.validateKeyFirstError', { provider: value }),
                           variant: "destructive"
                         });
                       }
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select LLM provider" />
+                      <SelectValue placeholder={t('settings.llm.selectProviderPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {(() => {
@@ -1422,7 +1411,7 @@ function LLMSettings() {
                         if (validatedProviders.length === 0) {
                           return (
                             <SelectItem value="_no_providers" disabled>
-                              Önce API key doğrulayın
+                              {t('settings.llm.validateFirst')}
                             </SelectItem>
                           );
                         }
@@ -1464,15 +1453,15 @@ function LLMSettings() {
                         });
                       } catch (error) {
                         toast({
-                          title: "Error",
-                          description: "Failed to update model",
+                          title: t('common.error'),
+                          description: t('settings.llm.modelUpdateFailed'),
                           variant: "destructive",
                         });
                       }
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select model" />
+                      <SelectValue placeholder={t('settings.llm.selectModelPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {(() => {
@@ -1481,7 +1470,7 @@ function LLMSettings() {
                         if (!isProviderValidated(currentProvider)) {
                           return (
                             <SelectItem value="_no_models" disabled>
-                              API key doğrulanmadı
+                              {t('settings.llm.notValidated')}
                             </SelectItem>
                           );
                         }
@@ -2136,6 +2125,7 @@ function QuestionPatternsEditor({
   patterns?: QuestionPattern[];
   onChange: (patterns: QuestionPattern[]) => void;
 }) {
+  const { t } = useTranslation();
   const [editingPattern, setEditingPattern] = useState<QuestionPattern | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
@@ -2201,7 +2191,7 @@ function QuestionPatternsEditor({
                 <Settings className="h-4 w-4" />
               </Button>
               <ConfirmTooltip
-                message={`Delete "${pattern.name}"?`}
+                message={t('settings.questionPatterns.deleteConfirm', { name: pattern.name })}
                 onConfirm={() => handleDeletePattern(pattern.name)}
               >
                 <Button
@@ -2220,10 +2210,10 @@ function QuestionPatternsEditor({
       {/* Actions */}
       <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={handleAddPattern}>
-          <Plus className="h-4 w-4 mr-1" /> Add Pattern
+          <Plus className="h-4 w-4 mr-1" /> {t('settings.questionPatterns.addPattern')}
         </Button>
         <Button variant="outline" size="sm" onClick={handleResetToDefaults}>
-          <RefreshCw className="h-4 w-4 mr-1" /> Reset Defaults
+          <RefreshCw className="h-4 w-4 mr-1" /> {t('settings.questionPatterns.resetDefaults')}
         </Button>
       </div>
 
@@ -2233,7 +2223,7 @@ function QuestionPatternsEditor({
           <DialogHeader className="px-6 py-4 border-b bg-muted/50">
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5 text-primary" />
-              {isAddingNew ? 'Add New Pattern' : `Edit Pattern: ${editingPattern?.name}`}
+              {isAddingNew ? t('settings.questionPatterns.addTitle') : t('settings.questionPatterns.editTitle', { name: editingPattern?.name })}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -2261,6 +2251,7 @@ function PatternEditForm({
   onSave: (pattern: QuestionPattern) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<QuestionPattern>(pattern);
   const [newCombo, setNewCombo] = useState({ with: '', question: '' });
 
@@ -2285,15 +2276,15 @@ function PatternEditForm({
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Pattern Name</Label>
+          <Label>{t('settings.questionPatterns.nameLabel')}</Label>
           <Input
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-            placeholder="e.g., emlak, vergi, saglik"
+            placeholder={t('settings.questionPatterns.namePlaceholder')}
           />
         </div>
         <div className="space-y-2">
-          <Label>Priority (lower = higher)</Label>
+          <Label>{t('settings.questionPatterns.priorityLabel')}</Label>
           <Input
             type="number"
             value={form.priority || 1}
@@ -2305,41 +2296,40 @@ function PatternEditForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Keywords (pipe-separated regex)</Label>
+        <Label>{t('settings.questionPatterns.keywordsLabel')}</Label>
         <Input
           value={form.keywords}
           onChange={(e) => setForm({ ...form, keywords: e.target.value })}
-          placeholder="e.g., satılık|kiralık|daire|konut"
+          placeholder={t('settings.questionPatterns.keywordsPlaceholder')}
         />
-        <p className="text-xs text-muted-foreground">Use | to separate keywords. These match content text.</p>
+        <p className="text-xs text-muted-foreground">{t('settings.questionPatterns.keywordsHelp')}</p>
       </div>
 
       <div className="space-y-2">
-        <Label>Title Keywords (optional)</Label>
+        <Label>{t('settings.questionPatterns.titleKeywordsLabel')}</Label>
         <Input
           value={form.titleKeywords || ''}
           onChange={(e) => setForm({ ...form, titleKeywords: e.target.value })}
-          placeholder="e.g., satılık|arsa"
+          placeholder={t('settings.questionPatterns.titleKeywordsPlaceholder')}
         />
-        <p className="text-xs text-muted-foreground">Additional keywords to match in titles only.</p>
+        <p className="text-xs text-muted-foreground">{t('settings.questionPatterns.titleKeywordsHelp')}</p>
       </div>
 
       <div className="space-y-2">
-        <Label>Default Question Template</Label>
+        <Label>{t('settings.questionPatterns.defaultQuestionLabel')}</Label>
         <Input
           value={form.defaultQuestion}
           onChange={(e) => setForm({ ...form, defaultQuestion: e.target.value })}
-          placeholder="{topic} hakkında bilgi verir misiniz?"
+          placeholder={t('settings.questionPatterns.defaultQuestionPlaceholder')}
         />
-        <p className="text-xs text-muted-foreground">Use {'{topic}'} as placeholder. Used when no combination matches.</p>
+        <p className="text-xs text-muted-foreground">{t('settings.questionPatterns.defaultQuestionHelp')}</p>
       </div>
 
       {/* Combinations */}
       <div className="space-y-3 pt-2 border-t">
-        <Label>Question Combinations</Label>
+        <Label>{t('settings.questionPatterns.combinationsLabel')}</Label>
         <p className="text-xs text-muted-foreground">
-          Define specific questions when certain secondary keywords are found.
-          Secondary keywords: fiyat, metrekare, konum, ozellik, oran, sure, basvuru, muafiyet
+          {t('settings.questionPatterns.combinationsHelp')}
         </p>
 
         {form.combinations?.map((combo, idx) => (
@@ -2375,7 +2365,7 @@ function PatternEditForm({
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-4 border-t">
-        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button variant="outline" onClick={onCancel}>{t('common.cancel')}</Button>
         <Button onClick={() => onSave(form)} disabled={!form.name || !form.keywords}>
           Save Pattern
         </Button>
@@ -2386,6 +2376,7 @@ function PatternEditForm({
 
 // Optimized Chatbot Settings Component
 function RAGSettings() {
+  const { t } = useTranslation();
   const [ragConfig, setRagConfig] = useState<any>({});
   const [tempRAGConfig, setTempRAGConfig] = useState<any>({});
   const [chatbotConfig, setChatbotConfig] = useState<any>({});
@@ -2653,7 +2644,7 @@ function RAGSettings() {
         {/* RAG Configuration - Left Column */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>RAG Configuration</CardTitle>
+            <CardTitle>{t('settings.rag.title')}</CardTitle>
             <Button
               variant="outline"
               size="sm"
@@ -2661,16 +2652,16 @@ function RAGSettings() {
               className="ml-auto"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              Reset to Defaults
+              {t('settings.rag.resetDefaults')}
             </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Search Parameters</h3>
+              <h3 className="text-lg font-medium">{t('settings.rag.searchParameters')}</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>Similarity Threshold: {(tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold).toFixed(2)} (Default: 0.25)</Label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Minimum similarity score for search results (0-1). Lower = more results, but less relevant.</p>
+                  <Label>{t('settings.rag.similarityThreshold')}: {(tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold).toFixed(2)} (Default: 0.25)</Label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.rag.similarityHelp')}</p>
                   <Slider
                     value={[tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold]}
                     max={1}
@@ -2682,8 +2673,8 @@ function RAGSettings() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Min Results: {tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults} (Default: 5)</Label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Initial number of sources to display (0 = citations off)</p>
+                    <Label>{t('settings.rag.minResults')}: {tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults} (Default: 5)</Label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.rag.minResultsHelp')}</p>
                     <Slider
                       value={[tempRAGConfig?.ragSettings?.minResults ?? DEFAULT_RAG_SETTINGS.minResults]}
                       max={20}
@@ -2694,8 +2685,8 @@ function RAGSettings() {
                     />
                   </div>
                   <div>
-                    <Label>Max Results: {tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults} (Default: 15)</Label>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total sources to fetch from database (0 = citations off)</p>
+                    <Label>{t('settings.rag.maxResults')}: {tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults} (Default: 15)</Label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.rag.maxResultsHelp')}</p>
                     <Slider
                       value={[tempRAGConfig?.ragSettings?.maxResults ?? DEFAULT_RAG_SETTINGS.maxResults]}
                       max={50}
@@ -2709,7 +2700,7 @@ function RAGSettings() {
                 {(tempRAGConfig?.ragSettings?.minResults === 0 && tempRAGConfig?.ragSettings?.maxResults === 0) && (
                   <Alert>
                     <AlertDescription>
-                      ⚡ Citations are <strong>disabled</strong>. The system will skip semantic search and only generate a direct summary response, improving performance significantly.
+                      <span dangerouslySetInnerHTML={{ __html: t('settings.rag.citationWarning') }} />
                     </AlertDescription>
                   </Alert>
                 )}
@@ -2717,12 +2708,12 @@ function RAGSettings() {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Processing Parameters</h3>
+              <h3 className="text-lg font-medium">{t('settings.rag.processingParameters')}</h3>
               <div className="space-y-4">
                 <div>
                   <div>
-                    <Label>Batch Size: {tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 3}</Label>
-                    <p className="text-xs text-muted-foreground mt-1">Number of items to load when clicking &quot;Load More&quot; (recommended: 3-5)</p>
+                    <Label>{t('settings.rag.batchSize')}: {tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 3}</Label>
+                    <p className="text-xs text-muted-foreground mt-1">{t('settings.rag.batchSizeHelp')}</p>
                     <Slider
                       value={[tempRAGConfig?.ragSettings?.parallelLLMBatchSize ?? ragConfig?.ragSettings?.parallelLLMBatchSize ?? 3]}
                       max={10}
@@ -2735,8 +2726,8 @@ function RAGSettings() {
                   {/* Chunk Size & Overlap - Disabled (not currently used, reserved for future large document processing) */}
                 </div>
                 <div>
-                  <Label>Summary Max Length: {tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800}</Label>
-                  <p className="text-xs text-muted-foreground mt-1">Maximum characters for AI-generated summaries (recommended: 800-1200 for markdown formatting)</p>
+                  <Label>{t('settings.rag.summaryMaxLength')}: {tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800}</Label>
+                  <p className="text-xs text-muted-foreground mt-1">{t('settings.rag.summaryMaxLengthHelp')}</p>
                   <Slider
                     value={[tempRAGConfig?.ragSettings?.summaryMaxLength || ragConfig?.ragSettings?.summaryMaxLength || 800]}
                     max={2000}
@@ -2750,13 +2741,13 @@ function RAGSettings() {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Search Options</h3>
+              <h3 className="text-lg font-medium">{t('settings.rag.searchOptions')}</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between py-2">
                   <div className="flex-1">
-                    <Label>Enable Hybrid Search</Label>
+                    <Label>{t('settings.rag.enableHybridSearch')}</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      When enabled, combines semantic similarity with keyword search for better results
+                      {t('settings.rag.hybridSearchHelp')}
                     </p>
                   </div>
                   <Switch
@@ -2778,9 +2769,9 @@ function RAGSettings() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label>Enable Keyword Boost</Label>
+                    <Label>{t('settings.rag.enableKeywordBoost')}</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Boosts exact keyword matches in search results. Highlighted keywords appear in yellow tags.
+                      {t('settings.rag.keywordBoostHelp')}
                     </p>
                   </div>
                   <Switch
@@ -2792,7 +2783,7 @@ function RAGSettings() {
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Data Source Priorities</h3>
+              <h3 className="text-lg font-medium">{t('settings.rag.dataSourcePriorities')}</h3>
               <div className="space-y-4">
                 {/* Database Content Priority */}
                 <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
@@ -3729,10 +3720,10 @@ function SecuritySettings() {
                             className="w-full"
                           >
                             <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
-                              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                              <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                              <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                              <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                              <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                              <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                              <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                             </svg>
                             Connect with Google
                           </Button>
@@ -4777,6 +4768,7 @@ function TranslationSettings() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [apiStatus, setApiStatus] = useState<Record<string, any>>({});
   const { toast } = useToast();
 
   const loadSettings = useCallback(async () => {
@@ -4819,7 +4811,7 @@ function TranslationSettings() {
   const updateSetting = (key: string, value: any) => {
     const newConfig = { ...tempConfig };
     const keys = key.split('.');
-    let current = newConfig;
+    let current: any = newConfig;
 
     for (let i = 0; i < keys.length - 1; i++) {
       if (!current[keys[i]]) current[keys[i]] = {};
@@ -4849,11 +4841,21 @@ function TranslationSettings() {
       // Simulate API test (in real implementation, this would call the actual API)
       await new Promise(resolve => setTimeout(resolve, 2000));
 
+      setApiStatus(prev => ({
+        ...prev,
+        [provider === 'google' ? 'googleTranslate' : provider]: { status: 'success' }
+      }));
+
       toast({
         title: "Success",
         description: `${provider.charAt(0).toUpperCase() + provider.slice(1)} API connection successful`,
       });
     } catch (error) {
+      setApiStatus(prev => ({
+        ...prev,
+        [provider === 'google' ? 'googleTranslate' : provider]: { status: 'error' }
+      }));
+
       toast({
         title: "Error",
         description: `${provider.charAt(0).toUpperCase() + provider.slice(1)} API connection failed`,

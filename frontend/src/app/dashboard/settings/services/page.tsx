@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Play,
   Square,
@@ -32,7 +33,8 @@ import {
   Plus,
   Trash2,
   X,
-  Mic
+  Mic,
+  RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 
