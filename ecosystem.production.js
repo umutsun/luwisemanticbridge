@@ -49,8 +49,8 @@ module.exports = {
       cwd: '/var/www/lsemb/backend/python-services',
       interpreter: 'python3',
       env: {
-        PORT: 8002,
-        PYTHON_SERVICE_PORT: '8002',
+        PORT: 8004,
+        PYTHON_SERVICE_PORT: '8004',
         PYTHONUNBUFFERED: '1',
         PYTHON_ENV: 'production',
         ENVIRONMENT: 'production'
