@@ -148,6 +148,8 @@ export default function DocumentManagerPage() {
   const [folders, setFolders] = useState<any[]>([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [selectedPhysicalFiles, setSelectedPhysicalFiles] = useState<Set<string>>(new Set());
+  const [bulkAddInProgress, setBulkAddInProgress] = useState(false);
+  const [bulkAddProgress, setBulkAddProgress] = useState({ current: 0, total: 0 });
 
   // Google Drive states
   const [showDriveModal, setShowDriveModal] = useState(false);
@@ -1091,42 +1093,63 @@ export default function DocumentManagerPage() {
       return;
     }
 
+    const filePaths = Array.from(selectedPhysicalFiles);
+    const total = filePaths.length;
+
     try {
+      setBulkAddInProgress(true);
+      setBulkAddProgress({ current: 0, total });
+
       const token = localStorage.getItem('token');
-      const filePaths = Array.from(selectedPhysicalFiles);
+      let addedCount = 0;
+      let skippedCount = 0;
 
-      const response = await fetch(getApiUrl('physicalFiles/bulk-add-to-database'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ filePaths })
-      });
+      // Process files one by one to track progress
+      for (let i = 0; i < filePaths.length; i++) {
+        try {
+          const response = await fetch(getApiUrl('physicalFiles/add-to-database'), {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ filePath: filePaths[i] })
+          });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Bulk add to database failed');
+          if (response.ok) {
+            addedCount++;
+          } else {
+            const errorData = await response.json();
+            if (errorData.code === 'ALREADY_EXISTS') {
+              skippedCount++;
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to add file ${filePaths[i]}:`, err);
+        }
+
+        // Update progress
+        setBulkAddProgress({ current: i + 1, total });
       }
-
-      const result = await response.json();
 
       toast({
         title: t('documents.toast.success'),
-        description: `${result.addedCount} file(s) added to database${result.skippedCount > 0 ? `, ${result.skippedCount} already existed` : ''}`
+        description: `${addedCount} file(s) added to database${skippedCount > 0 ? `, ${skippedCount} already existed` : ''}`
       });
 
       // Clear selection and refresh
       setSelectedPhysicalFiles(new Set());
       setSelectAllPhysicalFiles(false);
-      fetchPhysicalFiles();
-      fetchDocuments();
+      await Promise.all([fetchPhysicalFiles(), fetchDocuments()]);
     } catch (error: any) {
       toast({
         title: t('documents.toast.error'),
         description: error.message || 'Failed to add files to database',
         variant: 'destructive'
       });
+    } finally {
+      setBulkAddInProgress(false);
+      setBulkAddProgress({ current: 0, total: 0 });
     }
   };
 
@@ -3144,10 +3167,21 @@ export default function DocumentManagerPage() {
                     <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 mt-2">
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <span className="font-medium">
-                            {selectedPhysicalFiles.size} {selectedPhysicalFiles.size === 1 ? 'file' : 'files'} selected
-                          </span>
+                          {bulkAddInProgress ? (
+                            <>
+                              <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+                              <span className="font-medium text-blue-600">
+                                Adding to database: {bulkAddProgress.current}/{bulkAddProgress.total}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                              <span className="font-medium">
+                                {selectedPhysicalFiles.size} {selectedPhysicalFiles.size === 1 ? 'file' : 'files'} selected
+                              </span>
+                            </>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
                           {/* Bulk Add to Database Button */}
@@ -3161,24 +3195,13 @@ export default function DocumentManagerPage() {
                               variant="ghost"
                               className="h-8 w-8 p-0 hover:bg-blue-500/10 transition-colors"
                               title={`Add ${selectedPhysicalFiles.size} selected file(s) to database`}
+                              disabled={bulkAddInProgress}
                             >
-                              <Database className="w-4 h-4 text-blue-600" />
-                            </Button>
-                          </ConfirmTooltip>
-
-                          {/* Bulk Delete Button */}
-                          <ConfirmTooltip
-                            onConfirm={handleBulkDeletePhysicalFiles}
-                            message={`Delete ${selectedPhysicalFiles.size} selected file(s)?`}
-                            side="top"
-                          >
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
-                              title={`Delete ${selectedPhysicalFiles.size} selected file(s)`}
-                            >
-                              <Trash2 className="w-4 h-4 text-red-600" />
+                              {bulkAddInProgress ? (
+                                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                              ) : (
+                                <Database className="w-4 h-4 text-blue-600" />
+                              )}
                             </Button>
                           </ConfirmTooltip>
                         </div>
