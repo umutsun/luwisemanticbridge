@@ -30,6 +30,19 @@ export function VectorSpaceGraph({
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [dimensions, setDimensions] = useState({ width, height });
 
+  // Early return if no data - prevents canvas errors
+  if (!data || data.length === 0) {
+    return (
+      <Card className="overflow-hidden border-slate-200 dark:border-slate-700">
+        <CardContent className="p-6">
+          <div className="text-center text-muted-foreground">
+            No data available to display
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Calculate statistics
   const stats = {
     total: data.length,
@@ -38,9 +51,14 @@ export function VectorSpaceGraph({
   };
 
   // Convert data points to 2D positions in vector space
+  // Add safety check for empty data or invalid values
+  const maxValue = data.length > 0 ? Math.max(...data.map(d => d.value || 0)) : 1;
+  const safeMaxValue = maxValue > 0 ? maxValue : 1; // Prevent division by zero or negative
+
   const positions = data.map((point, index) => {
     const angle = (index / data.length) * Math.PI * 2;
-    const radius = 0.3 + (point.value / Math.max(...data.map(d => d.value))) * 0.4;
+    const normalizedValue = (point.value || 0) / safeMaxValue;
+    const radius = 0.3 + normalizedValue * 0.4;
 
     return {
       ...point,
@@ -101,15 +119,20 @@ export function VectorSpaceGraph({
         const baseRadius = 6;
         const pulseRadius = baseRadius + pulsePhase * 2;
 
+        // Safety check: ensure all values are finite
+        if (!isFinite(x) || !isFinite(y) || !isFinite(pulseRadius)) {
+          return; // Skip this point if any value is invalid
+        }
+
         // Outer glow (pulse)
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, pulseRadius * 2);
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, Math.abs(pulseRadius * 2));
         gradient.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
         gradient.addColorStop(0.5, 'rgba(99, 102, 241, 0.1)');
         gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
 
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(x, y, pulseRadius * 2, 0, Math.PI * 2);
+        ctx.arc(x, y, Math.abs(pulseRadius * 2), 0, Math.PI * 2);
         ctx.fill();
 
         // Inner circle
