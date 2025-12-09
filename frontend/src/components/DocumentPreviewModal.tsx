@@ -370,44 +370,47 @@ export default function DocumentPreviewModal({
       setOriginalCsvHeaders([]);
       setCsvLoading(false); // Reset loading state
 
-      // Parse content for CSV/JSON
-      if (document.content) {
-        parseContent();
-      }
-
-      // Auto-fetch GraphQL data for CSV to get total row count
-      if (document.type === 'csv' && document.id) {
-        fetchGraphQLData();
-      }
-
-      // Auto-analyze PDF to check if scanned
-      const isPDF = document.type === 'pdf' ||
-                    document.file_type === 'application/pdf' ||
-                    document.title?.toLowerCase().endsWith('.pdf');
-
-      if (isPDF && document.id) {
-        // Load saved metadata if available (avoid re-analyzing)
-        if (document.metadata?.analysis) {
-          console.log('[PDF Init] Loading saved metadata from document');
-          setPdfMetadata(document.metadata.analysis);
-
-          // Load previously selected fields if available, otherwise select all
-          if (document.metadata?.selectedFields) {
-            setPdfSelectedFields(new Set(document.metadata.selectedFields));
-          } else {
-            // Default: all fields selected
-            autoSelectAllFields(document.metadata.analysis);
-          }
-
-          // Also load extracted text if available
-          if (document.content && document.content.trim().length > 0) {
-            setPdfExtractedText(document.content);
-          }
+      // ⚡ PERFORMANCE: Defer heavy operations to next tick - modal opens instantly
+      setTimeout(() => {
+        // Parse content for CSV/JSON
+        if (document.content) {
+          parseContent();
         }
 
-        // Check PDF type (will handle scanned vs text-based)
-        checkPDFType();
-      }
+        // Auto-fetch GraphQL data for CSV to get total row count
+        if (document.type === 'csv' && document.id) {
+          fetchGraphQLData();
+        }
+
+        // Auto-analyze PDF to check if scanned
+        const isPDF = document.type === 'pdf' ||
+                      document.file_type === 'application/pdf' ||
+                      document.title?.toLowerCase().endsWith('.pdf');
+
+        if (isPDF && document.id) {
+          // Load saved metadata if available (avoid re-analyzing)
+          if (document.metadata?.analysis) {
+            console.log('[PDF Init] Loading saved metadata from document');
+            setPdfMetadata(document.metadata.analysis);
+
+            // Load previously selected fields if available, otherwise select all
+            if (document.metadata?.selectedFields) {
+              setPdfSelectedFields(new Set(document.metadata.selectedFields));
+            } else {
+              // Default: all fields selected
+              autoSelectAllFields(document.metadata.analysis);
+            }
+
+            // Also load extracted text if available
+            if (document.content && document.content.trim().length > 0) {
+              setPdfExtractedText(document.content);
+            }
+          }
+
+          // Check PDF type (will handle scanned vs text-based)
+          checkPDFType();
+        }
+      }, 0); // Defer to next event loop tick
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [document]);
