@@ -66,7 +66,8 @@ export default function CSVModalViewer({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage] = useState(50);
   const listRef = useRef<List>(null);
 
   // Auto-detect delimiter
@@ -178,6 +179,19 @@ export default function CSVModalViewer({
     return filtered;
   }, [rows, searchTerm, sortColumn, sortDirection]);
 
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAndSortedRows.length / rowsPerPage);
+  const paginatedRows = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    const endIndex = startIndex + rowsPerPage;
+    return filteredAndSortedRows.slice(startIndex, endIndex);
+  }, [filteredAndSortedRows, currentPage, rowsPerPage]);
+
+  // Reset to page 1 when search/sort changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortColumn, sortDirection]);
+
   // Handle sort
   const handleSort = useCallback((column: string) => {
     if (sortColumn === column) {
@@ -210,7 +224,7 @@ export default function CSVModalViewer({
 
   // Virtual list row renderer
   const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const row = filteredAndSortedRows[index];
+    const row = paginatedRows[index];
 
     return (
       <div
@@ -220,12 +234,12 @@ export default function CSVModalViewer({
         {headers.map((header, colIndex) => (
           <div
             key={`${index}-${header}`}
-            className={`flex-shrink-0 px-3 py-2 text-sm ${
+            className={`flex-shrink-0 px-4 py-3 text-sm ${
               colIndex === 0 ? 'sticky left-0 bg-white dark:bg-gray-900 z-10' : ''
             }`}
             style={{
-              width: colIndex === 0 ? '60px' : '200px',
-              minWidth: colIndex === 0 ? '60px' : '200px'
+              width: colIndex === 0 ? '80px' : '220px',
+              minWidth: colIndex === 0 ? '80px' : '220px'
             }}
           >
             <span className="truncate block" title={String(row[header])}>
@@ -235,26 +249,19 @@ export default function CSVModalViewer({
         ))}
       </div>
     );
-  }, [filteredAndSortedRows, headers]);
+  }, [paginatedRows, headers]);
 
   // Calculate list dimensions
-  const rowHeight = 40;
-  const headerHeight = 48;
-  const modalHeight = isFullscreen ? '90vh' : '600px';
-  const listHeight = isFullscreen
-    ? 'calc(90vh - 200px)'  // Account for header, filters, etc.
-    : '450px';
+  const rowHeight = 52; // Increased row height for better spacing
+  const headerHeight = 56;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className={`
-          ${isFullscreen ? 'max-w-[95vw] h-[90vh]' : 'max-w-6xl max-h-[80vh]'}
-          overflow-hidden flex flex-col
-        `}
+        className="max-w-[98vw] h-[95vh] overflow-hidden flex flex-col p-0"
       >
         {/* Header */}
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="flex-shrink-0 p-6 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <FileSpreadsheet className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -276,13 +283,6 @@ export default function CSVModalViewer({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={handleExport}
               >
                 <Download className="w-4 h-4 mr-2" />
@@ -293,7 +293,7 @@ export default function CSVModalViewer({
         </DialogHeader>
 
         {/* Filters */}
-        <div className="flex gap-3 mb-3 flex-shrink-0">
+        <div className="flex gap-3 px-6 mb-3 flex-shrink-0">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
@@ -319,14 +319,14 @@ export default function CSVModalViewer({
 
         {/* Stats */}
         {filteredAndSortedRows.length < rows.length && (
-          <div className="bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-md text-sm flex-shrink-0">
+          <div className="bg-blue-50 dark:bg-blue-900/20 mx-6 mb-3 px-3 py-2 rounded-md text-sm flex-shrink-0">
             <Filter className="w-4 h-4 inline mr-2" />
             Showing {filteredAndSortedRows.length} of {rows.length} rows
           </div>
         )}
 
         {/* Table Container */}
-        <div className="flex-1 min-h-0 border rounded-lg overflow-hidden">
+        <div className="flex-1 min-h-0 mx-6 mb-3 border rounded-lg overflow-hidden">
           {/* Table Header */}
           <div className="flex bg-gray-100 dark:bg-gray-800 border-b border-gray-300 dark:border-gray-600 sticky top-0 z-20">
             {headers.map((header, index) => (
@@ -334,13 +334,13 @@ export default function CSVModalViewer({
                 key={header}
                 onClick={() => handleSort(header)}
                 className={`
-                  flex items-center justify-between gap-2 px-3 py-3 text-sm font-semibold
+                  flex items-center justify-between gap-2 px-4 py-4 text-sm font-semibold
                   text-left hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors
                   ${index === 0 ? 'sticky left-0 bg-gray-100 dark:bg-gray-800 z-10' : ''}
                 `}
                 style={{
-                  width: index === 0 ? '60px' : '200px',
-                  minWidth: index === 0 ? '60px' : '200px'
+                  width: index === 0 ? '80px' : '220px',
+                  minWidth: index === 0 ? '80px' : '220px'
                 }}
               >
                 <span className="truncate" title={header}>{header}</span>
@@ -354,11 +354,11 @@ export default function CSVModalViewer({
           </div>
 
           {/* Virtual Table Body */}
-          {filteredAndSortedRows.length > 0 ? (
+          {paginatedRows.length > 0 ? (
             <List
               ref={listRef}
-              height={isFullscreen ? window.innerHeight * 0.9 - 250 : 400}
-              itemCount={filteredAndSortedRows.length}
+              height={window.innerHeight * 0.95 - 350}
+              itemCount={paginatedRows.length}
               itemSize={rowHeight}
               width="100%"
               className="scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200"
@@ -370,6 +370,71 @@ export default function CSVModalViewer({
               <Filter className="w-12 h-12 mb-3 opacity-50" />
               <p className="text-lg font-medium">No data found</p>
               <p className="text-sm">Try adjusting your search filters</p>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {filteredAndSortedRows.length > rowsPerPage && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <span>
+                  Showing {((currentPage - 1) * rowsPerPage) + 1} - {Math.min(currentPage * rowsPerPage, filteredAndSortedRows.length)} of {filteredAndSortedRows.length} rows
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                >
+                  First
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-sm">Page</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const page = parseInt(e.target.value);
+                      if (page >= 1 && page <= totalPages) {
+                        setCurrentPage(page);
+                      }
+                    }}
+                    className="w-16 h-8 text-center text-sm"
+                  />
+                  <span className="text-sm">of {totalPages}</span>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                >
+                  Last
+                </Button>
+              </div>
             </div>
           )}
         </div>
