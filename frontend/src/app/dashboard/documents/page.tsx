@@ -75,6 +75,8 @@ import JsonViewer from '@/components/ui/json-viewer';
 import CSVTableViewer from '@/components/ui/csv-table-viewer';
 import PDFViewer from '@/components/ui/pdf-viewer';
 import StructuredTextViewer from '@/components/ui/structured-text-viewer';
+import { executeMutation } from '@/lib/graphql/client';
+import { TRANSFORM_DOCUMENTS_TO_SOURCE_DB } from '@/lib/graphql/documents.queries';
 
 interface Document {
   id: string;
@@ -2262,6 +2264,63 @@ export default function DocumentManagerPage() {
   }, [batchSelectedSchema]);
 
 
+  // Quick Transform - Direct database save via GraphQL (no modal)
+  const handleQuickTransform = async () => {
+    const selectedDocs = Array.from(selectedRows);
+    const csvDocs = documents.filter(doc =>
+      selectedDocs.includes(doc.id) &&
+      (doc.type || doc.file_type)?.toLowerCase() === 'csv'
+    );
+
+    if (csvDocs.length === 0) {
+      toast({
+        title: 'No CSV documents selected',
+        description: 'Please select at least one CSV file to transform',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    setBatchProgress(0);
+    setBatchStatus(`Transforming ${csvDocs.length} CSV file(s) to database...`);
+
+    try {
+      const result = await executeMutation(TRANSFORM_DOCUMENTS_TO_SOURCE_DB, {
+        documentIds: csvDocs.map(doc => doc.id),
+        sourceDbId: 'source_database',
+        tableName: undefined, // Auto-generate table name
+        batchSize: 100,
+        createNewTable: true
+      });
+
+      toast({
+        title: 'Transform started',
+        description: `Job ID: ${result.transformDocumentsToSourceDb.jobId}`,
+      });
+
+      // Refresh documents
+      setTimeout(async () => {
+        await Promise.all([fetchDocuments(), fetchStats()]);
+        clearSelection();
+        setBatchProcessing(false);
+        setBatchProgress(100);
+        setBatchStatus('');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Quick transform error:', error);
+      toast({
+        title: 'Transform failed',
+        description: error.message || 'Failed to transform documents',
+        variant: 'destructive'
+      });
+      setBatchProcessing(false);
+      setBatchProgress(0);
+      setBatchStatus('');
+    }
+  };
+
   // Handle batch transform - insert into database table
   const handleBatchTransform = async (schemaId: string, targetTable: string) => {
     const selectedDocs = Array.from(selectedRows);
@@ -3469,24 +3528,33 @@ export default function DocumentManagerPage() {
 
                           return (
                             <>
-                              {/* CSV Transform Button */}
+                              {/* CSV Transform Button - Dropdown with Quick & Advanced options */}
                               {csvDocs.length > 0 && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setShowBatchModal(true)}
-                                        className="h-7 px-1.5 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors"
-                                      >
-                                        <Database className="w-3.5 h-3.5 text-green-600 mr-1" />
-                                        <span className="text-[11px] font-medium">Transform ({csvDocs.length})</span>
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{t('documents.actions.transform')}</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      disabled={batchProcessing}
+                                      className="h-7 px-1.5 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
+                                    >
+                                      <Database className="w-3.5 h-3.5 text-green-600 mr-1" />
+                                      <span className="text-[11px] font-medium">
+                                        {batchProcessing ? 'Transforming...' : `Transform (${csvDocs.length})`}
+                                      </span>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={handleQuickTransform}>
+                                      <Zap className="w-4 h-4 mr-2 text-green-600" />
+                                      Quick Transform
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setShowBatchModal(true)}>
+                                      <Target className="w-4 h-4 mr-2 text-blue-600" />
+                                      Advanced Transform
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               )}
 
                               {/* PDF/TXT/MD/DOC Embed Button */}
