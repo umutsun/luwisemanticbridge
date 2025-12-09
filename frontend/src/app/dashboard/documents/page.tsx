@@ -1056,7 +1056,7 @@ export default function DocumentManagerPage() {
       const token = localStorage.getItem('token');
       const filePaths = Array.from(selectedPhysicalFiles);
 
-      const response = await fetch(getApiUrl('physicalFiles/bulk-delete'), {
+      const response = await fetch(getApiUrl('physical-files/bulk-delete'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
