@@ -2972,33 +2972,26 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
         </div>
 
         {/* Modal Footer - Fixed */}
-        <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/50 px-6 py-3">
+        <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/50 px-6 py-2.5">
           <div className="flex items-center justify-between">
-            {/* Left side: Info */}
-            <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+            {/* Left side: Compact single-line info */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isCSV && parsedData && csvHeaders && (
-                <>
-                  <div className="flex items-center gap-1.5">
-                    {graphqlData?.rowCount && graphqlData.rowCount > parsedData.length ? (
-                      <span>Previewing <span className="font-bold text-foreground">{parsedData.length}</span> / <span className="font-bold text-foreground">{graphqlData.rowCount}</span> rows</span>
-                    ) : (
-                      <span><span className="font-bold text-foreground">{parsedData.length}</span> rows</span>
-                    )}
-                  </div>
-                  <div className="w-px h-3 bg-border" />
-                  <div className="flex items-center gap-1.5">
-                    <span><span className="font-bold text-foreground">{csvHeaders.length}</span> columns</span>
-                  </div>
+                <div className="flex items-center gap-2">
+                  {graphqlData?.rowCount && graphqlData.rowCount > parsedData.length ? (
+                    <span>Previewing <span className="font-semibold text-foreground">{csvVisibleRows}</span> / <span className="font-semibold text-foreground">{parsedData.length}</span> rows</span>
+                  ) : (
+                    <span><span className="font-semibold text-foreground">{parsedData.length}</span> rows</span>
+                  )}
+                  <span className="text-muted-foreground/40">•</span>
+                  <span><span className="font-semibold text-foreground">{csvHeaders.length}</span> columns</span>
                   {config?.database?.name && (
                     <>
-                      <div className="w-px h-3 bg-border" />
-                      <div className="flex items-center gap-1.5">
-                        <Database className="w-3 h-3" />
-                        <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
-                      </div>
+                      <span className="text-muted-foreground/40">•</span>
+                      <span className="font-mono font-semibold text-foreground">{config.database.name}</span>
                     </>
                   )}
-                </>
+                </div>
               )}
               {isPDF && pdfMetadata && (
                 <>
@@ -3027,6 +3020,21 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
             {/* Right side: Action buttons based on tab */}
             <div className="flex items-center gap-1.5">
+              {/* CSV: Load More button */}
+              {isCSV && csvVisibleRows < parsedData.length && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
+                  className="h-7 px-3 gap-2 text-xs"
+                >
+                  <span>Load More</span>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                    +{Math.min(CSV_ROWS_PER_PAGE, parsedData.length - csvVisibleRows)}
+                  </Badge>
+                </Button>
+              )}
+
               {/* Preview Tab: Template Dropdown + Custom Keywords + Analyze button */}
               {isPDF && pdfActiveTab === 'preview' && pdfExtractedText && (
                 <>
