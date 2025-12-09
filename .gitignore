@@ -176,7 +176,7 @@ instance/
 docs/_build/
 
 # Documentation folder
-docs/
+# docs/
 
 # PyBuilder
 target/
@@ -458,3 +458,4 @@ frontend/src/app/page-old.tsx
 reports/
 
 !docs/reports/
+!frontend/docs/reports/
