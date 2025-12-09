@@ -1406,6 +1406,12 @@ export default function DocumentManagerPage() {
   };
 
   const handlePreview = async (doc: Document) => {
+    // ✅ UX Improvement: Open modal IMMEDIATELY, then load CSV data in background
+    // This prevents users from forgetting they clicked the button
+
+    // Open modal right away with initial document data
+    setPreviewDoc(doc);
+
     // For CSV/JSON files, fetch raw file content if file_path exists
     if (((doc.type || doc.file_type) === 'csv' || (doc.type || doc.file_type) === 'json') && doc.metadata?.source) {
       try {
@@ -1422,26 +1428,24 @@ export default function DocumentManagerPage() {
 
           if (response.ok) {
             const fileData = await response.json();
-            // Update document with raw file content
+            // Update document with raw file content (modal already open, just update data)
             setPreviewDoc({
               ...doc,
               content: fileData.content,
               metadata: {
                 ...doc.metadata,
                 ...fileData.metadata,
-                source: 'physical'
+                source: 'physical',
+                _loaded: true // Flag to indicate data is loaded
               }
             });
-            return;
           }
         }
       } catch (error) {
         console.error('Failed to fetch raw file:', error);
+        // Keep modal open with basic data even if fetch fails
       }
     }
-
-    // Fallback: use document as-is
-    setPreviewDoc(doc);
   };
 
   const handleOCR = async (docId: string) => {

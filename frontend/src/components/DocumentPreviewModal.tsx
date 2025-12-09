@@ -368,12 +368,17 @@ export default function DocumentPreviewModal({
       setIsEditingHeaders(false);
       setEditableHeaders([]);
       setOriginalCsvHeaders([]);
-      setCsvLoading(false); // Reset loading state
+
+      // ✅ UX: Only reset loading if data is already loaded
+      const dataAlreadyLoaded = document.metadata?._loaded || !document.metadata?.source;
+      if (dataAlreadyLoaded) {
+        setCsvLoading(false);
+      }
 
       // ⚡ PERFORMANCE: Defer heavy operations to next tick - modal opens instantly
       setTimeout(() => {
-        // Parse content for CSV/JSON
-        if (document.content) {
+        // Parse content for CSV/JSON (only if data is loaded)
+        if (document.content && dataAlreadyLoaded) {
           parseContent();
         }
 
@@ -2838,9 +2843,13 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
   useEffect(() => {
     if (isOpen && document) {
       setCsvVisibleRows(CSV_ROWS_PER_PAGE);
-      setCsvLoading(false); // Reset loading state when modal opens
+
+      // ✅ UX: Show loading spinner if CSV/JSON data is not yet loaded
+      const isCSVorJSON = document.type === 'csv' || document.type === 'json';
+      const dataNotLoaded = !document.metadata?._loaded && document.metadata?.source;
+      setCsvLoading(isCSVorJSON && dataNotLoaded); // Show spinner until data arrives
     }
-  }, [isOpen, document?.id]);
+  }, [isOpen, document?.id, document?.metadata?._loaded]);
 
   if (!document) return null;
 
