@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -130,6 +130,12 @@ app.include_router(
     prefix="/api/python/worker",
     tags=["worker"]
     # Worker management endpoints
+)
+app.include_router(
+    pdf_router,
+    prefix="/api/python",
+    tags=["pdf"]
+    # PDF text extraction service
 )
 
 # Global exception handler

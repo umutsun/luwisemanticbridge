@@ -2596,4 +2596,66 @@ async function processFileInBackground(
   }
 }
 
+/**
+ * GET /api/v2/documents/pdf/:documentId
+ * Serve PDF file for viewing
+ */
+router.get('/pdf/:documentId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { documentId } = req.params;
+
+    // Get document from database
+    const result = await lsembPool.query(
+      'SELECT * FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const doc = result.rows[0];
+
+    // Check if it's a PDF
+    const isPDF = doc.type === 'pdf' ||
+                  doc.file_type === 'application/pdf' ||
+                  doc.title?.toLowerCase().endsWith('.pdf');
+
+    if (!isPDF) {
+      return res.status(400).json({ error: 'Document is not a PDF' });
+    }
+
+    // Check if file_path exists
+    if (!doc.file_path) {
+      return res.status(404).json({ error: 'PDF file path not found in database' });
+    }
+
+    // Check if file exists on disk
+    if (!fs.existsSync(doc.file_path)) {
+      return res.status(404).json({
+        error: 'PDF file not found on disk',
+        path: doc.file_path
+      });
+    }
+
+    // Serve PDF file
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${doc.title || 'document.pdf'}"`);
+
+    const fileStream = fs.createReadStream(doc.file_path);
+    fileStream.pipe(res);
+
+    fileStream.on('error', (error) => {
+      console.error('[Documents] Error streaming PDF:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream PDF file' });
+      }
+    });
+
+  } catch (error: any) {
+    console.error('[Documents] Error serving PDF:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

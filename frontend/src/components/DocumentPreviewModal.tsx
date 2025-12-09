@@ -110,6 +110,7 @@ export default function DocumentPreviewModal({
   const [originalCsvHeaders, setOriginalCsvHeaders] = useState<string[]>([]); // Original keys for data access
   const [totalRowCount, setTotalRowCount] = useState<number>(0); // Total rows in CSV (for large files)
   const [csvVisibleRows, setCsvVisibleRows] = useState<number>(20); // Paging for CSV preview
+  const [csvLoading, setCsvLoading] = useState<boolean>(false); // Loading state for CSV parsing
   const CSV_ROWS_PER_PAGE = 20; // Load 20 rows at a time
   const [isEditingHeaders, setIsEditingHeaders] = useState(false);
   const [editableHeaders, setEditableHeaders] = useState<string[]>([]);
@@ -367,6 +368,7 @@ export default function DocumentPreviewModal({
       setIsEditingHeaders(false);
       setEditableHeaders([]);
       setOriginalCsvHeaders([]);
+      setCsvLoading(false); // Reset loading state
 
       // Parse content for CSV/JSON
       if (document.content) {
@@ -538,18 +540,42 @@ export default function DocumentPreviewModal({
 
     try {
       if (document.type === 'csv') {
+        setCsvLoading(true);
         parseCSV();
       } else if (document.type === 'json') {
         parseJSON();
       }
     } catch (error) {
       console.error('Parse error:', error);
+      setCsvLoading(false);
       toast({
         title: 'Parse Error',
         description: 'Failed to parse document content',
         variant: 'destructive',
       });
     }
+  };
+
+  // Auto-detect delimiter
+  const detectDelimiter = (csvString: string): string => {
+    const firstLine = csvString.split('\n')[0];
+    if (!firstLine) return ',';
+
+    const delimiters = ['\t', ';', ',', '|']; // Tab first, then semicolon, comma, pipe
+    const counts = delimiters.map(d => {
+      const escapedDelimiter = d === '\t' ? '\\t' : d === '|' ? '\\|' : d;
+      return (firstLine.match(new RegExp(escapedDelimiter, 'g')) || []).length;
+    });
+    const maxCount = Math.max(...counts);
+    const delimiterIndex = counts.indexOf(maxCount);
+
+    console.log('[CSV Parser] Delimiter detection:', {
+      delimiters: delimiters.map(d => d === '\t' ? 'TAB' : d),
+      counts,
+      detected: delimiters[delimiterIndex] === '\t' ? 'TAB' : delimiters[delimiterIndex]
+    });
+
+    return maxCount > 0 ? delimiters[delimiterIndex] : ',';
   };
 
   const parseCSV = () => {
@@ -595,6 +621,7 @@ export default function DocumentPreviewModal({
 
             setTotalRowCount(recordLines.length);
             setParsedData(data);
+            setCsvLoading(false);
             console.log('[CSV Parser] Successfully parsed processed CSV:', {
               headers: headers.length,
               rows: data.length,
@@ -620,7 +647,10 @@ export default function DocumentPreviewModal({
     const lines = content.split('\n').filter(line => line.trim());
     if (lines.length === 0) return;
 
-    const parseCSVLine = (line: string): string[] => {
+    // Auto-detect delimiter
+    const delimiter = detectDelimiter(content);
+
+    const parseCSVLine = (line: string, delim: string): string[] => {
       const result: string[] = [];
       let current = '';
       let inQuotes = false;
@@ -636,7 +666,7 @@ export default function DocumentPreviewModal({
           } else {
             inQuotes = !inQuotes;
           }
-        } else if (char === ',' && !inQuotes) {
+        } else if (char === delim && !inQuotes) {
           result.push(current.trim());
           current = '';
         } else {
@@ -647,7 +677,7 @@ export default function DocumentPreviewModal({
       return result;
     };
 
-    const headers = parseCSVLine(lines[0]);
+    const headers = parseCSVLine(lines[0], delimiter);
     setCsvHeaders(headers);
     setOriginalCsvHeaders(headers); // Store original keys for data access
 
@@ -659,7 +689,7 @@ export default function DocumentPreviewModal({
     // But keep total count for accurate stats
     const dataRows = lines.slice(1, 11); // First 10 rows
     const data = dataRows.map(row => {
-      const values = parseCSVLine(row);
+      const values = parseCSVLine(row, delimiter);
       const obj: any = {};
       headers.forEach((header, index) => {
         obj[header] = values[index] || '';
@@ -668,7 +698,9 @@ export default function DocumentPreviewModal({
     });
 
     setParsedData(data);
+    setCsvLoading(false);
     console.log('[CSV Parser] Standard CSV parse complete:', {
+      delimiter: delimiter === '\t' ? 'TAB' : delimiter,
       headers: headers.length,
       rows: data.length
     });
@@ -893,27 +925,20 @@ export default function DocumentPreviewModal({
               <TableHeader className="bg-gray-50 dark:bg-gray-900">
                 <TableRow>
                   {/* Row number header */}
-                  <TableHead className="w-[50px] px-2 py-1 text-xs text-muted-foreground">#</TableHead>
+                  <TableHead className="w-[50px] px-4 py-3 text-sm text-muted-foreground font-semibold">#</TableHead>
                   {displayHeaders.map((header, idx) => (
                     <TableHead
                       key={idx}
-                      className={`font-medium text-xs px-2 py-1 whitespace-nowrap ${!isEditingHeaders ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                      onClick={() => {
-                        if (!isEditingHeaders) {
-                          setEditableHeaders([...csvHeaders]);
-                          setIsEditingHeaders(true);
-                        }
-                      }}
-                      title={!isEditingHeaders ? 'Tıklayarak başlıkları düzenle' : undefined}
+                      className="font-semibold text-sm px-4 py-3 whitespace-nowrap"
                     >
                       {isEditingHeaders ? (
                         <Input
                           value={header}
                           onChange={(e) => handleHeaderChange(idx, e.target.value)}
-                          className="h-6 text-xs min-w-[80px] px-2"
+                          className="h-8 text-sm min-w-[100px] px-3"
                         />
                       ) : (
-                        <span className="px-2">{header}</span>
+                        <span>{header}</span>
                       )}
                     </TableHead>
                   ))}
@@ -932,7 +957,7 @@ export default function DocumentPreviewModal({
                     className="hover:bg-muted/50 transition-colors duration-150"
                   >
                     {/* Row number cell */}
-                    <TableCell className="w-[50px] px-2 py-1 text-xs text-muted-foreground font-mono">
+                    <TableCell className="w-[50px] px-4 py-3 text-sm text-muted-foreground font-mono">
                       {rowIdx + 1}
                     </TableCell>
                     {/* Use originalCsvHeaders for data access since that's how parsed data is keyed */}
@@ -950,7 +975,7 @@ export default function DocumentPreviewModal({
                       return (
                         <TableCell
                           key={colIdx}
-                          className="px-2 py-1 text-xs"
+                          className="px-4 py-3 text-sm"
                         >
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -976,56 +1001,71 @@ export default function DocumentPreviewModal({
             </Table>
           </div>
 
-          {/* Fixed Footer: Edit controls + Load More */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
-            {/* Left: Edit controls */}
+          {/* Fixed Footer: Info + Controls */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm">
+            {/* Left: Stats */}
             <div className="flex items-center gap-2">
               {isEditingHeaders ? (
-                <>
+                <div className="flex items-center gap-2">
                   <Button
                     variant="default"
                     size="sm"
                     onClick={saveEditedHeaders}
-                    className="h-7 gap-1"
+                    className="h-8 gap-1.5"
                   >
-                    <Check className="h-3 w-3" />
-                    Kaydet
+                    <Check className="h-3.5 w-3.5" />
+                    Save Changes
                   </Button>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={() => {
                       setIsEditingHeaders(false);
                       setEditableHeaders([...csvHeaders]);
                     }}
-                    className="h-7 gap-1"
+                    className="h-8 gap-1.5"
                   >
-                    <X className="h-3 w-3" />
-                    İptal
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
                   </Button>
-                </>
+                </div>
               ) : (
-                <span className="text-xs text-muted-foreground">
-                  {csvHeaders.length} kolon • {parsedData.length} satır
-                  <span className="ml-2 opacity-60">(başlıklara tıklayarak düzenle)</span>
+                <span className="text-sm text-muted-foreground font-medium">
+                  {csvHeaders.length} columns • {totalRowCount > 0 ? totalRowCount : parsedData.length} rows
                 </span>
               )}
             </div>
 
-            {/* Right: Load More */}
-            {hasMore && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
-                className="h-7 gap-2"
-              >
-                Daha Fazla
-                <span className="text-xs text-muted-foreground">
-                  (+{Math.min(CSV_ROWS_PER_PAGE, parsedData.length - csvVisibleRows)})
-                </span>
-              </Button>
-            )}
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2">
+              {!isEditingHeaders && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditableHeaders([...csvHeaders]);
+                    setIsEditingHeaders(true);
+                  }}
+                  className="h-8 gap-1.5"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  Edit Columns
+                </Button>
+              )}
+              {hasMore && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
+                  className="h-8 gap-2"
+                >
+                  Load More
+                  <Badge variant="secondary" className="ml-1 text-xs px-1.5">
+                    +{Math.min(CSV_ROWS_PER_PAGE, parsedData.length - csvVisibleRows)}
+                  </Badge>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </TooltipProvider>
@@ -2798,6 +2838,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
   useEffect(() => {
     if (isOpen && document) {
       setCsvVisibleRows(CSV_ROWS_PER_PAGE);
+      setCsvLoading(false); // Reset loading state when modal opens
     }
   }, [isOpen, document?.id]);
 
@@ -2849,28 +2890,41 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
         <div className="overflow-hidden px-6 py-4">
           {/* CSV: Tabbed View */}
           {isCSV && (
-            <Tabs defaultValue="table" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-3">
-                <TabsTrigger value="table">
-                  Preview
-                </TabsTrigger>
-                <TabsTrigger value="graphql">
-                  Transform
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="table" className="mt-0">
-                <div className="h-[380px]">
-                  {renderCSVTable()}
+            <div className="relative">
+              {/* Loading Overlay */}
+              {csvLoading && (
+                <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
+                    <p className="text-sm font-medium text-foreground">Parsing CSV...</p>
+                    <p className="text-xs text-muted-foreground mt-1">This may take a moment for large files</p>
+                  </div>
                 </div>
-              </TabsContent>
+              )}
 
-              <TabsContent value="graphql" className="mt-0">
-                <div className="h-[380px]">
-                  {renderGraphQLTransform()}
-                </div>
-              </TabsContent>
-            </Tabs>
+              <Tabs defaultValue="table" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-3">
+                  <TabsTrigger value="table" disabled={csvLoading}>
+                    Preview
+                  </TabsTrigger>
+                  <TabsTrigger value="graphql" disabled={csvLoading}>
+                    Transform
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="table" className="mt-0">
+                  <div className="h-[380px]">
+                    {renderCSVTable()}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="graphql" className="mt-0">
+                  <div className="h-[380px]">
+                    {renderGraphQLTransform()}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
 
           {/* JSON: Tree View */}
