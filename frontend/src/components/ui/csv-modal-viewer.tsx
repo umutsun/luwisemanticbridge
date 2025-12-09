@@ -84,17 +84,28 @@ export default function CSVModalViewer({
     }
   }, [isOpen, data]);
 
-  // Auto-detect delimiter
+  // Auto-detect delimiter (improved with priority order)
   const detectDelimiter = (csvString: string): string => {
     const firstLine = csvString.split('\n')[0];
     if (!firstLine) return ',';
 
-    const delimiters = [',', ';', '\t'];
-    const counts = delimiters.map(d => (firstLine.match(new RegExp(`\\${d}`, 'g')) || []).length);
-    const maxCount = Math.max(...counts);
-    const delimiterIndex = counts.indexOf(maxCount);
+    // Count each delimiter - tab has priority over comma/semicolon
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const pipeCount = (firstLine.match(/\|/g) || []).length;
 
-    return maxCount > 0 ? delimiters[delimiterIndex] : ',';
+    // Return delimiter with highest count (priority: tab > semicolon > pipe > comma)
+    if (tabCount > 0 && tabCount >= semicolonCount && tabCount >= commaCount && tabCount >= pipeCount) {
+      return '\t';
+    }
+    if (semicolonCount > 0 && semicolonCount >= commaCount && semicolonCount >= pipeCount) {
+      return ';';
+    }
+    if (pipeCount > 0 && pipeCount >= commaCount) {
+      return '|';
+    }
+    return ','; // Default to comma
   };
 
   // Parse CSV data with auto-detection
@@ -302,7 +313,7 @@ export default function CSVModalViewer({
                   <DialogDescription className="mt-1">
                     {stats.totalRows} rows × {stats.totalColumns} columns
                     <span className="mx-2">•</span>
-                    Delimiter: <Badge variant="outline" className="text-xs">{delimiter === ',' ? 'comma' : delimiter === ';' ? 'semicolon' : 'tab'}</Badge>
+                    Delimiter: <Badge variant="outline" className="text-xs">{delimiter === ',' ? 'comma' : delimiter === ';' ? 'semicolon' : delimiter === '\t' ? 'tab' : delimiter === '|' ? 'pipe' : delimiter}</Badge>
                   </DialogDescription>
                 )}
               </div>
