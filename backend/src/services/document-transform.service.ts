@@ -97,6 +97,39 @@ export class DocumentTransformService {
   }
 
   /**
+   * Auto-detect CSV delimiter with improved priority logic
+   * Priority: tab > semicolon > pipe > comma
+   */
+  private detectDelimiter(csvString: string): string {
+    const firstLine = csvString.split('\n')[0];
+    if (!firstLine) return ',';
+
+    // Count each delimiter
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const pipeCount = (firstLine.match(/\|/g) || []).length;
+
+    console.log(`[DocumentTransform] Delimiter detection counts - tab: ${tabCount}, semicolon: ${semicolonCount}, comma: ${commaCount}, pipe: ${pipeCount}`);
+
+    // Return delimiter with highest count (priority: tab > semicolon > pipe > comma)
+    if (tabCount > 0 && tabCount >= semicolonCount && tabCount >= commaCount && tabCount >= pipeCount) {
+      console.log('[DocumentTransform] Detected delimiter: TAB');
+      return '\t';
+    }
+    if (semicolonCount > 0 && semicolonCount >= commaCount && semicolonCount >= pipeCount) {
+      console.log('[DocumentTransform] Detected delimiter: SEMICOLON');
+      return ';';
+    }
+    if (pipeCount > 0 && pipeCount >= commaCount) {
+      console.log('[DocumentTransform] Detected delimiter: PIPE');
+      return '|';
+    }
+    console.log('[DocumentTransform] Detected delimiter: COMMA (default)');
+    return ',';
+  }
+
+  /**
    * Upload and parse CSV/JSON document
    */
   async uploadDocument(
@@ -219,8 +252,12 @@ export class DocumentTransformService {
       if (parsedData.length === 0 && fileContent) {
         console.log(`[DocumentTransform] No parsed_data, parsing CSV with PapaParse...`);
 
+        // Auto-detect delimiter
+        const delimiter = this.detectDelimiter(fileContent);
+
         const parseResult = Papa.parse(fileContent, {
           header: true,           // First row is headers
+          delimiter,              // Use detected delimiter
           skipEmptyLines: true,   // Skip empty lines
           dynamicTyping: false,   // Keep all as strings for now
           trimHeaders: true,      // Trim whitespace from headers
@@ -404,8 +441,13 @@ export class DocumentTransformService {
           if (doc.file_path && fileType === 'csv') {
             console.log(`[DocumentTransform] Reading CSV file: ${doc.file_path}`);
             const fileContent = readFileSync(doc.file_path, 'utf-8');
+
+            // Auto-detect delimiter
+            const delimiter = this.detectDelimiter(fileContent);
+
             const parseResult = Papa.parse(fileContent, {
               header: true,
+              delimiter,              // Use detected delimiter
               skipEmptyLines: true,
               dynamicTyping: false,
               trimHeaders: true,
