@@ -581,6 +581,17 @@ export default function DocumentPreviewModal({
   const parseCSV = () => {
     let content = document!.content;
 
+    // ✅ Priority 1: Use GraphQL data if available (already parsed correctly by backend)
+    if (graphqlData?.columnHeaders && graphqlData.sampleRows) {
+      console.log('[CSV Parser] Using GraphQL data (backend-parsed, correct delimiter)');
+      setCsvHeaders(graphqlData.columnHeaders);
+      setOriginalCsvHeaders(graphqlData.columnHeaders);
+      setParsedData(graphqlData.sampleRows);
+      setTotalRowCount(graphqlData.rowCount || graphqlData.sampleRows.length);
+      setCsvLoading(false);
+      return;
+    }
+
     // Check if content is in processed format (from contextual-document-processor)
     if (content.includes('Tabular Data Overview:') && content.includes('Data Records:')) {
       console.log('[CSV Parser] Detected processed CSV format, extracting data...');
@@ -1038,20 +1049,6 @@ export default function DocumentPreviewModal({
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2">
-              {!isEditingHeaders && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setEditableHeaders([...csvHeaders]);
-                    setIsEditingHeaders(true);
-                  }}
-                  className="h-8 gap-1.5"
-                >
-                  <Edit3 className="h-3.5 w-3.5" />
-                  Edit Columns
-                </Button>
-              )}
               {hasMore && (
                 <Button
                   variant="outline"
