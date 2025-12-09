@@ -983,6 +983,9 @@ export default function DocumentManagerPage() {
   const [selectAllPhysicalFiles, setSelectAllPhysicalFiles] = useState(false);
 
   const handleSelectAllPhysicalFiles = () => {
+    // ✅ Null check to prevent crash
+    if (!physicalFiles) return;
+
     const filteredFiles = physicalFiles.filter(file => {
       // Apply same filters as display
       if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
@@ -1018,6 +1021,9 @@ export default function DocumentManagerPage() {
     setSelectedPhysicalFiles(newSelected);
 
     // Update select all state
+    // ✅ Null check to prevent crash
+    if (!physicalFiles) return;
+
     const filteredFiles = physicalFiles.filter(file => {
       if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
         return false;
@@ -2995,7 +3001,7 @@ export default function DocumentManagerPage() {
                 <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {physicalFilesFilter !== 'folders' && physicalFiles.length > 0 && (
+                      {physicalFilesFilter !== 'folders' && physicalFiles && physicalFiles.length > 0 && (
                         <Checkbox
                           checked={selectAllPhysicalFiles}
                           onCheckedChange={handleSelectAllPhysicalFiles}
@@ -3132,7 +3138,7 @@ export default function DocumentManagerPage() {
                       )
                     ) : (
                       /* Files View */
-                      physicalFiles.length === 0 ? (
+                      !physicalFiles || physicalFiles.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                           <File className="w-8 h-8 mx-auto mb-2 opacity-40" />
                           <p className="text-sm">{t('documents.physicalFiles.noFilesFound')}</p>
