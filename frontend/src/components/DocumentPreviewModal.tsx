@@ -765,7 +765,8 @@ export default function DocumentPreviewModal({
 
   // Initialize editable headers when csvHeaders changes
   useEffect(() => {
-    if (csvHeaders.length > 0 && editableHeaders.length === 0) {
+    // ✅ Null check to prevent crash when modal opens before CSV is parsed
+    if (csvHeaders && csvHeaders.length > 0 && editableHeaders.length === 0) {
       setEditableHeaders(csvHeaders);
     }
   }, [csvHeaders, editableHeaders.length]);
