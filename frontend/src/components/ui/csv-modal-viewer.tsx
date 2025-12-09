@@ -17,7 +17,8 @@ import {
   SortAsc,
   SortDesc,
   RefreshCw,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -68,7 +69,20 @@ export default function CSVModalViewer({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(50);
+  const [isLoading, setIsLoading] = useState(true);
   const listRef = useRef<List>(null);
+
+  // Handle loading state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoading(true);
+      // Small delay to show loading animation
+      const timer = setTimeout(() => {
+        setIsLoading(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, data]);
 
   // Auto-detect delimiter
   const detectDelimiter = (csvString: string): string => {
@@ -258,8 +272,23 @@ export default function CSVModalViewer({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent
-        className="max-w-[98vw] h-[95vh] overflow-hidden flex flex-col p-0"
+        className="max-w-[98vw] h-[95vh] overflow-hidden flex flex-col p-0 relative"
       >
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+            <div className="text-center space-y-4">
+              <Loader2 className="w-12 h-12 animate-spin mx-auto text-primary" />
+              <div>
+                <p className="text-lg font-semibold text-foreground">Loading CSV data...</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {stats ? `Processing ${stats.totalRows} rows...` : 'Parsing file...'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <DialogHeader className="flex-shrink-0 p-6 pb-4">
           <div className="flex items-center justify-between">
