@@ -3894,7 +3894,7 @@ export default function DocumentManagerPage() {
                   </ScrollArea>
                 </CardContent>
                 {getSelectedCount() > 0 && (
-                  <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
+                  <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 mt-2">
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <CheckCircle className="h-4 w-4 text-green-600" />
