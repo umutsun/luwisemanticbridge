@@ -3384,8 +3384,8 @@ export default function DocumentManagerPage() {
                     </Select>
                   </div>
 
-                  {/* Files List - fills remaining card space */}
-                  <ScrollArea className="flex-1 min-h-0">
+                  {/* Files List */}
+                  <ScrollArea className="h-[500px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3722,8 +3722,8 @@ export default function DocumentManagerPage() {
                     </Table>
                   </div>
 
-                  {/* Scrollable Body - fills remaining card space */}
-                  <ScrollArea className="flex-1 min-h-0">
+                  {/* Scrollable Body */}
+                  <ScrollArea className="h-[500px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
