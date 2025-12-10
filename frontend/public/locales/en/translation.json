@@ -1563,8 +1563,10 @@
       "alreadyInDatabase": "Already in Database",
       "deleteFromDisk": "Delete from disk & DB",
       "deleteFromDiskOnly": "Delete from disk",
-      "filterFiles": "[MISSING] filter Files"
+      "filterFiles": "Filter Files"
     },
+    "loadMore": "Load More",
+    "remaining": "remaining",
     "search": {
       "searchDocuments": "Search documents...",
       "allFiles": "All Files",

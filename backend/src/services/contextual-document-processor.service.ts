@@ -791,6 +791,12 @@ export class ContextualDocumentProcessorService {
       templateId?: string;
     }
   ): Promise<void> {
+    // Validate content before processing
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      console.error(`[Embedding] Document ${documentId} has no content to embed. Title: ${title}`);
+      throw new Error(`Document ${documentId} has no content to embed. Please ensure the document has been processed/OCR'd first.`);
+    }
+
     const client = await pool.connect();
 
     try {

@@ -1767,6 +1767,8 @@
       "deleteFromDiskOnly": "Diskten sil",
       "filterFiles": "Dosyaları Filtrele"
     },
+    "loadMore": "Daha Fazla Yükle",
+    "remaining": "kaldı",
     "search": {
       "searchDocuments": "Dökümanlarda ara...",
       "allFiles": "Tüm Dosyalar",
