@@ -1732,14 +1732,16 @@
     }
   },
   "documents": {
-    "title": "Başlık",
+    "title": "Doküman Yöneticisi",
     "stats": {
       "totalDocuments": "Toplam Belge",
+      "pending": "Beklemede",
+      "analyzing": "Analiz Ediliyor",
+      "analyzed": "Analiz Edildi",
       "embedded": "Gömülü",
       "ocrProcessed": "OCR İşlendi",
       "physicalFiles": "Fiziksel Dosyalar",
       "today": "bugün",
-      "pending": "beklemede",
       "notInDb": "VT'de değil"
     },
     "upload": {
@@ -1752,7 +1754,7 @@
       "completed": "Tamamlandı!"
     },
     "physicalFiles": {
-      "title": "Başlık",
+      "title": "Fiziksel Dosyalar",
       "searchFiles": "Dosyalarda ara...",
       "allTypes": "Tüm Tipler",
       "folders": "Klasörler",

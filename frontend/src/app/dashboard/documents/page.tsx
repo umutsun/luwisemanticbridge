@@ -2916,9 +2916,9 @@ export default function DocumentManagerPage() {
           </h1>
         </div>
 
-        {/* Stats Cards - Pastel Colors */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-6">
-          {/* Total Documents - Blue Pastel */}
+        {/* Stats Cards - Pipeline Flow: Total → Pending → Analyzed → Embedded */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 mb-6">
+          {/* Total Documents - Blue */}
           <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-blue-200 dark:border-blue-800">
             <CardContent className="p-3">
               <div className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">{t('documents.stats.totalDocuments')}</div>
@@ -2932,21 +2932,59 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
 
-          {/* Embedded - Green Pastel */}
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
+          {/* Pending - Gray (waiting to be analyzed) */}
+          <Card className="bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-950/20 dark:to-slate-950/20 border-gray-200 dark:border-gray-700">
             <CardContent className="p-3">
-              <div className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.embedded')}</div>
-              <div className="text-xl font-bold text-green-900 dark:text-green-100">
-                {(documents || []).filter(doc => doc.metadata?.embeddings > 0).length.toLocaleString()}
+              <div className="text-xs text-gray-700 dark:text-gray-300 font-medium mb-1">{t('documents.stats.pending')}</div>
+              <div className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                {(documents || []).filter(doc => !doc.processing_status || doc.processing_status === 'pending').length.toLocaleString()}
               </div>
-              <div className="text-xs text-green-600 dark:text-green-400 mt-0.5">
-                <span className="font-mono text-xs">{(documents || []).filter(doc => !doc.metadata?.embeddings || doc.metadata.embeddings === 0).length.toLocaleString()}</span>
-                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.pending')}</span>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                <span className="opacity-75 text-xs">→ {t('documents.status.analyzing')}</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Skipped Embeddings - Red Pastel (only show if count > 0) */}
+          {/* Analyzing - Amber (currently being analyzed) */}
+          <Card className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/20 border-amber-200 dark:border-amber-800">
+            <CardContent className="p-3">
+              <div className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-1">{t('documents.stats.analyzing')}</div>
+              <div className="text-xl font-bold text-amber-900 dark:text-amber-100">
+                {(documents || []).filter(doc => doc.processing_status === 'analyzing').length.toLocaleString()}
+              </div>
+              <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                <span className="opacity-75 text-xs">→ {t('documents.status.analyzed')}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Analyzed - Green (text extracted, ready for embedding) */}
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
+            <CardContent className="p-3">
+              <div className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.analyzed')}</div>
+              <div className="text-xl font-bold text-green-900 dark:text-green-100">
+                {(documents || []).filter(doc => doc.processing_status === 'analyzed' && !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0)).length.toLocaleString()}
+              </div>
+              <div className="text-xs text-green-600 dark:text-green-400 mt-0.5">
+                <span className="opacity-75 text-xs">→ {t('documents.status.embedded')}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Embedded - Violet (embeddings created) */}
+          <Card className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 border-violet-200 dark:border-violet-800">
+            <CardContent className="p-3">
+              <div className="text-xs text-violet-700 dark:text-violet-300 font-medium mb-1">{t('documents.stats.embedded')}</div>
+              <div className="text-xl font-bold text-violet-900 dark:text-violet-100">
+                {(documents || []).filter(doc => doc.hasEmbeddings || doc.metadata?.embeddings > 0).length.toLocaleString()}
+              </div>
+              <div className="text-xs text-violet-600 dark:text-violet-400 mt-0.5">
+                <span className="opacity-75 text-xs">✓ RAG hazır</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Skipped Embeddings - Red (only show if count > 0) */}
           {skippedCount > 0 && (
             <Card
               className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
@@ -2966,34 +3004,6 @@ export default function DocumentManagerPage() {
               </CardContent>
             </Card>
           )}
-
-          {/* OCR Processed - Purple Pastel */}
-          <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
-            <CardContent className="p-3">
-              <div className="text-xs text-purple-700 dark:text-purple-300 font-medium mb-1">{t('documents.stats.ocrProcessed')}</div>
-              <div className="text-xl font-bold text-purple-900 dark:text-purple-100">
-                {(documents || []).filter(doc => doc.metadata?.ocr_processed === true).length.toLocaleString()}
-              </div>
-              <div className="text-xs text-purple-600 dark:text-purple-400 mt-0.5">
-                <span className="font-mono text-xs">{(documents || []).filter(doc => (doc.type || doc.file_type) && ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png', 'tiff'].includes((doc.type || doc.file_type).toLowerCase()) && !doc.metadata?.ocr_processed).length.toLocaleString()}</span>
-                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.pending')}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Physical Files - Orange Pastel */}
-          <Card className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
-            <CardContent className="p-3">
-              <div className="text-xs text-orange-700 dark:text-orange-300 font-medium mb-1">{t('documents.stats.physicalFiles')}</div>
-              <div className="text-xl font-bold text-orange-900 dark:text-orange-100">
-                {physicalFilesStats.total.toLocaleString()}
-              </div>
-              <div className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-                <span className="font-mono text-xs">{physicalFilesStats.notInDatabase.toLocaleString()}</span>
-                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.notInDb')}</span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Files Section - 2 Column Layout */}

@@ -1533,11 +1533,13 @@
     "title": "Document Management",
     "stats": {
       "totalDocuments": "Total Documents",
+      "pending": "Pending",
+      "analyzing": "Analyzing",
+      "analyzed": "Analyzed",
       "embedded": "Embedded",
       "ocrProcessed": "OCR Processed",
       "physicalFiles": "Physical Files",
       "today": "today",
-      "pending": "pending",
       "notInDb": "not in DB"
     },
     "upload": {
@@ -1550,7 +1552,7 @@
       "completed": "Completed!"
     },
     "physicalFiles": {
-      "title": "docs",
+      "title": "Physical Files",
       "searchFiles": "Search files...",
       "allTypes": "All Types",
       "folders": "Folders",

@@ -3026,13 +3026,22 @@ async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): P
         skippedCount
       });
 
-      // Check if content already exists and is sufficient
-      if (doc.content && doc.content.trim().length > 100) {
-        skippedCount++;
-        results.push({ id: docId, status: 'skipped', reason: 'Content already exists', textLength: doc.content.length });
+      // Skip if already analyzed (has sufficient content or status is already 'analyzed')
+      const isAlreadyAnalyzed = doc.processing_status === 'analyzed' || doc.processing_status === 'embedded';
+      const hasContent = doc.content && doc.content.trim().length > 100;
 
-        // Ensure status is at least 'analyzed'
-        if (doc.processing_status === 'pending' || doc.processing_status === 'waiting') {
+      if (isAlreadyAnalyzed || hasContent) {
+        skippedCount++;
+        results.push({
+          id: docId,
+          status: 'skipped',
+          reason: isAlreadyAnalyzed ? 'Already analyzed' : 'Content already exists',
+          textLength: doc.content?.length || 0,
+          processingStatus: doc.processing_status
+        });
+
+        // Ensure status is at least 'analyzed' if not already
+        if (hasContent && (doc.processing_status === 'pending' || doc.processing_status === 'waiting')) {
           await lsembPool.query(
             `UPDATE documents SET processing_status = 'analyzed', updated_at = NOW() WHERE id = $1`,
             [docId]
