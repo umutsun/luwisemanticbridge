@@ -1,9 +1,11 @@
 import dotenv from "dotenv";
 import path from "path";
 
-// Load environment file from the root directory
-const envPath = path.resolve(__dirname, "../../.env.lsemb");
+// Load environment file from backend/.env directory
+const envPath = path.resolve(__dirname, "../.env");
+console.log(`[ENV] Loading environment from: ${envPath}`);
 dotenv.config({ path: envPath });
+console.log(`[ENV] PORT=${process.env.PORT}, PYTHON_SERVICE_URL=${process.env.PYTHON_SERVICE_URL}`);
 
 import express, { Application, Request, Response, NextFunction } from "express";
 import cors from "cors";
