@@ -272,14 +272,28 @@ def import_google_drive_files(
 
                 print(f"[GoogleDrive Worker] Downloading: {filename}")
 
-                # Download file
+                # Download file with progress updates
                 request = service.files().get_media(fileId=file_id)
                 file_buffer = BytesIO()
                 downloader = MediaIoBaseDownload(file_buffer, request)
 
                 done = False
+                last_progress = 0
                 while not done:
                     status, done = downloader.next_chunk()
+                    if status:
+                        progress = int(status.progress() * 100)
+                        # Report download progress every 20% to keep worker alive
+                        if progress - last_progress >= 20 or done:
+                            await update_job_progress(
+                                job_id=job_id,
+                                processed=processed,
+                                successful=successful,
+                                failed=failed,
+                                total=total,
+                                current_file=f"📥 Downloading {filename} ({progress}%)"
+                            )
+                            last_progress = progress
 
                 file_content = file_buffer.getvalue()
 
