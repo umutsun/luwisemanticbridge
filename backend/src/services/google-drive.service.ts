@@ -738,7 +738,8 @@ class GoogleDriveService {
       const docsDir = this.getUploadDirectory();
 
       // Call Python microservice to enqueue Celery task
-      const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8002';
+      const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8005';
+      console.log(`[GoogleDrive] Calling Python service at: ${pythonServiceUrl}`);
       const response = await fetch(`${pythonServiceUrl}/api/python/import/google-drive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
