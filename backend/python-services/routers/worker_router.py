@@ -85,7 +85,7 @@ def stop_worker_process():
         logger.error(f"Failed to stop worker: {e}")
         return False
 
-async def auto_stop_worker_after_idle(minutes: int = 5):
+async def auto_stop_worker_after_idle(minutes: int = 40):
     """Auto-stop worker after idle time"""
     global _auto_stop_task
 
@@ -121,8 +121,8 @@ async def start_worker():
 
     success = start_worker_process()
     if success:
-        # Auto-stop after 5 minutes
-        await auto_stop_worker_after_idle(minutes=5)
+        # Auto-stop after 40 minutes
+        await auto_stop_worker_after_idle(minutes=40)
         return {"status": "started", "message": "Worker started successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to start worker")
@@ -154,7 +154,7 @@ async def restart_worker():
     success = start_worker_process()
 
     if success:
-        await auto_stop_worker_after_idle(minutes=5)
+        await auto_stop_worker_after_idle(minutes=40)
         return {"status": "restarted", "message": "Worker restarted successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to restart worker")
@@ -168,4 +168,4 @@ async def ensure_worker_running():
         await asyncio.sleep(3)  # Wait for worker to initialize
 
     # Reset auto-stop timer
-    await auto_stop_worker_after_idle(minutes=5)
+    await auto_stop_worker_after_idle(minutes=40)

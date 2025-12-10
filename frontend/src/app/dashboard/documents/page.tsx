@@ -1820,6 +1820,8 @@ export default function DocumentManagerPage() {
   // Pagination state
   const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(40);
   const DOCUMENTS_PER_PAGE = 40;
+  const [visiblePhysicalFilesCount, setVisiblePhysicalFilesCount] = useState(30);
+  const PHYSICAL_FILES_PER_PAGE = 30;
 
   // Batch processing state
   const [batchProcessing, setBatchProcessing] = useState(false);
@@ -3156,6 +3158,7 @@ export default function DocumentManagerPage() {
                               }
                               return true;
                             })
+                            .slice(0, visiblePhysicalFilesCount)
                             .map((file) => (
                               <div
                                 key={file.path}
@@ -3212,6 +3215,40 @@ export default function DocumentManagerPage() {
                       )
                     )}
                   </ScrollArea>
+
+                  {/* Load More Button for Physical Files */}
+                  {!physicalFilesLoading && physicalFiles && (
+                    (() => {
+                      const filteredCount = physicalFiles.filter(file => {
+                        if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+                          return false;
+                        }
+                        if (physicalFilesFilter !== 'all') {
+                          const fileExt = file.ext.toLowerCase();
+                          if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+                            return false;
+                          }
+                          if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
+                            return false;
+                          }
+                        }
+                        return true;
+                      }).length;
+
+                      return filteredCount > visiblePhysicalFilesCount && (
+                        <div className="flex items-center px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setVisiblePhysicalFilesCount(prev => prev + PHYSICAL_FILES_PER_PAGE)}
+                            className="w-full text-xs"
+                          >
+                            {t('documents.loadMore')} ({filteredCount - visiblePhysicalFilesCount} {t('documents.remaining')})
+                          </Button>
+                        </div>
+                      );
+                    })()
+                  )}
 
                   {/* Action Bar - Shows when files are selected */}
                   {selectedPhysicalFiles.size > 0 && (
