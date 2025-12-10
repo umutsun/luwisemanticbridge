@@ -3550,15 +3550,15 @@ export default function DocumentManagerPage() {
                   )}
                 </CardContent>
                 {getSelectedCount() > 0 && (
-                  <div className="px-4 py-2 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-                        <span className="text-xs font-medium">
+                  <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="font-medium">
                           {getSelectedCount()} {getSelectedCount() === 1 ? t('documents.actions.documentSelected') : t('documents.actions.documentsSelected')}
                         </span>
                       </div>
-                      <div className="flex items-center gap-0.5 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
+                      <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
                         {/* Smart Batch Actions - CSV: Transform, Others: Embed */}
                         {(() => {
                           const selected = documents.filter(doc => selectedRows.has(doc.id));
@@ -3575,10 +3575,10 @@ export default function DocumentManagerPage() {
                                       size="sm"
                                       variant="ghost"
                                       disabled={batchProcessing}
-                                      className="h-7 px-1.5 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
+                                      className="h-8 px-2 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
                                     >
-                                      <Database className="w-3.5 h-3.5 text-green-600 mr-1" />
-                                      <span className="text-[11px] font-medium">
+                                      <Database className="w-4 h-4 text-green-600 mr-1" />
+                                      <span className="text-xs font-medium">
                                         {batchProcessing ? 'Transforming...' : `Transform (${csvDocs.length})`}
                                       </span>
                                     </Button>
@@ -3606,14 +3606,14 @@ export default function DocumentManagerPage() {
                                         variant="ghost"
                                         onClick={handleBatchEmbed}
                                         disabled={batchProcessing}
-                                        className="h-7 px-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+                                        className="h-8 px-2 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
                                       >
                                         {batchProcessing ? (
-                                          <Loader2 className="w-3.5 h-3.5 text-blue-600 mr-1 animate-spin" />
+                                          <Loader2 className="w-4 h-4 text-blue-600 mr-1 animate-spin" />
                                         ) : (
-                                          <Zap className="w-3.5 h-3.5 text-blue-600 mr-1" />
+                                          <Zap className="w-4 h-4 text-blue-600 mr-1" />
                                         )}
-                                        <span className="text-[11px] font-medium">Embed ({embedDocs.length})</span>
+                                        <span className="text-xs font-medium">Embed ({embedDocs.length})</span>
                                       </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>{t('documents.actions.embed')}</TooltipContent>
@@ -3634,9 +3634,9 @@ export default function DocumentManagerPage() {
                             size="sm"
                             variant="ghost"
                             disabled={batchProcessing}
-                            className="h-7 w-7 p-0 hover:bg-orange-100 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-50"
+                            className="h-8 w-8 p-0 hover:bg-orange-100 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-50"
                           >
-                            <XCircle className="w-3.5 h-3.5 text-orange-600" />
+                            <XCircle className="w-4 h-4 text-orange-600" />
                           </Button>
                         </ConfirmTooltip>
 
@@ -3649,10 +3649,10 @@ export default function DocumentManagerPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 w-7 p-0 hover:bg-destructive/10 transition-colors"
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
                             title={t('documents.actions.deleteSelectedDocuments')}
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                            <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
                         </ConfirmTooltip>
                       </div>
