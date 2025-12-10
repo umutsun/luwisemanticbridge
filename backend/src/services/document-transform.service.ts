@@ -493,14 +493,20 @@ export class DocumentTransformService {
             },
             // Map CSV columns (none should be primary key)
             // Store originalFieldName for mapping CSV data to table columns
-            ...analysis.fieldTypes.map((field: any) => ({
-              name: field.fieldName.replace(/[^a-z0-9_]/gi, '_').toLowerCase(),
-              originalFieldName: field.fieldName, // Keep original CSV header name for data mapping
-              type: field.suggestedSQLType,
-              nullable: field.nullable,
-              isPrimaryKey: false, // Never use CSV columns as primary key
-              isUnique: false, // Avoid unique constraints on CSV columns
-            })),
+            // IMPORTANT: Rename 'id' column from CSV to 'csv_id' to avoid conflict with auto-generated id
+            ...analysis.fieldTypes.map((field: any) => {
+              const sanitizedName = field.fieldName.replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+              // If CSV has 'id' column, rename it to 'csv_id' to avoid conflict with auto-generated PRIMARY KEY
+              const finalName = sanitizedName === 'id' ? 'csv_id' : sanitizedName;
+              return {
+                name: finalName,
+                originalFieldName: field.fieldName, // Keep original CSV header name for data mapping
+                type: field.suggestedSQLType,
+                nullable: field.nullable,
+                isPrimaryKey: false, // Never use CSV columns as primary key
+                isUnique: false, // Avoid unique constraints on CSV columns
+              };
+            }),
             // Add created_at timestamp with default value
             {
               name: 'created_at',
