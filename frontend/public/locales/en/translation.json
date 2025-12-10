@@ -1612,6 +1612,9 @@
       "selectDocumentsToEmbed": "Please select PDF, TXT, MD, or DOC files for embedding",
       "noPdfDocuments": "No PDF Documents",
       "selectPdfDocuments": "Please select PDF documents for batch processing",
+      "selectPdfToAnalyze": "Select PDF documents to analyze",
+      "analyzing": "Analyzing documents...",
+      "analyzeComplete": "Analysis Complete",
       "transforming": "Transforming {count} CSV files to table...",
       "creatingEmbeddings": "Creating embeddings for {count} documents...",
       "processing": "Processing {count} documents...",
@@ -1648,6 +1651,8 @@
       "documentsSelected": "documents selected",
       "transform": "Transform",
       "embed": "Embed",
+      "analyze": "Analyze",
+      "analyzeTooltip": "Extract text from PDFs (OCR if needed) before embedding",
       "deleteSelected": "Are you sure you want to delete {count} documents?",
       "deleteSelectedDocuments": "Delete selected documents"
     },

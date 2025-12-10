@@ -1833,6 +1833,53 @@ router.post('/bulk-embed', authenticateToken, async (req: AuthenticatedRequest, 
           continue;
         }
 
+        // ===== SMART EMBED: Check for empty content and try auto-extraction =====
+        if (!document.content || document.content.trim().length === 0) {
+          console.log(`[Bulk Embed] Document ${docId} has no content, attempting auto-extraction...`);
+
+          const fileType = (document.file_type || '').toLowerCase();
+          const fs = require('fs');
+
+          // Try to get file_path from document
+          const pathResult = await lsembPool.query('SELECT file_path FROM documents WHERE id = $1', [docId]);
+          const filePath = pathResult.rows[0]?.file_path;
+
+          if (fileType === 'pdf' && filePath && fs.existsSync(filePath)) {
+            try {
+              const pdfParse = require('pdf-parse');
+              const dataBuffer = fs.readFileSync(filePath);
+              const pdfData = await pdfParse(dataBuffer);
+
+              if (pdfData.text && pdfData.text.trim().length > 50) {
+                document.content = pdfData.text.trim();
+
+                // Update database with extracted content
+                await lsembPool.query(
+                  `UPDATE documents SET content = $1, processing_status = 'analyzed', updated_at = NOW() WHERE id = $2`,
+                  [document.content, docId]
+                );
+
+                console.log(`[Bulk Embed] ✓ Auto-extracted ${document.content.length} chars for ${document.title}`);
+              }
+            } catch (extractError: any) {
+              console.warn(`[Bulk Embed] Auto-extraction failed for ${docId}:`, extractError.message);
+            }
+          }
+
+          // If still no content, report error with helpful message
+          if (!document.content || document.content.trim().length === 0) {
+            errors.push(`Document ${docId} (${document.title}): No content available. Use "Analyze" button first to extract text.`);
+            results.push({
+              id: docId,
+              title: document.title,
+              status: 'error',
+              error: 'No content - needs analysis first'
+            });
+            continue;
+          }
+        }
+        // ===== END SMART EMBED =====
+
         // Determine document type
         const documentType = document.metadata?.document_type ||
           (document.title.match(/\.(csv|json)$/i) ? 'tabular' :

@@ -167,7 +167,7 @@ export class ContextualDocumentProcessorService {
           // Auto-trigger Vision OCR for image-heavy documents
           if (pdfAnalysis.needsOCR && process.env.GEMINI_API_KEY) {
             try {
-              console.log(` [Auto-OCR] Triggering Vision OCR for: ${filename}`);
+              console.log(` [Auto-OCR] Triggering Vision OCR for: ${originalName}`);
               const { visionOCRService } = await import('./vision-ocr.service');
 
               const visionResult = await visionOCRService.processPDFWithVision(filePath, {

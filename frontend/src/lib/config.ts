@@ -33,6 +33,7 @@ export const API_CONFIG = {
     pdfTemplates: '/api/v2/pdf/analysis-templates',
     pdfBatchMetadata: '/api/v2/pdf/batch-metadata',
     pdfBatchStatus: '/api/v2/pdf/job-status',
+    pdfBatchAnalyze: '/api/v2/pdf/batch-analyze',
 
     // Embeddings
     embeddings: '/api/v2/embeddings',

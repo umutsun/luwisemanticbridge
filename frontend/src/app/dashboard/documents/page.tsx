@@ -60,7 +60,8 @@ import {
   Sparkles,
   Play,
   HardDrive,
-  ChevronDown
+  ChevronDown,
+  Brain
 } from 'lucide-react';
 import {
   Dialog,
@@ -2640,6 +2641,166 @@ export default function DocumentManagerPage() {
     }
   };
 
+  // Batch Analyze - Extract text from PDFs before embedding
+  const handleBatchAnalyze = async () => {
+    const selectedDocs = Array.from(selectedRows);
+    // Filter PDF documents that need analysis (no content or insufficient content)
+    const pdfDocs = documents.filter(doc =>
+      selectedDocs.includes(doc.id) &&
+      (doc.type || doc.file_type)?.toLowerCase() === 'pdf'
+    );
+
+    if (pdfDocs.length === 0) {
+      toast({
+        title: t('documents.batch.noPdfDocuments') || 'No PDF documents',
+        description: t('documents.batch.selectPdfToAnalyze') || 'Select PDF documents to analyze',
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setBatchProcessing(true);
+    setBatchProgress(0);
+    setBatchCurrent(0);
+    setBatchTotal(pdfDocs.length);
+    setBatchStatus(t('documents.batch.analyzing') || 'Analyzing...');
+
+    // Initialize analyze queue
+    const initialQueue = pdfDocs.map(doc => ({
+      id: doc.id,
+      title: doc.title,
+      status: 'pending' as const
+    }));
+    setEmbedQueue(initialQueue);
+
+    try {
+      // Start batch analyze job
+      const response = await fetch(getApiUrl('pdfBatchAnalyze'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ documentIds: pdfDocs.map(d => d.id) })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to start batch analyze');
+      }
+
+      const data = await response.json();
+      const jobId = data.jobId;
+
+      // Poll for job status
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await fetch(
+            `${getApiUrl('pdfBatchStatus')}/${jobId}`,
+            {
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            }
+          );
+
+          if (!statusResponse.ok) {
+            console.warn('Failed to get job status');
+            return;
+          }
+
+          const statusData = await statusResponse.json();
+
+          // Update progress
+          setBatchProgress(statusData.percentage || 0);
+          setBatchCurrent(statusData.current || 0);
+          setBatchStatus(statusData.currentFile ? `Analyzing: ${statusData.currentFile}` : 'Processing...');
+
+          // Update queue status based on results
+          if (statusData.results && statusData.results.length > 0) {
+            setEmbedQueue(prev => prev.map(q => {
+              const result = statusData.results.find((r: any) => r.id === q.id);
+              if (result) {
+                if (result.status === 'success') return { ...q, status: 'completed' as const };
+                if (result.status === 'skipped') return { ...q, status: 'skipped' as const };
+                if (result.status === 'error') return { ...q, status: 'error' as const };
+              }
+              return q;
+            }));
+          }
+
+          // Check if job is completed
+          if (statusData.status === 'completed') {
+            clearInterval(pollInterval);
+
+            const successCount = statusData.successCount || 0;
+            const errorCount = statusData.errorCount || 0;
+            const skippedCount = statusData.skippedCount || 0;
+
+            toast({
+              title: t('documents.batch.analyzeComplete') || 'Analysis Complete',
+              description: `Analyzed: ${successCount}, Skipped: ${skippedCount}${errorCount > 0 ? `, Errors: ${errorCount}` : ''}`,
+            });
+
+            // Update document statuses locally
+            if (statusData.results) {
+              setDocuments(prev => prev.map(d => {
+                const result = statusData.results.find((r: any) => r.id === d.id);
+                if (result) {
+                  if (result.status === 'success') {
+                    return { ...d, processing_status: 'analyzed' };
+                  } else if (result.status === 'error') {
+                    return { ...d, processing_status: 'failed' };
+                  }
+                }
+                return d;
+              }));
+            }
+
+            // Refresh documents
+            await Promise.all([fetchDocuments(), fetchStats()]);
+
+            // Reset states
+            clearSelection();
+            setBatchProcessing(false);
+            setBatchProgress(0);
+            setBatchStatus('');
+            setBatchCurrent(0);
+            setBatchTotal(0);
+            setEmbedQueue([]);
+          }
+        } catch (pollError) {
+          console.error('Poll error:', pollError);
+        }
+      }, 1500);
+
+      // Cleanup interval after 10 minutes max
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (batchProcessing) {
+          setBatchProcessing(false);
+          toast({
+            title: "Timeout",
+            description: "Batch analyze timed out. Please check the documents.",
+            variant: "destructive"
+          });
+        }
+      }, 10 * 60 * 1000);
+
+    } catch (error: any) {
+      console.error('Batch analyze error:', error);
+      toast({
+        title: "Error",
+        description: error.message || 'Batch analyze failed',
+        variant: "destructive"
+      });
+      setBatchProcessing(false);
+      setBatchProgress(0);
+      setBatchStatus('');
+      setBatchCurrent(0);
+      setBatchTotal(0);
+      setEmbedQueue([]);
+    }
+  };
+
   const handleBatchProcess = async (schemaId: string) => {
     const selectedDocs = Array.from(selectedRows);
     const pdfDocs = documents.filter(doc => selectedDocs.includes(doc.id) && (doc.type || doc.file_type)?.toLowerCase() === 'pdf');
@@ -3601,6 +3762,39 @@ export default function DocumentManagerPage() {
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               )}
+
+                              {/* PDF Analyze Button - Extract text before embedding */}
+                              {(() => {
+                                const pdfDocs = selected.filter(doc =>
+                                  (doc.type || doc.file_type)?.toLowerCase() === 'pdf'
+                                );
+                                if (pdfDocs.length > 0) {
+                                  return (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={handleBatchAnalyze}
+                                            disabled={batchProcessing}
+                                            className="h-8 px-2 hover:bg-amber-100 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50"
+                                          >
+                                            {batchProcessing ? (
+                                              <Loader2 className="w-4 h-4 text-amber-600 mr-1 animate-spin" />
+                                            ) : (
+                                              <Brain className="w-4 h-4 text-amber-600 mr-1" />
+                                            )}
+                                            <span className="text-xs font-medium">{t('documents.actions.analyze') || 'Analyze'} ({pdfDocs.length})</span>
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{t('documents.actions.analyzeTooltip') || 'Extract text from PDFs (OCR if needed)'}</TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  );
+                                }
+                                return null;
+                              })()}
 
                               {/* PDF/TXT/MD/DOC Embed Button */}
                               {embedDocs.length > 0 && (

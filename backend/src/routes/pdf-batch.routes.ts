@@ -2931,4 +2931,288 @@ async function processBatchMetadataTransform(jobId: string, config: any): Promis
   }
 }
 
+// ==================== BATCH ANALYZE FOR EMBEDDING ====================
+
+/**
+ * POST /api/v2/pdf/batch-analyze
+ * Batch analyze PDFs: detect if OCR needed, extract text, update documents.content
+ * This prepares documents for embedding by ensuring content is populated.
+ *
+ * Body: { documentIds: string[] }
+ * Response: { success, jobId, status }
+ */
+router.post('/batch-analyze', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  console.log('[Batch Analyze] POST /batch-analyze - Request received');
+
+  try {
+    const { documentIds } = req.body;
+
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      return res.status(400).json({ error: 'documentIds array is required' });
+    }
+
+    const crypto = require('crypto');
+    const jobId = crypto.randomUUID();
+
+    // Initialize job status
+    await storeJobProgress(jobId, {
+      type: 'batch-analyze',
+      status: 'processing',
+      current: 0,
+      total: documentIds.length,
+      percentage: 0,
+      results: [],
+      successCount: 0,
+      errorCount: 0,
+      startedAt: new Date().toISOString()
+    });
+
+    // Start background processing (don't await)
+    processBatchAnalyzeQueue(jobId, documentIds);
+
+    res.json({
+      success: true,
+      jobId,
+      status: 'processing',
+      message: `Batch analyze started for ${documentIds.length} documents`
+    });
+  } catch (error: any) {
+    console.error('[Batch Analyze] Error:', error);
+    res.status(500).json({ error: 'Failed to start batch analyze', message: error.message });
+  }
+});
+
+/**
+ * Background batch analyze processor
+ * For each document: analyze → extract text (pdf-parse or OCR) → update content
+ */
+async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): Promise<void> {
+  let successCount = 0;
+  let errorCount = 0;
+  let skippedCount = 0;
+  const results: any[] = [];
+
+  console.log(`[Batch Analyze] Job ${jobId} started for ${documentIds.length} documents`);
+
+  for (let i = 0; i < documentIds.length; i++) {
+    const docId = documentIds[i];
+
+    try {
+      // Get document
+      const docResult = await lsembPool.query(
+        `SELECT id, title, file_path, content, file_type, processing_status FROM documents WHERE id = $1`,
+        [docId]
+      );
+
+      if (docResult.rows.length === 0) {
+        errorCount++;
+        results.push({ id: docId, status: 'error', error: 'Document not found' });
+        continue;
+      }
+
+      const doc = docResult.rows[0];
+      const currentFile = doc.title || `Document ${docId}`;
+
+      // Update job progress
+      await storeJobProgress(jobId, {
+        type: 'batch-analyze',
+        status: 'processing',
+        current: i + 1,
+        total: documentIds.length,
+        percentage: Math.round(((i + 1) / documentIds.length) * 100),
+        currentFile,
+        successCount,
+        errorCount,
+        skippedCount
+      });
+
+      // Check if content already exists and is sufficient
+      if (doc.content && doc.content.trim().length > 100) {
+        skippedCount++;
+        results.push({ id: docId, status: 'skipped', reason: 'Content already exists', textLength: doc.content.length });
+
+        // Ensure status is at least 'analyzed'
+        if (doc.processing_status === 'pending' || doc.processing_status === 'waiting') {
+          await lsembPool.query(
+            `UPDATE documents SET processing_status = 'analyzed', updated_at = NOW() WHERE id = $1`,
+            [docId]
+          );
+        }
+        continue;
+      }
+
+      // Update document status to 'analyzing'
+      await lsembPool.query(
+        `UPDATE documents SET processing_status = 'analyzing', updated_at = NOW() WHERE id = $1`,
+        [docId]
+      );
+
+      let extractedText = '';
+      let method = 'none';
+      const fileType = (doc.file_type || '').toLowerCase();
+
+      // Only process PDFs
+      if (fileType !== 'pdf') {
+        // For non-PDF files, try to read content directly
+        if (['txt', 'md', 'text'].includes(fileType) && doc.file_path) {
+          try {
+            const fs = require('fs');
+            if (fs.existsSync(doc.file_path)) {
+              extractedText = fs.readFileSync(doc.file_path, 'utf-8');
+              method = 'direct-read';
+            }
+          } catch (readError) {
+            console.warn(`[Batch Analyze] Could not read file ${doc.file_path}:`, readError);
+          }
+        }
+
+        if (!extractedText) {
+          errorCount++;
+          results.push({ id: docId, status: 'error', error: `Unsupported file type: ${fileType}` });
+          await lsembPool.query(
+            `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
+            [docId]
+          );
+          continue;
+        }
+      } else {
+        // PDF Processing
+        const fs = require('fs');
+
+        if (!doc.file_path || !fs.existsSync(doc.file_path)) {
+          errorCount++;
+          results.push({ id: docId, status: 'error', error: 'File not found on disk' });
+          await lsembPool.query(
+            `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
+            [docId]
+          );
+          continue;
+        }
+
+        // Step 1: Analyze PDF to detect if OCR needed
+        let needsOCR = false;
+        let analysisResult: any = null;
+
+        try {
+          analysisResult = await pdfAnalyzer.analyzePDF(doc.file_path, docId);
+          needsOCR = analysisResult.recommendation === 'needs_ocr';
+          console.log(`[Batch Analyze] PDF ${docId} analysis: ${analysisResult.recommendation}, chars/page: ${analysisResult.stats?.charsPerPage || 0}`);
+        } catch (analysisError) {
+          console.warn(`[Batch Analyze] PDF analysis failed for ${docId}, will try extraction anyway:`, analysisError);
+        }
+
+        // Step 2: Extract text based on analysis
+        if (!needsOCR) {
+          // Try pdf-parse first (fast, local)
+          try {
+            const pdfParse = require('pdf-parse');
+            const dataBuffer = fs.readFileSync(doc.file_path);
+            const pdfData = await pdfParse(dataBuffer);
+
+            if (pdfData.text && pdfData.text.trim().length > 50) {
+              extractedText = pdfData.text.trim();
+              method = 'pdf-parse';
+              console.log(`[Batch Analyze] Extracted ${extractedText.length} chars via pdf-parse for ${docId}`);
+            }
+          } catch (parseError) {
+            console.warn(`[Batch Analyze] pdf-parse failed for ${docId}:`, parseError);
+          }
+        }
+
+        // If pdf-parse failed or returned insufficient text, try OCR
+        if (!extractedText || extractedText.length < 50) {
+          try {
+            console.log(`[Batch Analyze] Trying OCR for ${docId}...`);
+            const result = await ocrRouterService.processDocument(doc.file_path, {
+              fileType: 'pdf',
+              language: 'tur+eng'
+            });
+
+            if (result.text && result.text.trim().length > 0) {
+              extractedText = result.text.trim();
+              method = result.metadata?.provider || 'ocr';
+              console.log(`[Batch Analyze] OCR extracted ${extractedText.length} chars via ${method} for ${docId}`);
+            }
+          } catch (ocrError: any) {
+            console.warn(`[Batch Analyze] OCR failed for ${docId}:`, ocrError.message);
+          }
+        }
+      }
+
+      // Step 3: Update document with extracted content
+      if (extractedText && extractedText.length > 0) {
+        await lsembPool.query(
+          `UPDATE documents
+           SET content = $1,
+               processing_status = 'analyzed',
+               metadata = jsonb_set(
+                 COALESCE(metadata, '{}'),
+                 '{analysis}',
+                 $2::jsonb
+               ),
+               updated_at = NOW()
+           WHERE id = $3`,
+          [
+            extractedText,
+            JSON.stringify({
+              extracted: true,
+              method: method,
+              textLength: extractedText.length,
+              analyzedAt: new Date().toISOString()
+            }),
+            docId
+          ]
+        );
+
+        successCount++;
+        results.push({
+          id: docId,
+          status: 'success',
+          method: method,
+          textLength: extractedText.length
+        });
+        console.log(`[Batch Analyze] ✓ Document ${docId} analyzed: ${extractedText.length} chars via ${method}`);
+      } else {
+        await lsembPool.query(
+          `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
+          [docId]
+        );
+        errorCount++;
+        results.push({ id: docId, status: 'error', error: 'No text could be extracted' });
+        console.log(`[Batch Analyze] ✗ Document ${docId} failed: no text extracted`);
+      }
+
+    } catch (error: any) {
+      console.error(`[Batch Analyze] Error processing ${docId}:`, error);
+      await lsembPool.query(
+        `UPDATE documents SET processing_status = 'failed', updated_at = NOW() WHERE id = $1`,
+        [docId]
+      ).catch(() => {});
+      errorCount++;
+      results.push({ id: docId, status: 'error', error: error.message });
+    }
+
+    // Small delay between documents to prevent overload
+    if (i < documentIds.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+  }
+
+  // Mark job complete
+  await storeJobProgress(jobId, {
+    type: 'batch-analyze',
+    status: 'completed',
+    current: documentIds.length,
+    total: documentIds.length,
+    percentage: 100,
+    successCount,
+    errorCount,
+    skippedCount,
+    results,
+    completedAt: new Date().toISOString()
+  });
+
+  console.log(`[Batch Analyze] Job ${jobId} completed: ${successCount} success, ${skippedCount} skipped, ${errorCount} errors`);
+}
+
 export default router;

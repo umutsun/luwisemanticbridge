@@ -1814,6 +1814,9 @@
       "selectDocumentsToEmbed": "Lütfen gömme için PDF, TXT, MD veya DOC dosyaları seçin",
       "noPdfDocuments": "PDF Döküman Yok",
       "selectPdfDocuments": "Lütfen toplu işlem için PDF dökümanları seçin",
+      "selectPdfToAnalyze": "Analiz için PDF dökümanları seçin",
+      "analyzing": "Dökümanlar analiz ediliyor...",
+      "analyzeComplete": "Analiz Tamamlandı",
       "transforming": "{count} CSV dosyası tabloya dönüştürülüyor...",
       "creatingEmbeddings": "{count} döküman için gömülü oluşturuluyor...",
       "processing": "{count} döküman işleniyor...",
@@ -1850,6 +1853,8 @@
       "documentsSelected": "döküman seçildi",
       "transform": "Dönüştür",
       "embed": "Göm",
+      "analyze": "Analiz Et",
+      "analyzeTooltip": "PDF'lerden metin çıkar (gerekirse OCR) - gömme öncesi",
       "deleteSelected": "{count} dökümanı silmek istediğinizden emin misiniz?",
       "deleteSelectedDocuments": "Seçili dökümanları sil"
     },
