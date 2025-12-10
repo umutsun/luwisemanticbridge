@@ -138,6 +138,20 @@ async def update_job_status(job_id: int, status: str):
             await conn.commit()
 
 
+async def check_if_document_exists(google_drive_id: str) -> bool:
+    """Check if document with this google_drive_id already exists"""
+    db_url = os.getenv('DATABASE_URL', 'postgresql://postgres@localhost:5432/vergilex_lsemb')
+
+    async with await psycopg.AsyncConnection.connect(db_url) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT id FROM documents WHERE metadata->>'google_drive_id' = %s",
+                (google_drive_id,)
+            )
+            existing = await cur.fetchone()
+            return existing is not None
+
+
 async def save_document_to_db(
     filename: str,
     file_path: str,
@@ -146,7 +160,7 @@ async def save_document_to_db(
     google_drive_id: str,
     job_id: int
 ):
-    """Save document metadata to PostgreSQL"""
+    """Save document metadata to PostgreSQL (INSERT only, no updates)"""
     db_url = os.getenv('DATABASE_URL', 'postgresql://postgres@localhost:5432/vergilex_lsemb')
 
     metadata = {
@@ -158,31 +172,11 @@ async def save_document_to_db(
 
     async with await psycopg.AsyncConnection.connect(db_url) as conn:
         async with conn.cursor() as cur:
-            # Check if exists
-            await cur.execute(
-                "SELECT id FROM documents WHERE metadata->>'google_drive_id' = %s",
-                (google_drive_id,)
-            )
-            existing = await cur.fetchone()
-
-            if existing:
-                # Update
-                await cur.execute("""
-                    UPDATE documents
-                    SET title = %s,
-                        file_path = %s,
-                        file_size = %s,
-                        file_type = %s,
-                        processing_status = 'completed',
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = %s
-                """, (filename, file_path, file_size, file_type, existing[0]))
-            else:
-                # Insert
-                await cur.execute("""
-                    INSERT INTO documents (title, file_path, file_size, file_type, processing_status, metadata)
-                    VALUES (%s, %s, %s, %s, 'completed', %s)
-                """, (filename, file_path, file_size, file_type, json.dumps(metadata)))
+            # Insert new document
+            await cur.execute("""
+                INSERT INTO documents (title, file_path, file_size, file_type, processing_status, metadata)
+                VALUES (%s, %s, %s, %s, 'completed', %s)
+            """, (filename, file_path, file_size, file_type, json.dumps(metadata)))
 
             await conn.commit()
 
@@ -230,6 +224,24 @@ def import_google_drive_files(
                 file_metadata = service.files().get(fileId=file_id, fields='name,mimeType,size').execute()
                 filename = file_metadata.get('name', 'unknown')
                 mime_type = file_metadata.get('mimeType', '')
+                file_size = int(file_metadata.get('size', 0))
+
+                # Check if already exists (by google_drive_id)
+                if save_to_db and await check_if_document_exists(file_id):
+                    print(f"[GoogleDrive Worker] ⏭️  Skipped (already imported): {filename} ({processed + 1}/{total})")
+                    successful += 1
+                    processed += 1
+
+                    # Update progress
+                    await update_job_progress(
+                        job_id=job_id,
+                        processed=processed,
+                        successful=successful,
+                        failed=failed,
+                        total=total,
+                        current_file=f"[SKIPPED] {filename}"
+                    )
+                    continue
 
                 print(f"[GoogleDrive Worker] Downloading: {filename}")
 
@@ -243,7 +255,6 @@ def import_google_drive_files(
                     status, done = downloader.next_chunk()
 
                 file_content = file_buffer.getvalue()
-                file_size = len(file_content)
 
                 print(f"[GoogleDrive Worker] Downloaded {filename}: {file_size / 1024:.1f} KB")
 
@@ -268,9 +279,9 @@ def import_google_drive_files(
                         google_drive_id=file_id,
                         job_id=job_id
                     )
-                    print(f"[GoogleDrive Worker] ✅ Saved to DB and disk: {safe_filename} ({processed}/{total})")
+                    print(f"[GoogleDrive Worker] ✅ Saved to DB and disk: {safe_filename} ({processed + 1}/{total})")
                 else:
-                    print(f"[GoogleDrive Worker] ✅ Saved to disk only: {safe_filename} ({processed}/{total})")
+                    print(f"[GoogleDrive Worker] ✅ Saved to disk only: {safe_filename} ({processed + 1}/{total})")
 
                 successful += 1
                 processed += 1
