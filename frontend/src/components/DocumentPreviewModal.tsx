@@ -939,9 +939,9 @@ export default function DocumentPreviewModal({
     return (
       <TooltipProvider delayDuration={300}>
         <div className="flex flex-col h-full overflow-hidden">
-          {/* Fixed Header */}
-          <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
-            <Table>
+          {/* Fixed Header - scrollbar-gutter accounts for scrollbar space */}
+          <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700" style={{ scrollbarGutter: 'stable' }}>
+            <Table className="w-full">
               <TableHeader className="bg-gray-50 dark:bg-gray-900">
                 <TableRow>
                   {/* Row number header */}
@@ -1021,58 +1021,32 @@ export default function DocumentPreviewModal({
             </Table>
           </div>
 
-          {/* Fixed Footer: Info + Controls */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm">
-            {/* Left: Stats */}
-            <div className="flex items-center gap-2">
-              {isEditingHeaders ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={saveEditedHeaders}
-                    className="h-8 gap-1.5"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Save Changes
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsEditingHeaders(false);
-                      setEditableHeaders([...csvHeaders]);
-                    }}
-                    className="h-8 gap-1.5"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <span className="text-sm text-muted-foreground font-medium">
-                  {csvHeaders?.length || 0} columns • {totalRowCount > 0 ? totalRowCount : (parsedData?.length || 0)} rows
-                </span>
-              )}
+          {/* Editing Controls (only when editing headers) */}
+          {isEditingHeaders && (
+            <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-t bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={saveEditedHeaders}
+                className="h-8 gap-1.5"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Save Changes
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setIsEditingHeaders(false);
+                  setEditableHeaders([...csvHeaders]);
+                }}
+                className="h-8 gap-1.5"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancel
+              </Button>
             </div>
-
-            {/* Right: Actions */}
-            <div className="flex items-center gap-2">
-              {hasMore && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCsvVisibleRows(prev => prev + CSV_ROWS_PER_PAGE)}
-                  className="h-8 gap-2"
-                >
-                  Load More
-                  <Badge variant="secondary" className="ml-1 text-xs px-1.5">
-                    +{Math.min(CSV_ROWS_PER_PAGE, (parsedData?.length || 0) - csvVisibleRows)}
-                  </Badge>
-                </Button>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </TooltipProvider>
     );
