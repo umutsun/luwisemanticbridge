@@ -3204,7 +3204,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Files List */}
-                  <ScrollArea className="flex-1 min-h-[200px] max-h-[400px]">
+                  <ScrollArea className="flex-1 min-h-[200px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3376,45 +3376,45 @@ export default function DocumentManagerPage() {
                         </div>
                       )
                     )}
+
+                    {/* Load More Button for Physical Files - Inside ScrollArea */}
+                    {!physicalFilesLoading && physicalFiles && (
+                      (() => {
+                        const filteredCount = physicalFiles.filter(file => {
+                          if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
+                            return false;
+                          }
+                          if (physicalFilesFilter !== 'all') {
+                            const fileExt = file.ext.toLowerCase();
+                            if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
+                              return false;
+                            }
+                            if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
+                              return false;
+                            }
+                          }
+                          return true;
+                        }).length;
+
+                        return filteredCount > visiblePhysicalFilesCount && (
+                          <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setVisiblePhysicalFilesCount(prev => prev + PHYSICAL_FILES_PER_PAGE)}
+                              className="gap-1 h-7 text-xs"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                              {t('documents.loadMore')}
+                              <span className="text-xs text-muted-foreground">
+                                ({filteredCount - visiblePhysicalFilesCount})
+                              </span>
+                            </Button>
+                          </div>
+                        );
+                      })()
+                    )}
                   </ScrollArea>
-
-                  {/* Load More Button for Physical Files */}
-                  {!physicalFilesLoading && physicalFiles && (
-                    (() => {
-                      const filteredCount = physicalFiles.filter(file => {
-                        if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
-                          return false;
-                        }
-                        if (physicalFilesFilter !== 'all') {
-                          const fileExt = file.ext.toLowerCase();
-                          if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
-                            return false;
-                          }
-                          if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-                            return false;
-                          }
-                        }
-                        return true;
-                      }).length;
-
-                      return filteredCount > visiblePhysicalFilesCount && (
-                        <div className="flex-shrink-0 flex items-center px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setVisiblePhysicalFilesCount(prev => prev + PHYSICAL_FILES_PER_PAGE)}
-                            className="gap-1 h-7 text-xs"
-                          >
-                            <ChevronDown className="w-3 h-3" />
-                            {t('documents.loadMore')}
-                            <span className="text-xs text-muted-foreground">
-                              ({filteredCount - visiblePhysicalFilesCount})
-                            </span>
-                          </Button>
-                        </div>
-                      );
-                    })()
-                  )}
 
                   {/* Action Bar - Shows when files are selected */}
                   {selectedPhysicalFiles.size > 0 && (
@@ -3546,7 +3546,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Scrollable Body */}
-                  <div className="flex-1 overflow-y-auto min-h-[200px] max-h-[400px]">
+                  <div className="flex-1 overflow-y-auto min-h-[200px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
@@ -3696,25 +3696,25 @@ export default function DocumentManagerPage() {
                         )}
                       </TableBody>
                     </Table>
-                  </div>
 
-                  {/* Fixed Footer: Load More */}
-                  {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
-                    <div className="flex-shrink-0 flex items-center px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                        className="gap-1 h-7 text-xs"
-                      >
-                        <ChevronDown className="w-3 h-3" />
-                        {t('documents.table.loadMore')}
-                        <span className="text-xs text-muted-foreground">
-                          ({filteredDocuments.length - visibleDocumentsCount})
-                        </span>
-                      </Button>
-                    </div>
-                  )}
+                    {/* Load More Button - Inside Scroll Area */}
+                    {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
+                      <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
+                          className="gap-1 h-7 text-xs"
+                        >
+                          <ChevronDown className="w-3 h-3" />
+                          {t('documents.table.loadMore')}
+                          <span className="text-xs text-muted-foreground">
+                            ({filteredDocuments.length - visibleDocumentsCount})
+                          </span>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
                 {getSelectedCount() > 0 && (
                   <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
