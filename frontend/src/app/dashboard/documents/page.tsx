@@ -4068,22 +4068,6 @@ export default function DocumentManagerPage() {
                     })}
                   </div>
 
-                  {/* Load More */}
-                  {drivePageToken && (
-                    <div className="pt-4 text-center">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => fetchDriveFiles(currentDriveFolderId, drivePageToken)}
-                        disabled={driveLoading}
-                      >
-                        {driveLoading ? (
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        ) : null}
-                        Load more
-                      </Button>
-                    </div>
-                  )}
                 </ScrollArea>
               </>
             )}
@@ -4105,6 +4089,23 @@ export default function DocumentManagerPage() {
                   {selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length
                     ? 'Deselect All'
                     : 'Select All'}
+                </Button>
+              )}
+              {/* Load More - moved to footer */}
+              {drivePageToken && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchDriveFiles(currentDriveFolderId, drivePageToken)}
+                  disabled={driveLoading}
+                  className="h-6 px-2 text-xs gap-1"
+                >
+                  {driveLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3" />
+                  )}
+                  Load More
                 </Button>
               )}
             </div>

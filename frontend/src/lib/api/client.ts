@@ -76,16 +76,32 @@ class ApiClient {
       async (error) => {
         const originalRequest = error.config;
 
-        // Handle 401 Unauthorized
+        // Handle 401 Unauthorized - redirect to login immediately
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
-          
+
+          // Check if we have a refresh token
+          const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+
+          if (!refreshToken) {
+            // No refresh token, redirect to login immediately
+            console.log('[ApiClient] 401 received, no refresh token - redirecting to login');
+            this.clearToken();
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
+            return Promise.reject(this.handleError(error));
+          }
+
           try {
             await this.refreshToken();
             return this.client(originalRequest);
           } catch (refreshError) {
+            console.log('[ApiClient] Token refresh failed - redirecting to login');
             this.clearToken();
-            window.location.href = '/login';
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
             return Promise.reject(this.handleError(refreshError));
           }
         }
@@ -257,30 +273,45 @@ export const authenticatedFetch = async (url: string, options: RequestInit = {})
     const response = await fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
 
     if (response.status === 401) {
+      // Check if we have a refresh token
+      const refreshToken = localStorage.getItem('refresh_token');
+
+      if (!refreshToken) {
+        // No refresh token, redirect to login immediately
+        console.log('[authenticatedFetch] 401 received, no refresh token - redirecting to login');
+        apiClient.clearToken();
+        window.location.href = '/login';
+        throw new Error('Session expired. Please login again.');
+      }
+
       // Try to refresh token and retry once
       try {
-        // Note: This assumes a refresh token is stored in localStorage
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          const refreshResponse = await fetch(`${apiClient['client'].defaults.baseURL}/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken }),
-          });
+        const refreshResponse = await fetch(`${apiClient['client'].defaults.baseURL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
 
-          if (refreshResponse.ok) {
-            const data = await refreshResponse.json();
-            apiClient.setToken(data.accessToken);
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          apiClient.setToken(data.accessToken);
 
-            // Retry the original request with new token
-            headers.Authorization = `Bearer ${data.accessToken}`;
-            config.headers = headers;
+          // Retry the original request with new token
+          headers.Authorization = `Bearer ${data.accessToken}`;
+          config.headers = headers;
 
-            return fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
-          }
+          return fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
+        } else {
+          // Refresh failed, redirect to login
+          console.log('[authenticatedFetch] Token refresh failed - redirecting to login');
+          apiClient.clearToken();
+          localStorage.removeItem('refresh_token');
+          window.location.href = '/login';
+          throw new Error('Session expired. Please login again.');
         }
       } catch (refreshError) {
         // If refresh fails, clear tokens and redirect
+        console.log('[authenticatedFetch] Token refresh error - redirecting to login');
         apiClient.clearToken();
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';
