@@ -1818,8 +1818,8 @@ export default function DocumentManagerPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Pagination state
-  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(50);
-  const DOCUMENTS_PER_PAGE = 50;
+  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(40);
+  const DOCUMENTS_PER_PAGE = 40;
 
   // Batch processing state
   const [batchProcessing, setBatchProcessing] = useState(false);
@@ -3040,7 +3040,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Files List */}
-                  <ScrollArea className="flex-1 min-h-[300px]">
+                  <ScrollArea className="flex-1 min-h-[200px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3343,7 +3343,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Scrollable Body */}
-                  <div className="flex-1 overflow-auto min-h-[300px]">
+                  <div className="flex-1 overflow-auto min-h-[200px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
