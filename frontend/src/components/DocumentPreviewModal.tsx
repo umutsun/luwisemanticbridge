@@ -662,12 +662,36 @@ export default function DocumentPreviewModal({
     }
 
     // Standard CSV parsing (for raw CSV or fallback)
-    console.log('[CSV Parser] Using standard CSV parsing...');
-    const lines = content.split('\n').filter(line => line.trim());
-    if (lines.length === 0) return;
+    // OPTIMIZED: Only extract first 25 lines for preview (don't split entire file!)
+    console.log('[CSV Parser] Using optimized CSV parsing (preview only)...');
 
-    // Auto-detect delimiter
-    const delimiter = detectDelimiter(content);
+    // Find first 25 newlines without splitting entire content
+    const PREVIEW_LINES = 25; // header + 20 data rows + buffer
+    let lineCount = 0;
+    let lastNewlinePos = -1;
+    let previewEndPos = content.length;
+
+    for (let i = 0; i < content.length && lineCount < PREVIEW_LINES; i++) {
+      if (content[i] === '\n') {
+        lineCount++;
+        lastNewlinePos = i;
+        if (lineCount === PREVIEW_LINES) {
+          previewEndPos = i;
+          break;
+        }
+      }
+    }
+
+    // Extract only the preview portion
+    const previewContent = content.substring(0, previewEndPos);
+    const lines = previewContent.split('\n').filter(line => line.trim());
+    if (lines.length === 0) {
+      setCsvLoading(false);
+      return;
+    }
+
+    // Auto-detect delimiter from first few lines only
+    const delimiter = detectDelimiter(previewContent);
 
     const parseCSVLine = (line: string, delim: string): string[] => {
       const result: string[] = [];
@@ -698,15 +722,30 @@ export default function DocumentPreviewModal({
 
     const headers = parseCSVLine(lines[0], delimiter);
     setCsvHeaders(headers);
-    setOriginalCsvHeaders(headers); // Store original keys for data access
+    setOriginalCsvHeaders(headers);
 
-    // Count total rows (excluding header)
-    const totalRows = lines.length - 1;
-    setTotalRowCount(totalRows);
+    // Estimate total rows by counting newlines (fast, without creating array)
+    // For very large files, sample-count instead of full count
+    let estimatedTotalRows = 0;
+    if (content.length > 10_000_000) { // > 10MB
+      // Sample first 1MB to estimate line density
+      const sampleSize = Math.min(1_000_000, content.length);
+      let sampleNewlines = 0;
+      for (let i = 0; i < sampleSize; i++) {
+        if (content[i] === '\n') sampleNewlines++;
+      }
+      estimatedTotalRows = Math.round((sampleNewlines / sampleSize) * content.length);
+      console.log('[CSV Parser] Large file - estimated rows:', estimatedTotalRows);
+    } else {
+      // Count all newlines for smaller files
+      for (let i = 0; i < content.length; i++) {
+        if (content[i] === '\n') estimatedTotalRows++;
+      }
+    }
+    setTotalRowCount(Math.max(0, estimatedTotalRows - 1)); // Subtract header
 
-    // For performance: Only parse first 10 rows for preview
-    // But keep total count for accurate stats
-    const dataRows = lines.slice(1, 11); // First 10 rows
+    // Parse preview rows (first 20)
+    const dataRows = lines.slice(1, 21);
     const data = dataRows.map(row => {
       const values = parseCSVLine(row, delimiter);
       const obj: any = {};
@@ -718,10 +757,11 @@ export default function DocumentPreviewModal({
 
     setParsedData(data);
     setCsvLoading(false);
-    console.log('[CSV Parser] Standard CSV parse complete:', {
+    console.log('[CSV Parser] Preview parse complete:', {
       delimiter: delimiter === '\t' ? 'TAB' : delimiter,
       headers: headers.length,
-      rows: data.length
+      previewRows: data.length,
+      estimatedTotalRows: estimatedTotalRows
     });
   };
 
