@@ -778,14 +778,49 @@ export default function DocumentPreviewModal({
     setEditableHeaders(newHeaders);
   };
 
-  // Save edited headers
-  const saveEditedHeaders = () => {
-    setCsvHeaders(editableHeaders);
-    setIsEditingHeaders(false);
-    toast({
-      title: 'Başlıklar güncellendi',
-      duration: 2000
-    });
+  // Save edited headers and update CSV file
+  const saveEditedHeaders = async () => {
+    if (!document || !parsedData) return;
+
+    try {
+      // Update headers in state
+      setCsvHeaders(editableHeaders);
+      setIsEditingHeaders(false);
+
+      // Update the CSV file with new headers
+      const response = await fetch(`/api/v2/documents/${document.id}/update-csv-headers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          headers: editableHeaders
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update CSV headers');
+      }
+
+      toast({
+        title: 'Headers updated successfully',
+        description: 'CSV file has been updated. Switch to Transform tab to create database table.',
+        duration: 3000
+      });
+
+      // Switch to Transform tab after saving
+      setActiveTab('transform');
+
+    } catch (error) {
+      console.error('Error updating CSV headers:', error);
+      toast({
+        title: 'Error updating headers',
+        description: 'Failed to save changes. Please try again.',
+        variant: 'destructive',
+        duration: 3000
+      });
+    }
   };
 
   const generateSQLPreview = async () => {
@@ -1011,33 +1046,6 @@ export default function DocumentPreviewModal({
               </TableBody>
             </Table>
           </div>
-
-          {/* Editing Controls (only when editing headers) */}
-          {isEditingHeaders && (
-            <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-t bg-gradient-to-r from-gray-50/80 to-gray-100/80 dark:from-gray-900/80 dark:to-gray-800/80 backdrop-blur-sm">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={saveEditedHeaders}
-                className="h-8 gap-1.5"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Save Changes
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setIsEditingHeaders(false);
-                  setEditableHeaders([...csvHeaders]);
-                }}
-                className="h-8 gap-1.5"
-              >
-                <X className="h-3.5 w-3.5" />
-                Cancel
-              </Button>
-            </div>
-          )}
         </div>
       </TooltipProvider>
     );
@@ -2962,7 +2970,22 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     <span><span className="font-semibold text-foreground">{parsedData.length}</span> rows</span>
                   )}
                   <span className="text-muted-foreground/40">•</span>
-                  <span><span className="font-semibold text-foreground">{csvHeaders?.length || 0}</span> columns</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-semibold text-foreground">{csvHeaders?.length || 0}</span> columns
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingHeaders(!isEditingHeaders)}
+                      className="h-5 w-5 p-0 hover:bg-muted/50"
+                      title={isEditingHeaders ? "Cancel editing" : "Edit column headers"}
+                    >
+                      {isEditingHeaders ? (
+                        <X className="h-3 w-3 text-muted-foreground" />
+                      ) : (
+                        <Edit3 className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </span>
                   {config?.database?.name && (
                     <>
                       <span className="text-muted-foreground/40">•</span>
@@ -2998,8 +3021,35 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
             {/* Right side: Action buttons based on tab */}
             <div className="flex items-center gap-1.5">
-              {/* CSV: Load More button */}
-              {isCSV && parsedData && csvVisibleRows < parsedData.length && (
+              {/* CSV: Editing mode - Save/Cancel buttons */}
+              {isCSV && isEditingHeaders && (
+                <>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={saveEditedHeaders}
+                    className="h-7 px-3 gap-1.5 text-xs"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Save & Transform
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsEditingHeaders(false);
+                      setEditableHeaders([...csvHeaders]);
+                    }}
+                    className="h-7 px-3 gap-1.5 text-xs"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
+                </>
+              )}
+
+              {/* CSV: Load More button (only when not editing) */}
+              {isCSV && !isEditingHeaders && parsedData && csvVisibleRows < parsedData.length && (
                 <Button
                   variant="outline"
                   size="sm"

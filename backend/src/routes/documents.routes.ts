@@ -2658,4 +2658,71 @@ router.get('/pdf/:documentId', authenticateToken, async (req: AuthenticatedReque
   }
 });
 
+/**
+ * POST /api/v2/documents/:id/update-csv-headers
+ * Update CSV file headers (first row)
+ */
+router.post('/:id/update-csv-headers', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { headers } = req.body;
+
+    if (!headers || !Array.isArray(headers)) {
+      return res.status(400).json({ error: 'Headers array is required' });
+    }
+
+    // Get document from database
+    const result = await lsembPool.query(
+      'SELECT * FROM documents WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const doc = result.rows[0];
+
+    // Check if it's a CSV
+    const isCSV = doc.type === 'csv' || doc.file_type === 'text/csv' || doc.title?.toLowerCase().endsWith('.csv');
+    if (!isCSV) {
+      return res.status(400).json({ error: 'Document is not a CSV file' });
+    }
+
+    // Check if file exists
+    if (!doc.file_path || !fs.existsSync(doc.file_path)) {
+      return res.status(404).json({ error: 'CSV file not found on disk' });
+    }
+
+    // Read CSV file
+    const fileBuffer = fs.readFileSync(doc.file_path);
+    const csvContent = decodeBufferToUTF8(fileBuffer);
+    const lines = csvContent.split('\n');
+
+    if (lines.length === 0) {
+      return res.status(400).json({ error: 'CSV file is empty' });
+    }
+
+    // Replace first line with new headers
+    const newHeaderLine = headers.join(',');
+    lines[0] = newHeaderLine;
+
+    // Write back to file
+    const updatedCSV = lines.join('\n');
+    fs.writeFileSync(doc.file_path, updatedCSV, 'utf-8');
+
+    console.log(`[Documents] Updated CSV headers for document ${id}:`, headers);
+
+    res.json({
+      success: true,
+      message: 'CSV headers updated successfully',
+      headers
+    });
+
+  } catch (error: any) {
+    console.error('[Documents] Error updating CSV headers:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
