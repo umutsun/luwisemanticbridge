@@ -1419,9 +1419,10 @@ export default function DocumentManagerPage() {
     setPreviewDoc(doc);
 
     // For CSV/JSON files, fetch raw file content if file_path exists
-    if (((doc.type || doc.file_type) === 'csv' || (doc.type || doc.file_type) === 'json') && doc.metadata?.source) {
+    // Use file_path for the actual path, metadata.source is just the source type (e.g., 'google_drive')
+    const filePath = doc.file_path || doc.metadata?.file_path;
+    if (((doc.type || doc.file_type) === 'csv' || (doc.type || doc.file_type) === 'json') && filePath) {
       try {
-        const filePath = doc.metadata.source;
         const filename = filePath.split(/[/\\]/).pop();
 
         if (filename) {

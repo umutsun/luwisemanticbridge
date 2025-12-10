@@ -981,7 +981,7 @@ export default function DocumentPreviewModal({
                       {rowIdx + 1}
                     </TableCell>
                     {/* Use originalCsvHeaders for data access since that's how parsed data is keyed */}
-                    {(originalCsvHeaders.length > 0 ? originalCsvHeaders : csvHeaders).map((originalHeader, colIdx) => {
+                    {((originalCsvHeaders && originalCsvHeaders.length > 0) ? originalCsvHeaders : (csvHeaders || [])).map((originalHeader, colIdx) => {
                       const cellValue = String(row[originalHeader] || '');
                       const cleanValue = cellValue
                         .replace(/<[^>]*>/g, '')
@@ -1051,7 +1051,7 @@ export default function DocumentPreviewModal({
                 </div>
               ) : (
                 <span className="text-sm text-muted-foreground font-medium">
-                  {csvHeaders.length} columns • {totalRowCount > 0 ? totalRowCount : parsedData.length} rows
+                  {csvHeaders?.length || 0} columns • {totalRowCount > 0 ? totalRowCount : (parsedData?.length || 0)} rows
                 </span>
               )}
             </div>
@@ -2997,7 +2997,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                     <span><span className="font-semibold text-foreground">{parsedData.length}</span> rows</span>
                   )}
                   <span className="text-muted-foreground/40">•</span>
-                  <span><span className="font-semibold text-foreground">{csvHeaders.length}</span> columns</span>
+                  <span><span className="font-semibold text-foreground">{csvHeaders?.length || 0}</span> columns</span>
                   {config?.database?.name && (
                     <>
                       <span className="text-muted-foreground/40">•</span>
