@@ -2708,16 +2708,17 @@ export default function DocumentManagerPage() {
           }
 
           const statusData = await statusResponse.json();
+          const progress = statusData.progress || statusData; // Handle both response formats
 
           // Update progress
-          setBatchProgress(statusData.percentage || 0);
-          setBatchCurrent(statusData.current || 0);
-          setBatchStatus(statusData.currentFile ? `Analyzing: ${statusData.currentFile}` : 'Processing...');
+          setBatchProgress(progress.percentage || 0);
+          setBatchCurrent(progress.current || 0);
+          setBatchStatus(progress.currentFile ? `Analyzing: ${progress.currentFile}` : 'Processing...');
 
           // Update queue status based on results
-          if (statusData.results && statusData.results.length > 0) {
+          if (progress.results && progress.results.length > 0) {
             setEmbedQueue(prev => prev.map(q => {
-              const result = statusData.results.find((r: any) => r.id === q.id);
+              const result = progress.results.find((r: any) => r.id === q.id);
               if (result) {
                 if (result.status === 'success') return { ...q, status: 'completed' as const };
                 if (result.status === 'skipped') return { ...q, status: 'skipped' as const };
@@ -2728,12 +2729,12 @@ export default function DocumentManagerPage() {
           }
 
           // Check if job is completed
-          if (statusData.status === 'completed') {
+          if (progress.status === 'completed') {
             clearInterval(pollInterval);
 
-            const successCount = statusData.successCount || 0;
-            const errorCount = statusData.errorCount || 0;
-            const skippedCount = statusData.skippedCount || 0;
+            const successCount = progress.successCount || 0;
+            const errorCount = progress.errorCount || 0;
+            const skippedCount = progress.skippedCount || 0;
 
             toast({
               title: t('documents.batch.analyzeComplete') || 'Analysis Complete',
@@ -2741,9 +2742,9 @@ export default function DocumentManagerPage() {
             });
 
             // Update document statuses locally
-            if (statusData.results) {
+            if (progress.results) {
               setDocuments(prev => prev.map(d => {
-                const result = statusData.results.find((r: any) => r.id === d.id);
+                const result = progress.results.find((r: any) => r.id === d.id);
                 if (result) {
                   if (result.status === 'success') {
                     return { ...d, processing_status: 'analyzed' };
