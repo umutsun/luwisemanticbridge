@@ -1818,8 +1818,8 @@ export default function DocumentManagerPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Pagination state
-  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(30);
-  const DOCUMENTS_PER_PAGE = 30;
+  const [visibleDocumentsCount, setVisibleDocumentsCount] = useState(50);
+  const DOCUMENTS_PER_PAGE = 50;
 
   // Batch processing state
   const [batchProcessing, setBatchProcessing] = useState(false);
