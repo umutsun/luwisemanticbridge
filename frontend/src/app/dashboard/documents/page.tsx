@@ -3385,7 +3385,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Files List */}
-                  <ScrollArea className="flex-1 min-h-[200px]">
+                  <ScrollArea className="flex-1 h-0">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3723,7 +3723,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Scrollable Body */}
-                  <ScrollArea className="flex-1 min-h-[200px]">
+                  <ScrollArea className="flex-1 h-0">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
