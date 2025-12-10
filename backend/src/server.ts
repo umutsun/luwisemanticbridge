@@ -851,7 +851,8 @@ import { loadProgressFromRedis } from "./routes/embeddings.routes";
 import { loadProgressFromRedis as loadV2ProgressFromRedis } from "./routes/embeddings-v2.routes";
 
 // Start server with database dependency
-const PORT = SERVER.PORT;
+// Use PORT from environment (already loaded at top of file) instead of SERVER.PORT
+const PORT = parseInt(process.env.PORT || '8083');
 
 async function startServer() {
   console.log(`\n LUWI Backend v2.0.0 | Port: ${PORT} | ${process.env.NODE_ENV || "development"}`);
