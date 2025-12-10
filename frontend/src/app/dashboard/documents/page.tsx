@@ -2917,7 +2917,7 @@ export default function DocumentManagerPage() {
         </div>
 
         {/* Stats Cards - Pipeline Flow: Total → Pending → Analyzed → Embedded */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-6">
           {/* Total Documents - Blue */}
           <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border-blue-200 dark:border-blue-800">
             <CardContent className="p-3">
@@ -2945,65 +2945,50 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
 
-          {/* Analyzing - Amber (currently being analyzed) */}
-          <Card className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/20 border-amber-200 dark:border-amber-800">
-            <CardContent className="p-3">
-              <div className="text-xs text-amber-700 dark:text-amber-300 font-medium mb-1">{t('documents.stats.analyzing')}</div>
-              <div className="text-xl font-bold text-amber-900 dark:text-amber-100">
-                {(documents || []).filter(doc => doc.processing_status === 'analyzing').length.toLocaleString()}
-              </div>
-              <div className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                <span className="opacity-75 text-xs">→ {t('documents.status.analyzed')}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Analyzed - Green (text extracted, ready for embedding) */}
+          {/* Analyzed - Green (analyzing + analyzed combined) */}
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
             <CardContent className="p-3">
               <div className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.analyzed')}</div>
               <div className="text-xl font-bold text-green-900 dark:text-green-100">
-                {(documents || []).filter(doc => doc.processing_status === 'analyzed' && !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0)).length.toLocaleString()}
+                {(() => {
+                  const analyzing = (documents || []).filter(doc => doc.processing_status === 'analyzing').length;
+                  const analyzed = (documents || []).filter(doc => doc.processing_status === 'analyzed' && !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0)).length;
+                  return (analyzing + analyzed).toLocaleString();
+                })()}
               </div>
               <div className="text-xs text-green-600 dark:text-green-400 mt-0.5">
-                <span className="opacity-75 text-xs">→ {t('documents.status.embedded')}</span>
+                <span className="font-mono text-xs">
+                  {(documents || []).filter(doc => doc.processing_status === 'analyzing').length.toLocaleString()}
+                </span>
+                <span className="opacity-75 ml-1 text-xs">{t('documents.stats.analyzing').toLowerCase()}</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Embedded - Violet (embeddings created) */}
-          <Card className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 border-violet-200 dark:border-violet-800">
+          {/* Embedded - Violet (embedded + skipped combined) */}
+          <Card className={`bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/20 border-violet-200 dark:border-violet-800 ${skippedCount > 0 ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+            onClick={skippedCount > 0 ? () => { fetchSkippedEmbeddings(); setShowSkippedModal(true); } : undefined}
+          >
             <CardContent className="p-3">
-              <div className="text-xs text-violet-700 dark:text-violet-300 font-medium mb-1">{t('documents.stats.embedded')}</div>
+              <div className="text-xs text-violet-700 dark:text-violet-300 font-medium mb-1 flex items-center gap-1">
+                {t('documents.stats.embedded')}
+                {skippedCount > 0 && <AlertCircle className="w-3 h-3 text-red-500" />}
+              </div>
               <div className="text-xl font-bold text-violet-900 dark:text-violet-100">
-                {(documents || []).filter(doc => doc.hasEmbeddings || doc.metadata?.embeddings > 0).length.toLocaleString()}
+                {((documents || []).filter(doc => doc.hasEmbeddings || doc.metadata?.embeddings > 0).length + skippedCount).toLocaleString()}
               </div>
               <div className="text-xs text-violet-600 dark:text-violet-400 mt-0.5">
-                <span className="opacity-75 text-xs">✓ RAG hazır</span>
+                {skippedCount > 0 ? (
+                  <>
+                    <span className="font-mono text-xs text-red-600 dark:text-red-400">{skippedCount.toLocaleString()}</span>
+                    <span className="opacity-75 ml-1 text-xs">skipped</span>
+                  </>
+                ) : (
+                  <span className="opacity-75 text-xs">✓ RAG hazır</span>
+                )}
               </div>
             </CardContent>
           </Card>
-
-          {/* Skipped Embeddings - Red (only show if count > 0) */}
-          {skippedCount > 0 && (
-            <Card
-              className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20 border-red-200 dark:border-red-800 cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => { fetchSkippedEmbeddings(); setShowSkippedModal(true); }}
-            >
-              <CardContent className="p-3">
-                <div className="text-xs text-red-700 dark:text-red-300 font-medium mb-1 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Skipped
-                </div>
-                <div className="text-xl font-bold text-red-900 dark:text-red-100">
-                  {skippedCount.toLocaleString()}
-                </div>
-                <div className="text-xs text-red-600 dark:text-red-400 mt-0.5">
-                  <span className="opacity-75 text-xs">Review & retry</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Files Section - 2 Column Layout */}
@@ -4275,6 +4260,25 @@ export default function DocumentManagerPage() {
                     })}
                   </div>
 
+                  {/* Load More Button - Inside ScrollArea */}
+                  {drivePageToken && (
+                    <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchDriveFiles(currentDriveFolderId, drivePageToken)}
+                        disabled={driveLoading}
+                        className="gap-1 h-7 text-xs"
+                      >
+                        {driveLoading ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )}
+                        Load More
+                      </Button>
+                    </div>
+                  )}
                 </ScrollArea>
               </>
             )}
@@ -4296,23 +4300,6 @@ export default function DocumentManagerPage() {
                   {selectedDriveFiles.size === driveFiles.filter(f => isImportableFile(f.mimeType)).length
                     ? 'Deselect All'
                     : 'Select All'}
-                </Button>
-              )}
-              {/* Load More - moved to footer */}
-              {drivePageToken && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchDriveFiles(currentDriveFolderId, drivePageToken)}
-                  disabled={driveLoading}
-                  className="h-6 px-2 text-xs gap-1"
-                >
-                  {driveLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3" />
-                  )}
-                  Load More
                 </Button>
               )}
             </div>
