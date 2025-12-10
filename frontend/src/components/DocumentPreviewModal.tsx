@@ -939,13 +939,12 @@ export default function DocumentPreviewModal({
     return (
       <TooltipProvider delayDuration={300}>
         <div className="flex flex-col h-full overflow-hidden">
-          {/* Fixed Header - scrollbar-gutter accounts for scrollbar space */}
-          <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700" style={{ scrollbarGutter: 'stable' }}>
-            <Table className="w-full">
-              <TableHeader className="bg-gray-50 dark:bg-gray-900">
+          {/* Single scrollable container for both header and body with synchronized scrolling */}
+          <div className="flex-1 overflow-auto">
+            <Table>
+              {/* Sticky Header - stays at top while scrolling vertically, scrolls horizontally with body */}
+              <TableHeader className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
                 <TableRow>
-                  {/* Row number header */}
-                  <TableHead className="w-[50px] px-4 py-3 text-sm text-muted-foreground font-semibold">#</TableHead>
                   {displayHeaders.map((header, idx) => (
                     <TableHead
                       key={idx}
@@ -964,22 +963,14 @@ export default function DocumentPreviewModal({
                   ))}
                 </TableRow>
               </TableHeader>
-            </Table>
-          </div>
 
-          {/* Scrollable Body */}
-          <div className="flex-1 overflow-auto">
-            <Table>
+              {/* Table Body */}
               <TableBody>
                 {displayedRows.map((row: any, rowIdx: number) => (
                   <TableRow
                     key={rowIdx}
                     className="hover:bg-muted/50 transition-colors duration-150"
                   >
-                    {/* Row number cell */}
-                    <TableCell className="w-[50px] px-4 py-3 text-sm text-muted-foreground font-mono">
-                      {rowIdx + 1}
-                    </TableCell>
                     {/* Use originalCsvHeaders for data access since that's how parsed data is keyed */}
                     {((originalCsvHeaders && originalCsvHeaders.length > 0) ? originalCsvHeaders : (csvHeaders || [])).map((originalHeader, colIdx) => {
                       const cellValue = String(row[originalHeader] || '');
