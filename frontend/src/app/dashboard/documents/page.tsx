@@ -59,7 +59,8 @@ import {
   MoreHorizontal,
   Sparkles,
   Play,
-  HardDrive
+  HardDrive,
+  ChevronDown
 } from 'lucide-react';
 import {
   Dialog,
