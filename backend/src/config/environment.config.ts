@@ -12,14 +12,11 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PRODUCTION = NODE_ENV === 'production';
 const IS_DEVELOPMENT = NODE_ENV === 'development';
 
-// Load appropriate .env file
-if (IS_DEVELOPMENT) {
-  // In development, use local .env
-  dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-} else {
-  // In production, use instance-specific .env
-  dotenv.config({ path: path.resolve(process.cwd(), '.env.lsemb') });
-}
+// Load .env file from backend directory
+// NOTE: server.ts already loads .env, but we load it here too for safety
+const envPath = path.resolve(__dirname, '../.env');
+console.log(`[environment.config] Loading .env from: ${envPath}`);
+dotenv.config({ path: envPath });
 
 // Environment-specific configurations
 export const config = {
