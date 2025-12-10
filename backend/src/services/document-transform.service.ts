@@ -230,38 +230,64 @@ export class DocumentTransformService {
       let columnHeaders = doc.column_headers || [];
 
       // Priority 1: If no parsed data, try to read from physical file first
+      // OPTIMIZED: Only read first 100KB for preview to avoid timeout on large files
       let fileContent = '';
+      let estimatedTotalRows = 0;
+      const PREVIEW_BYTES = 100 * 1024; // 100KB for preview
+
       if (parsedData.length === 0 && (doc.type === 'csv' || doc.file_type === 'csv')) {
         // Try to read from physical file path
         if (doc.file_path) {
           try {
-            console.log(`[DocumentTransform] Reading from physical file: ${doc.file_path}`);
-            fileContent = readFileSync(doc.file_path, 'utf-8');
-            console.log(`[DocumentTransform] File read successfully, size: ${fileContent.length} bytes`);
+            console.log(`[DocumentTransform] Reading preview from physical file: ${doc.file_path}`);
+            const fs = require('fs');
+            const stats = fs.statSync(doc.file_path);
+            const fileSize = stats.size;
+
+            if (fileSize > PREVIEW_BYTES) {
+              // Large file - only read first 100KB
+              console.log(`[DocumentTransform] Large file (${(fileSize / 1024 / 1024).toFixed(2)}MB), reading first ${PREVIEW_BYTES / 1024}KB only`);
+              const buffer = Buffer.alloc(PREVIEW_BYTES);
+              const fd = fs.openSync(doc.file_path, 'r');
+              fs.readSync(fd, buffer, 0, PREVIEW_BYTES, 0);
+              fs.closeSync(fd);
+              fileContent = buffer.toString('utf-8');
+
+              // Estimate total rows by counting newlines in sample and extrapolating
+              const sampleNewlines = (fileContent.match(/\n/g) || []).length;
+              estimatedTotalRows = Math.round((sampleNewlines / PREVIEW_BYTES) * fileSize);
+              console.log(`[DocumentTransform] Estimated total rows: ${estimatedTotalRows}`);
+            } else {
+              // Small file - read entirely
+              fileContent = readFileSync(doc.file_path, 'utf-8');
+            }
+            console.log(`[DocumentTransform] Preview content loaded: ${fileContent.length} bytes`);
           } catch (error) {
             console.log(`[DocumentTransform] Could not read physical file, falling back to content field`);
-            fileContent = doc.content || '';
+            fileContent = doc.content ? doc.content.substring(0, PREVIEW_BYTES) : '';
           }
         } else {
-          console.log(`[DocumentTransform] No file_path, using content field`);
-          fileContent = doc.content || '';
+          console.log(`[DocumentTransform] No file_path, using content field (truncated)`);
+          fileContent = doc.content ? doc.content.substring(0, PREVIEW_BYTES) : '';
         }
       }
 
-      // Priority 2: Parse CSV from file content or database content using PapaParse
+      // Priority 2: Parse CSV from file content using PapaParse
+      // Only parse the preview portion (first ~20 rows)
       if (parsedData.length === 0 && fileContent) {
-        console.log(`[DocumentTransform] No parsed_data, parsing CSV with PapaParse...`);
+        console.log(`[DocumentTransform] No parsed_data, parsing CSV preview with PapaParse...`);
 
-        // Auto-detect delimiter
+        // Auto-detect delimiter from preview
         const delimiter = this.detectDelimiter(fileContent);
 
         const parseResult = Papa.parse(fileContent, {
-          header: true,           // First row is headers
-          delimiter,              // Use detected delimiter
-          skipEmptyLines: true,   // Skip empty lines
-          dynamicTyping: false,   // Keep all as strings for now
-          trimHeaders: true,      // Trim whitespace from headers
+          header: true,
+          delimiter,
+          skipEmptyLines: true,
+          dynamicTyping: false,
+          trimHeaders: true,
           transformHeader: (header: string) => header.trim(),
+          preview: 25, // Only parse first 25 rows for preview
         });
 
         if (parseResult.errors && parseResult.errors.length > 0) {
@@ -271,7 +297,12 @@ export class DocumentTransformService {
         columnHeaders = parseResult.meta.fields || [];
         parsedData = parseResult.data as any[];
 
-        console.log(`[DocumentTransform] Parsed ${parsedData.length} rows, ${columnHeaders.length} columns`);
+        // If we estimated rows from large file, use that; otherwise use parsed count
+        if (estimatedTotalRows === 0) {
+          estimatedTotalRows = parsedData.length;
+        }
+
+        console.log(`[DocumentTransform] Parsed ${parsedData.length} preview rows, ${columnHeaders.length} columns`);
         console.log(`[DocumentTransform] Headers:`, columnHeaders.join(', '));
       }
 
