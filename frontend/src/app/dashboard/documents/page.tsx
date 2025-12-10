@@ -2998,29 +2998,17 @@ export default function DocumentManagerPage() {
 
               {/* Physical Files List */}
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-1 flex flex-col">
-                <CardHeader className="pb-3 border-b border-gray-100 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {physicalFilesFilter !== 'folders' && physicalFiles && physicalFiles.length > 0 && (
-                        <Checkbox
-                          checked={selectAllPhysicalFiles}
-                          onCheckedChange={handleSelectAllPhysicalFiles}
-                          aria-label="Select all files"
-                        />
-                      )}
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <FolderOpen className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                        <span className="text-gray-900 dark:text-white font-semibold">docs</span>
-                      </CardTitle>
-                    </div>
-                    <Badge variant="outline" className="px-3 py-1 text-xs font-medium">
-                      {physicalFilesStats.total} • {physicalFilesStats.notInDatabase} pending
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex flex-col overflow-hidden p-4 flex-1">
+                <CardContent className="flex flex-col overflow-hidden p-4 pt-3 flex-1">
                   {/* Search & Filter */}
-                  <div className="flex gap-2 mb-4" role="search" aria-label={t('documents.physicalFiles.searchFiles')}>
+                  <div className="flex gap-2 mb-3" role="search" aria-label={t('documents.physicalFiles.searchFiles')}>
+                    {physicalFilesFilter !== 'folders' && physicalFiles && physicalFiles.length > 0 && (
+                      <Checkbox
+                        checked={selectAllPhysicalFiles}
+                        onCheckedChange={handleSelectAllPhysicalFiles}
+                        aria-label="Select all files"
+                        className="mt-2"
+                      />
+                    )}
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
