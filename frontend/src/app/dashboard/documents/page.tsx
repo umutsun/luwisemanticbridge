@@ -3236,14 +3236,17 @@ export default function DocumentManagerPage() {
                       }).length;
 
                       return filteredCount > visiblePhysicalFilesCount && (
-                        <div className="flex items-center px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                        <div className="flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
                             onClick={() => setVisiblePhysicalFilesCount(prev => prev + PHYSICAL_FILES_PER_PAGE)}
-                            className="w-full text-xs"
+                            className="gap-2"
                           >
-                            {t('documents.loadMore')} ({filteredCount - visiblePhysicalFilesCount} {t('documents.remaining')})
+                            {t('documents.loadMore')}
+                            <span className="text-xs text-muted-foreground">
+                              ({filteredCount - visiblePhysicalFilesCount} {t('documents.remaining')})
+                            </span>
                           </Button>
                         </div>
                       );
