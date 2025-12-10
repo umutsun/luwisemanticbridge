@@ -58,12 +58,16 @@ export function TableBodySkeleton({
   return (
     <>
       {Array.from({ length: rows }).map((_, rowIndex) => (
-        <tr key={rowIndex} className="animate-pulse">
+        <tr key={rowIndex}>
           {Array.from({ length: columns }).map((_, colIndex) => {
             const width = columnWidths?.[colIndex] || `${Math.random() * 40 + 60}%`;
+            const delay = `${(rowIndex * columns + colIndex) * 0.05}s`;
             return (
               <td key={colIndex} className="px-3 py-4 border-b">
-                <div className="h-3 bg-muted rounded" style={{ width }} />
+                <div
+                  className="h-3 bg-muted rounded animate-pulse"
+                  style={{ width, animationDelay: delay, animationDuration: '1.5s' }}
+                />
               </td>
             );
           })}
