@@ -1056,7 +1056,7 @@ export default function DocumentManagerPage() {
       const token = localStorage.getItem('token');
       const filePaths = Array.from(selectedPhysicalFiles);
 
-      const response = await fetch(getApiUrl('physical-files/bulk-delete'), {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/physical-files/bulk-delete`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1111,7 +1111,7 @@ export default function DocumentManagerPage() {
       const token = localStorage.getItem('token');
 
       // Send all files in one bulk request
-      const response = await fetch(getApiUrl('physical-files/bulk-add-to-database'), {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/physical-files/bulk-add-to-database`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
