@@ -811,10 +811,32 @@ export class DocumentTransformService {
         hasPassword: !!dbSettings.password,
       });
 
+      // Fallback to environment variables if settings not found
+      if (!dbSettings.host) {
+        dbSettings.host = process.env.DB_HOST || 'localhost';
+      }
+      if (!dbSettings.port) {
+        dbSettings.port = process.env.DB_PORT || '5432';
+      }
+      if (!dbSettings.user) {
+        dbSettings.user = process.env.DB_USER || 'postgres';
+      }
+      if (!dbSettings.password) {
+        dbSettings.password = process.env.DB_PASSWORD || '';
+      }
+
+      console.log(`[DocumentTransform] Using database config (after fallback):`, {
+        host: dbSettings.host,
+        port: dbSettings.port,
+        database: sourceDbId,
+        user: dbSettings.user,
+        hasPassword: !!dbSettings.password,
+      });
+
       // Validate required settings
       if (!dbSettings.host || !dbSettings.user) {
-        console.error(`[DocumentTransform] Missing required database settings`);
-        throw new Error('Database settings not configured. Please configure database settings in the admin panel.');
+        console.error(`[DocumentTransform] Missing required database settings even after fallback`);
+        throw new Error('Database settings not configured. Please configure database settings in the admin panel or environment variables.');
       }
 
       // Create new pool for user's source database
