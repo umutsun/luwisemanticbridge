@@ -218,7 +218,34 @@ def import_google_drive_files(
         # Create docs directory if not exists
         Path(docs_dir).mkdir(parents=True, exist_ok=True)
 
+        # Sort files by size (smallest first) for better UX
+        # Fetch metadata for all files first
+        print(f"[GoogleDrive Worker] 📊 Fetching metadata for {total} files to sort by size...")
+        file_metadata_list = []
         for file_id in file_ids:
+            try:
+                metadata = service.files().get(fileId=file_id, fields='id,name,size').execute()
+                file_metadata_list.append({
+                    'id': file_id,
+                    'name': metadata.get('name', 'unknown'),
+                    'size': int(metadata.get('size', 0))
+                })
+            except Exception as e:
+                print(f"[GoogleDrive Worker] ⚠️ Failed to get metadata for {file_id}: {e}")
+                # Add with zero size if metadata fetch fails
+                file_metadata_list.append({
+                    'id': file_id,
+                    'name': 'unknown',
+                    'size': 0
+                })
+
+        # Sort by size (smallest first)
+        file_metadata_list.sort(key=lambda x: x['size'])
+        print(f"[GoogleDrive Worker] ✅ Sorted {len(file_metadata_list)} files by size (smallest → largest)")
+
+        # Process files in sorted order
+        for file_meta in file_metadata_list:
+            file_id = file_meta['id']
             try:
                 # Get file metadata
                 file_metadata = service.files().get(fileId=file_id, fields='name,mimeType,size').execute()
