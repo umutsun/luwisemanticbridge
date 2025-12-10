@@ -3323,8 +3323,6 @@ export default function DocumentManagerPage() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-[9px] text-muted-foreground/80">
                             <span className="font-mono">{batchCurrent} / {batchTotal} files</span>
-                            <span className="opacity-50">•</span>
-                            <span className="font-mono">{Math.round(batchProgress)}% complete</span>
                           </div>
                           {currentImportingFile && (
                             <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium max-w-[240px] truncate">
@@ -3725,7 +3723,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Scrollable Body */}
-                  <div className="flex-1 overflow-y-auto min-h-[200px]">
+                  <ScrollArea className="flex-1 min-h-[200px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
@@ -3893,7 +3891,7 @@ export default function DocumentManagerPage() {
                         </Button>
                       </div>
                     )}
-                  </div>
+                  </ScrollArea>
                 </CardContent>
                 {getSelectedCount() > 0 && (
                   <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50">
