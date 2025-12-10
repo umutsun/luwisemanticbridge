@@ -3046,7 +3046,7 @@ export default function DocumentManagerPage() {
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
-                          <div key={i} className="flex items-center gap-2 p-3">
+                          <div key={i} className="flex items-center gap-2 p-4">
                             {/* Action buttons skeleton on left */}
                             <div className="flex gap-1 flex-shrink-0">
                               <div className="w-7 h-7 bg-muted rounded animate-pulse" />
@@ -3080,7 +3080,7 @@ export default function DocumentManagerPage() {
                             .map((folder) => (
                               <div
                                 key={folder.path}
-                                className="flex items-center gap-2 p-3 hover:bg-muted/50 transition-colors group"
+                                className="flex items-center gap-2 p-4 hover:bg-muted/50 transition-colors group"
                               >
                                 {/* Actions on the left */}
                                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -3162,7 +3162,7 @@ export default function DocumentManagerPage() {
                             .map((file) => (
                               <div
                                 key={file.path}
-                                className={`flex items-center gap-2 p-3 transition-colors group ${
+                                className={`flex items-center gap-2 p-4 transition-colors group ${
                                   selectedPhysicalFiles.has(file.path)
                                     ? 'bg-blue-50 dark:bg-blue-950/30'
                                     : 'hover:bg-muted/50'
