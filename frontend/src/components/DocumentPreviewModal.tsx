@@ -934,7 +934,7 @@ export default function DocumentPreviewModal({
     const hasMore = parsedData.length > csvVisibleRows;
 
     // Headers to display (editable or original)
-    const displayHeaders = isEditingHeaders ? editableHeaders : csvHeaders;
+    const displayHeaders = isEditingHeaders ? editableHeaders : (csvHeaders || []);
 
     return (
       <TooltipProvider delayDuration={300}>
@@ -1067,7 +1067,7 @@ export default function DocumentPreviewModal({
                 >
                   Load More
                   <Badge variant="secondary" className="ml-1 text-xs px-1.5">
-                    +{Math.min(CSV_ROWS_PER_PAGE, parsedData.length - csvVisibleRows)}
+                    +{Math.min(CSV_ROWS_PER_PAGE, (parsedData?.length || 0) - csvVisibleRows)}
                   </Badge>
                 </Button>
               )}
@@ -3034,7 +3034,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
             {/* Right side: Action buttons based on tab */}
             <div className="flex items-center gap-1.5">
               {/* CSV: Load More button */}
-              {isCSV && csvVisibleRows < parsedData.length && (
+              {isCSV && parsedData && csvVisibleRows < parsedData.length && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -3043,7 +3043,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 >
                   <span>Load More</span>
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    +{Math.min(CSV_ROWS_PER_PAGE, parsedData.length - csvVisibleRows)}
+                    +{Math.min(CSV_ROWS_PER_PAGE, (parsedData?.length || 0) - csvVisibleRows)}
                   </Badge>
                 </Button>
               )}
