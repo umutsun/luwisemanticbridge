@@ -3347,7 +3347,7 @@ export default function DocumentManagerPage() {
 
               {/* Physical Files List */}
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-1 flex flex-col">
-                <CardContent className="flex flex-col overflow-hidden p-4 pt-3 flex-1">
+                <CardContent className="flex flex-col overflow-hidden p-4 pt-3 flex-1 min-h-0">
                   {/* Search & Filter */}
                   <div className="flex gap-2 mb-3" role="search" aria-label={t('documents.physicalFiles.searchFiles')}>
                     {physicalFilesFilter !== 'folders' && physicalFiles && physicalFiles.length > 0 && (
@@ -3698,7 +3698,7 @@ export default function DocumentManagerPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1 min-h-[400px]">
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1">
                 <CardContent className="p-0 flex flex-col flex-1 min-h-0">
                   {/* Fixed Header */}
                   <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
