@@ -3043,7 +3043,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Files List */}
-                  <ScrollArea className="flex-1 min-h-[200px] max-h-[600px]">
+                  <ScrollArea className="flex-1 min-h-[200px] max-h-[400px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3163,7 +3163,7 @@ export default function DocumentManagerPage() {
                             .map((file) => (
                               <div
                                 key={file.path}
-                                className={`flex items-center gap-2 p-4 transition-colors group ${
+                                className={`flex items-center gap-2 py-2 px-3 transition-colors group ${
                                   selectedPhysicalFiles.has(file.path)
                                     ? 'bg-blue-50 dark:bg-blue-950/30'
                                     : 'hover:bg-muted/50'
@@ -3237,16 +3237,17 @@ export default function DocumentManagerPage() {
                       }).length;
 
                       return filteredCount > visiblePhysicalFilesCount && (
-                        <div className="flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                        <div className="flex-shrink-0 flex items-center px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => setVisiblePhysicalFilesCount(prev => prev + PHYSICAL_FILES_PER_PAGE)}
-                            className="gap-2"
+                            className="gap-1 h-7 text-xs"
                           >
+                            <ChevronDown className="w-3 h-3" />
                             {t('documents.loadMore')}
                             <span className="text-xs text-muted-foreground">
-                              ({filteredCount - visiblePhysicalFilesCount} {t('documents.remaining')})
+                              ({filteredCount - visiblePhysicalFilesCount})
                             </span>
                           </Button>
                         </div>
@@ -3384,7 +3385,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Scrollable Body */}
-                  <div className="flex-1 overflow-y-auto min-h-[200px] max-h-[600px]">
+                  <div className="flex-1 overflow-y-auto min-h-[200px] max-h-[400px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
@@ -3538,16 +3539,17 @@ export default function DocumentManagerPage() {
 
                   {/* Fixed Footer: Load More */}
                   {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
-                    <div className="flex-shrink-0 flex items-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
+                    <div className="flex-shrink-0 flex items-center px-4 py-2 border-t bg-gray-50/50 dark:bg-gray-900/50">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                        className="gap-2"
+                        className="gap-1 h-7 text-xs"
                       >
+                        <ChevronDown className="w-3 h-3" />
                         {t('documents.table.loadMore')}
                         <span className="text-xs text-muted-foreground">
-                          ({filteredDocuments.length - visibleDocumentsCount} {t('documents.table.remaining')})
+                          ({filteredDocuments.length - visibleDocumentsCount})
                         </span>
                       </Button>
                     </div>
