@@ -993,6 +993,34 @@ export default function DocumentPreviewModal({
                       )}
                     </TableHead>
                   ))}
+                  {/* Actions column - Save/Cancel buttons when editing */}
+                  {isEditingHeaders && (
+                    <TableHead className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={saveEditedHeaders}
+                          className="h-7 w-7 p-0"
+                          title="Save headers"
+                        >
+                          <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsEditingHeaders(false);
+                            setEditableHeaders([...csvHeaders]);
+                          }}
+                          className="h-7 w-7 p-0"
+                          title="Cancel editing"
+                        >
+                          <X className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        </Button>
+                      </div>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
 
@@ -3018,31 +3046,21 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
             {/* Right side: Action buttons based on tab */}
             <div className="flex items-center gap-1.5">
-              {/* CSV: Editing mode - Save (check icon) + Cancel buttons */}
-              {isCSV && isEditingHeaders && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={saveEditedHeaders}
-                    className="h-7 w-7 p-0"
-                    title="Save headers"
-                  >
-                    <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsEditingHeaders(false);
-                      setEditableHeaders([...csvHeaders]);
-                    }}
-                    className="h-7 w-7 p-0"
-                    title="Cancel editing"
-                  >
-                    <X className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  </Button>
-                </>
+              {/* CSV: Transform button (only when not editing) */}
+              {isCSV && !isEditingHeaders && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    // Switch to transform tab in the Tabs component
+                    const transformTab = document.querySelector('[value="graphql"]') as HTMLElement;
+                    if (transformTab) transformTab.click();
+                  }}
+                  className="h-7 px-3 gap-1.5 text-xs"
+                >
+                  Transform
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
               )}
 
               {/* CSV: Load More button (only when not editing) */}
