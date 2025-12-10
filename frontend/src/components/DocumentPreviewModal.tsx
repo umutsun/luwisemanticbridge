@@ -3045,19 +3045,6 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </>
               )}
 
-              {/* CSV: Transform button (only when not editing) */}
-              {isCSV && !isEditingHeaders && activeTab === 'table' && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => setActiveTab('transform')}
-                  className="h-7 px-3 gap-1.5 text-xs"
-                >
-                  <TableIcon className="h-3.5 w-3.5" />
-                  Transform
-                </Button>
-              )}
-
               {/* CSV: Load More button (only when not editing) */}
               {isCSV && !isEditingHeaders && parsedData && csvVisibleRows < parsedData.length && (
                 <Button
