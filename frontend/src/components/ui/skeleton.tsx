@@ -46,16 +46,27 @@ export function TableSkeleton({ rows = 5, columns = 4 }: { rows?: number; column
 }
 
 // Table Body Skeleton (for use inside tbody elements)
-export function TableBodySkeleton({ rows = 5, columns = 7 }: { rows?: number; columns?: number }) {
+export function TableBodySkeleton({
+  rows = 5,
+  columns = 7,
+  columnWidths
+}: {
+  rows?: number;
+  columns?: number;
+  columnWidths?: string[];
+}) {
   return (
     <>
       {Array.from({ length: rows }).map((_, rowIndex) => (
         <tr key={rowIndex} className="animate-pulse">
-          {Array.from({ length: columns }).map((_, colIndex) => (
-            <td key={colIndex} className="px-3 py-4 border-b">
-              <div className="h-3 bg-muted rounded" style={{ width: `${Math.random() * 40 + 60}%` }} />
-            </td>
-          ))}
+          {Array.from({ length: columns }).map((_, colIndex) => {
+            const width = columnWidths?.[colIndex] || `${Math.random() * 40 + 60}%`;
+            return (
+              <td key={colIndex} className="px-3 py-4 border-b">
+                <div className="h-3 bg-muted rounded" style={{ width }} />
+              </td>
+            );
+          })}
         </tr>
       ))}
     </>

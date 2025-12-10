@@ -3727,7 +3727,11 @@ export default function DocumentManagerPage() {
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
-                          <TableBodySkeleton rows={20} columns={7} />
+                          <TableBodySkeleton
+                            rows={20}
+                            columns={6}
+                            columnWidths={['7%', '40%', '14%', '23%', '11%', '17%']}
+                          />
                         ) : filteredDocuments.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
