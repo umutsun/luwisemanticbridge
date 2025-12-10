@@ -1879,7 +1879,8 @@ export default function DocumentManagerPage() {
     });
 
     socket.on('connect_error', (error) => {
-      console.error('[WebSocket] ❌ Connection error:', error);
+      // WebSocket connection failed - this is normal in some network configurations
+      console.log('[WebSocket] ⚠️ Real-time updates unavailable, using polling fallback');
     });
 
     socket.on(`job-progress-${batchJobId}`, (data: any) => {
@@ -2070,7 +2071,9 @@ export default function DocumentManagerPage() {
     });
 
     socket.on('connect_error', (error) => {
-      console.error('[GoogleDrive WebSocket] ❌ Connection error:', error);
+      // WebSocket connection failed - this is expected in some network configurations
+      // Fallback to polling automatically (no need to alarm user)
+      console.log('[GoogleDrive WebSocket] ⚠️ WebSocket unavailable, using polling fallback');
       // Start polling as fallback if WebSocket fails
       if (!wsConnected) {
         startPolling();
