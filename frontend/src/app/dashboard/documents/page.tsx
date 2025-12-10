@@ -3030,7 +3030,7 @@ export default function DocumentManagerPage() {
                             <Button
                               size="sm"
                               className="w-full pointer-events-none"
-                              disabled={uploading}
+                              disabled={uploading || batchProcessing}
                               type="button"
                             >
                               {uploading ? (
@@ -3053,7 +3053,7 @@ export default function DocumentManagerPage() {
                                   variant="outline"
                                   size="sm"
                                   onClick={openDriveFilePicker}
-                                  disabled={uploading}
+                                  disabled={uploading || batchProcessing}
                                   className="px-3"
                                 >
                                   <HardDrive className="w-4 h-4" />
@@ -3496,18 +3496,14 @@ export default function DocumentManagerPage() {
                       />
                     </div>
                     <Select value={filterType} onValueChange={setFilterType}>
-                      <SelectTrigger className="w-full sm:w-48">
+                      <SelectTrigger className="w-full sm:w-40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">{t('documents.search.allFiles')}</SelectItem>
-                        <SelectItem value="analyzed">{t('documents.search.analyzed')}</SelectItem>
-                        <SelectItem value="processing">{t('documents.search.processing')}</SelectItem>
-                        <SelectItem value="pending">{t('documents.search.pending')}</SelectItem>
-                        <SelectItem value="completed">{t('documents.search.completed')}</SelectItem>
-                        <SelectItem value="failed">{t('documents.search.failed')}</SelectItem>
-                        <SelectItem value="embedded">{t('documents.search.embedded')}</SelectItem>
-                        <SelectItem value="not-embedded">{t('documents.search.notEmbedded')}</SelectItem>
+                        <SelectItem value="all">Tümü</SelectItem>
+                        <SelectItem value="pending">Bekleyen</SelectItem>
+                        <SelectItem value="analyzed">Analiz Edildi</SelectItem>
+                        <SelectItem value="embedded">Gömülü</SelectItem>
                       </SelectContent>
                     </Select>
                     <Badge variant="outline" className="px-3 py-2">
