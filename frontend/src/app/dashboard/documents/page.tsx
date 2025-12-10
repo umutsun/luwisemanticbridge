@@ -2168,6 +2168,193 @@ export default function DocumentManagerPage() {
     };
   }, [driveImportJobId]);
 
+  // WebSocket listener for batch analyze
+  useEffect(() => {
+    if (!batchJobId) return;
+
+    console.log('[BatchAnalyze WebSocket] Setting up connection for job:', batchJobId);
+
+    const token = localStorage.getItem('token');
+
+    // Decode JWT token to get userId
+    let userId: string | null = null;
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userId = payload.userId || payload.sub || payload.id;
+        console.log('[BatchAnalyze WebSocket] Extracted userId:', userId);
+      } catch (e) {
+        console.error('[BatchAnalyze WebSocket] Failed to decode token:', e);
+      }
+    }
+
+    const socket = io(API_CONFIG.baseUrl, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+      timeout: 60000,
+      upgrade: true,
+      rememberUpgrade: true,
+      path: '/socket.io/'
+    });
+
+    // Fallback polling for analyze progress (if WebSocket fails)
+    let pollingInterval: NodeJS.Timeout | null = null;
+    let wsConnected = false;
+
+    const startPolling = () => {
+      if (pollingInterval) return;
+      console.log('[BatchAnalyze] 🔄 Starting fallback polling for job:', batchJobId);
+
+      pollingInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/batch-analyze/status/${batchJobId}`, {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (response.ok) {
+            const statusData = await response.json();
+            const progress = statusData.progress || statusData;
+            console.log('[BatchAnalyze Polling] 📊 Job status:', progress);
+
+            // Update progress
+            if (progress.percentage !== undefined) {
+              setBatchProgress(progress.percentage);
+            }
+            if (progress.current !== undefined) {
+              setBatchCurrent(progress.current);
+            }
+            if (progress.total !== undefined) {
+              setBatchTotal(progress.total);
+            }
+            if (progress.currentFile) {
+              setBatchStatus(`Analyzing: ${progress.currentFile}`);
+            }
+
+            // Check completion
+            if (progress.status === 'completed' || progress.status === 'failed') {
+              if (pollingInterval) clearInterval(pollingInterval);
+              setBatchJobId(null);
+              setBatchProcessing(false);
+
+              if (progress.status === 'completed') {
+                setBatchProgress(100);
+                setBatchStatus('Complete');
+                toast({
+                  title: 'Analysis Complete',
+                  description: `Analyzed ${progress.successCount || 0} documents`
+                });
+              } else {
+                toast({
+                  title: 'Analysis Failed',
+                  variant: 'destructive'
+                });
+              }
+
+              Promise.all([fetchDocuments(), fetchStats()]);
+            }
+          }
+        } catch (err) {
+          console.error('[BatchAnalyze Polling] Error:', err);
+        }
+      }, 1500); // Poll every 1.5 seconds
+    };
+
+    socket.on('connect', () => {
+      console.log('[BatchAnalyze WebSocket] ✅ Connected for analyze job:', batchJobId);
+      wsConnected = true;
+
+      // Join user-specific room
+      if (userId) {
+        socket.emit('join', userId);
+        console.log('[BatchAnalyze WebSocket] 📢 Joined user room:', userId);
+      } else {
+        console.warn('[BatchAnalyze WebSocket] ⚠️ No userId found, cannot join user room');
+        startPolling();
+      }
+    });
+
+    socket.on('connect_error', (error) => {
+      console.log('[BatchAnalyze WebSocket] ⚠️ WebSocket unavailable, using polling fallback');
+      if (!wsConnected) {
+        startPolling();
+      }
+    });
+
+    socket.on('analyze:job:progress', (data: any) => {
+      console.log('[BatchAnalyze WebSocket] 📊 Progress update:', data);
+
+      if (data.jobId !== batchJobId) return;
+
+      // Update progress states
+      if (data.percentage !== undefined) {
+        setBatchProgress(data.percentage);
+      }
+      if (data.current !== undefined) {
+        setBatchCurrent(data.current);
+      }
+      if (data.total !== undefined) {
+        setBatchTotal(data.total);
+      }
+      if (data.currentFile) {
+        setBatchStatus(`Analyzing: ${data.currentFile}`);
+      }
+
+      // Refresh documents list incrementally
+      if (data.current && data.current > 0) {
+        fetchDocuments();
+      }
+    });
+
+    socket.on('analyze:job:status', (data: any) => {
+      console.log('[BatchAnalyze WebSocket] 📢 Status update:', data);
+
+      if (data.jobId !== batchJobId) return;
+
+      if (data.status === 'completed') {
+        setBatchJobId(null);
+        setBatchProcessing(false);
+        setBatchProgress(100);
+        setBatchStatus('Complete');
+
+        setTimeout(() => {
+          setBatchProgress(0);
+          setBatchStatus('');
+          setBatchCurrent(0);
+          setBatchTotal(0);
+        }, 2000);
+
+        // Refresh all data
+        Promise.all([fetchDocuments(), fetchStats()]);
+
+        toast({
+          title: 'Analysis Complete',
+          description: `Successfully analyzed ${data.successCount || batchTotal} documents`
+        });
+      } else if (data.status === 'failed') {
+        setBatchJobId(null);
+        setBatchProcessing(false);
+        setBatchProgress(0);
+        setBatchStatus('');
+
+        // Still refresh to show any partial results
+        Promise.all([fetchDocuments(), fetchStats()]);
+
+        toast({
+          title: 'Analysis Failed',
+          description: 'An error occurred during the analysis process',
+          variant: 'destructive'
+        });
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [batchJobId]);
+
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
 

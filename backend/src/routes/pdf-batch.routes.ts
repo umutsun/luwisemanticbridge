@@ -3014,7 +3014,7 @@ async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): P
       const currentFile = doc.title || `Document ${docId}`;
 
       // Update job progress
-      await storeJobProgress(jobId, {
+      const progressData = {
         type: 'batch-analyze',
         status: 'processing',
         current: i + 1,
@@ -3023,8 +3023,17 @@ async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): P
         currentFile,
         successCount,
         errorCount,
-        skippedCount
-      });
+        skippedCount,
+        results
+      };
+
+      await storeJobProgress(jobId, progressData);
+
+      // Emit WebSocket progress update
+      const progressService = getProgressService();
+      if (progressService) {
+        await progressService.updateProgress(jobId, progressData);
+      }
 
       // Skip if already analyzed (has sufficient content or status is already 'analyzed')
       const isAlreadyAnalyzed = doc.processing_status === 'analyzed' || doc.processing_status === 'embedded';
@@ -3208,7 +3217,7 @@ async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): P
   }
 
   // Mark job complete
-  await storeJobProgress(jobId, {
+  const completionData = {
     type: 'batch-analyze',
     status: 'completed',
     current: documentIds.length,
@@ -3219,7 +3228,21 @@ async function processBatchAnalyzeQueue(jobId: string, documentIds: string[]): P
     skippedCount,
     results,
     completedAt: new Date().toISOString()
-  });
+  };
+
+  await storeJobProgress(jobId, completionData);
+
+  // Emit WebSocket completion update
+  const progressService = getProgressService();
+  if (progressService) {
+    await progressService.completeJob(jobId, {
+      type: 'batch-analyze',
+      successCount,
+      errorCount,
+      skippedCount,
+      results
+    });
+  }
 
   console.log(`[Batch Analyze] Job ${jobId} completed: ${successCount} success, ${skippedCount} skipped, ${errorCount} errors`);
 }
