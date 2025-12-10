@@ -804,13 +804,10 @@ export default function DocumentPreviewModal({
       }
 
       toast({
-        title: 'Headers updated successfully',
-        description: 'CSV file has been updated. Switch to Transform tab to create database table.',
+        title: 'Headers saved successfully',
+        description: 'CSV file has been updated. Click Transform to create database table.',
         duration: 3000
       });
-
-      // Switch to Transform tab after saving
-      setActiveTab('transform');
 
     } catch (error) {
       console.error('Error updating CSV headers:', error);
@@ -3021,17 +3018,17 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
             {/* Right side: Action buttons based on tab */}
             <div className="flex items-center gap-1.5">
-              {/* CSV: Editing mode - Save/Cancel buttons */}
+              {/* CSV: Editing mode - Save (check icon) + Cancel buttons */}
               {isCSV && isEditingHeaders && (
                 <>
                   <Button
-                    variant="default"
+                    variant="ghost"
                     size="sm"
                     onClick={saveEditedHeaders}
-                    className="h-7 px-3 gap-1.5 text-xs"
+                    className="h-7 w-7 p-0"
+                    title="Save headers"
                   >
-                    <Check className="h-3.5 w-3.5" />
-                    Save & Transform
+                    <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -3040,12 +3037,25 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                       setIsEditingHeaders(false);
                       setEditableHeaders([...csvHeaders]);
                     }}
-                    className="h-7 px-3 gap-1.5 text-xs"
+                    className="h-7 w-7 p-0"
+                    title="Cancel editing"
                   >
-                    <X className="h-3.5 w-3.5" />
-                    Cancel
+                    <X className="h-4 w-4 text-red-600 dark:text-red-400" />
                   </Button>
                 </>
+              )}
+
+              {/* CSV: Transform button (only when not editing) */}
+              {isCSV && !isEditingHeaders && activeTab === 'table' && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setActiveTab('transform')}
+                  className="h-7 px-3 gap-1.5 text-xs"
+                >
+                  <TableIcon className="h-3.5 w-3.5" />
+                  Transform
+                </Button>
               )}
 
               {/* CSV: Load More button (only when not editing) */}
