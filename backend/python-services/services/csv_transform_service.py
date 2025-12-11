@@ -19,14 +19,23 @@ import redis.asyncio as aioredis
 from loguru import logger
 
 # Try polars first (faster), fall back to pandas
+USE_POLARS = False
+USE_PANDAS = False
+
 try:
     import polars as pl
     USE_POLARS = True
     logger.info("Using Polars for CSV processing (faster)")
 except ImportError:
-    import pandas as pd
-    USE_POLARS = False
-    logger.info("Using Pandas for CSV processing (fallback)")
+    pass
+
+if not USE_POLARS:
+    try:
+        import pandas as pd
+        USE_PANDAS = True
+        logger.info("Using Pandas for CSV processing (fallback)")
+    except ImportError:
+        logger.warning("Neither Polars nor Pandas available, CSV processing will be limited")
 
 
 class CSVTransformService:
@@ -73,10 +82,14 @@ class CSVTransformService:
                 # Polars lazy scanning for efficient counting
                 df = pl.scan_csv(file_path, encoding=encoding, ignore_errors=True)
                 count = df.select(pl.count()).collect().item()
-            else:
+            elif USE_PANDAS:
                 # Pandas chunked counting
                 for chunk in pd.read_csv(file_path, encoding=encoding, chunksize=100000):
                     count += len(chunk)
+            else:
+                # Simple line count fallback
+                with open(file_path, 'r', encoding=encoding, errors='ignore') as f:
+                    count = sum(1 for _ in f) - 1  # Subtract header
         except Exception as e:
             logger.warning(f"Error counting rows: {e}, falling back to line count")
             # Fallback: simple line count
@@ -268,9 +281,16 @@ class CSVTransformService:
                         batch_size, delimiter, encoding,
                         job_id, total_rows, total_batches, started_at
                     )
-                else:
+                elif USE_PANDAS:
                     # Pandas batch processing
                     await self._process_with_pandas(
+                        conn, file_path, table_name, sanitized_headers,
+                        batch_size, delimiter, encoding,
+                        job_id, total_rows, total_batches, started_at
+                    )
+                else:
+                    # Native CSV module fallback
+                    await self._process_with_csv_module(
                         conn, file_path, table_name, sanitized_headers,
                         batch_size, delimiter, encoding,
                         job_id, total_rows, total_batches, started_at
@@ -460,6 +480,88 @@ class CSVTransformService:
 
             # Commit each batch
             await conn.commit()
+
+    async def _process_with_csv_module(
+        self,
+        conn: psycopg.AsyncConnection,
+        file_path: str,
+        table_name: str,
+        columns: list,
+        batch_size: int,
+        delimiter: str,
+        encoding: str,
+        job_id: str,
+        total_rows: int,
+        total_batches: int,
+        started_at: datetime
+    ):
+        """Process CSV using native csv module (ultimate fallback)"""
+        rows_processed = 0
+        current_batch = 0
+
+        with open(file_path, 'r', encoding=encoding, errors='replace') as f:
+            reader = csv.DictReader(f, delimiter=delimiter)
+
+            batch_rows = []
+            for row in reader:
+                batch_rows.append(row)
+
+                if len(batch_rows) >= batch_size:
+                    current_batch += 1
+                    await self._copy_batch_native(
+                        conn, table_name, columns, batch_rows
+                    )
+                    rows_processed += len(batch_rows)
+
+                    # Publish progress
+                    progress = (rows_processed / total_rows) * 100 if total_rows > 0 else 0
+                    await self.publish_progress(
+                        job_id, "processing", progress, rows_processed, total_rows,
+                        current_batch, total_batches, started_at=started_at
+                    )
+
+                    logger.info(
+                        f"Batch {current_batch}/{total_batches}: "
+                        f"{rows_processed:,}/{total_rows:,} rows ({progress:.1f}%)"
+                    )
+
+                    batch_rows = []
+                    await conn.commit()
+
+            # Process remaining rows
+            if batch_rows:
+                current_batch += 1
+                await self._copy_batch_native(
+                    conn, table_name, columns, batch_rows
+                )
+                rows_processed += len(batch_rows)
+                await conn.commit()
+
+    async def _copy_batch_native(
+        self,
+        conn: psycopg.AsyncConnection,
+        table_name: str,
+        columns: list,
+        rows: list
+    ):
+        """Copy batch of rows using native csv module"""
+        csv_buffer = StringIO()
+        writer = csv.writer(csv_buffer)
+
+        for row in rows:
+            # Write values in column order
+            values = [str(row.get(col, '')) for col in columns]
+            writer.writerow(values)
+
+        csv_buffer.seek(0)
+
+        async with conn.cursor() as cur:
+            columns_quoted = ', '.join(f'"{c}"' for c in columns)
+            copy_sql = f'COPY "{table_name}" ({columns_quoted}) FROM STDIN WITH (FORMAT csv)'
+
+            async with cur.copy(copy_sql) as copy:
+                while data := csv_buffer.read(65536):
+                    await copy.write(data.encode('utf-8'))
 
     async def get_job_progress(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get current progress for a job"""
