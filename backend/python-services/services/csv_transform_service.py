@@ -123,6 +123,21 @@ class CSVTransformService:
 
         return sanitized or 'unnamed_col'
 
+    def deduplicate_columns(self, columns: list) -> list:
+        """Ensure all column names are unique by adding suffix numbers"""
+        seen = {}
+        result = []
+
+        for col in columns:
+            if col in seen:
+                seen[col] += 1
+                result.append(f"{col}_{seen[col]}")
+            else:
+                seen[col] = 0
+                result.append(col)
+
+        return result
+
     async def create_table_from_headers(
         self,
         conn: psycopg.AsyncConnection,
@@ -136,6 +151,12 @@ class CSVTransformService:
         """
         sanitized_headers = [self.sanitize_column_name(h) for h in headers]
 
+        # Deduplicate column names (handles duplicate columns in CSV)
+        sanitized_headers = self.deduplicate_columns(sanitized_headers)
+
+        # Determine primary key column name (avoid conflict with CSV "id" column)
+        pk_column = "row_id" if "id" in sanitized_headers else "id"
+
         # Build column definitions
         columns = []
         for i, (original, sanitized) in enumerate(zip(headers, sanitized_headers)):
@@ -148,8 +169,8 @@ class CSVTransformService:
 
             columns.append(f'"{sanitized}" {col_type}')
 
-        # Add auto-incrementing ID column
-        columns.insert(0, 'id SERIAL PRIMARY KEY')
+        # Add auto-incrementing ID column (row_id if CSV has "id" column)
+        columns.insert(0, f'{pk_column} SERIAL PRIMARY KEY')
 
         # Create table
         create_sql = f"""
@@ -162,7 +183,7 @@ class CSVTransformService:
         async with conn.cursor() as cur:
             await cur.execute(create_sql)
 
-        logger.info(f"Created table '{table_name}' with {len(sanitized_headers)} columns")
+        logger.info(f"Created table '{table_name}' with {len(sanitized_headers)} columns (pk: {pk_column})")
         return sanitized_headers
 
     async def publish_progress(
