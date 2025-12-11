@@ -1273,8 +1273,32 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
       }
     } else if (['.csv', '.txt', '.json', '.log', '.md', '.doc', '.docx'].includes(fileExt)) {
       // Text-based files - read directly with encoding detection
-      const fileBuffer = fs.readFileSync(filePath);
-      content = decodeBufferToUTF8(fileBuffer);
+      // ⚡ PERFORMANCE: For large CSV files (>1MB), only read preview portion
+      const PREVIEW_BYTES = 100 * 1024; // 100KB for preview
+      const fileSize = stats.size;
+
+      if (ext === 'csv' && fileSize > 1_000_000) {
+        // Large CSV file - stream only first 100KB
+        console.log(`⚡ [Preview] Large CSV file (${(fileSize / 1024 / 1024).toFixed(1)}MB) - reading first ${PREVIEW_BYTES / 1024}KB only`);
+        const buffer = Buffer.alloc(PREVIEW_BYTES);
+        const fd = fs.openSync(filePath, 'r');
+        fs.readSync(fd, buffer, 0, PREVIEW_BYTES, 0);
+        fs.closeSync(fd);
+        content = decodeBufferToUTF8(buffer);
+
+        // Estimate total rows from sample
+        const sampleNewlines = (content.match(/\n/g) || []).length;
+        const estimatedTotalRows = Math.round((sampleNewlines / PREVIEW_BYTES) * fileSize);
+        metadata.estimatedTotalRows = estimatedTotalRows;
+        metadata.isPartialPreview = true;
+        metadata.previewBytes = PREVIEW_BYTES;
+        metadata.totalBytes = fileSize;
+        console.log(`⚡ [Preview] Estimated ${estimatedTotalRows} total rows from ${sampleNewlines} sample rows`);
+      } else {
+        // Small file - read entirely
+        const fileBuffer = fs.readFileSync(filePath);
+        content = decodeBufferToUTF8(fileBuffer);
+      }
 
       // For CSV files, parse and provide stats
       if (ext === 'csv') {
