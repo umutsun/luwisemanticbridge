@@ -377,6 +377,15 @@ export default function DocumentPreviewModal({
 
       // ⚡ PERFORMANCE: Defer heavy operations to next tick - modal opens instantly
       setTimeout(() => {
+        // For CSV files, set total row count from metadata if available (large file estimation)
+        if (document.type === 'csv' && document.metadata) {
+          const estimatedRows = document.metadata.estimatedTotalRows || document.metadata.totalRows;
+          if (estimatedRows && estimatedRows > 0) {
+            console.log('[CSV] Using estimated total rows from metadata:', estimatedRows);
+            setTotalRowCount(estimatedRows);
+          }
+        }
+
         // Parse content for CSV/JSON (only if data is loaded)
         if (document.content && dataAlreadyLoaded) {
           parseContent();

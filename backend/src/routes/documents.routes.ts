@@ -1411,7 +1411,12 @@ router.get('/preview/:filename', authenticateToken, async (req: AuthenticatedReq
           }));
         }
 
-        preview = lines.slice(0, 11).join('\n'); // Header + 10 rows
+        preview = lines.slice(0, 31).join('\n'); // Header + 30 rows for better preview
+
+        // Store row count in metadata (estimated for large files, actual for small)
+        if (!metadata.estimatedTotalRows) {
+          metadata.totalRows = lines.length - 1; // Exclude header
+        }
       } else if (ext === 'json') {
         // For JSON, provide structure stats
         try {
