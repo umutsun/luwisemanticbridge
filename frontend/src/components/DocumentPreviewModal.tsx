@@ -552,7 +552,11 @@ export default function DocumentPreviewModal({
         setCsvHeaders(response.documentPreview.columnHeaders);
         setOriginalCsvHeaders(response.documentPreview.columnHeaders);
         setParsedData(response.documentPreview.sampleRows);
-        setTotalRowCount(response.documentPreview.rowCount || response.documentPreview.sampleRows.length);
+        // Use metadata's estimated total rows (for large files) or GraphQL rowCount
+        const estimatedFromMetadata = document.metadata?.estimatedTotalRows || document.metadata?.totalRows;
+        const rowCount = estimatedFromMetadata || response.documentPreview.rowCount || response.documentPreview.sampleRows.length;
+        console.log('[GraphQL] Row count sources:', { estimatedFromMetadata, graphqlRowCount: response.documentPreview.rowCount, final: rowCount });
+        setTotalRowCount(rowCount);
         setCsvLoading(false);
       }
     } catch (error) {
@@ -615,7 +619,9 @@ export default function DocumentPreviewModal({
       setCsvHeaders(graphqlData.columnHeaders);
       setOriginalCsvHeaders(graphqlData.columnHeaders);
       setParsedData(graphqlData.sampleRows);
-      setTotalRowCount(graphqlData.rowCount || graphqlData.sampleRows.length);
+      // Prefer metadata's estimated total (for large files) over GraphQL rowCount
+      const estimatedFromMetadata = document?.metadata?.estimatedTotalRows || document?.metadata?.totalRows;
+      setTotalRowCount(estimatedFromMetadata || graphqlData.rowCount || graphqlData.sampleRows.length);
       setCsvLoading(false);
       return;
     }
@@ -3147,22 +3153,7 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
 
             {/* Right side: Action buttons based on tab */}
             <div className="flex items-center gap-1.5">
-              {/* CSV: Transform button (only when not editing) */}
-              {isCSV && !isEditingHeaders && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    // Switch to transform tab in the Tabs component
-                    const transformTab = document.querySelector('[value="graphql"]') as HTMLElement;
-                    if (transformTab) transformTab.click();
-                  }}
-                  className="h-7 px-3 gap-1.5 text-xs"
-                >
-                  Transform
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
-              )}
+              {/* CSV: Transform button removed - use tab navigation instead */}
 
               {/* CSV: Load More button (only when not editing) */}
               {isCSV && !isEditingHeaders && parsedData && csvVisibleRows < parsedData.length && (
