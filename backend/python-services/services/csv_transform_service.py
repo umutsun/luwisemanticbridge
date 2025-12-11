@@ -18,7 +18,7 @@ from psycopg import sql
 import redis.asyncio as aioredis
 from loguru import logger
 
-# Try polars first (faster), fall back to pandas
+# Try polars first (faster), fall back to pandas, ultimate fallback to native csv
 USE_POLARS = False
 USE_PANDAS = False
 
@@ -26,16 +26,20 @@ try:
     import polars as pl
     USE_POLARS = True
     logger.info("Using Polars for CSV processing (faster)")
-except ImportError:
-    pass
+except (ImportError, ValueError) as e:
+    logger.warning(f"Polars not available: {e}")
 
 if not USE_POLARS:
     try:
         import pandas as pd
         USE_PANDAS = True
         logger.info("Using Pandas for CSV processing (fallback)")
-    except ImportError:
-        logger.warning("Neither Polars nor Pandas available, CSV processing will be limited")
+    except (ImportError, ValueError) as e:
+        # ValueError catches numpy binary incompatibility errors
+        logger.warning(f"Pandas not available: {e}")
+
+if not USE_POLARS and not USE_PANDAS:
+    logger.info("Using native csv module for CSV processing (ultimate fallback - slower but works)")
 
 
 class CSVTransformService:
