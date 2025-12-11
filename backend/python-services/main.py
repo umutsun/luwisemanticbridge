@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -137,6 +137,12 @@ app.include_router(
     tags=["pdf"]
     # PDF text extraction service
 )
+app.include_router(
+    csv_transform_router,
+    # Note: csv_transform_router has its own prefix /api/python/csv
+    tags=["csv-transform"]
+    # High-performance CSV import using PostgreSQL COPY
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -161,6 +167,7 @@ async def root():
             "pgai": "/api/python/pgai",
             "whisper": "/api/python/whisper",
             "import": "/api/python/import",
+            "csv_transform": "/api/python/csv",
             "docs": "/docs"
         }
     }

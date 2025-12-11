@@ -1,15 +1,19 @@
 /**
  * Document Transform Service
  * Handles CSV/JSON upload, parsing, preview, and transformation to source_db
+ *
+ * For large files (>10MB), delegates to Python CSV Worker for 100-1000x faster processing
+ * using PostgreSQL COPY command instead of row-by-row INSERT.
  */
 
 import { Pool } from 'pg';
 import Redis from 'ioredis';
-import { readFileSync } from 'fs';
+import { readFileSync, statSync } from 'fs';
 import Papa from 'papaparse';
 import dataAnalysisService from './data-analysis.service';
 import TableCreationService from './table-creation.service';
 import { SettingsService } from './settings.service';
+import { pythonService } from './python-integration.service';
 
 export interface DocumentMetadata {
   id: number;
@@ -470,6 +474,59 @@ export class DocumentTransformService {
           console.log(`[DocumentTransform] Detected file type: ${fileType}`);
 
           if (doc.file_path && fileType === 'csv') {
+            // Check file size for large file handling
+            let fileSizeBytes = 0;
+            try {
+              const stats = statSync(doc.file_path);
+              fileSizeBytes = stats.size;
+              console.log(`[DocumentTransform] CSV file size: ${(fileSizeBytes / 1024 / 1024).toFixed(2)} MB`);
+            } catch (e) {
+              console.warn(`[DocumentTransform] Could not get file size: ${e}`);
+            }
+
+            // For large files (>10MB), delegate to Python CSV Worker
+            if (fileSizeBytes > 10 * 1024 * 1024) {
+              console.log(`[DocumentTransform] Large file detected (${(fileSizeBytes / 1024 / 1024).toFixed(2)} MB), delegating to Python CSV Worker`);
+
+              const finalTableName = tableName || this.generateTableName(doc.filename);
+              const databaseUrl = await this.getDatabaseUrl(sourceDbId);
+
+              try {
+                // Start Python CSV transform
+                await pythonService.transformCSV(
+                  doc.file_path,
+                  finalTableName,
+                  databaseUrl,
+                  jobId,
+                  { batchSize: 50000 }
+                );
+
+                // Poll for progress and update via Redis
+                await this.pollPythonTransformProgress(jobId, documentId, finalTableName);
+
+                // Update document status
+                await this.pool.query(
+                  `UPDATE documents SET
+                    transform_status = 'completed',
+                    transform_progress = 100,
+                    target_table_name = $1,
+                    source_db_id = $2,
+                    transformed_at = NOW(),
+                    updated_at = NOW()
+                  WHERE id = $3`,
+                  [finalTableName, sourceDbId, documentId]
+                );
+
+                console.log(`[DocumentTransform] Python CSV transform completed for document ${documentId}`);
+                continue; // Skip to next document
+              } catch (pythonError) {
+                console.error(`[DocumentTransform] Python CSV transform failed: ${pythonError}`);
+                // Fall through to Node.js processing as fallback
+                console.log(`[DocumentTransform] Falling back to Node.js processing`);
+              }
+            }
+
+            // Standard Node.js processing for small files or as fallback
             console.log(`[DocumentTransform] Reading CSV file: ${doc.file_path}`);
             const fileContent = readFileSync(doc.file_path, 'utf-8');
 
@@ -1053,6 +1110,106 @@ export class DocumentTransformService {
     );
 
     console.log(`[DocumentTransform] ✓ Created ${processedChunks} embeddings for document ${documentId}`);
+  }
+
+  /**
+   * Get database URL string for Python CSV Worker
+   * Constructs PostgreSQL connection string from settings
+   */
+  private async getDatabaseUrl(sourceDbId: string): Promise<string> {
+    console.log(`[DocumentTransform] Getting database URL for: ${sourceDbId}`);
+
+    // Query settings table for database configuration
+    const result = await this.pool.query(
+      `SELECT key, value FROM settings WHERE key LIKE 'database.%'`
+    );
+
+    // Parse settings into a config object
+    const dbSettings: any = {};
+    result.rows.forEach(row => {
+      const key = row.key.replace('database.', '');
+      try {
+        dbSettings[key] = JSON.parse(row.value);
+      } catch {
+        dbSettings[key] = row.value;
+      }
+    });
+
+    // Fallback to environment variables
+    const host = dbSettings.host || process.env.DB_HOST || 'localhost';
+    const port = dbSettings.port || process.env.DB_PORT || '5432';
+    const user = dbSettings.user || process.env.DB_USER || 'postgres';
+    const password = dbSettings.password || process.env.DB_PASSWORD || '';
+
+    // Construct connection string
+    const encodedPassword = encodeURIComponent(password);
+    const databaseUrl = `postgresql://${user}:${encodedPassword}@${host}:${port}/${sourceDbId}`;
+
+    console.log(`[DocumentTransform] Database URL constructed for ${sourceDbId} (host: ${host})`);
+    return databaseUrl;
+  }
+
+  /**
+   * Poll Python CSV transform progress and update Redis
+   * Waits for completion or failure
+   */
+  private async pollPythonTransformProgress(
+    jobId: string,
+    documentId: number,
+    tableName: string
+  ): Promise<void> {
+    const maxAttempts = 3600; // Max 1 hour (1 second intervals)
+    const pollInterval = 1000; // 1 second
+
+    console.log(`[DocumentTransform] Polling Python CSV transform progress for job ${jobId}`);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const progress = await pythonService.getCSVTransformProgress(jobId);
+
+        if (!progress) {
+          console.warn(`[DocumentTransform] No progress data for job ${jobId}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          continue;
+        }
+
+        // Update Redis with progress
+        await this.updateTransformProgress(jobId, documentId, {
+          status: progress.status as any,
+          progress: progress.progress,
+          rowsProcessed: progress.rowsProcessed,
+          totalRows: progress.totalRows,
+        });
+
+        // Update document progress in database
+        await this.updateDocumentStatus(documentId, 'transforming', progress.progress);
+
+        console.log(`[DocumentTransform] Job ${jobId}: ${progress.progress.toFixed(1)}% (${progress.rowsProcessed}/${progress.totalRows} rows)`);
+
+        // Check for completion or failure
+        if (progress.status === 'completed') {
+          console.log(`[DocumentTransform] Python CSV transform completed for job ${jobId}`);
+          return;
+        }
+
+        if (progress.status === 'failed') {
+          throw new Error(`Python CSV transform failed: ${progress.errorMessage}`);
+        }
+
+        if (progress.status === 'cancelled') {
+          throw new Error('Python CSV transform was cancelled');
+        }
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      } catch (error) {
+        console.error(`[DocumentTransform] Error polling progress: ${error}`);
+        throw error;
+      }
+    }
+
+    throw new Error('Python CSV transform timed out after 1 hour');
   }
 }
 

@@ -384,9 +384,132 @@ export class PythonIntegrationService {
       endpoints: {
         crawl: `${this.pythonServiceUrl}/api/python/crawl`,
         pgai: `${this.pythonServiceUrl}/api/python/pgai`,
+        csv: `${this.pythonServiceUrl}/api/python/csv`,
         health: `${this.pythonServiceUrl}/health`
       }
     };
+  }
+
+  // ============= CSV Transform Methods (High Performance) =============
+
+  /**
+   * Transform large CSV files using PostgreSQL COPY command via Python worker
+   * 100-1000x faster than Node.js row-by-row INSERT
+   *
+   * @param filePath - Absolute path to CSV file
+   * @param tableName - Target PostgreSQL table name
+   * @param databaseUrl - PostgreSQL connection string
+   * @param jobId - Unique job ID for progress tracking
+   * @param options - Additional options (batchSize, delimiter, etc.)
+   */
+  public async transformCSV(
+    filePath: string,
+    tableName: string,
+    databaseUrl: string,
+    jobId: string,
+    options?: {
+      batchSize?: number;
+      delimiter?: string;
+      encoding?: string;
+      truncateTable?: boolean;
+      columnTypes?: Record<string, string>;
+    }
+  ): Promise<{ jobId: string; status: string; message: string; estimatedRows?: number }> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python service is not available for CSV transform');
+      }
+
+      logger.info(`Starting Python CSV transform: ${filePath} -> ${tableName}`);
+
+      const response = await this.axiosClient.post('/api/python/csv/transform', {
+        file_path: filePath,
+        table_name: tableName,
+        database_url: databaseUrl,
+        job_id: jobId,
+        batch_size: options?.batchSize || 50000,
+        delimiter: options?.delimiter || ',',
+        encoding: options?.encoding || 'utf-8',
+        truncate_table: options?.truncateTable || false,
+        column_types: options?.columnTypes
+      }, {
+        timeout: 60000 // 60 second timeout for starting job
+      });
+
+      logger.info(`CSV transform job started: ${jobId}`);
+      return {
+        jobId: response.data.job_id,
+        status: response.data.status,
+        message: response.data.message,
+        estimatedRows: response.data.estimated_rows
+      };
+
+    } catch (error) {
+      logger.error('CSV transform start error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get CSV transform job progress
+   */
+  public async getCSVTransformProgress(jobId: string): Promise<{
+    jobId: string;
+    status: string;
+    progress: number;
+    rowsProcessed: number;
+    totalRows: number;
+    rowsPerSecond: number;
+    estimatedRemainingSeconds: number;
+    errorMessage?: string;
+  } | null> {
+    try {
+      const response = await this.axiosClient.get(`/api/python/csv/progress/${jobId}`);
+      return {
+        jobId: response.data.job_id,
+        status: response.data.status,
+        progress: response.data.progress,
+        rowsProcessed: response.data.rows_processed,
+        totalRows: response.data.total_rows,
+        rowsPerSecond: response.data.rows_per_second,
+        estimatedRemainingSeconds: response.data.estimated_remaining_seconds,
+        errorMessage: response.data.error_message
+      };
+
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      logger.error('Get CSV transform progress error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a running CSV transform job
+   */
+  public async cancelCSVTransform(jobId: string): Promise<boolean> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python service is not available');
+      }
+
+      const response = await this.axiosClient.post(`/api/python/csv/cancel/${jobId}`);
+      return response.data.status === 'cancelled';
+
+    } catch (error) {
+      logger.error('Cancel CSV transform error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a file should use Python CSV transform (based on size)
+   * Files larger than 10MB should use Python for performance
+   */
+  public shouldUsePythonTransform(fileSizeBytes: number): boolean {
+    const THRESHOLD_BYTES = 10 * 1024 * 1024; // 10MB
+    return fileSizeBytes > THRESHOLD_BYTES;
   }
 }
 
