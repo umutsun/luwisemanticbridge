@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { executeQuery, executeMutation } from '@/lib/graphql/client';
+import { authenticatedFetch } from '@/lib/api/client';
 import {
   GET_DOCUMENT_PREVIEW,
   GET_TRANSFORM_PROGRESS,
@@ -199,11 +200,8 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
     if (!jobId) return;
 
     try {
-      const response = await fetch(`/api/v2/documents/table-creation/cancel/${jobId}`, {
+      const response = await authenticatedFetch(`/api/v2/documents/table-creation/cancel/${jobId}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
       });
 
       if (response.ok) {
@@ -226,11 +224,7 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
 
     const pollProgress = async () => {
       try {
-        const response = await fetch(`/api/v2/documents/table-creation/progress/${jobId}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          },
-        });
+        const response = await authenticatedFetch(`/api/v2/documents/table-creation/progress/${jobId}`);
 
         if (!response.ok) {
           if (response.status === 404) {
