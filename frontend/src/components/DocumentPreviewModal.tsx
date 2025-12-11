@@ -725,19 +725,21 @@ export default function DocumentPreviewModal({
     setOriginalCsvHeaders(headers);
 
     // Estimate total rows by counting newlines (fast, without creating array)
-    // For very large files, sample-count instead of full count
+    // For large files (>1MB), use sample-based estimation only
     let estimatedTotalRows = 0;
-    if (content.length > 10_000_000) { // > 10MB
-      // Sample first 1MB to estimate line density
-      const sampleSize = Math.min(1_000_000, content.length);
+    const ONE_MB = 1_000_000;
+
+    if (content.length > ONE_MB) {
+      // Large file - sample first 100KB to estimate line density
+      const sampleSize = Math.min(100_000, content.length);
       let sampleNewlines = 0;
       for (let i = 0; i < sampleSize; i++) {
         if (content[i] === '\n') sampleNewlines++;
       }
       estimatedTotalRows = Math.round((sampleNewlines / sampleSize) * content.length);
-      console.log('[CSV Parser] Large file - estimated rows:', estimatedTotalRows);
+      console.log('[CSV Parser] Large file - estimated rows from sample:', estimatedTotalRows);
     } else {
-      // Count all newlines for smaller files
+      // Small file (<1MB) - count all newlines
       for (let i = 0; i < content.length; i++) {
         if (content[i] === '\n') estimatedTotalRows++;
       }
