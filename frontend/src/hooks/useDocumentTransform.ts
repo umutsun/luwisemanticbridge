@@ -5,7 +5,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { executeQuery, executeMutation } from '@/lib/graphql/client';
-import { authenticatedFetch } from '@/lib/api/client';
 import {
   GET_DOCUMENT_PREVIEW,
   GET_TRANSFORM_PROGRESS,
@@ -200,8 +199,12 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
     if (!jobId) return;
 
     try {
-      const response = await authenticatedFetch(`/api/v2/documents/table-creation/cancel/${jobId}`, {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/v2/documents/table-creation/cancel/${jobId}`, {
         method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
       });
 
       if (response.ok) {
@@ -224,11 +227,23 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
 
     const pollProgress = async () => {
       try {
-        const response = await authenticatedFetch(`/api/v2/documents/table-creation/progress/${jobId}`);
+        // Use raw fetch to avoid redirect on auth failure
+        const token = localStorage.getItem('token');
+        const response = await fetch(`/api/v2/documents/table-creation/progress/${jobId}`, {
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+        });
 
         if (!response.ok) {
           if (response.status === 404) {
             console.log('[Progress] Progress not found yet (404), will retry...');
+            return;
+          }
+          if (response.status === 401) {
+            console.warn('[Progress] Auth expired during polling, stopping...');
+            setError('Session expired. Please refresh and try again.');
+            clearInterval(pollInterval);
             return;
           }
           throw new Error('Failed to fetch progress');
