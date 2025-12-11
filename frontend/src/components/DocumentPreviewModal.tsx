@@ -3068,11 +3068,11 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 <div className="flex items-center gap-2">
                   {/* Show preview count / total count */}
                   <span>
-                    <span className="font-semibold text-foreground">{csvVisibleRows}</span>
+                    <span className="font-semibold text-foreground">{Math.min(csvVisibleRows, parsedData.length)}</span>
                     {' / '}
-                    <span className="font-semibold text-foreground">{graphqlData?.rowCount || parsedData.length}</span>
+                    <span className="font-semibold text-foreground">{totalRowCount > 0 ? totalRowCount.toLocaleString() : parsedData.length}</span>
                     {' rows'}
-                    {graphqlData?.rowCount && graphqlData.rowCount > parsedData.length && (
+                    {totalRowCount > parsedData.length && (
                       <span className="text-muted-foreground ml-1">(total)</span>
                     )}
                   </span>

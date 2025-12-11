@@ -10,7 +10,7 @@ interface TaoProgressBarProps {
   showLabel?: boolean;
   showPercentage?: boolean;
   size?: 'sm' | 'md' | 'lg';
-  variant?: 'default' | 'minimal' | 'zen';
+  variant?: 'default' | 'minimal' | 'zen' | 'vibrant' | 'sunset';
 }
 
 export const TaoProgressBar: React.FC<TaoProgressBarProps> = ({
@@ -33,13 +33,17 @@ export const TaoProgressBar: React.FC<TaoProgressBarProps> = ({
   const variantClasses = {
     default: 'bg-gray-100 dark:bg-gray-800',
     minimal: 'bg-transparent border border-gray-200 dark:border-gray-700',
-    zen: 'bg-gray-50 dark:bg-gray-900/50'
+    zen: 'bg-gray-50 dark:bg-gray-900/50',
+    vibrant: 'bg-slate-200/50 dark:bg-white/5',
+    sunset: 'bg-orange-100/50 dark:bg-orange-900/10'
   };
 
   const fillVariantClasses = {
     default: 'bg-gradient-to-r from-blue-500 to-blue-600',
     minimal: 'bg-gray-900 dark:bg-gray-100',
-    zen: 'bg-gradient-to-r from-gray-700 via-gray-600 to-gray-700 dark:from-gray-300 dark:via-gray-200 dark:to-gray-300'
+    zen: 'bg-gradient-to-r from-gray-700 via-gray-600 to-gray-700 dark:from-gray-300 dark:via-gray-200 dark:to-gray-300',
+    vibrant: 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500',
+    sunset: 'bg-gradient-to-r from-orange-400 via-rose-500 to-purple-600'
   };
 
   return (
@@ -61,14 +65,15 @@ export const TaoProgressBar: React.FC<TaoProgressBarProps> = ({
         <div
           className={cn(
             'h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden',
-            fillVariantClasses[variant]
+            fillVariantClasses[variant],
+            (variant === 'vibrant' || variant === 'sunset') && 'shadow-sm'
           )}
           style={{ width: `${percentage}%` }}
         >
-          {/* Subtle animated shimmer effect for zen variant */}
-          {variant === 'zen' && percentage > 0 && (
+          {/* Animated shimmer effect for special variants */}
+          {(variant === 'zen' || variant === 'vibrant' || variant === 'sunset') && percentage > 0 && (
             <div className="absolute inset-0 -skew-x-12">
-              <div className="shimmer w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
+              <div className="shimmer w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
             </div>
           )}
         </div>

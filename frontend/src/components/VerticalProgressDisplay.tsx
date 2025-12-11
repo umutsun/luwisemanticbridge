@@ -46,8 +46,8 @@ interface VerticalProgressDisplayProps {
   migrationTables?: string[];
 }
 
-// Circular Progress Component
-const CircularProgress = ({ percentage, size = 120, strokeWidth = 2, className = "" }) => {
+// Circular Progress Component with vibrant colors
+const CircularProgress = ({ percentage, size = 120, strokeWidth = 3, className = "" }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const strokeDasharray = circumference;
@@ -55,7 +55,13 @@ const CircularProgress = ({ percentage, size = 120, strokeWidth = 2, className =
 
   return (
     <div className={`relative ${className}`}>
-      <svg width={size} height={size} className="transform -rotate-90">
+      {/* Animated glow ring */}
+      <div
+        className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 animate-pulse"
+        style={{ animationDuration: '3s' }}
+      />
+
+      <svg width={size} height={size} className="transform -rotate-90 relative z-10">
         {/* Background circle */}
         <circle
           cx={size / 2}
@@ -64,39 +70,41 @@ const CircularProgress = ({ percentage, size = 120, strokeWidth = 2, className =
           stroke="currentColor"
           strokeWidth={strokeWidth}
           fill="none"
-          className="text-gray-200 dark:text-gray-800"
+          className="text-slate-200 dark:text-white/10"
         />
-        {/* Progress circle with gradient */}
+        {/* Progress circle with vibrant gradient */}
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="url(#gradient)"
-          strokeWidth={strokeWidth}
+          stroke="url(#vibrantGradient)"
+          strokeWidth={strokeWidth + 1}
           fill="none"
           strokeDasharray={strokeDasharray}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
-          className="transition-all duration-1000 ease-out"
+          className="transition-all duration-700 ease-in-out drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]"
         />
         <defs>
-          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id="vibrantGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#3B82F6" />
-            <stop offset="100%" stopColor="#8B5CF6" />
+            <stop offset="30%" stopColor="#8B5CF6" />
+            <stop offset="60%" stopColor="#D946EF" />
+            <stop offset="100%" stopColor="#F97316" />
           </linearGradient>
         </defs>
       </svg>
-      {/* Center content */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-3xl font-light tracking-tight">
-          {percentage.toFixed(1)}
+      {/* Center content with gradient text */}
+      <div className="absolute inset-0 flex items-center justify-center flex-col z-20">
+        <span className="text-3xl font-bold tabular-nums bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+          {percentage.toFixed(1)}%
         </span>
       </div>
     </div>
   );
 };
 
-// Mini Sparkline for token usage
+// Mini Sparkline for token usage with gradient
 const MiniSparkline = ({ values, width = 60, height = 20 }) => {
   const max = Math.max(...values, 1);
   const points = values.map((value, index) => {
@@ -107,12 +115,19 @@ const MiniSparkline = ({ values, width = 60, height = 20 }) => {
 
   return (
     <svg width={width} height={height} className="overflow-visible">
+      <defs>
+        <linearGradient id="sparklineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#3B82F6" />
+          <stop offset="50%" stopColor="#8B5CF6" />
+          <stop offset="100%" stopColor="#D946EF" />
+        </linearGradient>
+      </defs>
       <polyline
         points={points}
         fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        className="text-purple-500 opacity-60"
+        stroke="url(#sparklineGradient)"
+        strokeWidth="1.5"
+        className="drop-shadow-[0_0_3px_rgba(139,92,246,0.4)]"
       />
     </svg>
   );
@@ -257,22 +272,22 @@ export default function VerticalProgressDisplay({
         <CircularProgress percentage={currentProgress} size={140} strokeWidth={2} />
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid with vibrant colors */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="text-center">
-          <div className="text-lg font-light text-blue-600">
+        <div className="text-center group">
+          <div className="text-lg font-semibold tabular-nums bg-gradient-to-r from-blue-500 to-cyan-500 bg-clip-text text-transparent transition-all group-hover:scale-105">
             {Math.round(animatedCurrent).toLocaleString('tr-TR')}
           </div>
           <div className="text-xs text-gray-500">processed</div>
         </div>
-        <div className="text-center">
-          <div className="text-lg font-light text-orange-600">
+        <div className="text-center group">
+          <div className="text-lg font-semibold tabular-nums bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent transition-all group-hover:scale-105">
             {displaySpeed.toFixed(1)}
           </div>
           <div className="text-xs text-gray-500">kayıt/dk</div>
         </div>
-        <div className="text-center">
-          <div className="text-lg font-light text-purple-600">
+        <div className="text-center group">
+          <div className="text-lg font-semibold tabular-nums bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent transition-all group-hover:scale-105">
             {progress.workerCount || 1}
           </div>
           <div className="text-xs text-gray-500">workers</div>
