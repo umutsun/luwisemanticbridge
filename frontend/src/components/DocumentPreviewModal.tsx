@@ -3029,27 +3029,57 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {isCSV && parsedData && csvHeaders && (
                 <div className="flex items-center gap-2">
-                  {graphqlData?.rowCount && graphqlData.rowCount > parsedData.length ? (
-                    <span>Previewing <span className="font-semibold text-foreground">{csvVisibleRows}</span> / <span className="font-semibold text-foreground">{parsedData.length}</span> rows</span>
-                  ) : (
-                    <span><span className="font-semibold text-foreground">{parsedData.length}</span> rows</span>
-                  )}
+                  {/* Show preview count / total count */}
+                  <span>
+                    <span className="font-semibold text-foreground">{csvVisibleRows}</span>
+                    {' / '}
+                    <span className="font-semibold text-foreground">{graphqlData?.rowCount || parsedData.length}</span>
+                    {' rows'}
+                    {graphqlData?.rowCount && graphqlData.rowCount > parsedData.length && (
+                      <span className="text-muted-foreground ml-1">(total)</span>
+                    )}
+                  </span>
                   <span className="text-muted-foreground/40">•</span>
                   <span className="flex items-center gap-1.5">
                     <span className="font-semibold text-foreground">{csvHeaders?.length || 0}</span> columns
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsEditingHeaders(!isEditingHeaders)}
-                      className="h-5 w-5 p-0 hover:bg-muted/50"
-                      title={isEditingHeaders ? "Cancel editing" : "Edit column headers"}
-                    >
-                      {isEditingHeaders ? (
-                        <X className="h-3 w-3 text-muted-foreground" />
-                      ) : (
+                    {!isEditingHeaders ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditingHeaders(true);
+                          setEditableHeaders([...csvHeaders]);
+                        }}
+                        className="h-5 w-5 p-0 hover:bg-muted/50"
+                        title="Edit column headers"
+                      >
                         <Edit3 className="h-3 w-3 text-muted-foreground" />
-                      )}
-                    </Button>
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={saveEditedHeaders}
+                          className="h-5 w-5 p-0 hover:bg-green-100 dark:hover:bg-green-900/20"
+                          title="Save headers"
+                        >
+                          <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsEditingHeaders(false);
+                            setEditableHeaders([...csvHeaders]);
+                          }}
+                          className="h-5 w-5 p-0 hover:bg-red-100 dark:hover:bg-red-900/20"
+                          title="Cancel editing"
+                        >
+                          <X className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
+                        </Button>
+                      </div>
+                    )}
                   </span>
                   {config?.database?.name && (
                     <>
