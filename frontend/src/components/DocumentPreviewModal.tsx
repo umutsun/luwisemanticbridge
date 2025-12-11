@@ -536,10 +536,21 @@ export default function DocumentPreviewModal({
       );
       console.log('[DocumentPreview] GraphQL response received');
       setGraphqlData(response.documentPreview);
+
+      // ⚡ For CSV files, immediately use GraphQL data (don't wait for parseCSV)
+      if (document.type === 'csv' && response.documentPreview.columnHeaders && response.documentPreview.sampleRows) {
+        console.log('[GraphQL] CSV data received - updating preview immediately');
+        setCsvHeaders(response.documentPreview.columnHeaders);
+        setOriginalCsvHeaders(response.documentPreview.columnHeaders);
+        setParsedData(response.documentPreview.sampleRows);
+        setTotalRowCount(response.documentPreview.rowCount || response.documentPreview.sampleRows.length);
+        setCsvLoading(false);
+      }
     } catch (error) {
       console.error('GraphQL fetch error (backend may be disabled):', error);
       // GraphQL is optional - fallback to CSV parsing only
       // This is expected when backend GraphQL is disabled
+      setCsvLoading(false);
     }
   };
 
@@ -597,6 +608,15 @@ export default function DocumentPreviewModal({
       setParsedData(graphqlData.sampleRows);
       setTotalRowCount(graphqlData.rowCount || graphqlData.sampleRows.length);
       setCsvLoading(false);
+      return;
+    }
+
+    // ⚡ PERFORMANCE: For large files (>5MB), skip content parsing entirely
+    // Wait for GraphQL data instead - it's already optimized on backend
+    const FIVE_MB = 5_000_000;
+    if (content && content.length > FIVE_MB) {
+      console.log(`[CSV Parser] Large file (${(content.length / 1024 / 1024).toFixed(1)}MB) - waiting for GraphQL preview...`);
+      // Don't set loading to false - keep showing spinner until GraphQL arrives
       return;
     }
 
