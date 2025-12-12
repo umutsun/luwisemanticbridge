@@ -3181,7 +3181,7 @@ export default function DocumentManagerPage() {
 
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-4 sm:space-y-6">
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-stretch">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-stretch min-h-[600px]">
             {/* Left Column (40%) - Upload & Physical Files */}
             <div className="xl:col-span-5 lg:col-span-6 flex flex-col gap-4 h-full">
               {/* Upload Area */}
@@ -3384,8 +3384,8 @@ export default function DocumentManagerPage() {
                     </Select>
                   </div>
 
-                  {/* Files List */}
-                  <ScrollArea className="h-[500px]">
+                  {/* Files List - flex-1 to match Documents table height */}
+                  <ScrollArea className="flex-1">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3667,7 +3667,7 @@ export default function DocumentManagerPage() {
             {/* Right Column (60%) - Database Files */}
             <div className="xl:col-span-7 lg:col-span-6 flex flex-col gap-4 h-full">
               {/* Search and Filter - Moved Above Table */}
-              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm">
+              <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
                 <CardContent className="p-4">
                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-start sm:items-center">
                     <div className="relative flex-1">
