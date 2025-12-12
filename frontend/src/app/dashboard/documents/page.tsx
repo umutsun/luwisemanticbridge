@@ -3722,8 +3722,8 @@ export default function DocumentManagerPage() {
                     </Table>
                   </div>
 
-                  {/* Scrollable Body */}
-                  <ScrollArea className="h-[500px]">
+                  {/* Scrollable Body - flex-1 to fill remaining card space */}
+                  <ScrollArea className="flex-1">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
