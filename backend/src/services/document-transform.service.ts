@@ -823,7 +823,8 @@ export class DocumentTransformService {
       'transform_progress = $2',
       'updated_at = NOW()',
     ];
-    const values: any[] = [status, progress];
+    // Round progress to integer - PostgreSQL transform_progress column is INTEGER
+    const values: any[] = [status, Math.round(progress)];
     let paramCount = 2;
 
     if (extras.targetTableName) {
