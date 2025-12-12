@@ -315,8 +315,9 @@ class CSVTransformService:
                     )
                 else:
                     # Native CSV module fallback
+                    # Pass both original headers (for DictReader lookup) and sanitized (for SQL)
                     await self._process_with_csv_module(
-                        conn, file_path, table_name, sanitized_headers,
+                        conn, file_path, table_name, sanitized_headers, headers,
                         batch_size, delimiter, encoding,
                         job_id, total_rows, total_batches, started_at
                     )
@@ -512,6 +513,7 @@ class CSVTransformService:
         file_path: str,
         table_name: str,
         columns: list,
+        original_headers: list,
         batch_size: int,
         delimiter: str,
         encoding: str,
@@ -534,7 +536,7 @@ class CSVTransformService:
                 if len(batch_rows) >= batch_size:
                     current_batch += 1
                     await self._copy_batch_native(
-                        conn, table_name, columns, batch_rows
+                        conn, table_name, columns, original_headers, batch_rows
                     )
                     rows_processed += len(batch_rows)
 
@@ -557,7 +559,7 @@ class CSVTransformService:
             if batch_rows:
                 current_batch += 1
                 await self._copy_batch_native(
-                    conn, table_name, columns, batch_rows
+                    conn, table_name, columns, original_headers, batch_rows
                 )
                 rows_processed += len(batch_rows)
                 await conn.commit()
@@ -567,6 +569,7 @@ class CSVTransformService:
         conn: psycopg.AsyncConnection,
         table_name: str,
         columns: list,
+        original_headers: list,
         rows: list
     ):
         """Copy batch of rows using native csv module"""
@@ -574,8 +577,9 @@ class CSVTransformService:
         writer = csv.writer(csv_buffer)
 
         for row in rows:
-            # Write values in column order
-            values = [str(row.get(col, '')) for col in columns]
+            # Write values in column order using ORIGINAL headers for lookup
+            # columns = sanitized names for SQL, original_headers = CSV header names for dict lookup
+            values = [str(row.get(orig, '')) for orig in original_headers]
             writer.writerow(values)
 
         csv_buffer.seek(0)
