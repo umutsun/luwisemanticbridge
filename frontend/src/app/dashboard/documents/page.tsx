@@ -3599,7 +3599,7 @@ export default function DocumentManagerPage() {
 
                   {/* Action Bar - Shows when files are selected */}
                   {selectedPhysicalFiles.size > 0 && (
-                    <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 mt-2">
+                    <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 rounded-b-lg">
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           {bulkAddInProgress ? (
@@ -3896,17 +3896,18 @@ export default function DocumentManagerPage() {
                       </div>
                     )}
                   </ScrollArea>
-                </CardContent>
-                {getSelectedCount() > 0 && (
-                  <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 mt-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="font-medium">
-                          {getSelectedCount()} {getSelectedCount() === 1 ? t('documents.actions.documentSelected') : t('documents.actions.documentsSelected')}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
+
+                  {/* Selection Action Bar - Inside CardContent for consistent styling */}
+                  {getSelectedCount() > 0 && (
+                    <div className="px-4 py-3 bg-muted/30 dark:bg-muted/10 border-t border-border/50 rounded-b-lg">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">
+                            {getSelectedCount()} {getSelectedCount() === 1 ? t('documents.actions.documentSelected') : t('documents.actions.documentsSelected')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-background/40 backdrop-blur-sm border border-border/50 rounded-md p-0.5">
                         {/* Smart Batch Actions - CSV: Transform, Others: Embed */}
                         {(() => {
                           const selected = documents.filter(doc => selectedRows.has(doc.id));
@@ -4004,22 +4005,6 @@ export default function DocumentManagerPage() {
                             </>
                           );
                         })()}
-
-                        {/* Bulk Delete Embeddings Button */}
-                        <ConfirmTooltip
-                          onConfirm={handleBulkDeleteEmbeddings}
-                          message={`Delete embeddings for ${selectedRows.size} documents?`}
-                          side="top"
-                        >
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={batchProcessing}
-                            className="h-8 w-8 p-0 hover:bg-orange-100 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-50"
-                          >
-                            <XCircle className="w-4 h-4 text-orange-600" />
-                          </Button>
-                        </ConfirmTooltip>
 
                         {/* Bulk Delete Documents */}
                         <ConfirmTooltip
