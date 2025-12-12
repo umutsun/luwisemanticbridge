@@ -2237,7 +2237,7 @@ router.get('/table-creation/progress/:jobId', authenticateToken, async (req: Aut
           status: p.status === 'completed' ? 'COMPLETED' :
                   p.status === 'failed' ? 'FAILED' :
                   p.status === 'cancelled' ? 'CANCELLED' : 'INSERTING_DATA',
-          progress: Math.round(p.progress || 0),
+          progress: parseFloat((p.progress || 0).toFixed(2)), // Keep decimal precision for smooth progress
           totalRows: p.total_rows || 0,
           rowsInserted: p.rows_processed || 0,
           currentBatch: p.current_batch || 1,

@@ -240,10 +240,11 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
             console.log('[Progress] Progress not found yet (404), will retry...');
             return;
           }
-          if (response.status === 401) {
-            console.warn('[Progress] Auth expired during polling, stopping...');
-            setError('Session expired. Please refresh and try again.');
+          if (response.status === 401 || response.status === 402) {
+            console.warn('[Progress] Auth expired during polling, redirecting to login...');
             clearInterval(pollInterval);
+            localStorage.removeItem('token');
+            window.location.href = '/login';
             return;
           }
           throw new Error('Failed to fetch progress');
