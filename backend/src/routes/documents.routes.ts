@@ -2224,6 +2224,31 @@ router.get('/table-creation/progress/:jobId', authenticateToken, async (req: Aut
     let progressKey = `table_creation:${jobId}`;
     let progressData = await redis.get(progressKey);
 
+    // If not found, try Python CSV Worker key (csv_transform:progress:{jobId})
+    if (!progressData) {
+      const pythonProgressKey = `csv_transform:progress:${jobId}`;
+      const pythonProgress = await redis.get(pythonProgressKey);
+
+      if (pythonProgress) {
+        const p = JSON.parse(pythonProgress);
+        // Map Python progress format to frontend expected format
+        const mappedProgress = {
+          jobId,
+          status: p.status === 'completed' ? 'COMPLETED' :
+                  p.status === 'failed' ? 'FAILED' :
+                  p.status === 'cancelled' ? 'CANCELLED' : 'INSERTING_DATA',
+          progress: Math.round(p.progress || 0),
+          totalRows: p.total_rows || 0,
+          rowsInserted: p.rows_processed || 0,
+          currentBatch: p.current_batch || 1,
+          totalBatches: p.total_batches || 1,
+          startedAt: p.started_at || new Date().toISOString(),
+          errorMessage: p.error_message || null,
+        };
+        return res.json({ progress: mappedProgress });
+      }
+    }
+
     // If not found, try transform_progress pattern (used by DocumentTransformService)
     if (!progressData) {
       const transformKeys = await redis.keys(`transform_progress:${jobId}:*`);
