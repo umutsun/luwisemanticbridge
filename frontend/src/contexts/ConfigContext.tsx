@@ -144,7 +144,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         apiClient.setToken(authToken);
       }
 
-      const response = await apiClient.get<Partial<Config>>('/settings');
+      const response = await apiClient.get<Partial<Config>>('/api/v2/settings');
       const data = response.data;
 
       // Transform backend settings to match Config interface
@@ -173,7 +173,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       // Fetch chatbot settings separately if not in main config and no error
       if (!data.chatbot) {
         try {
-          const chatRes = await apiClient.get<any>('/chatbot/settings');
+          const chatRes = await apiClient.get<any>('/api/v2/chatbot/settings');
           if (chatRes.data) {
             transformedConfig.chatbot = {
               title: chatRes.data.title,
@@ -226,7 +226,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = async (newConfig: Config) => {
     try {
-      const response = await apiClient.put<{ config: Config }>('/settings', newConfig);
+      const response = await apiClient.put<{ config: Config }>('/api/v2/settings', newConfig);
 
       if (response.data && response.data.config) {
         setConfig(response.data.config);
@@ -259,7 +259,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const fetchPublicChatbotSettings = async (): Promise<{ name: string; description: string }> => {
     try {
       // Unauthenticated request
-      const response = await apiClient.get<any>('/chatbot/settings');
+      const response = await apiClient.get<any>('/api/v2/chatbot/settings');
       if (response.data) {
         return {
           name: response.data.title || 'LSEMB',
