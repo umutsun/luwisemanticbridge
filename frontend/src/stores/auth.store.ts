@@ -32,7 +32,7 @@ const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await apiClient.post('/auth/login', data);
+          const response = await apiClient.post('/api/v2/auth/login', data);
           const { user, accessToken, refreshToken } = response.data;
 
           apiClient.setToken(accessToken);
@@ -59,7 +59,7 @@ const useAuthStore = create<AuthStore>()(
         const { refreshToken } = get();
         if (refreshToken) {
           // Best effort logout on server
-          apiClient.post('/auth/logout', { refreshToken }).catch(console.error);
+          apiClient.post('/api/v2/auth/logout', { refreshToken }).catch(console.error);
         }
 
         set({
@@ -81,7 +81,7 @@ const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await apiClient.post('/auth/register', data);
+          const response = await apiClient.post('/api/v2/auth/register', data);
 
           const { user, accessToken, refreshToken } = response.data;
 
@@ -112,7 +112,7 @@ const useAuthStore = create<AuthStore>()(
         }
 
         try {
-          const response = await apiClient.post('/auth/refresh', { refreshToken });
+          const response = await apiClient.post('/api/v2/auth/refresh', { refreshToken });
           const { accessToken, user } = response.data;
 
           apiClient.setToken(accessToken);
@@ -139,7 +139,7 @@ const useAuthStore = create<AuthStore>()(
 
         try {
           // Verify token validity by fetching user profile
-          const response = await apiClient.get('/auth/me');
+          const response = await apiClient.get('/api/v2/auth/me');
           const user = response.data?.user;
           if (user) {
             set({ user, isAuthenticated: true });
