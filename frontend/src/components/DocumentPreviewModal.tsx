@@ -919,7 +919,13 @@ export default function DocumentPreviewModal({
       sql += `-- Table: ${suggestedTableName}\n`;
       sql += `-- Generated from: ${document.title}\n\n`;
       sql += `CREATE TABLE IF NOT EXISTS ${suggestedTableName} (\n`;
-      sql += `  id SERIAL PRIMARY KEY,\n`;
+
+      // Check if any column is named "id" (case insensitive) to avoid PK conflict
+      const hasIdColumn = dataQuality.fieldTypes.some(
+        f => f.field.toLowerCase() === 'id'
+      );
+      const pkColumn = hasIdColumn ? 'row_id' : 'id';
+      sql += `  ${pkColumn} SERIAL PRIMARY KEY,\n`;
 
       // Add columns based on field types
       dataQuality.fieldTypes.forEach((field, idx) => {
@@ -2998,13 +3004,13 @@ ${selectedArray.map(f => `  ${f.replace(/\./g, '_')} = EXCLUDED.${f.replace(/\./
                 </TabsList>
 
                 <TabsContent value="table" className="mt-0">
-                  <div className="h-[380px]">
+                  <div className="h-[450px]">
                     {renderCSVTable()}
                   </div>
                 </TabsContent>
 
                 <TabsContent value="graphql" className="mt-0">
-                  <div className="h-[380px]">
+                  <div className="h-[450px]">
                     {renderGraphQLTransform()}
                   </div>
                 </TabsContent>

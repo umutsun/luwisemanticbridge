@@ -191,6 +191,25 @@ export function GraphQLTransformTab({
             </div>
           )}
 
+          {/* Already Inserted Info - Show when table exists with data */}
+          {!isGenerating && graphqlData?.existingTableStatus?.rowCount > 0 && !graphqlData?.existingTableStatus?.willResume && (
+            <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded border border-blue-200 dark:border-blue-900 flex-shrink-0">
+              <div className="flex items-start gap-2">
+                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center mt-0.5">
+                  <span className="text-white text-[10px] font-bold">✓</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] font-semibold text-blue-900 dark:text-blue-100">
+                    Already Inserted
+                  </p>
+                  <p className="text-[9px] text-blue-700 dark:text-blue-200 mt-0.5">
+                    Table "{tableName}" has {graphqlData.existingTableStatus.rowCount.toLocaleString()} rows
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Compact Error/Success */}
           {error && (
             <div className="p-1.5 bg-destructive/10 border border-destructive/30 rounded text-[9px] text-destructive animate-in fade-in flex-shrink-0">
