@@ -4025,6 +4025,7 @@ export default function DocumentManagerPage() {
                     </div>
                   </div>
                 )}
+                </CardContent>
               </Card>
             </div>
           </div>
