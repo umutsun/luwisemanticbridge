@@ -2357,6 +2357,7 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
   /**
    * Get popular questions based on recent searches and actual database content
    * IMPROVED: Now generates contextual, specific questions instead of generic ones
+   * ENHANCED: Now respects RAG settings - source table weights and document embeddings toggle
    */
   async getPopularQuestions(): Promise<string[]> {
     try {
@@ -2370,6 +2371,40 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
         maxQuestionLength = chatbotSettings.maxQuestionLength || 500;
       } catch (e) { /* use default */ }
 
+      // ===== NEW: Get RAG Settings for source filtering =====
+      // Get source table weights from settings
+      let sourceTableWeights: Record<string, number> = {};
+      try {
+        const weightsRaw = await settingsService.getSetting('search.sourceTableWeights');
+        if (weightsRaw) {
+          sourceTableWeights = typeof weightsRaw === 'string' ? JSON.parse(weightsRaw) : weightsRaw;
+        }
+      } catch (e) {
+        console.log('[SUGGESTIONS] No source table weights found, using defaults');
+      }
+
+      // Get enableDocumentEmbeddings setting
+      let enableDocumentEmbeddings = true; // default true
+      try {
+        const docEmbeddingSetting = await settingsService.getSetting('ragSettings.enableDocumentEmbeddings');
+        enableDocumentEmbeddings = docEmbeddingSetting === 'true' || docEmbeddingSetting === true;
+      } catch (e) { /* use default */ }
+
+      // Get database priority (for unified_embeddings)
+      let databasePriority = 5; // default
+      try {
+        const dbPrioritySetting = await settingsService.getSetting('ragSettings.databasePriority');
+        if (dbPrioritySetting) {
+          databasePriority = parseInt(dbPrioritySetting as string) || 5;
+        }
+      } catch (e) { /* use default */ }
+
+      console.log('[SUGGESTIONS] RAG Settings:', {
+        sourceTableWeights,
+        enableDocumentEmbeddings,
+        databasePriority
+      });
+
       // 1. Get active source tables (with minimum record count threshold)
       // This filters out disabled or empty data sources
       const activeTablesQuery = `
@@ -2380,41 +2415,87 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
       `;
 
       const activeTablesResult = await this.pool.query(activeTablesQuery);
-      const activeTables = activeTablesResult.rows.map(row => row.source_table).filter(Boolean);
 
-      console.log(`[SUGGESTIONS] Active data sources (count >= 5):`, activeTables);
+      // ===== NEW: Filter tables by weight > 0 and databasePriority > 0 =====
+      let activeTables = activeTablesResult.rows
+        .map(row => row.source_table)
+        .filter(Boolean)
+        .filter(table => {
+          // If databasePriority is 0, exclude all unified_embeddings sources
+          if (databasePriority === 0) {
+            console.log(`[SUGGESTIONS] Excluding ${table}: databasePriority is 0`);
+            return false;
+          }
+          // If table has explicit weight of 0, exclude it
+          if (sourceTableWeights[table] === 0) {
+            console.log(`[SUGGESTIONS] Excluding ${table}: weight is 0`);
+            return false;
+          }
+          return true;
+        });
 
-      // If no active tables, return empty suggestions
-      if (activeTables.length === 0) {
+      console.log(`[SUGGESTIONS] Active data sources after RAG filter:`, activeTables);
+
+      // ===== NEW: Also get suggestions from document_embeddings if enabled =====
+      let documentContent: any[] = [];
+      if (enableDocumentEmbeddings) {
+        try {
+          const docQuery = `
+            SELECT
+              COALESCE(metadata->>'filename', LEFT(chunk_text, 100)) as title,
+              LEFT(chunk_text, 300) as excerpt,
+              'document_embeddings' as source_table
+            FROM document_embeddings
+            WHERE chunk_text IS NOT NULL
+              AND LENGTH(chunk_text) > 50
+            ORDER BY RANDOM()
+            LIMIT 20
+          `;
+          const docResult = await this.pool.query(docQuery);
+          documentContent = docResult.rows;
+          console.log(`[SUGGESTIONS] Found ${documentContent.length} document embeddings entries`);
+        } catch (e) {
+          console.log('[SUGGESTIONS] No document_embeddings table or error:', e);
+        }
+      }
+
+      // If no active tables AND no document content, return empty suggestions
+      if (activeTables.length === 0 && documentContent.length === 0) {
         console.log(`[SUGGESTIONS] No active data sources found, returning empty suggestions`);
         return [];
       }
 
       // 2. Get interesting content from database (titles + excerpts for context)
-      // Only select from active tables (filtered by minimum record count)
-      const contentQuery = `
-        SELECT
-          COALESCE(metadata->>'title', LEFT(content, 100)) as title,
-          LEFT(content, 300) as excerpt,
-          metadata->>'table' as source_table
-        FROM unified_embeddings
-        WHERE (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
-          AND LENGTH(COALESCE(metadata->>'title', content)) > 30
-          AND source_table = ANY($1::text[])
-        ORDER BY RANDOM()
-        LIMIT 50
-      `;
+      // Only select from active tables (filtered by RAG settings)
+      let unifiedContent: any[] = [];
+      if (activeTables.length > 0) {
+        const contentQuery = `
+          SELECT
+            COALESCE(metadata->>'title', LEFT(content, 100)) as title,
+            LEFT(content, 300) as excerpt,
+            source_table
+          FROM unified_embeddings
+          WHERE (metadata->>'title' IS NOT NULL OR content IS NOT NULL)
+            AND LENGTH(COALESCE(metadata->>'title', content)) > 30
+            AND source_table = ANY($1::text[])
+          ORDER BY RANDOM()
+          LIMIT 50
+        `;
+        const contentResult = await this.pool.query(contentQuery, [activeTables]);
+        unifiedContent = contentResult.rows;
+      }
 
-      const contentResult = await this.pool.query(contentQuery, [activeTables]);
+      // Combine both sources
+      const allContent = [...unifiedContent, ...documentContent];
       const generatedQuestions: string[] = [];
 
-      console.log(`[SUGGESTIONS] Processing ${contentResult.rows.length} database entries from active sources...`);
+      console.log(`[SUGGESTIONS] Processing ${allContent.length} entries (${unifiedContent.length} unified + ${documentContent.length} documents)...`);
 
       // Early exit once we have enough questions (for performance)
       const TARGET_QUESTIONS = 8; // Generate 8, pick 4 randomly
 
-      // 2. Generate contextual questions from each content
-      for (const row of contentResult.rows) {
+      // 2. Generate contextual questions from each content (unified + documents)
+      for (const row of allContent) {
         const title = row.title || '';
         const excerpt = row.excerpt || '';
         const sourceTable = row.source_table || '';

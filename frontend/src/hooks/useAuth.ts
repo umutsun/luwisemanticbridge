@@ -10,7 +10,7 @@ export function useAuth() {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      await authStore.login(email, password);
+      await authStore.login({ email, password });
       addNotification({
         type: 'success',
         message: 'Successfully logged in!',
@@ -27,7 +27,7 @@ export function useAuth() {
 
   const register = useCallback(async (email: string, password: string, name: string) => {
     try {
-      await authStore.register(email, password, name);
+      await authStore.register({ email, password, username: name }); // Mapping name to username/first_name?? Type says username.
       addNotification({
         type: 'success',
         message: 'Account created successfully!',
@@ -69,7 +69,7 @@ export function useAuth() {
 
       const updatedUser = await response.json();
       authStore.setUser(updatedUser);
-      
+
       addNotification({
         type: 'success',
         message: 'Profile updated successfully',
@@ -108,8 +108,8 @@ export function useRequireAuth(redirectTo: string = '/login') {
 // Hook for role-based access control
 export function useRole(requiredRole: string) {
   const { user } = useAuthStore();
-  
+
   if (!user) return false;
-  
+
   return user.role === requiredRole || user.role === 'admin';
 }

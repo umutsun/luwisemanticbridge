@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { fetchWithAuth, setStoredToken, getStoredToken, safeJsonParse } from '@/lib/auth-fetch';
+import apiClient, { authenticatedFetch } from '@/lib/api/client';
 
 interface Config {
   app: {
@@ -139,147 +139,53 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
 
-      // Get API URL from environment variables (.env.lsemb)
-      // Use relative path if NEXT_PUBLIC_API_URL is not set (leverages Next.js rewrites)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
-
+      // Force apiClient to use specific token if provided (e.g. initial load)
       if (authToken) {
-        setStoredToken(authToken);
+        apiClient.setToken(authToken);
       }
 
-      const headers: { [key: string]: string } = {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-      };
-
-      // Add Authorization header if token exists
-      const token = authToken || getStoredToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/v2/settings?t=${Date.now()}`, {
-        headers,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch configuration from backend');
-      }
-      const data = await safeJsonParse(response);
-      if (!data) {
-        throw new Error('Invalid JSON response from backend');
-      }
+      const response = await apiClient.get<Partial<Config>>('/settings');
+      const data = response.data;
 
       // Transform backend settings to match Config interface
-      const transformedConfig = {
+      const transformedConfig: Config = {
         app: {
           name: data.app?.name || 'Luwi Semantic Bridge',
           description: data.app?.description || 'Intelligent RAG & Context Engine',
           version: data.app?.version || '1.0.0',
           locale: data.app?.locale || 'tr'
         },
-        database: data.database || {
-          host: 'localhost',
-          port: 5432,
-          name: 'lsemb', // Default to lsemb database
-          user: 'postgres',
-          password: 'postgres',
-          ssl: false,
-          maxConnections: 20,
-        },
-        redis: data.redis || {
-          host: 'localhost',
-          port: 6379,
-          password: '',
-          db: 0,
-        },
-        openai: data.openai || {
-          apiKey: '',
-          model: 'gpt-4-turbo-preview',
-          embeddingModel: 'text-embedding-3-small',
-          maxTokens: 4096,
-          temperature: 0.7,
-        },
-        anthropic: data.anthropic || {
-          apiKey: '',
-          model: 'claude-3-5-sonnet-20241022',
-          maxTokens: 4096,
-        },
-        deepseek: data.deepseek || {
-          apiKey: '',
-          baseUrl: 'https://api.deepseek.com',
-          model: 'deepseek-coder',
-        },
-        ollama: data.ollama || {
-          baseUrl: 'http://localhost:11434',
-          model: 'llama2',
-          embeddingModel: 'nomic-embed-text',
-        },
-        huggingface: data.huggingface || {
-          apiKey: '',
-          model: 'sentence-transformers/all-MiniLM-L6-v2',
-          endpoint: 'https://api-inference.huggingface.co/models/',
-        },
-        n8n: data.n8n || {
-          url: 'http://localhost:5678',
-          apiKey: '',
-        },
-        scraper: data.scraper || {
-          timeout: 30000,
-          maxConcurrency: 3,
-          userAgent: 'LSEM Web Scraper',
-        },
-        embeddings: data.embeddings || {
-          chunkSize: 1000,
-          chunkOverlap: 200,
-          batchSize: 10,
-          provider: 'openai',
-        },
-        dataSource: data.dataSource || {
-          useLocalDb: true,
-          localDbPercentage: 100,
-          externalApiPercentage: 0,
-          hybridMode: false,
-          prioritySource: 'local',
-        },
-        llmSettings: data.llmSettings || {
-          temperature: 0.1,
-          topP: 0.9,
-          maxTokens: 2048,
-          presencePenalty: 0,
-          frequencyPenalty: 0,
-          ragWeight: 95,
-          llmKnowledgeWeight: 5,
-          streamResponse: true,
-          systemPrompt: 'Sen bir RAG asistanısın. SADECE verilen context\'ten cevap ver.',
-          activeChatModel: 'openai/gpt-4-turbo-preview',
-          activeEmbeddingModel: 'openai/text-embedding-3-small',
-          responseStyle: 'professional',
-          language: 'tr',
-        },
-        // Chatbot settings for dynamic page title
-        chatbot: data.chatbot || undefined
+        database: data.database || DEFAULT_CONFIG.database,
+        redis: data.redis || DEFAULT_CONFIG.redis,
+        openai: data.openai || DEFAULT_CONFIG.openai,
+        anthropic: data.anthropic || DEFAULT_CONFIG.anthropic,
+        deepseek: data.deepseek || DEFAULT_CONFIG.deepseek,
+        ollama: data.ollama || DEFAULT_CONFIG.ollama,
+        huggingface: data.huggingface || DEFAULT_CONFIG.huggingface,
+        n8n: data.n8n || DEFAULT_CONFIG.n8n,
+        scraper: data.scraper || DEFAULT_CONFIG.scraper,
+        embeddings: data.embeddings || DEFAULT_CONFIG.embeddings,
+        dataSource: data.dataSource || DEFAULT_CONFIG.dataSource,
+        llmSettings: data.llmSettings || DEFAULT_CONFIG.llmSettings,
+        chatbot: data.chatbot
       };
 
-      // Fetch chatbot settings separately if not in main config
+      // Fetch chatbot settings separately if not in main config and no error
       if (!data.chatbot) {
         try {
-          const chatbotResponse = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`, { headers });
-          if (chatbotResponse.ok) {
-            const chatbotData = await safeJsonParse(chatbotResponse);
-            if (chatbotData) {
-              transformedConfig.chatbot = {
-                title: chatbotData.title,
-                subtitle: chatbotData.subtitle,
-                logoUrl: chatbotData.logoUrl,
-                welcomeMessage: chatbotData.welcomeMessage,
-                placeholder: chatbotData.placeholder,
-                primaryColor: chatbotData.primaryColor
-              };
-            }
+          const chatRes = await apiClient.get<any>('/chatbot/settings');
+          if (chatRes.data) {
+            transformedConfig.chatbot = {
+              title: chatRes.data.title,
+              subtitle: chatRes.data.subtitle,
+              logoUrl: chatRes.data.logoUrl,
+              welcomeMessage: chatRes.data.welcomeMessage,
+              placeholder: chatRes.data.placeholder,
+              primaryColor: chatRes.data.primaryColor
+            };
           }
-        } catch (chatbotErr) {
-          console.warn('Could not fetch chatbot settings:', chatbotErr);
+        } catch (e) {
+          console.warn('Chatbot settings fetch failed', e);
         }
       }
 
@@ -287,26 +193,25 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       setError(null);
       setBackendDown(false);
       setRetryCount(0);
-      setLoading(false); // Backend başarıyla yüklendi, loading'i kapat
-    } catch (err) {
+      setLoading(false);
+    } catch (err: any) {
       console.error('Error fetching config:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load configuration';
+      const errorMessage = err.message || 'Failed to load configuration';
 
       // Check if it's a connection error (backend not ready)
-      if (errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) {
+      // Axios errors have codes like ERR_NETWORK or 503
+      if (err.code === 'ERR_NETWORK' || (err.response && err.response.status >= 500)) {
         console.log(`⏳ Backend not ready yet (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
         setError('Backend bağlantısı bekleniyor...');
 
-        // Retry with exponential backoff
         if (retryCount < MAX_RETRIES) {
-          const delay = Math.min(2000 * Math.pow(2, retryCount), 10000); // Max 10 seconds
+          const delay = Math.min(2000 * Math.pow(2, retryCount), 10000);
           setTimeout(() => {
             console.log(`🔄 Retrying backend connection (attempt ${retryCount + 2}/${MAX_RETRIES})...`);
             setRetryCount(prev => prev + 1);
             fetchConfig(authToken);
           }, delay);
         } else {
-          // Max retries reached - backend is definitely down
           console.error('❌ Backend/Database is down after multiple retries');
           setBackendDown(true);
           setError('Backend veya veritabanı bağlantısı başarısız. Lütfen sunucuyu kontrol edin.');
@@ -321,64 +226,59 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = async (newConfig: Config) => {
     try {
-      // Get API URL from environment variables (.env.lsemb)
-      // Use relative path if NEXT_PUBLIC_API_URL is not set (leverages Next.js rewrites)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetchWithAuth(`${API_BASE_URL}/api/v2/settings`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newConfig),
-      });
+      const response = await apiClient.put<{ config: Config }>('/settings', newConfig);
 
-      if (!response.ok) {
-        throw new Error('Failed to update configuration');
-      }
-
-      const result = await safeJsonParse(response);
-      if (result && result.config) {
-        setConfig(result.config);
+      if (response.data && response.data.config) {
+        setConfig(response.data.config);
         setError(null);
       } else {
         throw new Error('Invalid response format');
       }
 
-      // Dispatch event to notify components that settings have been updated
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('settingsUpdated'));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating config:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update configuration');
+      setError(err.message || 'Failed to update configuration');
       throw err;
     }
   };
 
-  // Function to check if configuration is complete
   const isConfigurationComplete = (config: Config | null): boolean => {
     if (!config) return false;
-
-    // Check essential configuration fields
     const hasEssentialConfig =
       config.app?.name &&
       config.database?.host &&
       config.database?.name &&
-      config.openai?.apiKey && // At least one LLM provider should be configured
-      config.anthropic?.apiKey; // Check for another provider as backup
-
+      config.openai?.apiKey &&
+      config.anthropic?.apiKey;
     return Boolean(hasEssentialConfig);
+  };
+
+  const fetchPublicChatbotSettings = async (): Promise<{ name: string; description: string }> => {
+    try {
+      // Unauthenticated request
+      const response = await apiClient.get<any>('/chatbot/settings');
+      if (response.data) {
+        return {
+          name: response.data.title || 'LSEMB',
+          description: response.data.subtitle || 'AI-Powered Knowledge Management System'
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching public chatbot settings:', error);
+    }
+    return { name: 'LSEMB', description: 'AI-Powered Knowledge Management System' };
   };
 
   useEffect(() => {
     // Only try to fetch config if there's a token (user is authenticated)
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = apiClient.getToken();
 
     if (token) {
       fetchConfig(token);
     } else {
-      // Set loading to false if no token (user not authenticated)
-      // Fetch public chatbot settings instead of using hardcoded values
       fetchPublicChatbotSettings().then((settings) => {
         setConfig({
           ...DEFAULT_CONFIG,
@@ -393,82 +293,37 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchConfig]);
 
-  // Helper function to fetch public chatbot settings for non-authenticated users
-  const fetchPublicChatbotSettings = async (): Promise<{ name: string; description: string }> => {
-    try {
-      // Use relative path if NEXT_PUBLIC_API_URL is not set (leverages Next.js rewrites)
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL === undefined ? 'http://localhost:8083' : process.env.NEXT_PUBLIC_API_URL;
-      const response = await fetch(`${API_BASE_URL}/api/v2/chatbot/settings`);
-      if (response.ok) {
-        const chatbotData = await safeJsonParse(response);
-        if (chatbotData) {
-          return {
-            name: chatbotData.title || 'LSEMB',
-            description: chatbotData.subtitle || 'AI-Powered Knowledge Management System'
-          };
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching public chatbot settings:', error);
-    }
-    return { name: 'LSEMB', description: 'AI-Powered Knowledge Management System' };
-  };
-
   // Listen for token changes to automatically refresh config
   useEffect(() => {
     const handleTokenChange = (e: StorageEvent | CustomEvent) => {
-      if ('key' in e) {
-        // Storage event - user logged in/out in another tab
-        if (e.key === 'token') {
-          const token = e.newValue;
-          if (token) {
-            fetchConfig(token);
-          } else {
-            // Token removed - fetch public chatbot settings
-            fetchPublicChatbotSettings().then((settings) => {
-              setConfig({
-                ...DEFAULT_CONFIG,
-                app: {
-                  ...DEFAULT_CONFIG.app,
-                  name: settings.name,
-                  description: settings.description,
-                }
-              });
-              setLoading(false);
-            });
-          }
-        }
+      // If token changed, refresh config
+      const token = apiClient.getToken();
+      if (token) {
+        fetchConfig(token);
       } else {
-        // Custom event - user logged in/out in same tab
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-        if (token) {
-          fetchConfig(token);
-        } else {
-          // Fetch public chatbot settings
-          fetchPublicChatbotSettings().then((settings) => {
-            setConfig({
-              ...DEFAULT_CONFIG,
-              app: {
-                ...DEFAULT_CONFIG.app,
-                name: settings.name,
-                description: settings.description,
-              }
-            });
-            setLoading(false);
+        // Token removed - fetch public settings
+        fetchPublicChatbotSettings().then((settings) => {
+          setConfig({
+            ...DEFAULT_CONFIG,
+            app: {
+              ...DEFAULT_CONFIG.app,
+              name: settings.name,
+              description: settings.description,
+            }
           });
-        }
+          setLoading(false);
+        });
       }
     };
 
-    // Listen for storage events (cross-tab changes)
     if (typeof window !== 'undefined') {
+      // We can listen to localStorage changes for cross-tab, but apiClient might not update automatically
+      // apiClient reads from localStorage on getToken() so it should be fine.
       window.addEventListener('storage', handleTokenChange);
-      // Listen for custom token change events (same-tab changes)
-      window.addEventListener('tokenChanged', handleTokenChange as EventListener);
+      // Listen for custom token change events if valid
+      window.addEventListener('tokenChanged', handleTokenChange as EventListener); // Legacy support
 
-      // Listen for settings updates
       const handleSettingsUpdate = (e: Event) => {
-        // Optimistically update config if details are present
         if (e instanceof CustomEvent && e.detail && e.detail.category === 'app' && e.detail.settings) {
           setConfig(prev => {
             if (!prev) return null;
@@ -481,11 +336,8 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
             };
           });
         }
-
-        const token = localStorage.getItem('token');
-        if (token) {
-          fetchConfig(token);
-        }
+        const token = apiClient.getToken();
+        if (token) fetchConfig(token);
       };
       window.addEventListener('settingsUpdated', handleSettingsUpdate);
 

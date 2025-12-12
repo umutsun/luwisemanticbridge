@@ -13,3 +13,10 @@ Project initialized successfully.
 
 ---
 *This file is automatically maintained by SpecPulse*
+
+## Workflow History
+
+### Active Feature: 001-schema-data-prompt-redesign
+- Feature ID: 001
+- Branch: 001-schema-data-prompt-redesign
+- Started: 2025-12-12T01:39:50.597799
