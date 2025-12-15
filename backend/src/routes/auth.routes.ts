@@ -89,6 +89,14 @@ router.post('/register', createAuthRateLimit.middleware, async (req: Request, re
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
+    // Also set auth-token cookie for middleware (NOT httpOnly so frontend can read it)
+    res.cookie('auth-token', result.accessToken, {
+      httpOnly: false, // Frontend needs to read this
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days (same as token expiry)
+    });
+
     res.status(201).json({
       user: result.user,
       accessToken: result.accessToken
@@ -150,6 +158,14 @@ router.post('/login', createAuthRateLimit.middleware, async (req: Request, res: 
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
+    // Also set auth-token cookie for middleware (NOT httpOnly so frontend can read it)
+    res.cookie('auth-token', result.accessToken, {
+      httpOnly: false, // Frontend needs to read this
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days (same as token expiry)
+    });
+
     res.json({
       user: result.user,
       accessToken: result.accessToken
@@ -178,6 +194,14 @@ router.post('/refresh', async (req: Request, res: Response) => {
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
+    // Also update auth-token cookie for middleware
+    res.cookie('auth-token', tokens.accessToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     res.json({ accessToken: tokens.accessToken });
   } catch (error: any) {
     res.status(401).json({ error: error.message });
@@ -193,8 +217,9 @@ router.post('/logout', authenticateToken, async (req: Request, res: Response) =>
       await authService.logout(token);
     }
 
-    // Clear refresh token cookie
+    // Clear both cookies
     res.clearCookie('refreshToken');
+    res.clearCookie('auth-token');
 
     res.json({ message: 'Logged out successfully' });
   } catch (error: any) {
