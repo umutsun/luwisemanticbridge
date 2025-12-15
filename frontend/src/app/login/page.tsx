@@ -53,16 +53,37 @@ export default function LoginPage() {
       const urlParams = new URLSearchParams(window.location.search);
       const from = urlParams.get('from');
 
-      // Redirect after delay
-      setTimeout(() => {
+      // Wait for Zustand persist to finish writing token to localStorage
+      // This prevents race condition where dashboard's checkAuth runs before token is persisted
+      const waitForTokenPersist = async () => {
+        const maxAttempts = 10;
+        const delayMs = 100;
+
+        for (let i = 0; i < maxAttempts; i++) {
+          const token = localStorage.getItem('accessToken');
+          if (token) {
+            console.log('[LoginPage] Token persisted, redirecting...');
+            // Token is persisted, safe to redirect
+            if (from && from.startsWith('/')) {
+              router.push(from);
+            } else {
+              router.push('/dashboard');
+            }
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+
+        // Fallback: redirect anyway after max attempts
+        console.warn('[LoginPage] Token not found in localStorage after max attempts, redirecting anyway');
         if (from && from.startsWith('/')) {
-          // Redirect to the requested page
           router.push(from);
         } else {
-          // Default redirect to dashboard for admin users
           router.push('/dashboard');
         }
-      }, 1000);
+      };
+
+      waitForTokenPersist();
     } else {
       // Show error toast only (no form error display)
       toast({
