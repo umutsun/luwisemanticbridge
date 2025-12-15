@@ -140,8 +140,8 @@ const useAuthStore = create<AuthStore>()(
         } catch (error) {
           // If check fails (and interceptor didn't auto-refresh or failed), logout
           console.error('Check auth failed', error);
-          // We rely on interceptor handling 401s, but if it comes back as error here, it's failed.
-          // get().logout(); // Optional: aggressive logout?
+          // Clear invalid token to prevent infinite refresh loop
+          get().logout();
         }
       },
 
