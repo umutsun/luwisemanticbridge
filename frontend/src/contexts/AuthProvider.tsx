@@ -39,8 +39,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshAuth
   } = useAuthStore();
 
-  // Initial check (synced with store)
+  // Initial check (synced with store) - but NOT on login/register pages
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      // Skip checkAuth on login/register pages to avoid infinite loops with invalid tokens
+      if (path === '/login' || path === '/register') {
+        return;
+      }
+    }
     checkAuth();
   }, [checkAuth]);
 
