@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshAuth
   } = useAuthStore();
 
-  // Initial check (synced with store) - but NOT on login/register pages
+  // Initial check ONLY on mount - not on state changes
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
@@ -50,11 +50,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     // Only run checkAuth if we're already authenticated (have token in store)
-    // This prevents checkAuth from running immediately after login
+    // Run ONLY on initial mount, not when token/auth state changes
     if (isAuthenticated && token) {
       checkAuth();
     }
-  }, [checkAuth, isAuthenticated, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount
 
   // Periodic refresh (every 15 minutes)
   useEffect(() => {
