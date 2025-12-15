@@ -33,7 +33,7 @@ const useAuthStore = create<AuthStore>()(
 
         try {
           const response = await apiClient.post('/api/v2/auth/login', data);
-          const { user, accessToken, refreshToken } = response.data;
+          const { user, accessToken } = response.data;
 
           apiClient.setToken(accessToken);
 
@@ -41,7 +41,7 @@ const useAuthStore = create<AuthStore>()(
             user,
             token: accessToken,
             accessToken: accessToken,
-            refreshToken,
+            refreshToken: null, // Backend uses httpOnly cookie
             isAuthenticated: true,
             isLoading: false,
           });
@@ -56,11 +56,9 @@ const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         apiClient.clearToken();
-        const { refreshToken } = get();
-        if (refreshToken) {
-          // Best effort logout on server
-          apiClient.post('/api/v2/auth/logout', { refreshToken }).catch(console.error);
-        }
+
+        // Best effort logout on server (clears httpOnly cookie)
+        apiClient.post('/api/v2/auth/logout', {}).catch(console.error);
 
         set({
           user: null,
@@ -73,7 +71,7 @@ const useAuthStore = create<AuthStore>()(
 
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
-          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('accessToken');
         }
       },
 
@@ -83,7 +81,7 @@ const useAuthStore = create<AuthStore>()(
         try {
           const response = await apiClient.post('/api/v2/auth/register', data);
 
-          const { user, accessToken, refreshToken } = response.data;
+          const { user, accessToken } = response.data;
 
           apiClient.setToken(accessToken);
 
@@ -91,7 +89,7 @@ const useAuthStore = create<AuthStore>()(
             user,
             token: accessToken,
             accessToken: accessToken,
-            refreshToken,
+            refreshToken: null, // Backend uses httpOnly cookie
             isAuthenticated: true,
             isLoading: false,
           });
@@ -105,14 +103,9 @@ const useAuthStore = create<AuthStore>()(
       },
 
       refreshAuth: async () => {
-        const { refreshToken } = get();
-        if (!refreshToken) {
-          get().logout();
-          return;
-        }
-
+        // refreshToken is in httpOnly cookie, backend will read it
         try {
-          const response = await apiClient.post('/api/v2/auth/refresh', { refreshToken });
+          const response = await apiClient.post('/api/v2/auth/refresh', {});
           const { accessToken, user } = response.data;
 
           apiClient.setToken(accessToken);

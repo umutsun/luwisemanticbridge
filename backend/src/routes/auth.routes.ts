@@ -85,7 +85,7 @@ router.post('/register', createAuthRateLimit.middleware, async (req: Request, re
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
@@ -146,7 +146,7 @@ router.post('/login', createAuthRateLimit.middleware, async (req: Request, res: 
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
@@ -174,7 +174,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'strict',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 

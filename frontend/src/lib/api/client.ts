@@ -25,6 +25,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: true, // Send cookies (for httpOnly refreshToken)
     });
 
     this.setupInterceptors();
@@ -47,7 +48,7 @@ class ApiClient {
 
         // Add request timestamp
         config.metadata = { startTime: new Date() };
-        
+
         // Log request in development
         if (process.env.NODE_ENV === 'development') {
           console.log(`🚀 ${config.method?.toUpperCase()} ${config.url}`, config.data);
@@ -65,7 +66,7 @@ class ApiClient {
       (response) => {
         // Calculate request duration
         const duration = new Date().getTime() - response.config.metadata?.startTime?.getTime();
-        
+
         // Log response in development
         if (process.env.NODE_ENV === 'development') {
           console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url} (${duration}ms)`, response.data);
@@ -76,23 +77,11 @@ class ApiClient {
       async (error) => {
         const originalRequest = error.config;
 
-        // Handle 401 Unauthorized - redirect to login immediately
+        // Handle 401 Unauthorized - try refresh token (from httpOnly cookie)
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
 
-          // Check if we have a refresh token
-          const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
-
-          if (!refreshToken) {
-            // No refresh token, redirect to login immediately
-            console.log('[ApiClient] 401 received, no refresh token - redirecting to login');
-            this.clearToken();
-            if (typeof window !== 'undefined') {
-              window.location.href = '/login';
-            }
-            return Promise.reject(this.handleError(error));
-          }
-
+          // Try to refresh token (backend reads refreshToken from httpOnly cookie)
           try {
             await this.refreshToken();
             return this.client(originalRequest);
@@ -118,7 +107,7 @@ class ApiClient {
       retryCondition: (error) => {
         // Retry on network errors or 5xx errors
         return axiosRetry.isNetworkOrIdempotentRequestError(error) ||
-               (error.response?.status ? error.response.status >= 500 : false);
+          (error.response?.status ? error.response.status >= 500 : false);
       },
       onRetry: (retryCount, error, requestConfig) => {
         console.log(`🔄 Retry attempt ${retryCount} for ${requestConfig.url}`);
@@ -129,7 +118,7 @@ class ApiClient {
   private handleError(error: any): ApiError {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<any>;
-      
+
       // Network error
       if (!axiosError.response) {
         return {
@@ -140,7 +129,7 @@ class ApiClient {
 
       // Server error with response
       const { status, data } = axiosError.response;
-      
+
       return {
         message: data?.message || `Request failed with status ${status}`,
         code: data?.code || 'API_ERROR',
@@ -160,7 +149,7 @@ class ApiClient {
   public setToken(token: string): void {
     this.token = token;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('token', token);
+      localStorage.setItem('accessToken', token);
     }
   }
 
@@ -171,7 +160,7 @@ class ApiClient {
     }
 
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('token');
+      this.token = localStorage.getItem('accessToken');
       console.log('[ApiClient] getToken: Retrieved from localStorage:', this.token ? `${this.token.substring(0, 20)}...` : 'none');
     } else {
       console.log('[ApiClient] getToken: window is undefined');
@@ -183,15 +172,13 @@ class ApiClient {
   public clearToken(): void {
     this.token = null;
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
+      localStorage.removeItem('accessToken');
     }
   }
 
   private async refreshToken(): Promise<void> {
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) throw new Error('No refresh token available');
-
-    const response = await this.post('/auth/refresh', { refreshToken });
+    // refreshToken is in httpOnly cookie, backend will read it automatically
+    const response = await this.post('/api/v2/auth/refresh', {});
     this.setToken(response.data.accessToken);
   }
 
@@ -273,23 +260,13 @@ export const authenticatedFetch = async (url: string, options: RequestInit = {})
     const response = await fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
 
     if (response.status === 401) {
-      // Check if we have a refresh token
-      const refreshToken = localStorage.getItem('refresh_token');
-
-      if (!refreshToken) {
-        // No refresh token, redirect to login immediately
-        console.log('[authenticatedFetch] 401 received, no refresh token - redirecting to login');
-        apiClient.clearToken();
-        window.location.href = '/login';
-        throw new Error('Session expired. Please login again.');
-      }
-
-      // Try to refresh token and retry once
+      // Try to refresh token (backend reads refreshToken from httpOnly cookie)
       try {
-        const refreshResponse = await fetch(`${apiClient['client'].defaults.baseURL}/auth/refresh`, {
+        const refreshResponse = await fetch(`${apiClient['client'].defaults.baseURL}/api/v2/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
+          credentials: 'include', // Important: send cookies
+          body: JSON.stringify({}),
         });
 
         if (refreshResponse.ok) {
@@ -297,15 +274,14 @@ export const authenticatedFetch = async (url: string, options: RequestInit = {})
           apiClient.setToken(data.accessToken);
 
           // Retry the original request with new token
-          headers.Authorization = `Bearer ${data.accessToken}`;
-          config.headers = headers;
+          const newHeaders = { ...headers, Authorization: `Bearer ${data.accessToken}` };
+          config.headers = newHeaders;
 
           return fetch(`${apiClient['client'].defaults.baseURL}${url}`, config);
         } else {
           // Refresh failed, redirect to login
           console.log('[authenticatedFetch] Token refresh failed - redirecting to login');
           apiClient.clearToken();
-          localStorage.removeItem('refresh_token');
           window.location.href = '/login';
           throw new Error('Session expired. Please login again.');
         }
@@ -313,7 +289,6 @@ export const authenticatedFetch = async (url: string, options: RequestInit = {})
         // If refresh fails, clear tokens and redirect
         console.log('[authenticatedFetch] Token refresh error - redirecting to login');
         apiClient.clearToken();
-        localStorage.removeItem('refresh_token');
         window.location.href = '/login';
         throw new Error('Session expired. Please login again.');
       }
