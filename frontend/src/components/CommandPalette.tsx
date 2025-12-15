@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore } from '@/store/useStore';
+import useAppStore from '@/stores/app.store';
+import useChatStore from '@/stores/chat.store';
 import { useTranslation } from 'react-i18next';
 import { Command } from 'cmdk';
 import {
@@ -30,7 +31,13 @@ import {
 
 const CommandPalette = () => {
   const { t } = useTranslation();
-  const { commandPaletteOpen, setCommandPaletteOpen, setTheme, theme, clearMessages, addNotification } = useStore();
+  const {
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+    setTheme,
+    addNotification
+  } = useAppStore();
+  const { clearMessages } = useChatStore();
   const [search, setSearch] = useState('');
 
   useEffect(() => {

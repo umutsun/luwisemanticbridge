@@ -57,6 +57,7 @@ import aiSettingsRoutes from "./routes/ai-settings.routes";
 import appSettingsRoutes from "./routes/app-settings.routes";
 import healthRoutes from "./routes/health.routes";
 import adminRoutes from "./routes/admin.routes";
+import adminTodosRoutes from "./routes/admin-todos.routes";
 import llmStatusRoutes from "./routes/llm-status.routes";
 import logsRoutes, { initializeLogWebSocket } from "./routes/logs.routes";
 import translateRoutes from "./routes/translate.routes";
@@ -499,6 +500,7 @@ app.use("/api/v2/config", settingsRoutes);
 app.use("/api/v2/health", healthRoutes);
 app.use("/api/v2/llm", llmStatusRoutes);
 app.use("/api/v2/admin", adminRoutes);
+app.use("/api/v2/admin", adminTodosRoutes);
 app.use("/api/v2/logs", logsRoutes);
 app.use("/api/v2/embeddings-tables", embeddingsTablesRoutes);
 app.use("/api/v2/embeddings-sync", embeddingsSyncRoutes);
@@ -569,6 +571,21 @@ if (SERVER.WEBSOCKET.ENABLED && io) {
     // Join user room
     socket.on("join", (userId: string) => {
       socket.join(`user:${userId}`);
+    });
+
+    // Join admin room (for admin todo notifications)
+    socket.on("admin:join", (data: { userId: number; role: string }) => {
+      if (data.role === 'admin' || data.role === 'moderator') {
+        socket.join("admin-room");
+        socket.join(`user:${data.userId}`);
+        console.log(`Admin ${data.userId} joined admin-room`);
+      }
+    });
+
+    // Leave admin room
+    socket.on("admin:leave", () => {
+      socket.leave("admin-room");
+      console.log("Admin left admin-room");
     });
 
     // Handle typing indicators

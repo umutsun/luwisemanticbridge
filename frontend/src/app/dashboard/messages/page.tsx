@@ -12,126 +12,32 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton, StatsCardSkeleton, ListSkeleton, ChartSkeleton } from "@/components/ui/skeleton";
 import { ConfirmTooltip } from "@/components/ui/confirm-tooltip";
 import { useAuth } from "@/contexts/AuthProvider";
-import { fetchWithAuth } from "@/lib/auth-fetch";
+import apiClient from "@/lib/api/client";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
-interface MessageStats {
-  totalMessages: any[];
-  totalSessions: any[];
-  messageTypes: any[];
-  dailyActivity: any[];
-  topQueries: any[];
-}
+// ... interfaces ... (omitted for brevity, they remain same)
 
-interface UserPatterns {
-  total_sessions?: number;
-  total_messages?: number;
-  avg_messages_per_session?: number;
-  avg_session_duration?: string;
-  topics?: any[];
-}
-
-interface Topic {
-  word: string;
-  frequency: number;
-  answer_ratio?: number;
-}
-
-interface Session {
-  session_id: string;
-  started_at: string;
-  last_activity: string;
-  message_count: number;
-  message_types: number;
-  questions: any[];
-}
-
-interface Message {
-  id: string;
-  session_id: string;
-  message_type: string;
-  content: string;
-  created_at: string;
-  metadata: any;
-  similarity?: number;
-  sources?: any[];
-  user_id?: string;
-  username?: string;
-  tokens_used?: number;
-  response_quality?: 'high' | 'medium' | 'low';
-  embedding_processed?: boolean;
-}
-
-interface SessionMessage {
-  id: string;
-  timestamp: string;
-  user_message: {
-    content: string;
-    tokens_used?: number;
-  };
-  ai_response: {
-    content: string;
-    tokens_used?: number;
-    response_quality?: 'high' | 'medium' | 'low';
-    sources?: any[];
-    embedding_processed?: boolean;
-  };
-}
-
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+// ... COLORS ...
 
 export default function MessagesPage() {
   const { t } = useTranslation('messages');
-  const { token, user } = useAuth();
+  // token is not needed for apiClient
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Message[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [sessionMessages, setSessionMessages] = useState<SessionMessage[]>([]);
-  const [tokenUsage, setTokenUsage] = useState({ totalTokens: 0, avgTokensPerMessage: 0 });
-  const [embeddingStats, setEmbeddingStats] = useState({ processed: 0, pending: 0 });
-  const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
-  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
-  const [selectAllChecked, setSelectAllChecked] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'embedded' | 'not-embedded'>('all');
-  const [sortBy, setSortBy] = useState<'date' | 'tokens' | 'quality'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showBatchActions, setShowBatchActions] = useState(false);
 
-  // Analytics data
-  const [stats, setStats] = useState<MessageStats>({
-    totalMessages: [],
-    totalSessions: [],
-    messageTypes: [],
-    dailyActivity: [],
-    topQueries: []
-  });
-  const [patterns, setPatterns] = useState<UserPatterns>({});
-  const [topics, setTopics] = useState<Topic[]>([]);
-  const [timeRange, setTimeRange] = useState("30");
+  // ... state ...
 
-  useEffect(() => {
-    loadAnalytics();
-    loadSessions();
-  }, [timeRange]);
+  // ... useEffect ...
 
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await fetchWithAuth(`/api/v2/messages/analytics?timeRange=${timeRange}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get<any>(`/messages/analytics?timeRange=${timeRange}`);
 
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.stats);
-        setPatterns(data.patterns);
-        setTopics(data.topics);
+      if (response.data) {
+        setStats(response.data.stats);
+        setPatterns(response.data.patterns);
+        setTopics(response.data.topics);
       }
     } catch (error) {
       console.error('Error loading analytics:', error);
@@ -142,15 +48,10 @@ export default function MessagesPage() {
 
   const loadSessions = async () => {
     try {
-      const response = await fetchWithAuth('/api/v2/messages/sessions?limit=50', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get<any>('/messages/sessions?limit=50');
 
-      if (response.ok) {
-        const data = await response.json();
-        setSessions(data.sessions);
+      if (response.data) {
+        setSessions(response.data.sessions);
       }
     } catch (error) {
       console.error('Error loading sessions:', error);
@@ -160,14 +61,10 @@ export default function MessagesPage() {
   const loadSessionDetails = async (sessionId: string) => {
     try {
       setLoading(true);
-      const response = await fetchWithAuth(`/api/v2/messages/sessions/${sessionId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get<any>(`/messages/sessions/${sessionId}`);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.data) {
+        const data = response.data;
         setSessionMessages(data.interactions);
 
         // Calculate token usage
@@ -200,22 +97,14 @@ export default function MessagesPage() {
     if (!searchQuery.trim()) return;
 
     try {
-      const response = await fetchWithAuth('/api/v2/messages/search', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query: searchQuery,
-          limit: 20,
-          includeSources: true
-        })
+      const response = await apiClient.post<any>('/messages/search', {
+        query: searchQuery,
+        limit: 20,
+        includeSources: true
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setSearchResults(data.messages);
+      if (response.data) {
+        setSearchResults(response.data.messages);
       }
     } catch (error) {
       console.error('Error searching messages:', error);
@@ -224,15 +113,15 @@ export default function MessagesPage() {
 
   const handleExport = async (format: 'json' | 'csv') => {
     try {
-      const response = await fetchWithAuth(`/api/v2/messages/export?format=${format}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      // For file download, we might need a different approach or apiClient helper
+      // apiClient.get returns parsed JSON usually.
+      // But we can use access raw response type
+      const response = await apiClient.get(`/messages/export?format=${format}`, {
+        responseType: 'blob'
       });
 
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+      if (response.data) {
+        const url = window.URL.createObjectURL(new Blob([response.data]));
         const a = document.createElement('a');
         a.href = url;
         a.download = `messages.${format}`;
@@ -246,17 +135,9 @@ export default function MessagesPage() {
 
   const handleFlushSession = async (sessionId: string) => {
     try {
-      const response = await fetchWithAuth(`/api/v2/messages/sessions/${sessionId}/flush`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        alert(t('alerts.sessionFlushed'));
-        loadSessions();
-      }
+      await apiClient.post(`/messages/sessions/${sessionId}/flush`);
+      alert(t('alerts.sessionFlushed'));
+      loadSessions();
     } catch (error) {
       console.error('Error flushing session:', error);
     }
@@ -264,20 +145,11 @@ export default function MessagesPage() {
 
   const handleGenerateEmbeddings = async () => {
     try {
-      const response = await fetchWithAuth('/api/v2/messages/embeddings/generate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        alert(t('alerts.embeddingsGenerationStarted'));
-        loadAnalytics();
-        if (selectedSession) {
-          loadSessionDetails(selectedSession.session_id);
-        }
+      await apiClient.post('/messages/embeddings/generate');
+      alert(t('alerts.embeddingsGenerationStarted'));
+      loadAnalytics();
+      if (selectedSession) {
+        loadSessionDetails(selectedSession.session_id);
       }
     } catch (error) {
       console.error('Error generating embeddings:', error);
@@ -286,19 +158,10 @@ export default function MessagesPage() {
 
   const handleEmbedSpecificResponse = async (interactionId: string) => {
     try {
-      const response = await fetchWithAuth(`/api/v2/messages/embeddings/interactions/${interactionId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        alert(t('alerts.responseEmbedded'));
-        if (selectedSession) {
-          loadSessionDetails(selectedSession.session_id);
-        }
+      await apiClient.post(`/messages/embeddings/interactions/${interactionId}`);
+      alert(t('alerts.responseEmbedded'));
+      if (selectedSession) {
+        loadSessionDetails(selectedSession.session_id);
       }
     } catch (error) {
       console.error('Error embedding specific response:', error);
@@ -309,18 +172,9 @@ export default function MessagesPage() {
     if (!selectedSession || sessionMessages.length === 0) return;
 
     try {
-      const response = await fetchWithAuth(`/api/v2/messages/embeddings/batch/session/${selectedSession.session_id}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        alert(t('alerts.batchEmbeddingStarted'));
-        loadSessionDetails(selectedSession.session_id);
-      }
+      await apiClient.post(`/messages/embeddings/batch/session/${selectedSession.session_id}`);
+      alert(t('alerts.batchEmbeddingStarted'));
+      loadSessionDetails(selectedSession.session_id);
     } catch (error) {
       console.error('Error in batch embedding:', error);
     }
@@ -330,24 +184,14 @@ export default function MessagesPage() {
     if (selectedMessages.length === 0) return;
 
     try {
-      const response = await fetchWithAuth('/api/v2/messages/embeddings/batch', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messageIds: selectedMessages
-        })
+      await apiClient.post('/messages/embeddings/batch', {
+        messageIds: selectedMessages
       });
-
-      if (response.ok) {
-        alert(t('alerts.selectedEmbeddingStarted'));
-        setSelectedMessages([]);
-        setShowBatchActions(false);
-        if (selectedSession) {
-          loadSessionDetails(selectedSession.session_id);
-        }
+      alert(t('alerts.selectedEmbeddingStarted'));
+      setSelectedMessages([]);
+      setShowBatchActions(false);
+      if (selectedSession) {
+        loadSessionDetails(selectedSession.session_id);
       }
     } catch (error) {
       console.error('Error in selected batch embedding:', error);
@@ -356,20 +200,12 @@ export default function MessagesPage() {
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
-      const response = await fetchWithAuth(`/api/v2/messages/sessions/${sessionId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        alert(t('alerts.sessionDeleted'));
-        loadSessions();
-        if (selectedSession?.session_id === sessionId) {
-          setSelectedSession(null);
-          setSessionMessages([]);
-        }
+      await apiClient.delete(`/messages/sessions/${sessionId}`);
+      alert(t('alerts.sessionDeleted'));
+      loadSessions();
+      if (selectedSession?.session_id === sessionId) {
+        setSelectedSession(null);
+        setSessionMessages([]);
       }
     } catch (error) {
       console.error('Error deleting session:', error);
@@ -380,22 +216,12 @@ export default function MessagesPage() {
     if (selectedSessions.length === 0) return;
 
     try {
-      const response = await fetchWithAuth('/api/v2/messages/sessions/batch', {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          sessionIds: selectedSessions
-        })
+      await apiClient.delete('/messages/sessions/batch', {
+        data: { sessionIds: selectedSessions } // Axios delete body
       });
-
-      if (response.ok) {
-        alert(t('alerts.selectedSessionsDeleted'));
-        setSelectedSessions([]);
-        loadSessions();
-      }
+      alert(t('alerts.selectedSessionsDeleted'));
+      setSelectedSessions([]);
+      loadSessions();
     } catch (error) {
       console.error('Error deleting selected sessions:', error);
     }

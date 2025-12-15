@@ -48,7 +48,8 @@ import {
   CheckSquare,
   Square,
   Server,
-  CircuitBoard
+  CircuitBoard,
+  ListTodo
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
@@ -362,6 +363,7 @@ export default function Header() {
     // Admin only - dashboard access (chat removed from menu)
     ...(currentUser?.role === 'admin' ? [
       { href: '/dashboard', label: t('header.menu.dashboard'), icon: Home },
+      { href: '/dashboard/admin-tasks', label: 'Admin Görevleri', icon: ListTodo },
       { href: '/dashboard/users', label: t('header.menu.users'), icon: Users },
       { href: '/dashboard/migrations', label: t('header.menu.migrations'), icon: Database },
       { href: '/dashboard/documents', label: t('header.menu.documents'), icon: FileText },

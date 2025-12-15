@@ -48,8 +48,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
     }
-    checkAuth();
-  }, [checkAuth]);
+
+    // Only run checkAuth if we're already authenticated (have token in store)
+    // This prevents checkAuth from running immediately after login
+    if (isAuthenticated && token) {
+      checkAuth();
+    }
+  }, [checkAuth, isAuthenticated, token]);
 
   // Periodic refresh (every 15 minutes)
   useEffect(() => {

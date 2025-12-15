@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useStore } from '@/store/useStore';
+import useAppStore from '@/stores/app.store';
 import { Moon, Sun, Monitor, Plus, Minus, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 const ThemeToggle = () => {
-  const { theme, setTheme } = useStore();
+  const { theme, setTheme } = useAppStore();
   const [mounted, setMounted] = useState(false);
   const [fontSize, setFontSize] = useState(16); // Default font size in px
 

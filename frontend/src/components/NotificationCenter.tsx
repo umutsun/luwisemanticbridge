@@ -1,134 +1,173 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bell, X, Check, AlertTriangle, Info, AlertCircle, CheckCircle, Settings } from 'lucide-react';
+import { Bell, X, Check, AlertTriangle, Info, AlertCircle, CheckCircle, ListTodo, User } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { useSocketIO } from '@/hooks/useSocketIO';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'next/navigation';
+import useAuthStore from '@/stores/auth.store';
+import useAdminTodoStore from '@/stores/admin-todo.store';
+import { AdminNotification } from '@/types/admin-todo';
 
 interface Notification {
   id: string;
-  type: 'info' | 'warning' | 'error' | 'success';
+  type: 'info' | 'warning' | 'error' | 'success' | 'todo';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
   source: string;
-  action?: {
-    label: string;
-    callback: () => void;
+  data?: {
+    todoId?: string;
+    actionByName?: string;
   };
 }
 
 interface NotificationCenterProps {
   onSettingsClick?: () => void;
-  enableWebSocket?: boolean; // Yeni: WebSocket'i kontrol et
+  enableWebSocket?: boolean;
 }
 
 export default function NotificationCenter({
   onSettingsClick,
-  enableWebSocket = false // Varsayılan: KAPALI (şimdilik WebSocket kullanmıyoruz)
+  enableWebSocket = true // Varsayılan: AÇIK (artık kullanıyoruz)
 }: NotificationCenterProps) {
   const { t } = useTranslation();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const router = useRouter();
+  const { user } = useAuthStore();
+  const {
+    notifications: adminNotifications,
+    unreadCount: adminUnreadCount,
+    fetchNotifications,
+    markAsRead: markAdminAsRead,
+    markAllAsRead: markAllAdminAsRead,
+    deleteNotification: deleteAdminNotification,
+    addNotification: addAdminNotification
+  } = useAdminTodoStore();
 
-  // WebSocket URL - sadece enableWebSocket=true ise kullanılır
+  const [systemNotifications, setSystemNotifications] = useState<Notification[]>([]);
+
+  // Combined notifications
+  const allNotifications: Notification[] = [
+    // Admin notifications
+    ...adminNotifications.map((n: AdminNotification) => ({
+      id: n.id,
+      type: 'todo' as const,
+      title: n.title,
+      message: n.message,
+      timestamp: n.createdAt,
+      read: n.read,
+      source: n.data.actionByName || 'Admin',
+      data: n.data
+    })),
+    // System notifications
+    ...systemNotifications
+  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const totalUnread = adminUnreadCount + systemNotifications.filter(n => !n.read).length;
+
+  // WebSocket URL
   const websocketUrl = enableWebSocket
     ? (process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_API_URL?.replace('http', 'ws') || '')
     : '';
 
-  // WebSocket bağlantısı - sadece enabled ise
+  // WebSocket connection
   const { socket, isConnected } = useSocketIO(websocketUrl, {
-    reconnectAttempts: 2,
-    reconnectInterval: 10000, // 10 saniye (daha az agresif)
-    enableLogs: false // Log'ları kapat
+    reconnectAttempts: 3,
+    reconnectInterval: 5000,
+    enableLogs: false
   });
 
-  // İlk notification'ları yükle (simulated)
+  // Fetch admin notifications on mount (only for admin users)
   useEffect(() => {
-    const initialNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'info',
-        title: t('notifications.systemReady'),
-        message: t('notifications.welcomeToLuwiSemanticBridge'),
-        timestamp: new Date(Date.now() - 300000).toISOString(),
+    if (user?.role === 'admin' || user?.role === 'moderator') {
+      fetchNotifications();
+    }
+  }, [user]);
+
+  // Join admin room and listen for notifications
+  useEffect(() => {
+    if (!socket || !isConnected || !user) return;
+
+    // Join admin room if admin
+    if (user.role === 'admin' || user.role === 'moderator') {
+      socket.emit('admin:join', { userId: user.id, role: user.role });
+
+      // Listen for admin notifications
+      socket.on('admin:notification', (notification: AdminNotification) => {
+        addAdminNotification(notification);
+      });
+    }
+
+    // General system notification listener
+    socket.on('notification', (data: any) => {
+      const newNotification: Notification = {
+        id: data.id || Date.now().toString(),
+        type: data.severity || 'info',
+        title: data.title || t('notifications.title'),
+        message: data.message || '',
+        timestamp: data.timestamp || new Date().toISOString(),
         read: false,
-        source: 'System'
-      }
-    ];
-    setNotifications(initialNotifications);
-    setUnreadCount(initialNotifications.filter(n => !n.read).length);
-  }, [t]);
-
-  // WebSocket mesajlarını dinle (sadece enabled ise)
-  useEffect(() => {
-    if (!socket || !enableWebSocket) return;
-
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'notification') {
-          const newNotification: Notification = {
-            id: data.id || Date.now().toString(),
-            type: data.severity || 'info',
-            title: data.title || t('notifications.title'),
-            message: data.message || '',
-            timestamp: data.timestamp || new Date().toISOString(),
-            read: false,
-            source: data.source || 'System'
-          };
-          setNotifications(prev => [newNotification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-        }
-      } catch (error) {
-        // Sessizce hata yoksay
-      }
-    };
-
-    socket.onmessage = handleMessage;
+        source: data.source || 'System'
+      };
+      setSystemNotifications(prev => [newNotification, ...prev].slice(0, 50));
+    });
 
     return () => {
-      socket.onmessage = null;
+      if (user?.role === 'admin' || user?.role === 'moderator') {
+        socket.emit('admin:leave');
+        socket.off('admin:notification');
+      }
+      socket.off('notification');
     };
-  }, [socket, enableWebSocket]);
+  }, [socket, isConnected, user]);
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  }, []);
-
-  const markAllAsRead = useCallback(() => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    setUnreadCount(0);
-  }, []);
-
-  const removeNotification = useCallback((id: string) => {
-    const notification = notifications.find(n => n.id === id);
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    if (notification && !notification.read) {
-      setUnreadCount(prev => Math.max(0, prev - 1));
+  const handleMarkAsRead = useCallback(async (notification: Notification) => {
+    if (notification.type === 'todo') {
+      await markAdminAsRead(notification.id);
+    } else {
+      setSystemNotifications(prev =>
+        prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+      );
     }
-  }, [notifications]);
+  }, [markAdminAsRead]);
+
+  const handleMarkAllAsRead = useCallback(async () => {
+    await markAllAdminAsRead();
+    setSystemNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  }, [markAllAdminAsRead]);
+
+  const handleRemove = useCallback(async (notification: Notification) => {
+    if (notification.type === 'todo') {
+      await deleteAdminNotification(notification.id);
+    } else {
+      setSystemNotifications(prev => prev.filter(n => n.id !== notification.id));
+    }
+  }, [deleteAdminNotification]);
+
+  const handleClick = useCallback((notification: Notification) => {
+    handleMarkAsRead(notification);
+
+    // Navigate to admin tasks if it's a todo notification
+    if (notification.type === 'todo' && notification.data?.todoId) {
+      router.push('/dashboard/admin-tasks');
+    }
+  }, [handleMarkAsRead, router]);
 
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'error': return <AlertCircle className="h-4 w-4 text-red-500" />;
       case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
       case 'success': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'todo': return <ListTodo className="h-4 w-4 text-purple-500" />;
       default: return <Info className="h-4 w-4 text-blue-500" />;
     }
   };
@@ -139,14 +178,14 @@ export default function NotificationCenter({
         <Button variant="ghost" size="sm" className="relative p-2 h-9">
           <div className="relative">
             <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
+            {totalUnread > 0 && (
               <span className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                {unreadCount > 99 ? '99+' : unreadCount}
+                {totalUnread > 99 ? '99+' : totalUnread}
               </span>
             )}
-            {/* WebSocket status indicator - sadece enabled ise göster */}
+            {/* WebSocket status indicator */}
             {enableWebSocket && isConnected && (
-              <div className="absolute bottom-0 right-0 h-2 w-2 bg-green-500 rounded-full" title="WebSocket Connected" />
+              <div className="absolute bottom-0 right-0 h-2 w-2 bg-green-500 rounded-full" title="Canlı bağlantı" />
             )}
           </div>
         </Button>
@@ -157,18 +196,18 @@ export default function NotificationCenter({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">{t('notifications.title')}</span>
-              {unreadCount > 0 && (
-                <Badge variant="error" className="h-5 px-2 text-xs">
-                  {unreadCount}
+              {totalUnread > 0 && (
+                <Badge variant="destructive" className="h-5 px-2 text-xs">
+                  {totalUnread}
                 </Badge>
               )}
             </div>
             <div className="flex items-center gap-1">
-              {unreadCount > 0 && (
+              {totalUnread > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={markAllAsRead}
+                  onClick={handleMarkAllAsRead}
                   className="h-7 px-2 text-xs"
                 >
                   <Check className="h-3 w-3 mr-1" />
@@ -181,19 +220,19 @@ export default function NotificationCenter({
 
         {/* Notifications list */}
         <ScrollArea className="h-80">
-          {notifications.length === 0 ? (
+          {allNotifications.length === 0 ? (
             <div className="p-4 text-center">
               <Bell className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">{t('notifications.noNotifications')}</p>
             </div>
           ) : (
             <div className="p-2">
-              {notifications.slice(0, 10).map((notification) => (
+              {allNotifications.slice(0, 20).map((notification) => (
                 <div
                   key={notification.id}
                   className={`p-3 rounded-lg mb-2 cursor-pointer transition-colors hover:bg-muted/50 ${!notification.read ? 'bg-muted/30' : ''
                     }`}
-                  onClick={() => markAsRead(notification.id)}
+                  onClick={() => handleClick(notification)}
                 >
                   <div className="flex items-start gap-2">
                     {getNotificationIcon(notification.type)}
@@ -222,7 +261,7 @@ export default function NotificationCenter({
                           className="h-5 w-5"
                           onClick={(e) => {
                             e.stopPropagation();
-                            removeNotification(notification.id);
+                            handleRemove(notification);
                           }}
                         >
                           <X className="h-3 w-3" />

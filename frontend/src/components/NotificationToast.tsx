@@ -2,31 +2,33 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore } from '@/store/useStore';
-import { CheckCircle, AlertTriangle, Info, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import useAppStore from '@/stores/app.store';
+import { CheckCircle, AlertTriangle, Info, X, AlertCircle } from 'lucide-react';
 
 const NotificationToast = () => {
-  const { t } = useTranslation();
-  const { notifications, removeNotification } = useStore();
+  const { notifications, removeNotification } = useAppStore();
 
-  const getIcon = (type: 'success' | 'error' | 'info') => {
+  const getIcon = (type: 'success' | 'error' | 'info' | 'warning') => {
     switch (type) {
       case 'success':
         return <CheckCircle className="w-5 h-5 text-green-500" />;
       case 'error':
         return <AlertTriangle className="w-5 h-5 text-red-500" />;
+      case 'warning':
+        return <AlertCircle className="w-5 h-5 text-yellow-500" />;
       case 'info':
         return <Info className="w-5 h-5 text-blue-500" />;
     }
   };
 
-  const getStyles = (type: 'success' | 'error' | 'info') => {
+  const getStyles = (type: 'success' | 'error' | 'info' | 'warning') => {
     switch (type) {
       case 'success':
         return 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200';
       case 'error':
         return 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-800 dark:text-red-200';
+      case 'warning':
+        return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200';
       case 'info':
         return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200';
     }
