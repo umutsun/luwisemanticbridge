@@ -22,7 +22,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (config?.app?.name) {
-      document.title = `${t('login.title')} - ${config.app.name}`;
+      // Multi-language page title support
+      const loginTitle = config?.app?.locale === 'tr' ? 'Giriş' :
+                        config?.app?.locale === 'fr' ? 'Connexion' :
+                        config?.app?.locale === 'de' ? 'Anmeldung' :
+                        config?.app?.locale === 'es' ? 'Iniciar sesión' : 'Login';
+      document.title = `${loginTitle} - ${config.app.name}`;
     }
   }, [config, t]);
 
