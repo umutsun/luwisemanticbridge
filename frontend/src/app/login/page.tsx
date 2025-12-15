@@ -1,24 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 
 export default function LoginPage() {
-  const { config, loading: configLoading } = useConfig();
-  const router = useRouter();
+  const { config } = useConfig();
   const { toast } = useToast();
   const { t } = useTranslation();
-  const [mounted, setMounted] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (config?.app?.name) {
@@ -58,12 +50,12 @@ export default function LoginPage() {
       const urlParams = new URLSearchParams(window.location.search);
       const from = urlParams.get('from');
 
-      // Simply redirect after login success
-      // The auth store (Zustand) handles token persistence automatically
+      // Use window.location.href for full page reload to ensure cookie is sent to middleware
+      // router.push is client-side navigation and middleware might not see the cookie yet
       if (from && from.startsWith('/')) {
-        router.push(from);
+        window.location.href = from;
       } else {
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       }
     } else {
       // Show error toast only (no form error display)
