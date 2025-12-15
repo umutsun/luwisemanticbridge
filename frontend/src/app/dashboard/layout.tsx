@@ -91,9 +91,32 @@ export default function DashboardLayout({
   }, []);
 
   const checkAuth = () => {
-    let token = localStorage.getItem('token');
+    // Try multiple sources for token
+    let token = localStorage.getItem('token') || localStorage.getItem('accessToken');
     let userData = localStorage.getItem('user');
 
+    // Check zustand auth-storage (primary source after login)
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      try {
+        const parsed = JSON.parse(authStorage);
+        if (parsed.state) {
+          // Zustand persist format
+          if (!token && parsed.state.token) {
+            token = parsed.state.token;
+            localStorage.setItem('token', token);
+          }
+          if (!userData && parsed.state.user) {
+            userData = JSON.stringify(parsed.state.user);
+            localStorage.setItem('user', userData);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse auth-storage:', e);
+      }
+    }
+
+    // Legacy token migration
     const legacyToken = localStorage.getItem('asb_token');
     if (!token && legacyToken) {
       setStoredToken(legacyToken);
@@ -113,6 +136,7 @@ export default function DashboardLayout({
     }
 
     if (!token || !userData) {
+      console.log('[DashboardLayout] No token or user data, redirecting to login');
       router.push('/login');
       return;
     }
