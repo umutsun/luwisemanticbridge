@@ -37,6 +37,12 @@ const useAuthStore = create<AuthStore>()(
 
           apiClient.setToken(accessToken);
 
+          // Set cookie for middleware (expires in 7 days)
+          if (typeof window !== 'undefined') {
+            const expires = new Date(Date.now() + 7 * 864e5).toUTCString();
+            document.cookie = `auth-token=${encodeURIComponent(accessToken)}; expires=${expires}; path=/; samesite=lax`;
+          }
+
           set({
             user,
             token: accessToken,
@@ -72,6 +78,8 @@ const useAuthStore = create<AuthStore>()(
         if (typeof window !== 'undefined') {
           localStorage.removeItem('token');
           localStorage.removeItem('accessToken');
+          // Clear auth-token cookie for middleware
+          document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
         }
       },
 
@@ -84,6 +92,12 @@ const useAuthStore = create<AuthStore>()(
           const { user, accessToken } = response.data;
 
           apiClient.setToken(accessToken);
+
+          // Set cookie for middleware (expires in 7 days)
+          if (typeof window !== 'undefined') {
+            const expires = new Date(Date.now() + 7 * 864e5).toUTCString();
+            document.cookie = `auth-token=${encodeURIComponent(accessToken)}; expires=${expires}; path=/; samesite=lax`;
+          }
 
           set({
             user,
@@ -109,6 +123,12 @@ const useAuthStore = create<AuthStore>()(
           const { accessToken, user } = response.data;
 
           apiClient.setToken(accessToken);
+
+          // Update cookie for middleware (expires in 7 days)
+          if (typeof window !== 'undefined') {
+            const expires = new Date(Date.now() + 7 * 864e5).toUTCString();
+            document.cookie = `auth-token=${encodeURIComponent(accessToken)}; expires=${expires}; path=/; samesite=lax`;
+          }
 
           set((state) => ({
             user: user || state.user,
