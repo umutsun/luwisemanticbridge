@@ -50,9 +50,11 @@ router.get('/all-schemas', authenticateToken, async (req: AuthenticatedRequest, 
       description: p.schema_description,
       industry_code: p.industry_code,
       industry_name: p.industry_name,
+      industry_icon: p.industry_icon,
       fields: p.fields,
       templates: p.templates,
       llm_guide: p.llm_guide,
+      llm_config: p.llm_config,
       is_active: p.is_active,
       is_default: false,
       is_system: true,
@@ -70,9 +72,11 @@ router.get('/all-schemas', authenticateToken, async (req: AuthenticatedRequest, 
       description: s.description,
       industry_code: undefined,
       industry_name: undefined,
+      industry_icon: undefined,
       fields: s.fields,
       templates: s.templates,
       llm_guide: s.llm_guide,
+      llm_config: s.llm_config,
       is_active: s.is_active,
       is_default: s.is_default,
       is_system: false,
@@ -681,6 +685,99 @@ router.get('/llm-guide', authenticateToken, async (req: Request, res: Response) 
     res.json({ guide });
   } catch (error: any) {
     console.error('[DataSchema Routes] Get LLM guide error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// LLM CONFIG ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/v2/data-schema/llm-config
+ * Get active schema's LLM config for current user
+ */
+router.get('/llm-config', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const config = await dataSchemaService.getActiveLLMConfig(userId);
+    res.json({ config });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Get LLM config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/v2/data-schema/llm-config/:process
+ * Get specific prompt for a process type
+ * process: analyze | chatbot | embedding | transform | questions | search
+ */
+router.get('/llm-config/:process', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const processType = req.params.process as any;
+    const validProcesses = ['analyze', 'chatbot', 'embedding', 'transform', 'questions', 'search'];
+
+    if (!validProcesses.includes(processType)) {
+      return res.status(400).json({ error: `Invalid process type. Must be one of: ${validProcesses.join(', ')}` });
+    }
+
+    const prompt = await dataSchemaService.getPromptForProcess(userId, processType);
+    res.json({ prompt, process: processType });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Get process prompt error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/v2/data-schema/schemas/:id/llm-config
+ * Update LLM config for a user schema
+ */
+router.put('/schemas/:id/llm-config', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const success = await dataSchemaService.updateLLMConfig(req.params.id, userId, req.body);
+    if (!success) {
+      return res.status(404).json({ error: 'Schema not found or update failed' });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Update LLM config error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/v2/data-schema/chatbot-system-prompt
+ * Get enhanced system prompt for chatbot with schema context
+ */
+router.get('/chatbot-system-prompt', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = (req.user as any)?.userId || (req.user as any)?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const basePrompt = req.query.basePrompt as string | undefined;
+    const systemPrompt = await dataSchemaService.buildChatbotSystemPrompt(userId, basePrompt);
+    res.json({ systemPrompt });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Get chatbot system prompt error:', error);
     res.status(500).json({ error: error.message });
   }
 });

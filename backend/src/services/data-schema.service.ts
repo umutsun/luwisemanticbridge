@@ -16,7 +16,10 @@ import {
   TemplateContext,
   ProcessedCitation,
   ProcessedQuestion,
-  DEFAULT_SCHEMAS
+  DEFAULT_SCHEMAS,
+  LLMConfig,
+  LLMProcessType,
+  DEFAULT_LLM_CONFIG
 } from '../types/data-schema.types';
 
 // Industry Preset from database
@@ -35,6 +38,7 @@ export interface IndustryPreset {
     questions: string[];
   };
   llm_guide?: string;
+  llm_config?: LLMConfig;
   tier: 'free' | 'pro' | 'enterprise';
   is_active: boolean;
   sort_order: number;
@@ -56,6 +60,7 @@ export interface UserSchema {
     questions: string[];
   };
   llm_guide?: string;
+  llm_config?: LLMConfig;
   is_active: boolean;
   is_default: boolean;
 }
@@ -415,6 +420,173 @@ class DataSchemaService {
   }
 
   // ============================================
+  // LLM CONFIG METHODS
+  // ============================================
+
+  /**
+   * Get active schema's LLM configuration for a user
+   * Falls back to default config if not found
+   */
+  async getActiveLLMConfig(userId: string): Promise<LLMConfig> {
+    try {
+      const activeSchema = await this.getActiveSchemaForUser(userId);
+
+      if (activeSchema?.llmConfig) {
+        // Merge with defaults to ensure all fields exist
+        return { ...DEFAULT_LLM_CONFIG, ...activeSchema.llmConfig };
+      }
+
+      // If no llm_config, try to build from legacy fields
+      if (activeSchema) {
+        return {
+          analyzePrompt: activeSchema.templates?.analyze || DEFAULT_LLM_CONFIG.analyzePrompt,
+          citationTemplate: activeSchema.templates?.citation || DEFAULT_LLM_CONFIG.citationTemplate,
+          chatbotContext: activeSchema.llmGuide || DEFAULT_LLM_CONFIG.chatbotContext,
+          embeddingPrefix: DEFAULT_LLM_CONFIG.embeddingPrefix,
+          transformRules: DEFAULT_LLM_CONFIG.transformRules,
+          questionGenerator: DEFAULT_LLM_CONFIG.questionGenerator,
+          searchContext: DEFAULT_LLM_CONFIG.searchContext
+        };
+      }
+
+      return DEFAULT_LLM_CONFIG;
+    } catch (error) {
+      console.error('[DataSchema] Failed to get active LLM config:', error);
+      return DEFAULT_LLM_CONFIG;
+    }
+  }
+
+  /**
+   * Get specific prompt/config for a process type
+   */
+  async getPromptForProcess(
+    userId: string,
+    process: LLMProcessType
+  ): Promise<string> {
+    const config = await this.getActiveLLMConfig(userId);
+
+    switch (process) {
+      case 'analyze':
+        return config.analyzePrompt || DEFAULT_LLM_CONFIG.analyzePrompt!;
+      case 'chatbot':
+        return config.chatbotContext || DEFAULT_LLM_CONFIG.chatbotContext!;
+      case 'embedding':
+        return config.embeddingPrefix || DEFAULT_LLM_CONFIG.embeddingPrefix!;
+      case 'transform':
+        return config.transformRules || DEFAULT_LLM_CONFIG.transformRules!;
+      case 'questions':
+        return config.questionGenerator || DEFAULT_LLM_CONFIG.questionGenerator!;
+      case 'search':
+        return config.searchContext || DEFAULT_LLM_CONFIG.searchContext!;
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Get schema with LLM config by ID (preset or user schema)
+   */
+  async getSchemaWithLLMConfig(schemaId: string, userId?: string): Promise<(DataSchema & { llmConfig?: LLMConfig }) | null> {
+    try {
+      // First try user schemas
+      if (userId) {
+        const userResult = await pool.query(
+          'SELECT * FROM user_schemas WHERE id = $1 AND user_id = $2',
+          [schemaId, userId]
+        );
+        if (userResult.rows[0]) {
+          const schema = this.userSchemaToDataSchema(userResult.rows[0]);
+          return { ...schema, llmConfig: userResult.rows[0].llm_config };
+        }
+      }
+
+      // Then try presets
+      const presetResult = await pool.query(
+        'SELECT * FROM industry_presets WHERE id = $1',
+        [schemaId]
+      );
+      if (presetResult.rows[0]) {
+        const schema = this.presetToDataSchema(presetResult.rows[0]);
+        return { ...schema, llmConfig: presetResult.rows[0].llm_config };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[DataSchema] Failed to get schema with LLM config:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update LLM config for a user schema
+   */
+  async updateLLMConfig(schemaId: string, userId: string, llmConfig: Partial<LLMConfig>): Promise<boolean> {
+    try {
+      const result = await pool.query(
+        `UPDATE user_schemas
+         SET llm_config = COALESCE(llm_config, '{}'::jsonb) || $3::jsonb,
+             updated_at = NOW()
+         WHERE id = $1 AND user_id = $2
+         RETURNING id`,
+        [schemaId, userId, JSON.stringify(llmConfig)]
+      );
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error('[DataSchema] Failed to update LLM config:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Build system prompt with schema context for chatbot
+   */
+  async buildChatbotSystemPrompt(userId: string, basePrompt?: string): Promise<string> {
+    const config = await this.getActiveLLMConfig(userId);
+    const activeSchema = await this.getActiveSchemaForUser(userId);
+
+    let systemPrompt = basePrompt || '';
+
+    // Add schema context
+    if (config.chatbotContext) {
+      systemPrompt += `\n\n## Veri Bağlamı\n${config.chatbotContext}`;
+    }
+
+    // Add LLM guide if available
+    if (activeSchema?.llmGuide) {
+      systemPrompt += `\n\n## Veri Kılavuzu\n${activeSchema.llmGuide}`;
+    }
+
+    // Add field information
+    if (activeSchema?.fields && activeSchema.fields.length > 0) {
+      const fieldInfo = activeSchema.fields
+        .map(f => `- ${f.label} (${f.key}): ${f.extractionHint || f.type}`)
+        .join('\n');
+      systemPrompt += `\n\n## Veri Alanları\n${fieldInfo}`;
+    }
+
+    return systemPrompt;
+  }
+
+  /**
+   * Enrich content with embedding prefix based on active schema
+   */
+  async enrichContentForEmbedding(userId: string, content: string, metadata?: Record<string, unknown>): Promise<string> {
+    const config = await this.getActiveLLMConfig(userId);
+    const prefix = config.embeddingPrefix || '';
+
+    // Add metadata context if available
+    let enrichedContent = prefix;
+
+    if (metadata?.source_table) {
+      enrichedContent += `[${metadata.source_table}] `;
+    }
+
+    enrichedContent += content;
+
+    return enrichedContent;
+  }
+
+  // ============================================
   // UNIFIED SCHEMA ACCESS (for existing code compatibility)
   // ============================================
 
@@ -465,6 +637,7 @@ class DataSchemaService {
       fields: preset.fields,
       templates: preset.templates,
       llmGuide: preset.llm_guide || '',
+      llmConfig: preset.llm_config,
       isActive: preset.is_active,
       isDefault: preset.schema_name === 'genel_dokuman',
       createdAt: new Date(),
@@ -484,6 +657,7 @@ class DataSchemaService {
       fields: schema.fields,
       templates: schema.templates,
       llmGuide: schema.llm_guide || '',
+      llmConfig: schema.llm_config,
       isActive: schema.is_active,
       isDefault: schema.is_default,
       createdAt: new Date(),

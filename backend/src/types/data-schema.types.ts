@@ -71,6 +71,9 @@ export interface DataSchema {
   // Bu metin system prompt'a eklenir
   llmGuide: string;
 
+  // LLM Configuration for all processes
+  llmConfig?: LLMConfig;
+
   // Source table mapping (hangi tablolara uygulanır)
   sourceTables?: string[];
 
@@ -168,6 +171,61 @@ export interface TransformPrompt {
   temperature?: number;             // LLM temperature (default: 0.1)
   priority?: number;                // Uygulama önceliği
 }
+
+// ============================================
+// LLM CONFIG - Unified LLM Configuration
+// ============================================
+
+/**
+ * LLM Configuration for schema-aware processing
+ * Used across all LLM-powered features: analyze, chatbot, embedding, transform
+ */
+export interface LLMConfig {
+  /** Prompt used during document analysis */
+  analyzePrompt?: string;
+
+  /** Template for citation formatting */
+  citationTemplate?: string;
+
+  /** Context provided to chatbot for this schema */
+  chatbotContext?: string;
+
+  /** Prefix added to content before embedding generation */
+  embeddingPrefix?: string;
+
+  /** Rules for data transformation process */
+  transformRules?: string;
+
+  /** Template for generating follow-up questions */
+  questionGenerator?: string;
+
+  /** Context for semantic search queries */
+  searchContext?: string;
+}
+
+/**
+ * Process types that use LLM config
+ */
+export type LLMProcessType =
+  | 'analyze'
+  | 'chatbot'
+  | 'embedding'
+  | 'transform'
+  | 'questions'
+  | 'search';
+
+/**
+ * Default LLM config for fallback
+ */
+export const DEFAULT_LLM_CONFIG: LLMConfig = {
+  analyzePrompt: 'Bu belgeyi analiz et ve önemli bilgileri çıkar.',
+  citationTemplate: '{{baslik}}',
+  chatbotContext: 'Bu belge hakkında sorulara yanıt ver. Belgedeki bilgileri doğrudan referans alarak yanıtla.',
+  embeddingPrefix: 'Doküman: ',
+  transformRules: 'Metin içindeki anahtar bilgileri çıkar.',
+  questionGenerator: 'Bu belgenin içeriği hakkında kullanıcının ilgilenebileceği sorular öner.',
+  searchContext: 'Genel doküman arama'
+};
 
 // Varsayılan schema örnekleri
 export const DEFAULT_SCHEMAS: Partial<DataSchema>[] = [

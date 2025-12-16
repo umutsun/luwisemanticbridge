@@ -2392,25 +2392,36 @@ export default function DocumentManagerPage() {
     let matchesType = true;
     switch (filterType) {
       case 'analyzed':
-        matchesType = doc.processing_status === 'analyzed';
+        // Analyzed = completed OR embedded (documents with extracted content)
+        matchesType = doc.processing_status === 'completed' ||
+                      doc.processing_status === 'embedded' ||
+                      doc.processing_status === 'analyzed';
         break;
       case 'processing':
-        matchesType = doc.processing_status === 'processing';
+        // Processing = analyzing status
+        matchesType = doc.processing_status === 'analyzing' ||
+                      doc.processing_status === 'processing';
         break;
       case 'pending':
         matchesType = doc.processing_status === 'pending' || !doc.processing_status;
         break;
       case 'completed':
+        // Completed = transformed or fully processed
         matchesType = doc.processing_status === 'completed';
         break;
       case 'failed':
         matchesType = doc.processing_status === 'failed';
         break;
       case 'embedded':
-        matchesType = doc.hasEmbeddings || doc.metadata?.embeddings > 0;
+        // Embedded = has embeddings in document_embeddings table
+        matchesType = doc.hasEmbeddings ||
+                      doc.processing_status === 'embedded' ||
+                      doc.metadata?.embeddings > 0;
         break;
       case 'not-embedded':
-        matchesType = !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0);
+        matchesType = !doc.hasEmbeddings &&
+                      doc.processing_status !== 'embedded' &&
+                      (!doc.metadata?.embeddings || doc.metadata.embeddings === 0);
         break;
     }
 

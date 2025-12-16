@@ -841,11 +841,6 @@ export default function ChatInterface() {
                                         animate={{ opacity: 1, y: 0 }}
                                         className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                                     >
-                                        {message.role === 'assistant' && (
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-900/20">
-                                                <Bot className="w-5 h-5 text-white" />
-                                            </div>
-                                        )}
 
                                         <div className={`max-w-[85%] ${message.role === 'user' ? 'order-1' : 'order-2'}`}>
                                             <div className={`p-4 shadow-sm ${message.role === 'user'
@@ -864,14 +859,10 @@ export default function ChatInterface() {
                                                 )}
 
                                                 {message.isTyping || (message.isStreaming && !message.content) ? (
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center animate-pulse">
-                                                            <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                                                        </div>
-                                                        <div className="flex-1 space-y-2">
-                                                            <Skeleton className="h-3 w-3/4 bg-slate-200 dark:bg-slate-700" />
-                                                            <Skeleton className="h-3 w-1/2 bg-slate-200 dark:bg-slate-700" />
-                                                        </div>
+                                                    <div className="space-y-2 py-1">
+                                                        <Skeleton className="h-3 w-full bg-slate-200 dark:bg-slate-700" />
+                                                        <Skeleton className="h-3 w-4/5 bg-slate-200 dark:bg-slate-700" />
+                                                        <Skeleton className="h-3 w-3/5 bg-slate-200 dark:bg-slate-700" />
                                                     </div>
                                                 ) : (
                                                     <div className="prose prose-slate dark:prose-invert prose-sm max-w-none">
@@ -1007,22 +998,10 @@ export default function ChatInterface() {
                                                             </>
                                                         )}
                                                     </span>
-                                                    {/* ⚡ Fast Mode Badge */}
-                                                    {message.fastMode && !message.isStreaming && (
-                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[9px] font-medium border border-amber-300 dark:border-amber-700">
-                                                            <Zap className="w-2.5 h-2.5" />
-                                                            {t('chat.fastMode', 'Hızlı Mod')}
-                                                        </span>
-                                                    )}
                                                 </div>
                                             )}
                                         </div>
 
-                                        {message.role === 'user' && (
-                                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-white/10 flex items-center justify-center">
-                                                <User className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                                            </div>
-                                        )}
                                     </motion.div>
                                 ))}
                             </AnimatePresence>
