@@ -68,7 +68,7 @@ const ModernInputArea = memo(forwardRef<HTMLTextAreaElement, ModernInputAreaProp
                             className={`flex-shrink-0 mb-0.5 sm:mb-1 mr-0.5 sm:mr-1 h-9 w-9 sm:h-10 sm:w-10 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800 ${
                                 canSend
                                     ? 'bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40'
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                                    : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
                             }`}
                             aria-label={isLoading ? t('chat.sending', 'Gönderiliyor...') : t('chat.send', 'Gönder')}
                         >
