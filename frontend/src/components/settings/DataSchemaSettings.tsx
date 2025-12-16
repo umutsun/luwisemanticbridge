@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
-  Database, Plus, Trash2, Check, Save, RefreshCw, Search, Copy, MoreVertical
+  Database, Plus, Trash2, Check, Save, RefreshCw, Search, Copy, MoreVertical, Download, Upload
 } from 'lucide-react';
 import { DataSchema, SchemaField, FieldType, FIELD_TYPE_LABELS, EMPTY_FIELD } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
@@ -57,6 +57,7 @@ export default function DataSchemaSettings() {
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
   const [editedSchema, setEditedSchema] = useState<EditedSchema | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
 
   useEffect(() => { loadData(); }, []);
 
@@ -220,6 +221,69 @@ export default function DataSchemaSettings() {
     setEditedSchema({ ...editedSchema, fields: editedSchema.fields.filter((_, idx) => idx !== i) });
   };
 
+  const exportSchema = () => {
+    if (!editedSchema) return;
+    const data = {
+      name: editedSchema.name,
+      displayName: editedSchema.displayName,
+      description: editedSchema.description,
+      fields: editedSchema.fields,
+      templates: editedSchema.templates,
+      llmConfig: editedSchema.llmConfig
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `schema_${editedSchema.name}_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Şema JSON olarak indirildi');
+  };
+
+  const importSchema = () => {
+    if (fileInputRef) fileInputRef.click();
+  };
+
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Validate JSON structure
+      if (!data.name || !data.fields) {
+        toast.error('Geçersiz şema formatı');
+        return;
+      }
+
+      setSelectedSchemaId('new');
+      setEditedSchema({
+        id: '',
+        name: data.name || 'imported_schema',
+        displayName: data.displayName || 'Imported Schema',
+        description: data.description || '',
+        fields: data.fields || [],
+        templates: data.templates || { analyze: '', citation: '', questions: [] },
+        llmGuide: '',
+        llmConfig: data.llmConfig || {},
+        isActive: true,
+        isDefault: false,
+        isPreset: false,
+        createdAt: '', updatedAt: ''
+      });
+      toast.success('Şema JSON\'dan yüklendi, kaydedin');
+    } catch (error) {
+      console.error('Import error:', error);
+      toast.error('JSON dosyası okunamadı');
+    }
+
+    // Reset file input
+    if (e.target) e.target.value = '';
+  };
+
   const filtered = allSchemas.filter(s =>
     !searchQuery || s.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -231,6 +295,15 @@ export default function DataSchemaSettings() {
 
   return (
     <div className="grid grid-cols-[35%_65%] gap-6">
+      {/* Hidden file input for JSON import */}
+      <input
+        type="file"
+        accept="application/json"
+        ref={el => setFileInputRef(el)}
+        onChange={handleFileImport}
+        className="hidden"
+      />
+
       {/* Sol - Şema Listesi */}
       <Card>
         <CardHeader className="py-3 px-4">
@@ -238,9 +311,17 @@ export default function DataSchemaSettings() {
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Database className="w-4 h-4" /> Şemalar
             </CardTitle>
-            <Button size="sm" variant="ghost" onClick={createNew} className="h-7 px-2">
-              <Plus className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-1">
+              <Button size="sm" variant="ghost" onClick={importSchema} className="h-7 px-2" title="JSON Import">
+                <Upload className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={exportSchema} disabled={!editedSchema} className="h-7 px-2" title="JSON Export">
+                <Download className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={createNew} className="h-7 px-2" title="Yeni Şema">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="px-4 pb-4 pt-0 space-y-3">
@@ -377,23 +458,11 @@ export default function DataSchemaSettings() {
                 />
               </div>
 
-              {/* LLM Configuration - All 7 fields */}
+              {/* LLM Configuration - 6 fields (System Prompt ve Transform Rules kaldırıldı) */}
               <div className="border-t pt-4 space-y-3">
                 <h3 className="text-sm font-medium">LLM Konfigürasyonu</h3>
 
-                {/* 1. System Prompt / LLM Guide */}
-                <div>
-                  <Label className="text-xs">System Prompt (LLM Kılavuzu)</Label>
-                  <Textarea
-                    value={editedSchema.llmGuide || ''}
-                    onChange={e => setEditedSchema({ ...editedSchema, llmGuide: e.target.value })}
-                    placeholder="AI'a veri hakkında bağlam ve talimatlar..."
-                    rows={4}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
-
-                {/* 2. Analyze Prompt */}
+                {/* 1. Analyze Prompt */}
                 <div>
                   <Label className="text-xs">Analyze Prompt (Doküman Analizi)</Label>
                   <Textarea
@@ -408,7 +477,7 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* 3. Citation Template */}
+                {/* 2. Citation Template */}
                 <div>
                   <Label className="text-xs">Citation Template (Kaynak Formatı)</Label>
                   <Input
@@ -422,7 +491,7 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* 4. Chatbot Context */}
+                {/* 3. Chatbot Context */}
                 <div>
                   <Label className="text-xs">Chatbot Context (Sohbet Bağlamı)</Label>
                   <Textarea
@@ -437,7 +506,7 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* 5. Question Generator */}
+                {/* 4. Question Generator */}
                 <div>
                   <Label className="text-xs">Question Generator (Soru Üretici)</Label>
                   <Textarea
@@ -452,22 +521,7 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* 6. Transform Rules */}
-                <div>
-                  <Label className="text-xs">Transform Rules (Dönüştürme Kuralları)</Label>
-                  <Textarea
-                    value={editedSchema.llmConfig?.transformRules || ''}
-                    onChange={e => setEditedSchema({
-                      ...editedSchema,
-                      llmConfig: { ...editedSchema.llmConfig, transformRules: e.target.value }
-                    })}
-                    placeholder="Veri dönüştürme ve işleme kuralları..."
-                    rows={3}
-                    className="mt-1 text-sm font-mono"
-                  />
-                </div>
-
-                {/* 7. Embedding Prefix */}
+                {/* 5. Embedding Prefix */}
                 <div>
                   <Label className="text-xs">Embedding Prefix (Vektör Öneki)</Label>
                   <Input
@@ -481,7 +535,7 @@ export default function DataSchemaSettings() {
                   />
                 </div>
 
-                {/* 8. Search Context */}
+                {/* 6. Search Context */}
                 <div>
                   <Label className="text-xs">Search Context (Arama Bağlamı)</Label>
                   <Textarea
