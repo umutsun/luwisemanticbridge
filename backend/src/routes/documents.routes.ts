@@ -305,46 +305,54 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       ADD COLUMN IF NOT EXISTS tokens_used INTEGER DEFAULT 0
     `);
 
+    // Search parameter
+    const searchQuery = req.query.search as string || '';
+
     // Build WHERE clause based on status filter
-    let whereClause = '';
+    let whereConditions: string[] = [];
     let queryParams: any[] = [];
     let paramIndex = 1;
 
+    // Add search condition if provided
+    if (searchQuery.trim()) {
+      whereConditions.push(`d.title ILIKE $${paramIndex}`);
+      queryParams.push(`%${searchQuery.trim()}%`);
+      paramIndex++;
+    }
+
+    // Add status filter condition
     switch (statusFilter) {
       case 'embedded':
-        // Documents that have embeddings in document_embeddings table
-        whereClause = `WHERE EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`;
+        whereConditions.push(`EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`);
         break;
       case 'not-embedded':
-        // Documents that do NOT have embeddings
-        whereClause = `WHERE NOT EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`;
+        whereConditions.push(`NOT EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`);
         break;
       case 'analyzed':
-        // Documents that are completed or embedded (have been processed)
-        whereClause = `WHERE d.processing_status IN ('completed', 'embedded', 'analyzed')`;
+        whereConditions.push(`d.processing_status IN ('completed', 'embedded', 'analyzed')`);
         break;
       case 'pending':
-        // Documents that are pending or have no status
-        whereClause = `WHERE d.processing_status = 'pending' OR d.processing_status IS NULL`;
+        whereConditions.push(`(d.processing_status = 'pending' OR d.processing_status IS NULL)`);
         break;
       case 'processing':
-        // Documents currently being processed
-        whereClause = `WHERE d.processing_status IN ('analyzing', 'processing')`;
+        whereConditions.push(`d.processing_status IN ('analyzing', 'processing')`);
         break;
       case 'completed':
-        // Only completed status
-        whereClause = `WHERE d.processing_status = 'completed'`;
+        whereConditions.push(`d.processing_status = 'completed'`);
         break;
       case 'failed':
-        // Failed documents
-        whereClause = `WHERE d.processing_status = 'failed'`;
+        whereConditions.push(`d.processing_status = 'failed'`);
+        break;
+      case 'transformed':
+        whereConditions.push(`d.transform_status = 'completed'`);
         break;
       case 'all':
       default:
-        // No filter
-        whereClause = '';
+        // No status filter
         break;
     }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     // Get total count for pagination (with filter)
     const countQuery = `SELECT COUNT(*) as total FROM documents d ${whereClause}`;

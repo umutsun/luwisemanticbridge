@@ -219,7 +219,7 @@ export default function DocumentManagerPage() {
     fetchSkippedCount();
   }, []);
 
-  const fetchDocuments = async (page: number = 1, append: boolean = false, statusFilter: string = 'all') => {
+  const fetchDocuments = async (page: number = 1, append: boolean = false, statusFilter: string = 'all', search: string = '') => {
     try {
       if (!append) setLoading(true);
       const token = localStorage.getItem('accessToken');
@@ -237,6 +237,10 @@ export default function DocumentManagerPage() {
       // Add status filter for server-side filtering
       if (statusFilter && statusFilter !== 'all') {
         url.searchParams.append('status', statusFilter);
+      }
+      // Add search parameter for server-side search
+      if (search && search.trim()) {
+        url.searchParams.append('search', search.trim());
       }
 
       const response = await fetch(url.toString(), {
@@ -2432,16 +2436,16 @@ export default function DocumentManagerPage() {
     return matchesSearch && matchesType;
   });
 
-  // Re-fetch documents when filter changes (server-side filtering)
+  // Re-fetch documents when filter or search changes (server-side filtering)
   useEffect(() => {
     setVisibleDocumentsCount(DOCUMENTS_PER_PAGE);
-    // Only re-fetch if filterType changes (not on initial mount)
-    if (filterType !== 'all') {
-      fetchDocuments(1, false, filterType);
-    } else {
-      fetchDocuments(1, false, 'all');
-    }
-  }, [filterType]);
+    // Debounce search to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      fetchDocuments(1, false, filterType, searchQuery);
+    }, searchQuery ? 300 : 0); // 300ms debounce for search, instant for filter
+
+    return () => clearTimeout(timeoutId);
+  }, [filterType, searchQuery]);
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -3737,10 +3741,11 @@ export default function DocumentManagerPage() {
                         <SelectItem value="pending">Bekleyen</SelectItem>
                         <SelectItem value="analyzed">Analiz Edildi</SelectItem>
                         <SelectItem value="embedded">Gömülü</SelectItem>
+                        <SelectItem value="transformed">Dönüştürülmüş</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Badge variant="outline" className="px-3 py-2">
-                      {filteredDocuments.length} of {documents.length} {hasMoreDocuments ? `(${documentsTotal} total)` : ''} files
+                    <Badge variant="outline" className="px-2 py-1 text-xs whitespace-nowrap">
+                      {documents.length}/{documentsTotal}
                     </Badge>
                   </div>
                 </CardContent>
