@@ -3,6 +3,7 @@
 import { useState, KeyboardEvent, useEffect, useCallback } from 'react';
 import { Send, Paperclip, Mic, Sparkles, RefreshCw, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { fetchWithAuth } from '@/lib/auth-fetch';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -19,22 +20,22 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   // API URL
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
 
-  // Fetch suggested questions from backend (respects RAG settings)
+  // Fetch suggested questions from backend (respects RAG settings and user's active schema)
   const fetchSuggestedQuestions = useCallback(async () => {
     setIsLoadingSuggestions(true);
     try {
-      const response = await fetch(`${apiUrl}/api/v2/chat/suggestions`);
+      const response = await fetchWithAuth(`${apiUrl}/api/v2/chat/suggestions`);
       if (response.ok) {
         const data = await response.json();
         if (data.suggestions && data.suggestions.length > 0) {
-          // Backend returned questions based on RAG settings
+          // Backend returned schema-aware questions
           setSampleQuestions(data.suggestions.slice(0, 4));
-          console.log('[ChatInput] Loaded suggestions from backend:', data.suggestions.length);
+          console.log('[ChatInput] Loaded schema-aware suggestions:', data.suggestions.length);
           return;
         }
       }
       // Fallback: use empty array if backend returns no suggestions
-      console.log('[ChatInput] No suggestions from backend');
+      console.log('[ChatInput] No schema-aware suggestions from backend');
       setSampleQuestions([]);
     } catch (err) {
       console.error('[ChatInput] Failed to fetch suggestions:', err);

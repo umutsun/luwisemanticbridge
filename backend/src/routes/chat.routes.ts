@@ -254,35 +254,73 @@ router.get('/api/v2/chat/conversation/:id', async (req: Request, res: Response) 
 });
 
 /**
- * Get popular/suggested questions
+ * Get popular/suggested questions - Schema-aware suggestions
  */
 router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
   try {
-    // Get chatbot settings to check autoGenerateSuggestions toggle
-    const settingsResult = await dbConfig.query(`
-      SELECT value FROM settings WHERE key = 'chatbot'
-    `);
-
     let suggestions: string[] = [];
 
-    if (settingsResult.rows.length > 0) {
-      const rawValue = settingsResult.rows[0].value;
-      const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
-
-      const autoGenerate = chatbotData.autoGenerateSuggestions !== undefined
-        ? chatbotData.autoGenerateSuggestions
-        : true; // Default to true for backwards compatibility
-
-      if (autoGenerate) {
-        // Auto-generate suggestions from recent questions, documents, and topics
-        suggestions = await ragChat.getPopularQuestions();
-      } else {
-        // Use manual suggestion questions from chatbot settings
-        suggestions = chatbotData.suggestionQuestions || [];
+    // Try to get user ID from token (if authenticated)
+    // Parse Authorization header if present
+    let userId: string | null = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.substring(7);
+        const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+        userId = payload.userId || payload.id;
+      } catch (error) {
+        // Not a valid token, proceed without user context
       }
-    } else {
-      // No settings found, use auto-generation
-      suggestions = await ragChat.getPopularQuestions();
+    }
+
+    // If user is authenticated, get schema-aware suggestions
+    if (userId) {
+      try {
+        const { DataSchemaService } = await import('../services/data-schema.service');
+        const dataSchemaService = new DataSchemaService();
+
+        const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);
+
+        if (activeSchema?.templates?.questions && activeSchema.templates.questions.length > 0) {
+          // Use schema's question templates
+          suggestions = [...activeSchema.templates.questions];
+
+          // Shuffle for variety
+          suggestions = suggestions.sort(() => Math.random() - 0.5);
+
+          // Limit to 4 suggestions
+          suggestions = suggestions.slice(0, 4);
+
+          console.log(`[Suggestions] Using schema-aware questions for user ${userId}:`, activeSchema.name);
+        }
+      } catch (schemaError) {
+        console.error('[Suggestions] Failed to get schema-aware suggestions:', schemaError);
+      }
+    }
+
+    // Fallback: use chatbot settings or popular questions
+    if (suggestions.length === 0) {
+      const settingsResult = await dbConfig.query(`
+        SELECT value FROM settings WHERE key = 'chatbot'
+      `);
+
+      if (settingsResult.rows.length > 0) {
+        const rawValue = settingsResult.rows[0].value;
+        const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
+
+        const autoGenerate = chatbotData.autoGenerateSuggestions !== undefined
+          ? chatbotData.autoGenerateSuggestions
+          : true;
+
+        if (autoGenerate) {
+          suggestions = await ragChat.getPopularQuestions();
+        } else {
+          suggestions = chatbotData.suggestionQuestions || [];
+        }
+      } else {
+        suggestions = await ragChat.getPopularQuestions();
+      }
     }
 
     res.json({ suggestions });
