@@ -180,6 +180,13 @@ export default function DocumentManagerPage() {
   const [skippedCount, setSkippedCount] = useState(0);
   const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
 
+  // Pagination state for documents
+  const [documentsPage, setDocumentsPage] = useState(1);
+  const [documentsTotal, setDocumentsTotal] = useState(0);
+  const [documentsTotalPages, setDocumentsTotalPages] = useState(1);
+  const [hasMoreDocuments, setHasMoreDocuments] = useState(false);
+  const DOCS_PER_PAGE = 100;
+
   const [stats, setStats] = useState<Stats>({
     documents: {
       total: 0,
@@ -212,9 +219,9 @@ export default function DocumentManagerPage() {
     fetchSkippedCount();
   }, []);
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = async (page: number = 1, append: boolean = false) => {
     try {
-      setLoading(true);
+      if (!append) setLoading(true);
       const token = localStorage.getItem('token');
       if (!token) {
         console.error('No token found in localStorage');
@@ -223,7 +230,12 @@ export default function DocumentManagerPage() {
         return;
       }
 
-      const response = await fetch(getApiUrl('documents'), {
+      // Use pagination - fetch DOCS_PER_PAGE at a time
+      const url = new URL(getApiUrl('documents'), window.location.origin);
+      url.searchParams.append('page', page.toString());
+      url.searchParams.append('limit', DOCS_PER_PAGE.toString());
+
+      const response = await fetch(url.toString(), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -253,15 +265,27 @@ export default function DocumentManagerPage() {
       const data = await response.json();
       console.log('Documents API Response:', data);
 
-      // The backend returns data in format: { documents: [...] }
-      // But if it's just an array, we handle that too
+      // The backend returns data in format: { documents: [...], pagination: {...} }
       const docs = data.documents || data || [];
-      console.log('Setting documents:', docs);
-      console.log('Documents count:', docs.length);
-      setDocuments(docs);
+      const pagination = data.pagination || { page: 1, limit: DOCS_PER_PAGE, total: docs.length, totalPages: 1 };
+
+      console.log('Documents count:', docs.length, 'Total:', pagination.total);
+
+      // Update pagination state
+      setDocumentsPage(pagination.page);
+      setDocumentsTotal(pagination.total);
+      setDocumentsTotalPages(pagination.totalPages);
+      setHasMoreDocuments(pagination.page < pagination.totalPages);
+
+      if (append) {
+        // Append to existing documents
+        setDocuments(prev => [...prev, ...docs]);
+      } else {
+        setDocuments(docs);
+      }
     } catch (error) {
       console.error('Failed to fetch documents:', error);
-      setDocuments([]); // Set empty array on error to avoid undefined issues
+      if (!append) setDocuments([]); // Set empty array on error to avoid undefined issues
       toast({
         title: t('documents.toast.error'),
         description: t('documents.toast.failedToLoadDocuments'),
@@ -269,6 +293,13 @@ export default function DocumentManagerPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load more documents
+  const loadMoreDocuments = async () => {
+    if (hasMoreDocuments && !loading) {
+      await fetchDocuments(documentsPage + 1, true);
     }
   };
 
@@ -3692,7 +3723,7 @@ export default function DocumentManagerPage() {
                       </SelectContent>
                     </Select>
                     <Badge variant="outline" className="px-3 py-2">
-                      {filteredDocuments.length} of {documents.length} files
+                      {filteredDocuments.length} of {documents.length} {hasMoreDocuments ? `(${documentsTotal} total)` : ''} files
                     </Badge>
                   </div>
                 </CardContent>
@@ -3722,8 +3753,8 @@ export default function DocumentManagerPage() {
                     </Table>
                   </div>
 
-                  {/* Scrollable Body - flex-1 to fill remaining card space */}
-                  <ScrollArea className="flex-1">
+                  {/* Scrollable Body - max height to prevent page from growing too long */}
+                  <ScrollArea className="flex-1 max-h-[500px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
@@ -3891,6 +3922,24 @@ export default function DocumentManagerPage() {
                           {t('documents.table.loadMore')}
                           <span className="text-xs text-muted-foreground">
                             ({filteredDocuments.length - visibleDocumentsCount})
+                          </span>
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Load More from Server - When there are more pages */}
+                    {(!loading && hasMoreDocuments) && (
+                      <div className="flex items-center justify-center px-4 py-3 border-t bg-blue-50/50 dark:bg-blue-900/20">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={loadMoreDocuments}
+                          className="gap-1 h-7 text-xs border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                        >
+                          <ChevronDown className="w-3 h-3 text-blue-600" />
+                          <span className="text-blue-600">{t('documents.loadMoreFromServer') || 'Load More from Server'}</span>
+                          <span className="text-xs text-blue-500">
+                            ({documents.length} / {documentsTotal})
                           </span>
                         </Button>
                       </div>
