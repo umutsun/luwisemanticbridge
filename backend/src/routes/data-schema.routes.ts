@@ -130,6 +130,31 @@ router.get('/presets/:id', authenticateToken, async (req: Request, res: Response
 });
 
 /**
+ * PUT /api/v2/data-schema/presets/:id
+ * Update an industry preset (admin only)
+ */
+router.put('/presets/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userRole = (req.user as any)?.role;
+
+    // Only admins can update presets
+    if (userRole !== 'admin' && userRole !== 'manager') {
+      return res.status(403).json({ error: 'Admin access required to update presets' });
+    }
+
+    const preset = await dataSchemaService.updateIndustryPreset(req.params.id, req.body);
+    if (!preset) {
+      return res.status(404).json({ error: 'Preset not found or update failed' });
+    }
+
+    res.json({ preset });
+  } catch (error: any) {
+    console.error('[DataSchema Routes] Update preset error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /api/v2/data-schema/presets/:id/clone
  * Clone a preset to user's schemas
  */

@@ -156,6 +156,69 @@ class DataSchemaService {
     }
   }
 
+  /**
+   * Update an industry preset (admin only - called from route with role check)
+   */
+  async updateIndustryPreset(presetId: string, updates: Partial<IndustryPreset>): Promise<IndustryPreset | null> {
+    try {
+      const setClauses: string[] = [];
+      const params: any[] = [presetId];
+
+      if (updates.schema_name) {
+        params.push(updates.schema_name);
+        setClauses.push(`schema_name = $${params.length}`);
+      }
+      if (updates.schema_display_name) {
+        params.push(updates.schema_display_name);
+        setClauses.push(`schema_display_name = $${params.length}`);
+      }
+      if (updates.schema_description !== undefined) {
+        params.push(updates.schema_description);
+        setClauses.push(`schema_description = $${params.length}`);
+      }
+      if (updates.fields) {
+        params.push(JSON.stringify(updates.fields));
+        setClauses.push(`fields = $${params.length}`);
+      }
+      if (updates.templates) {
+        params.push(JSON.stringify(updates.templates));
+        setClauses.push(`templates = $${params.length}`);
+      }
+      if (updates.llm_guide !== undefined) {
+        params.push(updates.llm_guide);
+        setClauses.push(`llm_guide = $${params.length}`);
+      }
+      if (updates.llm_config !== undefined) {
+        params.push(JSON.stringify(updates.llm_config));
+        setClauses.push(`llm_config = $${params.length}`);
+      }
+      if (updates.tier) {
+        params.push(updates.tier);
+        setClauses.push(`tier = $${params.length}`);
+      }
+      if (updates.is_active !== undefined) {
+        params.push(updates.is_active);
+        setClauses.push(`is_active = $${params.length}`);
+      }
+
+      if (setClauses.length === 0) return null;
+
+      const result = await pool.query(
+        `UPDATE industry_presets
+         SET ${setClauses.join(', ')}, updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        params
+      );
+
+      console.log(`[DataSchema] Updated industry preset: ${presetId}`);
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('[DataSchema] Failed to update industry preset:', error);
+      return null;
+    }
+  }
+
   // ============================================
   // USER SCHEMAS (User's custom schemas)
   // ============================================
