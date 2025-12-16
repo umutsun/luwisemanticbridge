@@ -261,6 +261,11 @@ router.post('/init', async (req: Request, res: Response) => {
 // Get all documents (with trailing slash) - REQUIRES AUTHENTICATION
 router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Pagination parameters
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200); // Default 50, max 200
+    const offset = (page - 1) * limit;
+
     // First ensure table exists
     await lsembPool.query(`
       CREATE TABLE IF NOT EXISTS documents (
@@ -297,8 +302,19 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       ADD COLUMN IF NOT EXISTS tokens_used INTEGER DEFAULT 0
     `);
 
+    // Get total count for pagination
+    const countResult = await lsembPool.query('SELECT COUNT(*) as total FROM documents');
+    const totalCount = parseInt(countResult.rows[0].total);
+
     const result = await lsembPool.query(
-      `SELECT d.*,
+      `SELECT d.id, d.title, d.type, d.size, d.file_path, d.processing_status,
+              d.created_at, d.updated_at, d.metadata,
+              d.tokens_used, d.model_used, d.cost_usd,
+              d.verified_at, d.auto_verified,
+              d.transform_status, d.transform_progress, d.target_table_name,
+              d.transformed_at, d.last_transform_row_count,
+              d.column_count, d.row_count, d.column_headers,
+              d.original_filename, d.upload_count,
               COALESCE(emb_stats.model_name, 'None') as embedding_model,
               COALESCE(emb_stats.total_tokens, 0) as total_tokens_used,
               COALESCE(emb_stats.chunk_count, 0) as chunk_count,
@@ -316,7 +332,9 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
          FROM document_embeddings
          GROUP BY document_id, model_name
        ) emb_stats ON d.id = emb_stats.document_id
-       ORDER BY d.created_at DESC`
+       ORDER BY d.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
 
     const documents = result.rows.map(doc => ({
@@ -356,12 +374,21 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       }
     }));
 
-    res.json({ documents });
+    res.json({
+      documents,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
   } catch (error) {
     console.error('Error fetching documents:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch documents',
-      documents: [] 
+      documents: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }
     });
   }
 });
