@@ -90,6 +90,7 @@ interface Document {
   file_path?: string; // Physical file path on server
   hasEmbeddings?: boolean; // from backend
   processing_status?: string; // Database processing status: waiting, analyzing, analyzed, transformed
+  transform_status?: string; // CSV transform status: pending, completed, failed
   metadata: {
     source?: string;
     created_at: string;
@@ -3427,11 +3428,6 @@ export default function DocumentManagerPage() {
                       <SelectContent>
                         <SelectItem value="all">{t('documents.physicalFiles.allTypes')}</SelectItem>
                         <SelectItem value="folders">{t('documents.physicalFiles.folders')}</SelectItem>
-                        <SelectItem value="txt">TXT</SelectItem>
-                        <SelectItem value="md">Markdown</SelectItem>
-                        <SelectItem value="json">JSON</SelectItem>
-                        <SelectItem value="csv">CSV</SelectItem>
-                        <SelectItem value="pdf">PDF</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -3828,23 +3824,25 @@ export default function DocumentManagerPage() {
                               </TableCell>
                               <TableCell>
                                 {(() => {
-                                  // Use actual processing_status from database if available
-                                  const processingStatus = doc.processing_status;
+                                  // For CSV files, use transform_status; for others, use processing_status
+                                  const isCSV = (doc.type || doc.file_type || '').toLowerCase() === 'csv' || doc.title?.toLowerCase().endsWith('.csv');
+                                  const statusValue = isCSV ? doc.transform_status : doc.processing_status;
                                   const isEmbedded = doc.metadata?.embeddings;
                                   const isOCRProcessed = doc.metadata?.ocr_processed;
 
                                   let status = '';
                                   let colorClass = '';
 
-                                  // Map processing_status values to display
-                                  if (processingStatus) {
-                                    switch (processingStatus) {
+                                  // Map status values to display
+                                  if (statusValue) {
+                                    switch (statusValue) {
                                       case 'pending':
                                       case 'waiting':
                                         status = t('documents.status.waiting');
                                         colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
                                         break;
                                       case 'analyzing':
+                                      case 'processing':
                                         status = t('documents.status.analyzing');
                                         colorClass = 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400';
                                         break;
@@ -3857,8 +3855,9 @@ export default function DocumentManagerPage() {
                                         // Purple/violet for embedded - distinct from transformed
                                         colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
                                         break;
+                                      case 'completed':
                                       case 'transformed':
-                                        status = t('documents.status.transformed');
+                                        status = isCSV ? t('documents.status.transformed') : t('documents.status.analyzed');
                                         // Emerald/green for transformed - indicates data in DB
                                         colorClass = 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400';
                                         break;
@@ -3868,11 +3867,11 @@ export default function DocumentManagerPage() {
                                         break;
                                       default:
                                         // Fallback for unknown status
-                                        status = processingStatus;
+                                        status = statusValue;
                                         colorClass = 'bg-gray-50 dark:bg-gray-950/30 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400';
                                     }
                                   } else {
-                                    // Fallback to old logic if processing_status is not available
+                                    // Fallback to old logic if status is not available
                                     if (isEmbedded) {
                                       status = t('documents.status.embedded');
                                       colorClass = 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-400';
