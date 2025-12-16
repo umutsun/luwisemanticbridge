@@ -81,6 +81,7 @@ interface Message {
         output?: number;
         total?: number;
     };
+    fastMode?: boolean; // ⚡ Fast mode flag - no sources, quick response
 }
 
 const getSourceTableName = (sourceTable?: string, t?: (key: string, fallback?: string) => string) => {
@@ -572,6 +573,7 @@ export default function ChatInterface() {
                     response?: string;
                     tokens?: Message['tokens'];
                     usage?: Message['tokens'];
+                    fastMode?: boolean;
                 } = {};
                 try {
                     const finalResponse = await fetch(getEndpoint('chat', 'send'), {
@@ -596,11 +598,12 @@ export default function ChatInterface() {
                     ...msg,
                     content: accumulatedContent || finalData.response || msg.content,
                     isStreaming: false,
-                    sources: finalData.sources,
+                    sources: finalData.fastMode ? [] : finalData.sources, // ⚡ Fast mode: no sources
                     relatedTopics: finalData.relatedTopics,
                     context: finalData.context,
                     responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
-                    tokens: finalData.tokens || finalData.usage
+                    tokens: finalData.tokens || finalData.usage,
+                    fastMode: finalData.fastMode
                 } : msg));
             }
         } catch (error) {
@@ -848,7 +851,7 @@ export default function ChatInterface() {
                                             <div className={`p-4 shadow-sm ${message.role === 'user'
                                                 ? message.isFromSource
                                                     ? 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 rounded-2xl rounded-tr-sm'
-                                                    : 'bg-violet-600 text-white rounded-2xl rounded-tr-sm'
+                                                    : 'bg-violet-600 text-white rounded-2xl rounded-tr-sm shadow-violet-500/20'
                                                 : message.isError
                                                     ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 rounded-2xl rounded-tl-sm'
                                                     : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm'
@@ -861,10 +864,14 @@ export default function ChatInterface() {
                                                 )}
 
                                                 {message.isTyping || (message.isStreaming && !message.content) ? (
-                                                    <div className="flex gap-1.5">
-                                                        <span className="w-2 h-2 rounded-full bg-current opacity-40 animate-bounce"></span>
-                                                        <span className="w-2 h-2 rounded-full bg-current opacity-40 animate-bounce delay-100"></span>
-                                                        <span className="w-2 h-2 rounded-full bg-current opacity-40 animate-bounce delay-200"></span>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center animate-pulse">
+                                                            <Bot className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                                                        </div>
+                                                        <div className="flex-1 space-y-2">
+                                                            <Skeleton className="h-3 w-3/4 bg-slate-200 dark:bg-slate-700" />
+                                                            <Skeleton className="h-3 w-1/2 bg-slate-200 dark:bg-slate-700" />
+                                                        </div>
                                                     </div>
                                                 ) : (
                                                     <div className="prose prose-slate dark:prose-invert prose-sm max-w-none">
@@ -876,8 +883,8 @@ export default function ChatInterface() {
                                                     </div>
                                                 )}
 
-                                                {/* Sources Section */}
-                                                {message.sources && message.sources.length > 0 && (
+                                                {/* Sources Section - Hidden in Fast Mode */}
+                                                {message.sources && message.sources.length > 0 && !message.fastMode && (
                                                     <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                                                         <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                                             {(() => {
@@ -900,18 +907,6 @@ export default function ChatInterface() {
                                                                                 >
                                                                                     <div className="flex items-start gap-3">
                                                                                         <div className="min-w-0 flex-1">
-                                                                                            {/* Source Number & Category */}
-                                                                                            <div className="flex items-center gap-2 mb-2">
-                                                                                                <span className="text-xs px-2 py-0.5 rounded bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-200 border border-violet-300 dark:border-violet-600 font-bold">
-                                                                                                    {idx + 1}
-                                                                                                </span>
-                                                                                                {source.category && (
-                                                                                                    <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
-                                                                                                        {source.category}
-                                                                                                    </span>
-                                                                                                )}
-                                                                                            </div>
-
                                                                                             {/* Primary: Natural Language Summary/Excerpt */}
                                                                                             <div className="mb-2">
                                                                                                 <p className="text-sm text-slate-800 dark:text-slate-100 leading-relaxed line-clamp-3">
@@ -919,14 +914,22 @@ export default function ChatInterface() {
                                                                                                 </p>
                                                                                             </div>
 
-                                                                                            {/* Keywords */}
+                                                                                            {/* Footer: Source Number + Keywords */}
                                                                                             <div className="flex flex-wrap items-center gap-1.5">
-                                                                                                {getSemanticKeywords(source).slice(0, 4).map((keyword: string, kidx: number) => {
+                                                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-200 border border-violet-300 dark:border-violet-600 font-bold">
+                                                                                                    {idx + 1}
+                                                                                                </span>
+                                                                                                {source.category && (
+                                                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                                                                                        {source.category}
+                                                                                                    </span>
+                                                                                                )}
+                                                                                                {getSemanticKeywords(source).slice(0, 3).map((keyword: string, kidx: number) => {
                                                                                                     const isBoosted = kidx < 2 && lastUserQuery.length > 0;
                                                                                                     return (
                                                                                                         <span
                                                                                                             key={kidx}
-                                                                                                            className={`text-[10px] px-2 py-0.5 rounded border ${getKeywordColor(keyword, isBoosted)}`}
+                                                                                                            className={`text-[10px] px-1.5 py-0.5 rounded border ${getKeywordColor(keyword, isBoosted)}`}
                                                                                                             title={isBoosted ? t('chat.keyword.fromQuery', `🔍 Sorgunuzdan: "${keyword}"`) : ''}
                                                                                                         >
                                                                                                             {keyword}
@@ -986,7 +989,7 @@ export default function ChatInterface() {
 
                                             {/* Message Footer */}
                                             {message.role === 'assistant' && (
-                                                <div className="flex justify-start mt-2 px-1">
+                                                <div className="flex justify-start items-center gap-2 mt-2 px-1">
                                                     <span className="text-[10px] font-medium text-slate-500 tabular-nums">
                                                         {message.isStreaming && message.startTime ? (
                                                             // Show elapsed time during streaming
@@ -1004,6 +1007,13 @@ export default function ChatInterface() {
                                                             </>
                                                         )}
                                                     </span>
+                                                    {/* ⚡ Fast Mode Badge */}
+                                                    {message.fastMode && !message.isStreaming && (
+                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[9px] font-medium border border-amber-300 dark:border-amber-700">
+                                                            <Zap className="w-2.5 h-2.5" />
+                                                            {t('chat.fastMode', 'Hızlı Mod')}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -1041,10 +1051,10 @@ export default function ChatInterface() {
                                     size="icon"
                                     className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-200 ${inputText.trim()
                                         ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/25'
-                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                                        : 'bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
                                         }`}
                                 >
-                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-700 dark:text-slate-300" /> : <Send className="w-5 h-5" />}
                                 </Button>
                             </div>
                         </div>

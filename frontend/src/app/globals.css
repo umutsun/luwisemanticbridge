@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Modern Template Styles */
+@import '../templates/modern/styles/modern.css';
+
 @layer base {
   html {
     font-size: 16px;

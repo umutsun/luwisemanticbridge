@@ -654,13 +654,24 @@ async function streamChatResponse(
     const minResults = parseInt(await settingsService.getSetting('ragSettings.minResults') || '5');
     const minThreshold = parseFloat(await settingsService.getSetting('ragSettings.similarityThreshold') || '0.014');
 
-    // Check if citations are disabled (both min and max results are 0)
+    // Check if citations are disabled (both min and max results are 0) = FAST MODE
     const citationsDisabled = maxResults === 0 && minResults === 0;
     let formattedSources: any[] = [];
     let searchResults: any[] = [];
 
-    if (!citationsDisabled) {
-      // Perform semantic search only if citations are enabled
+    if (citationsDisabled) {
+      // ⚡ FAST MODE: Send empty sources immediately
+      console.log('⚡ FAST MODE (WebSocket): Citations disabled - skipping source formatting');
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'sources',
+          sources: [],
+          hasMore: false,
+          fastMode: true // Flag for frontend
+        }));
+      }
+    } else {
+      // Normal mode: Perform semantic search and format sources
       let allResults = [];
       let useUnifiedEmbeddings = process.env.USE_UNIFIED_EMBEDDINGS === 'true';
 
@@ -706,17 +717,8 @@ async function streamChatResponse(
         ws.send(JSON.stringify({
           type: 'sources',
           sources: formattedSources,
-          hasMore: searchResults.length > minResults
-        }));
-      }
-    } else {
-      // Citations disabled - send empty sources
-      if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'sources',
-          sources: [],
-          hasMore: false,
-          citationsDisabled: true
+          hasMore: searchResults.length > minResults,
+          fastMode: false
         }));
       }
     }
@@ -741,7 +743,8 @@ async function streamChatResponse(
         sources: result.sources,
         conversationId: result.conversationId,
         followUpQuestions: (result as any).followUpQuestions,
-        relatedTopics: result.relatedTopics
+        relatedTopics: result.relatedTopics,
+        fastMode: (result as any).fastMode || false // Pass fastMode flag to frontend
       }));
     }
 

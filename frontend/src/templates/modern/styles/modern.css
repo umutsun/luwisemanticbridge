@@ -1,0 +1,353 @@
+/* ============================================
+   MODERN TEMPLATE - STYLE SYSTEM
+   Consistent Dark/Light Mode Styling
+   ============================================ */
+
+/* ============================================
+   CSS CUSTOM PROPERTIES (Design Tokens)
+   ============================================ */
+
+:root {
+  /* === Primary Colors (Violet Theme) === */
+  --modern-primary: 139 92 246;        /* violet-500 */
+  --modern-primary-light: 167 139 250; /* violet-400 */
+  --modern-primary-dark: 124 58 237;   /* violet-600 */
+
+  /* === Accent Colors === */
+  --modern-accent-amber: 245 158 11;   /* amber-500 */
+  --modern-accent-green: 34 197 94;    /* green-500 */
+  --modern-accent-red: 239 68 68;      /* red-500 */
+  --modern-accent-blue: 59 130 246;    /* blue-500 */
+
+  /* === Light Mode Surfaces === */
+  --modern-bg: 248 250 252;            /* slate-50 */
+  --modern-surface: 255 255 255;       /* white */
+  --modern-surface-hover: 241 245 249; /* slate-100 */
+  --modern-border: 226 232 240;        /* slate-200 */
+  --modern-border-hover: 203 213 225;  /* slate-300 */
+
+  /* === Light Mode Text === */
+  --modern-text: 30 41 59;             /* slate-800 */
+  --modern-text-secondary: 100 116 139;/* slate-500 */
+  --modern-text-muted: 148 163 184;    /* slate-400 */
+
+  /* === Glassmorphism === */
+  --modern-glass-bg: 255 255 255 / 0.8;
+  --modern-glass-border: 255 255 255 / 0.2;
+  --modern-glass-blur: 10px;
+
+  /* === Shadows === */
+  --modern-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --modern-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --modern-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  --modern-shadow-glow: 0 0 20px rgb(var(--modern-primary) / 0.3);
+
+  /* === Spacing & Sizing === */
+  --modern-radius-sm: 0.5rem;
+  --modern-radius: 1rem;
+  --modern-radius-lg: 1.5rem;
+  --modern-radius-full: 9999px;
+
+  /* === Transitions === */
+  --modern-transition-fast: 150ms ease;
+  --modern-transition: 200ms ease;
+  --modern-transition-slow: 300ms ease;
+}
+
+/* === Dark Mode Overrides === */
+.dark {
+  --modern-bg: 15 23 42;               /* slate-900 */
+  --modern-surface: 30 41 59;          /* slate-800 */
+  --modern-surface-hover: 51 65 85;    /* slate-700 */
+  --modern-border: 51 65 85;           /* slate-700 */
+  --modern-border-hover: 71 85 105;    /* slate-600 */
+
+  --modern-text: 248 250 252;          /* slate-50 */
+  --modern-text-secondary: 148 163 184;/* slate-400 */
+  --modern-text-muted: 100 116 139;    /* slate-500 */
+
+  --modern-glass-bg: 30 41 59 / 0.7;
+  --modern-glass-border: 255 255 255 / 0.1;
+
+  --modern-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --modern-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
+  --modern-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4);
+}
+
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* === Backgrounds === */
+.modern-bg {
+  background-color: rgb(var(--modern-bg));
+}
+
+.modern-surface {
+  background-color: rgb(var(--modern-surface));
+}
+
+.modern-glass {
+  background-color: rgb(var(--modern-glass-bg));
+  backdrop-filter: blur(var(--modern-glass-blur));
+  border: 1px solid rgb(var(--modern-glass-border));
+}
+
+/* === Text === */
+.modern-text {
+  color: rgb(var(--modern-text));
+}
+
+.modern-text-secondary {
+  color: rgb(var(--modern-text-secondary));
+}
+
+.modern-text-muted {
+  color: rgb(var(--modern-text-muted));
+}
+
+/* === Borders === */
+.modern-border {
+  border-color: rgb(var(--modern-border));
+}
+
+.modern-border-hover:hover {
+  border-color: rgb(var(--modern-border-hover));
+}
+
+/* === Primary Button === */
+.modern-btn-primary {
+  background-color: rgb(var(--modern-primary));
+  color: white;
+  border-radius: var(--modern-radius);
+  transition: all var(--modern-transition);
+  box-shadow: 0 4px 14px 0 rgb(var(--modern-primary) / 0.3);
+}
+
+.modern-btn-primary:hover {
+  background-color: rgb(var(--modern-primary-dark));
+  box-shadow: 0 6px 20px 0 rgb(var(--modern-primary) / 0.4);
+  transform: translateY(-1px);
+}
+
+/* === Ghost Button === */
+.modern-btn-ghost {
+  background-color: transparent;
+  color: rgb(var(--modern-text-secondary));
+  border-radius: var(--modern-radius-full);
+  transition: all var(--modern-transition);
+}
+
+.modern-btn-ghost:hover {
+  background-color: rgb(var(--modern-surface-hover));
+  color: rgb(var(--modern-text));
+}
+
+
+/* ============================================
+   COMPONENT STYLES
+   ============================================ */
+
+/* === Message Bubbles === */
+.modern-message-user {
+  background-color: rgb(var(--modern-primary));
+  color: white;
+  border-radius: var(--modern-radius-lg) var(--modern-radius-lg) var(--modern-radius-sm) var(--modern-radius-lg);
+}
+
+.modern-message-assistant {
+  background-color: rgb(var(--modern-surface));
+  color: rgb(var(--modern-text));
+  border: 1px solid rgb(var(--modern-border));
+  border-radius: var(--modern-radius-lg) var(--modern-radius-lg) var(--modern-radius-lg) var(--modern-radius-sm);
+}
+
+.modern-message-error {
+  background-color: rgb(254 242 242); /* red-50 */
+  color: rgb(185 28 28);              /* red-700 */
+  border: 1px solid rgb(254 202 202); /* red-200 */
+}
+
+.dark .modern-message-error {
+  background-color: rgb(127 29 29 / 0.3); /* red-900/30 */
+  color: rgb(254 202 202);                /* red-200 */
+  border-color: rgb(153 27 27);           /* red-800 */
+}
+
+/* === Source Cards === */
+.modern-source-card {
+  background-color: rgb(var(--modern-surface-hover));
+  border: 1px solid rgb(var(--modern-border));
+  border-radius: var(--modern-radius);
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all var(--modern-transition);
+}
+
+.modern-source-card:hover {
+  background-color: rgb(var(--modern-surface));
+  border-color: rgb(var(--modern-primary) / 0.5);
+  box-shadow: var(--modern-shadow);
+}
+
+/* === Input Area === */
+.modern-input-container {
+  background-color: rgb(var(--modern-surface));
+  border: 1px solid rgb(var(--modern-border));
+  border-radius: var(--modern-radius-lg);
+  box-shadow: var(--modern-shadow-lg);
+}
+
+.modern-input {
+  background-color: transparent;
+  color: rgb(var(--modern-text));
+  border: none;
+}
+
+.modern-input::placeholder {
+  color: rgb(var(--modern-text-muted));
+}
+
+/* === Header === */
+.modern-header {
+  background-color: rgb(var(--modern-surface));
+  border-bottom: 1px solid rgb(var(--modern-border));
+}
+
+/* === Badges === */
+.modern-badge {
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--modern-radius-sm);
+}
+
+.modern-badge-primary {
+  background-color: rgb(var(--modern-primary) / 0.1);
+  color: rgb(var(--modern-primary));
+  border: 1px solid rgb(var(--modern-primary) / 0.3);
+}
+
+.modern-badge-amber {
+  background-color: rgb(var(--modern-accent-amber) / 0.1);
+  color: rgb(var(--modern-accent-amber));
+  border: 1px solid rgb(var(--modern-accent-amber) / 0.3);
+}
+
+.dark .modern-badge-primary {
+  background-color: rgb(var(--modern-primary) / 0.2);
+  color: rgb(var(--modern-primary-light));
+}
+
+.dark .modern-badge-amber {
+  background-color: rgb(var(--modern-accent-amber) / 0.15);
+  color: rgb(251 191 36); /* amber-400 */
+}
+
+/* === Fast Mode Badge === */
+.modern-fast-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.5625rem;
+  font-weight: 500;
+  border-radius: 0.25rem;
+  background-color: rgb(254 243 199); /* amber-100 */
+  color: rgb(180 83 9);               /* amber-700 */
+  border: 1px solid rgb(252 211 77);  /* amber-300 */
+}
+
+.dark .modern-fast-mode-badge {
+  background-color: rgb(120 53 15 / 0.4); /* amber-900/40 */
+  color: rgb(252 211 77);                 /* amber-300 */
+  border-color: rgb(180 83 9);            /* amber-700 */
+}
+
+
+/* ============================================
+   SCROLLBAR STYLES
+   ============================================ */
+
+.modern-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(var(--modern-primary) / 0.3);
+  border-radius: 3px;
+}
+
+.modern-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--modern-primary) / 0.5);
+}
+
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes modern-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modern-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modern-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.modern-animate-fade-in {
+  animation: modern-fade-in 0.3s ease-out;
+}
+
+.modern-animate-slide-up {
+  animation: modern-slide-up 0.4s ease-out;
+}
+
+.modern-animate-pulse {
+  animation: modern-pulse 1.5s ease-in-out infinite;
+}
+
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  :root {
+    --modern-radius: 0.75rem;
+    --modern-radius-lg: 1rem;
+  }
+
+  .modern-message-user,
+  .modern-message-assistant {
+    max-width: 90%;
+  }
+}

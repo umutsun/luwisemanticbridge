@@ -407,7 +407,26 @@ export class RAGChatService {
           console.log('Using all available results');
         }
       } else {
-        console.log(' Citations disabled - skipping semantic search for performance');
+        // FAST MODE: Citations disabled but still do semantic search for context
+        console.log('⚡ FAST MODE: Citations disabled - performing lightweight semantic search');
+
+        // Still perform search but with reduced limit for faster response
+        const fastModeLimit = 10; // Fewer results for speed
+        if (useUnifiedEmbeddings) {
+          allResults = await semanticSearch.unifiedSemanticSearch(message, fastModeLimit);
+        } else {
+          allResults = await semanticSearch.hybridSearch(message, fastModeLimit);
+        }
+
+        searchResults = allResults.sort((a, b) => {
+          const scoreA = a.score || (a.similarity_score * 100) || 0;
+          const scoreB = b.score || (b.similarity_score * 100) || 0;
+          return scoreB - scoreA;
+        });
+
+        // Use top 5 results for context in fast mode
+        initialDisplayCount = Math.min(5, searchResults.length);
+        console.log(`⚡ FAST MODE: Found ${searchResults.length} results, using top ${initialDisplayCount} for context`);
       }
 
       // 3. Get conversation history with retry
@@ -504,29 +523,39 @@ export class RAGChatService {
       const contextLabel = responseLanguage === 'en' ? 'CONTEXT INFORMATION' : 'BAĞLAM BİLGİLERİ';
       const questionLabel = responseLanguage === 'en' ? 'QUESTION' : 'SORU';
 
-      // Removed confidence instruction - results are already sorted by score (best first)
-      // The LLM will naturally use the most relevant context from top results
+      let userPrompt: string;
 
-      // Add citation format instruction with STRONG emphasis on NO HEADINGS
-      // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
-      // INLINE CITATIONS: Place citations right after the relevant statement (footnote style)
-      const citationInstruction = responseLanguage === 'en'
-        ? `\n\nCRITICAL FORMATTING RULES:\n` +
-        ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
-        ` INLINE CITATIONS: Place **[1]** after relevant statements. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
-        ` NO DUPLICATE CITATIONS: Each source number should appear only ONCE in the response. Don't repeat **[1]** multiple times.\n` +
-        ` Use ONLY source numbers 1-${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
-        ` NEVER add section headings or labels like "REFERENCES:"\n` +
-        `Write flowing text with unique inline citations.`
-        : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
-        ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
-        ` INLINE KAYNAKÇA: İlgili bilgiden sonra **[1]** koy. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
-        ` TEKRAR ETME: Her kaynak numarası yanıtta sadece BİR KEZ geçsin. **[1]**'i birden fazla kullanma.\n` +
-        ` SADECE 1-${initialDisplayCount} arası kaynak numarası kullan\n` +
-        ` ASLA bölüm başlığı veya "KAYNAKLAR:" gibi etiket ekleme\n` +
-        `Akıcı metin yaz, her kaynağı tek seferde kullan.`;
+      // ⚡ FAST MODE: Simplified prompt without citation instructions
+      if (citationsDisabled) {
+        console.log('⚡ FAST MODE: Using simplified prompt (no citations)');
+        const fastModeInstruction = responseLanguage === 'en'
+          ? `\n\nAnswer directly and concisely based on the context. Write natural paragraphs without citations or source references.`
+          : `\n\nBağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı veya atıf olmadan doğal paragraflar yaz.`;
 
-      const userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
+        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
+      } else {
+        // Normal mode with citation instructions
+        // Add citation format instruction with STRONG emphasis on NO HEADINGS
+        // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
+        // INLINE CITATIONS: Place citations right after the relevant statement (footnote style)
+        const citationInstruction = responseLanguage === 'en'
+          ? `\n\nCRITICAL FORMATTING RULES:\n` +
+          ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
+          ` INLINE CITATIONS: Place **[1]** after relevant statements. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
+          ` NO DUPLICATE CITATIONS: Each source number should appear only ONCE in the response. Don't repeat **[1]** multiple times.\n` +
+          ` Use ONLY source numbers 1-${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+          ` NEVER add section headings or labels like "REFERENCES:"\n` +
+          `Write flowing text with unique inline citations.`
+          : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
+          ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
+          ` INLINE KAYNAKÇA: İlgili bilgiden sonra **[1]** koy. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
+          ` TEKRAR ETME: Her kaynak numarası yanıtta sadece BİR KEZ geçsin. **[1]**'i birden fazla kullanma.\n` +
+          ` SADECE 1-${initialDisplayCount} arası kaynak numarası kullan\n` +
+          ` ASLA bölüm başlığı veya "KAYNAKLAR:" gibi etiket ekleme\n` +
+          `Akıcı metin yaz, her kaynağı tek seferde kullan.`;
+
+        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
+      }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
       console.log(` Context length: ${enhancedContext.length}, sources: ${initialDisplayCount}`);
@@ -570,20 +599,6 @@ export class RAGChatService {
         });
       }
 
-      // 6. Format sources for frontend with natural language summaries
-      // PERFORMANCE: Pass settings to avoid re-querying database
-      const formattedSources = await this.formatSources(searchResults, {
-        enableParallelLLM: settingsMap.get('enable_parallel_llm') === 'true',
-        parallelCount: Math.min(parseInt(settingsMap.get('parallel_llm_count') || '3'), 5),
-        batchSize: batchSize
-      });
-
-      // 7. Get additional related topics (excluding already shown ones) - DISABLED FOR PERFORMANCE
-      // const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
-      // const shownIds = searchResults.slice(0, 3).map(s => s.id?.toString() || s.source_id?.toString());
-      // const relatedTopics = await this.getRelatedTopics(message, searchResults.slice(0, 3), relatedResultsLimit);
-      const relatedTopics = []; // Disable for now
-
       // Multilingual provider names
       const getProviderDisplayName = (provider: string, language: string = 'tr') => {
         const providerNames = {
@@ -603,6 +618,41 @@ export class RAGChatService {
 
         return providerNames[language]?.[provider] || provider;
       };
+
+      // ⚡ FAST MODE: Skip source formatting and follow-up questions
+      if (citationsDisabled) {
+        console.log('⚡ FAST MODE: Skipping source formatting and follow-up generation');
+
+        return {
+          response: response.content,
+          sources: [], // No sources in fast mode
+          relatedTopics: [],
+          followUpQuestions: [],
+          conversationId: convId,
+          provider: response.provider,
+          model: response.model || response.provider,
+          providerDisplayName: getProviderDisplayName(response.provider || '', options.language || 'tr'),
+          language: options.language || 'tr',
+          fallbackUsed: response.fallbackUsed || false,
+          originalModel: activeModel,
+          actualProvider: response.provider,
+          fastMode: true // Flag for frontend
+        };
+      }
+
+      // 6. Format sources for frontend with natural language summaries (NORMAL MODE)
+      // PERFORMANCE: Pass settings to avoid re-querying database
+      const formattedSources = await this.formatSources(searchResults, {
+        enableParallelLLM: settingsMap.get('enable_parallel_llm') === 'true',
+        parallelCount: Math.min(parseInt(settingsMap.get('parallel_llm_count') || '3'), 5),
+        batchSize: batchSize
+      });
+
+      // 7. Get additional related topics (excluding already shown ones) - DISABLED FOR PERFORMANCE
+      // const relatedResultsLimit = parseInt(await settingsService.getSetting('related_results_limit') || '20');
+      // const shownIds = searchResults.slice(0, 3).map(s => s.id?.toString() || s.source_id?.toString());
+      // const relatedTopics = await this.getRelatedTopics(message, searchResults.slice(0, 3), relatedResultsLimit);
+      const relatedTopics = []; // Disable for now
 
       // Log sources content for debugging
       console.log(` Returning ${formattedSources.length} sources to frontend`);
@@ -636,7 +686,8 @@ export class RAGChatService {
         language: options.language || 'tr',
         fallbackUsed: response.fallbackUsed || false,
         originalModel: activeModel,
-        actualProvider: response.provider
+        actualProvider: response.provider,
+        fastMode: false
       };
     } catch (error) {
       console.error('RAG chat error:', error);
