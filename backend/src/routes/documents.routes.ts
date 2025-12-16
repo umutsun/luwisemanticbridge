@@ -617,27 +617,29 @@ router.post('/', authenticateToken, async (req: AuthenticatedRequest, res: Respo
 // Get document statistics (must come before /:id route) - REQUIRES AUTHENTICATION
 router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Get document counts
+    // Get document counts using processing_status and document_embeddings table
     const docStats = await lsembPool.query(`
       SELECT
         COUNT(*)::int as total,
-        COUNT(CASE WHEN (metadata->'analysis'->>'embeddings')::int > 0
-                   OR metadata->>'hasEmbeddings' = 'true'
-                   OR (SELECT COUNT(*) FROM chunks WHERE chunks.document_id = documents.id) > 0
+        COUNT(CASE WHEN processing_status = 'pending' THEN 1 END)::int as pending,
+        COUNT(CASE WHEN processing_status = 'embedded'
+                   OR EXISTS (SELECT 1 FROM document_embeddings de WHERE de.document_id = documents.id)
               THEN 1 END)::int as embedded,
-        COUNT(CASE WHEN metadata->'visionOCR' IS NOT NULL
-                   OR metadata->>'ocr_processed' = 'true'
+        COUNT(CASE WHEN processing_status IN ('completed', 'analyzed', 'embedded')
+                   OR content IS NOT NULL AND LENGTH(content) > 50
               THEN 1 END)::int as ocr_processed,
+        COUNT(CASE WHEN processing_status = 'analyzing' THEN 1 END)::int as ocr_pending,
         COUNT(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 END)::int as uploaded_today,
-        SUM(CASE WHEN metadata->'analysis'->>'tokensUsed' IS NOT NULL
-                THEN (metadata->'analysis'->>'tokensUsed')::int ELSE 0 END)::bigint as total_tokens
+        SUM(COALESCE(tokens_used, 0))::bigint as total_tokens
       FROM documents
     `);
 
     const doc = docStats.rows[0];
     const total = parseInt(doc.total) || 0;
+    const pending = parseInt(doc.pending) || 0;
     const embedded = parseInt(doc.embedded) || 0;
     const ocrProcessed = parseInt(doc.ocr_processed) || 0;
+    const ocrPending = parseInt(doc.ocr_pending) || 0;
 
     // Get transform statistics (tables created and records inserted)
     let transformStats = {
@@ -737,9 +739,9 @@ router.get('/stats', authenticateToken, async (req: AuthenticatedRequest, res: R
       documents: {
         total: total,
         embedded: embedded,
-        pending: Math.max(0, total - embedded),
+        pending: pending,
         ocr_processed: ocrProcessed,
-        ocr_pending: Math.max(0, total - ocrProcessed),
+        ocr_pending: ocrPending,
         under_review: 0
       },
       transform: {
