@@ -182,8 +182,11 @@ export default function DataSchemaSettings() {
 
   if (loading) return <div className="flex justify-center p-8"><RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
+  // Debug
+  console.log('DataSchemaSettings:', { allSchemas, filtered, loading, activeSchemaId });
+
   return (
-    <div className="grid grid-cols-[300px_1fr] gap-4">
+    <div className="grid grid-cols-[35%_65%] gap-6">
       {/* Sol - Şema Listesi */}
       <Card className="h-fit">
         <CardHeader className="py-3 px-4">
@@ -247,7 +250,14 @@ export default function DataSchemaSettings() {
               </div>
             )}
             {!filtered.length && selectedSchemaId !== 'new' && (
-              <p className="text-center text-xs text-muted-foreground py-4">Şema yok</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <Database className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Henüz şema yok</p>
+                <Button size="sm" variant="outline" onClick={createNew} className="mt-3">
+                  <Plus className="w-3 h-3 mr-1" />
+                  İlk Şemanı Oluştur
+                </Button>
+              </div>
             )}
           </div>
         </CardContent>
