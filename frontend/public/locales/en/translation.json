@@ -1554,7 +1554,8 @@
     "physicalFiles": {
       "title": "Physical Files",
       "searchFiles": "Search files...",
-      "allTypes": "All Types",
+      "allTypes": "All Files",
+      "notInDatabase": "Not in DB",
       "folders": "Folders",
       "noFoldersFound": "No folders found",
       "noFilesFound": "No files found",

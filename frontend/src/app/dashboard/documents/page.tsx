@@ -1033,14 +1033,9 @@ export default function DocumentManagerPage() {
       if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
         return false;
       }
-      if (physicalFilesFilter !== 'all') {
-        const fileExt = file.ext.toLowerCase();
-        if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
-          return false;
-        }
-        if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-          return false;
-        }
+      // Not in database filter
+      if (physicalFilesFilter === 'not-in-db' && file.inDatabase) {
+        return false;
       }
       return true;
     });
@@ -1070,14 +1065,9 @@ export default function DocumentManagerPage() {
       if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
         return false;
       }
-      if (physicalFilesFilter !== 'all') {
-        const fileExt = file.ext.toLowerCase();
-        if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
-          return false;
-        }
-        if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-          return false;
-        }
+      // Not in database filter
+      if (physicalFilesFilter === 'not-in-db' && file.inDatabase) {
+        return false;
       }
       return true;
     });
@@ -3427,6 +3417,7 @@ export default function DocumentManagerPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">{t('documents.physicalFiles.allTypes')}</SelectItem>
+                        <SelectItem value="not-in-db">{t('documents.physicalFiles.notInDatabase')}</SelectItem>
                         <SelectItem value="folders">{t('documents.physicalFiles.folders')}</SelectItem>
                       </SelectContent>
                     </Select>
@@ -3536,16 +3527,9 @@ export default function DocumentManagerPage() {
                               if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
                                 return false;
                               }
-                              // File type filter
-                              if (physicalFilesFilter !== 'all') {
-                                const fileExt = file.ext.toLowerCase();
-                                // Handle markdown separately
-                                if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
-                                  return false;
-                                }
-                                if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-                                  return false;
-                                }
+                              // Not in database filter
+                              if (physicalFilesFilter === 'not-in-db' && file.inDatabase) {
+                                return false;
                               }
                               return true;
                             })
@@ -3613,14 +3597,9 @@ export default function DocumentManagerPage() {
                           if (physicalFilesSearch && !file.filename.toLowerCase().includes(physicalFilesSearch.toLowerCase())) {
                             return false;
                           }
-                          if (physicalFilesFilter !== 'all') {
-                            const fileExt = file.ext.toLowerCase();
-                            if (physicalFilesFilter === 'md' && fileExt !== 'md' && fileExt !== 'markdown') {
-                              return false;
-                            }
-                            if (physicalFilesFilter !== 'md' && fileExt !== physicalFilesFilter) {
-                              return false;
-                            }
+                          // Not in database filter
+                          if (physicalFilesFilter === 'not-in-db' && file.inDatabase) {
+                            return false;
                           }
                           return true;
                         }).length;

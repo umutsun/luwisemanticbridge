@@ -1756,7 +1756,8 @@
     "physicalFiles": {
       "title": "Fiziksel Dosyalar",
       "searchFiles": "Dosyalarda ara...",
-      "allTypes": "Tüm Tipler",
+      "allTypes": "Tüm Dosyalar",
+      "notInDatabase": "DB'de Yok",
       "folders": "Klasörler",
       "noFoldersFound": "Klasör bulunamadı",
       "noFilesFound": "Dosya bulunamadı",
