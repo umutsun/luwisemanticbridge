@@ -3142,7 +3142,7 @@ export default function DocumentManagerPage() {
             <CardContent className="p-3">
               <div className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">{t('documents.stats.totalDocuments')}</div>
               <div className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                {(documents || []).length.toLocaleString()}
+                {(stats.documents?.total || documentsTotal || 0).toLocaleString()}
               </div>
               <div className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
                 <span className="font-mono text-xs">+{stats.history?.uploaded_today || 0}</span>
@@ -3156,7 +3156,7 @@ export default function DocumentManagerPage() {
             <CardContent className="p-3">
               <div className="text-xs text-gray-700 dark:text-gray-300 font-medium mb-1">{t('documents.stats.pending')}</div>
               <div className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                {(documents || []).filter(doc => !doc.processing_status || doc.processing_status === 'pending').length.toLocaleString()}
+                {(stats.documents?.pending || 0).toLocaleString()}
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                 <span className="opacity-75 text-xs">→ {t('documents.status.analyzing')}</span>
@@ -3169,15 +3169,11 @@ export default function DocumentManagerPage() {
             <CardContent className="p-3">
               <div className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">{t('documents.stats.analyzed')}</div>
               <div className="text-xl font-bold text-green-900 dark:text-green-100">
-                {(() => {
-                  const analyzing = (documents || []).filter(doc => doc.processing_status === 'analyzing').length;
-                  const analyzed = (documents || []).filter(doc => doc.processing_status === 'analyzed' && !doc.hasEmbeddings && (!doc.metadata?.embeddings || doc.metadata.embeddings === 0)).length;
-                  return (analyzing + analyzed).toLocaleString();
-                })()}
+                {(stats.documents?.ocr_processed || 0).toLocaleString()}
               </div>
               <div className="text-xs text-green-600 dark:text-green-400 mt-0.5">
                 <span className="font-mono text-xs">
-                  {(documents || []).filter(doc => doc.processing_status === 'analyzing').length.toLocaleString()}
+                  {(stats.documents?.ocr_pending || 0).toLocaleString()}
                 </span>
                 <span className="opacity-75 ml-1 text-xs">{t('documents.stats.analyzing').toLowerCase()}</span>
               </div>
@@ -3194,7 +3190,7 @@ export default function DocumentManagerPage() {
                 {skippedCount > 0 && <AlertCircle className="w-3 h-3 text-red-500" />}
               </div>
               <div className="text-xl font-bold text-violet-900 dark:text-violet-100">
-                {((documents || []).filter(doc => doc.hasEmbeddings || doc.metadata?.embeddings > 0).length + skippedCount).toLocaleString()}
+                {((stats.documents?.embedded || 0) + skippedCount).toLocaleString()}
               </div>
               <div className="text-xs text-violet-600 dark:text-violet-400 mt-0.5">
                 {skippedCount > 0 ? (
