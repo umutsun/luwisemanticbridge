@@ -691,7 +691,7 @@ export default function ChatInterface() {
                                 {/* Active Model Display */}
                                 {settingsLoaded && chatbotSettings.activeChatModel && (
                                     <div className="flex items-center gap-1">
-                                        <span className="text-[9px] font-medium text-slate-600 dark:text-slate-500">
+                                        <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                                             {chatbotSettings.activeChatModel.split('/')?.[1] || chatbotSettings.activeChatModel}
                                         </span>
                                     </div>
@@ -701,7 +701,7 @@ export default function ChatInterface() {
 
                         <div className="flex items-center gap-2">
                             {/* New Chat Button */}
-                            <Button variant="ghost" size="icon" onClick={clearChat} className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full" title={t('chat.newChat', 'Yeni Sohbet')}>
+                            <Button variant="ghost" size="icon" onClick={clearChat} className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full transition-colors" title={t('chat.newChat', 'Yeni Sohbet')}>
                                 <Plus className="w-5 h-5" />
                             </Button>
 
@@ -709,12 +709,12 @@ export default function ChatInterface() {
                             {user?.role === 'admin' && (
                                 <>
                                     <Link href="/dashboard/settings">
-                                        <Button variant="ghost" size="icon" className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full" title={t('common.settings', 'Ayarlar')}>
+                                        <Button variant="ghost" size="icon" className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full transition-colors" title={t('common.settings', 'Ayarlar')}>
                                             <Settings className="w-5 h-5" />
                                         </Button>
                                     </Link>
                                     <Link href="/dashboard">
-                                        <Button variant="ghost" size="icon" className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full" title={t('common.dashboard', 'Dashboard')}>
+                                        <Button variant="ghost" size="icon" className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full transition-colors" title={t('common.dashboard', 'Dashboard')}>
                                             <LayoutDashboard className="w-5 h-5" />
                                         </Button>
                                     </Link>
@@ -726,33 +726,33 @@ export default function ChatInterface() {
                             {/* User Dropdown */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full">
+                                    <Button variant="ghost" size="icon" className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full transition-colors">
                                         <User className="w-5 h-5" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 min-w-[200px] shadow-lg">
-                                    <div className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700/50">
-                                        <p className="text-sm font-medium text-slate-900 dark:text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email}</p>
+                                <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 min-w-[220px] shadow-xl">
+                                    <div className="px-3 py-2.5 border-b-2 border-slate-200 dark:border-slate-600">
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
+                                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-0.5">{user?.email}</p>
                                     </div>
-                                    <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer" onClick={openProfileDialog}>
-                                        <Edit3 className="w-4 h-4 mr-2 text-violet-400" /> {t('profile.edit', 'Profili Düzenle')}
+                                    <DropdownMenuItem className="focus:bg-violet-100 dark:focus:bg-violet-600/30 focus:text-violet-900 dark:focus:text-violet-100 cursor-pointer font-medium" onClick={openProfileDialog}>
+                                        <Edit3 className="w-4 h-4 mr-2 text-violet-500 dark:text-violet-400" /> {t('profile.edit', 'Profili Düzenle')}
                                     </DropdownMenuItem>
                                     <Link href="/profile">
-                                        <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer">
-                                            <UserCircle className="w-4 h-4 mr-2 text-blue-400" /> {t('common.profile', 'Profil Sayfası')}
+                                        <DropdownMenuItem className="focus:bg-blue-100 dark:focus:bg-blue-600/30 focus:text-blue-900 dark:focus:text-blue-100 cursor-pointer font-medium">
+                                            <UserCircle className="w-4 h-4 mr-2 text-blue-500 dark:text-blue-400" /> {t('common.profile', 'Profil Sayfası')}
                                         </DropdownMenuItem>
                                     </Link>
                                     {(user?.role === 'admin' || (user as { role?: string })?.role === 'manager') && (
                                         <Link href="/dashboard/messages">
-                                            <DropdownMenuItem className="focus:bg-violet-500/20 focus:text-white cursor-pointer">
-                                                <MessageSquare className="w-4 h-4 mr-2 text-green-400" /> {t('dashboard.messages.title', 'Mesaj Analizleri')}
+                                            <DropdownMenuItem className="focus:bg-green-100 dark:focus:bg-green-600/30 focus:text-green-900 dark:focus:text-green-100 cursor-pointer font-medium">
+                                                <MessageSquare className="w-4 h-4 mr-2 text-green-500 dark:text-green-400" /> {t('dashboard.messages.title', 'Mesaj Analizleri')}
                                             </DropdownMenuItem>
                                         </Link>
                                     )}
-                                    <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-700/50" />
-                                    <DropdownMenuItem className="focus:bg-red-500/20 focus:text-white cursor-pointer" onClick={logout}>
-                                        <LogOut className="w-4 h-4 mr-2 text-red-400" /> {t('nav.logout', 'Çıkış')}
+                                    <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-600" />
+                                    <DropdownMenuItem className="focus:bg-red-100 dark:focus:bg-red-600/30 focus:text-red-900 dark:focus:text-red-100 cursor-pointer font-medium" onClick={logout}>
+                                        <LogOut className="w-4 h-4 mr-2 text-red-500 dark:text-red-400" /> {t('nav.logout', 'Çıkış')}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -804,9 +804,14 @@ export default function ChatInterface() {
                                     {isSuggestionsLoading ? (
                                         Array.from({ length: 4 }).map((_, index) => (
                                             <div key={`skeleton-${index}`} className="p-4 rounded-2xl bg-white/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/30 backdrop-blur-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 animate-pulse" />
-                                                    <Skeleton className="h-4 w-3/4 bg-slate-100 dark:bg-slate-700" />
+                                                <div className="flex items-start gap-3">
+                                                    <div className="mt-0.5 p-2 rounded-xl bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-500/10 dark:to-indigo-500/10 animate-pulse">
+                                                        <Zap className="w-4 h-4 text-violet-400 dark:text-violet-500" />
+                                                    </div>
+                                                    <div className="flex-1 space-y-2">
+                                                        <Skeleton className="h-3.5 w-full bg-slate-200 dark:bg-slate-700" />
+                                                        <Skeleton className="h-3.5 w-5/6 bg-slate-200 dark:bg-slate-700" />
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))
@@ -859,10 +864,10 @@ export default function ChatInterface() {
                                                 )}
 
                                                 {message.isTyping || (message.isStreaming && !message.content) ? (
-                                                    <div className="space-y-2 py-1">
-                                                        <Skeleton className="h-3 w-full bg-slate-200 dark:bg-slate-700" />
-                                                        <Skeleton className="h-3 w-4/5 bg-slate-200 dark:bg-slate-700" />
-                                                        <Skeleton className="h-3 w-3/5 bg-slate-200 dark:bg-slate-700" />
+                                                    <div className="space-y-3 py-2">
+                                                        <Skeleton className="h-3.5 w-full bg-slate-200 dark:bg-slate-700/80" />
+                                                        <Skeleton className="h-3.5 w-[90%] bg-slate-200 dark:bg-slate-700/80" />
+                                                        <Skeleton className="h-3.5 w-[75%] bg-slate-200 dark:bg-slate-700/80" />
                                                     </div>
                                                 ) : (
                                                     <div className="prose prose-slate dark:prose-invert prose-sm max-w-none">
@@ -893,25 +898,25 @@ export default function ChatInterface() {
                                                                                 <div
                                                                                     key={idx}
                                                                                     onClick={() => handleSourceClick(source)}
-                                                                                    className="group p-3 rounded-lg bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-600 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer"
+                                                                                    className="group p-3.5 rounded-xl bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-700/90 border-2 border-slate-200 dark:border-slate-600 hover:border-violet-400 dark:hover:border-violet-500 transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md"
                                                                                     title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
                                                                                 >
                                                                                     <div className="flex items-start gap-3">
                                                                                         <div className="min-w-0 flex-1">
                                                                                             {/* Primary: Natural Language Summary/Excerpt */}
-                                                                                            <div className="mb-2">
-                                                                                                <p className="text-sm text-slate-800 dark:text-slate-100 leading-relaxed line-clamp-3">
+                                                                                            <div className="mb-2.5">
+                                                                                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100 leading-relaxed line-clamp-3">
                                                                                                     {source.summary || source.excerpt || source.content || source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                                                 </p>
                                                                                             </div>
 
                                                                                             {/* Footer: Source Number + Keywords */}
                                                                                             <div className="flex flex-wrap items-center gap-1.5">
-                                                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-200 border border-violet-300 dark:border-violet-600 font-bold">
-                                                                                                    {idx + 1}
+                                                                                                <span className="text-[10.5px] px-2 py-1 rounded-md bg-violet-500 dark:bg-violet-600 text-white border-0 font-bold shadow-sm">
+                                                                                                    #{idx + 1}
                                                                                                 </span>
                                                                                                 {source.category && (
-                                                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                                                                                    <span className="text-[10.5px] px-2 py-1 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-medium">
                                                                                                         {source.category}
                                                                                                     </span>
                                                                                                 )}
@@ -920,7 +925,7 @@ export default function ChatInterface() {
                                                                                                     return (
                                                                                                         <span
                                                                                                             key={kidx}
-                                                                                                            className={`text-[10px] px-1.5 py-0.5 rounded border ${getKeywordColor(keyword, isBoosted)}`}
+                                                                                                            className={`text-[10.5px] px-2 py-1 rounded-md border font-medium ${getKeywordColor(keyword, isBoosted)}`}
                                                                                                             title={isBoosted ? t('chat.keyword.fromQuery', `🔍 Sorgunuzdan: "${keyword}"`) : ''}
                                                                                                         >
                                                                                                             {keyword}
@@ -929,7 +934,7 @@ export default function ChatInterface() {
                                                                                                 })}
                                                                                             </div>
                                                                                         </div>
-                                                                                        <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-violet-500 dark:group-hover:text-violet-400 flex-shrink-0 transition-colors" />
+                                                                                        <ChevronRight className="w-5 h-5 text-slate-400 dark:text-slate-400 group-hover:text-violet-500 dark:group-hover:text-violet-400 flex-shrink-0 transition-colors mt-0.5" />
                                                                                     </div>
                                                                                 </div>
                                                                             );
@@ -946,12 +951,12 @@ export default function ChatInterface() {
                                                                                                 [message.id]: Math.min(visibleCount + 5, sortedSources.length)
                                                                                             }));
                                                                                         }}
-                                                                                        className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-100 dark:bg-violet-500/10 hover:bg-violet-200 dark:hover:bg-violet-500/20 border border-violet-300 dark:border-violet-500/20 hover:border-violet-400 dark:hover:border-violet-500/40 transition-all duration-300"
+                                                                                        className="group flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-100 dark:bg-violet-600/30 hover:bg-violet-200 dark:hover:bg-violet-600/50 border-2 border-violet-300 dark:border-violet-500 hover:border-violet-400 dark:hover:border-violet-400 transition-all duration-300 shadow-sm"
                                                                                     >
-                                                                                        <span className="text-[10px] font-medium text-violet-700 dark:text-violet-400 group-hover:text-violet-800 dark:group-hover:text-violet-300">
+                                                                                        <span className="text-[11px] font-bold text-violet-700 dark:text-violet-200 group-hover:text-violet-800 dark:group-hover:text-violet-100">
                                                                                             +{Math.min(5, sortedSources.length - visibleCount)} {t('chat.more', 'daha')}
                                                                                         </span>
-                                                                                        <ChevronDown className="w-3.5 h-3.5 text-violet-700 dark:text-violet-400 group-hover:text-violet-800 dark:group-hover:text-violet-300 group-hover:translate-y-0.5 transition-transform" />
+                                                                                        <ChevronDown className="w-4 h-4 text-violet-700 dark:text-violet-200 group-hover:text-violet-800 dark:group-hover:text-violet-100 group-hover:translate-y-0.5 transition-transform" />
                                                                                     </button>
                                                                                 )}
                                                                                 {canShowLess && (
@@ -962,10 +967,10 @@ export default function ChatInterface() {
                                                                                                 [message.id]: initialCount
                                                                                             }));
                                                                                         }}
-                                                                                        className="group flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-200 dark:bg-slate-700/30 hover:bg-slate-300 dark:hover:bg-slate-700/50 border border-slate-300 dark:border-slate-600/20 hover:border-slate-400 dark:hover:border-slate-600/40 transition-all duration-300"
+                                                                                        className="group flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 border-2 border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500 transition-all duration-300 shadow-sm"
                                                                                     >
-                                                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:-translate-y-0.5 transition-transform" />
-                                                                                        <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300">{t('chat.showLess', 'Küçült')}</span>
+                                                                                        <ChevronUp className="w-4 h-4 text-slate-700 dark:text-slate-200 group-hover:text-slate-800 dark:group-hover:text-slate-100 group-hover:-translate-y-0.5 transition-transform" />
+                                                                                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 group-hover:text-slate-800 dark:group-hover:text-slate-100">{t('chat.showLess', 'Küçült')}</span>
                                                                                     </button>
                                                                                 )}
                                                                             </div>
@@ -981,12 +986,12 @@ export default function ChatInterface() {
                                             {/* Message Footer */}
                                             {message.role === 'assistant' && (
                                                 <div className="flex justify-start items-center gap-2 mt-2 px-1">
-                                                    <span className="text-[10px] font-medium text-slate-500 tabular-nums">
+                                                    <span className="text-[10.5px] font-semibold text-slate-600 dark:text-slate-400 tabular-nums">
                                                         {message.isStreaming && message.startTime ? (
                                                             // Show elapsed time during streaming
                                                             <>
                                                                 <span className="inline-flex items-center gap-1">
-                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    <Loader2 className="w-3 h-3 animate-spin text-violet-500 dark:text-violet-400" />
                                                                     {Math.floor((Date.now() - message.startTime) / 1000)}s
                                                                 </span>
                                                             </>
@@ -1030,18 +1035,18 @@ export default function ChatInterface() {
                                     size="icon"
                                     className={`mb-1 mr-1 h-10 w-10 rounded-xl transition-all duration-200 ${inputText.trim()
                                         ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/25'
-                                        : 'bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                                         }`}
                                 >
-                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-700 dark:text-slate-300" /> : <Send className="w-5 h-5" />}
+                                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-600 dark:text-slate-300" /> : <Send className="w-5 h-5" />}
                                 </Button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between mt-3 px-2">
-                            <p className="text-[10px] text-slate-500 dark:text-slate-500 font-medium">
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
                                 {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
                             </p>
-                            <p className="text-[10px] text-slate-500 dark:text-slate-500 font-medium tracking-wide uppercase">
+                            <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold tracking-wide uppercase">
                                 {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR.')}
                             </p>
                         </div>
@@ -1061,22 +1066,22 @@ export default function ChatInterface() {
                         </DialogHeader>
                         <div className="space-y-4 pt-2">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('profile.name', 'Ad Soyad')}</label>
+                                <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('profile.name', 'Ad Soyad')}</label>
                                 <Input
                                     value={profileForm.name}
                                     onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
                                     placeholder={t('profile.namePlaceholder', 'Adınızı girin')}
-                                    className="bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/50 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-violet-500/50 focus:ring-violet-500/20"
+                                    className="bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:border-violet-500 dark:focus:border-violet-400 focus:ring-violet-500/20"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('profile.email', 'E-posta')}</label>
+                                <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('profile.email', 'E-posta')}</label>
                                 <Input
                                     value={profileForm.email}
                                     disabled
-                                    className="bg-slate-100 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700/30 text-slate-500 cursor-not-allowed"
+                                    className="bg-slate-200 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 cursor-not-allowed"
                                 />
-                                <p className="text-[10px] text-slate-500">{t('profile.emailHint', 'E-posta değiştirilemez')}</p>
+                                <p className="text-[10.5px] font-medium text-slate-600 dark:text-slate-400">{t('profile.emailHint', 'E-posta değiştirilemez')}</p>
                             </div>
                             {profileError && (
                                 <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
