@@ -34,7 +34,8 @@ export function ChatContainer() {
         : 'AI Assistant Chat';
       createNewConversation(chatTitle);
     }
-  }, [currentConversationId, createNewConversation, config]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentConversationId]);
   
   return (
     <div className="flex flex-col h-full w-full bg-gray-50/50 dark:bg-gray-900">
