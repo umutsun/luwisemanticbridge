@@ -3415,8 +3415,8 @@ export default function DocumentManagerPage() {
                     </Select>
                   </div>
 
-                  {/* Files List - max height to match Documents table */}
-                  <ScrollArea className="flex-1 max-h-[500px]">
+                  {/* Files List - fills remaining card space */}
+                  <ScrollArea className="flex-1 min-h-0">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3753,8 +3753,8 @@ export default function DocumentManagerPage() {
                     </Table>
                   </div>
 
-                  {/* Scrollable Body - max height to prevent page from growing too long */}
-                  <ScrollArea className="flex-1 max-h-[500px]">
+                  {/* Scrollable Body - fills remaining card space, min-h-0 needed for flex child overflow */}
+                  <ScrollArea className="flex-1 min-h-0">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
