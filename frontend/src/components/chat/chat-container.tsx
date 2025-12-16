@@ -6,8 +6,10 @@ import { ChatInput } from './chat-input';
 import { useChatStore } from '@/lib/store/chat-store';
 import { useChat } from '@/lib/hooks/use-chat';
 import { useChatStream } from '@/lib/hooks/use-chat-stream';
+import { useConfig } from '@/contexts/ConfigContext';
 
 export function ChatContainer() {
+  const { config } = useConfig();
   const {
     getCurrentMessages,
     isLoading,
@@ -27,9 +29,12 @@ export function ChatContainer() {
   useEffect(() => {
     // Create a new conversation if none exists
     if (!currentConversationId) {
-      createNewConversation('Legal Assistant Chat');
+      const chatTitle = config?.app?.name
+        ? `${config.app.name} Chat`
+        : 'AI Assistant Chat';
+      createNewConversation(chatTitle);
     }
-  }, [currentConversationId, createNewConversation]);
+  }, [currentConversationId, createNewConversation, config]);
   
   return (
     <div className="flex flex-col h-full w-full bg-gray-50/50 dark:bg-gray-900">
