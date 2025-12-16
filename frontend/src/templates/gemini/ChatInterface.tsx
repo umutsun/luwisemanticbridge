@@ -416,7 +416,7 @@ export default function ChatInterface() {
                     <div className="flex items-center gap-1">
                         <button
                             onClick={clearChat}
-                            className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5 transition-all duration-200"
+                            className="p-2 rounded-xl text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5 transition-all duration-200"
                             title={t('chat.newChat', 'Yeni Sohbet')}
                         >
                             <Plus className="w-5 h-5" />
@@ -437,7 +437,7 @@ export default function ChatInterface() {
                             <DropdownMenuContent align="end" className="w-56 bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl border-gray-200/50 dark:border-gray-700/50 shadow-2xl shadow-black/10 dark:shadow-black/30 rounded-2xl p-2 animate-in slide-in-from-top-2 duration-200">
                                 <div className="px-3 py-2.5 mb-1 rounded-xl bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
                                     <div className="font-semibold text-sm text-gray-900 dark:text-white">{user?.name || 'User'}</div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">{user?.email}</div>
+                                    <div className="text-xs text-gray-700 dark:text-gray-300 truncate mt-0.5 font-medium">{user?.email}</div>
                                 </div>
                                 <DropdownMenuItem onClick={openProfileDialog} className="cursor-pointer rounded-xl py-2.5 px-3 focus:bg-gray-100 dark:focus:bg-white/5 transition-colors">
                                     {t('profile.edit', 'Profili Düzenle')}
@@ -568,7 +568,7 @@ export default function ChatInterface() {
                                                 {chatbotSettings.greeting || t('chat.greeting', 'Merhaba')}, {user?.name?.split(' ')[0] || t('chat.user', 'Kullanıcı')}
                                             </span>
                                         </h1>
-                                        <p className="text-sm md:text-base text-gray-500 dark:text-gray-400">
+                                        <p className="text-sm md:text-base text-gray-600 dark:text-gray-300 font-medium">
                                             {chatbotSettings.welcomeMessage || t('chat.welcomeMessage', 'Size nasıl yardımcı olabilirim?')}
                                         </p>
                                     </div>
@@ -631,7 +631,7 @@ export default function ChatInterface() {
                                             {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
                                                 <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 overflow-hidden">
                                                     <div className="flex items-center justify-between mb-3">
-                                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                        <div className="flex items-center gap-2 text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">
                                                             <Sparkles className="w-3 h-3" />
                                                             {t('chat.sourcesAndCitations', 'Kaynaklar ve Atıflar')} ({msg.sources.length})
                                                         </div>
@@ -668,7 +668,7 @@ export default function ChatInterface() {
                                                                                                     style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
                                                                                                 />
                                                                                             </div>
-                                                                                            <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium flex-shrink-0">
+                                                                                            <span className="text-[10px] text-gray-700 dark:text-gray-200 font-bold flex-shrink-0">
                                                                                                 {Math.round(source.score)}%
                                                                                             </span>
                                                                                         </div>
@@ -737,7 +737,7 @@ export default function ChatInterface() {
                                             {/* Contextual Follow-up Questions */}
                                             {msg.role === 'assistant' && !msg.isStreaming && msg.followUpQuestions && msg.followUpQuestions.length > 0 && idx === messages.length - 1 && (
                                                 <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700/50">
-                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{t('chat.followUp', 'İlgili sorular')}</p>
+                                                    <p className="text-xs text-gray-700 dark:text-gray-300 mb-2 font-semibold">{t('chat.followUp', 'İlgili sorular')}</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {msg.followUpQuestions.map((question, qIdx) => (
                                                             <button
@@ -783,7 +783,7 @@ export default function ChatInterface() {
                                     onChange={(e) => setInputText(e.target.value)}
                                     onKeyDown={handleKeyPress}
                                     placeholder={chatbotSettings.placeholder}
-                                    className="flex-1 bg-transparent border-0 focus-visible:ring-0 resize-none max-h-[200px] min-h-[52px] py-3.5 px-4 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                                    className="flex-1 bg-transparent border-0 focus-visible:ring-0 resize-none max-h-[200px] min-h-[52px] py-3.5 px-4 text-base text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 font-medium"
                                     rows={1}
                                 />
 
@@ -806,7 +806,7 @@ export default function ChatInterface() {
                             </div>
                         </div>
                         <div className="text-center mt-2">
-                            <p className="text-[9px] text-gray-400/70 dark:text-gray-500/70 font-medium tracking-wide">
+                            <p className="text-[11px] text-gray-600 dark:text-gray-300 font-semibold tracking-wide uppercase">
                                 {t('chat.disclaimer', 'Yapay zeka hata yapabilir. Önemli bilgileri doğrulayın.')}
                             </p>
                         </div>

@@ -1008,7 +1008,7 @@ export default function ChatInterface() {
                   {/* Active Model Display */}
                   {settingsLoaded && chatbotSettings.activeChatModel && (
                     <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[9px] font-medium text-muted-foreground leading-tight">
+                      <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 leading-tight uppercase tracking-wide">
                         {chatbotSettings.activeChatModel.split('/')?.[1] || chatbotSettings.activeChatModel}
                       </span>
                     </div>
