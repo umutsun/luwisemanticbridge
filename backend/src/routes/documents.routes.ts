@@ -346,6 +346,24 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       case 'transformed':
         whereConditions.push(`d.transform_status = 'completed'`);
         break;
+      case 'csv':
+        // Only CSV files
+        whereConditions.push(`(d.type = 'csv' OR d.title ILIKE '%.csv')`);
+        break;
+      case 'transform-pending':
+        // CSV files that haven't been transformed yet
+        whereConditions.push(`(d.type = 'csv' OR d.title ILIKE '%.csv')`);
+        whereConditions.push(`(d.transform_status IS NULL OR d.transform_status != 'completed')`);
+        break;
+      case 'pdf':
+        // Only PDF files
+        whereConditions.push(`(d.type = 'pdf' OR d.title ILIKE '%.pdf')`);
+        break;
+      case 'pdf-pending':
+        // PDF files not yet analyzed/embedded
+        whereConditions.push(`(d.type = 'pdf' OR d.title ILIKE '%.pdf')`);
+        whereConditions.push(`(d.processing_status IS NULL OR d.processing_status = 'pending')`);
+        break;
       case 'all':
       default:
         // No status filter
