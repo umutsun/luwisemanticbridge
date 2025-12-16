@@ -3,19 +3,17 @@
 import React, { useState, useCallback, memo } from 'react';
 import { motion } from 'framer-motion';
 import {
-    Bot,
-    User,
     ExternalLink,
     ChevronRight,
     ChevronDown,
     ChevronUp,
     Loader2,
-    Zap,
     Copy,
     Check,
     RefreshCw,
     AlertCircle
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from 'react-i18next';
 
 interface Source {
@@ -108,34 +106,24 @@ const ModernMessageItem = memo(function ModernMessageItem({
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: 'easeOut' }}
-            className={`flex gap-3 sm:gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             role="listitem"
             aria-label={message.role === 'user' ? t('chat.userMessage', 'Kullanıcı mesajı') : t('chat.assistantMessage', 'Asistan mesajı')}
         >
-            {/* Assistant Avatar */}
-            {message.role === 'assistant' && (
-                <div
-                    className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-900/20"
-                    aria-hidden="true"
-                >
-                    <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                </div>
-            )}
-
-            <div className={`max-w-[90%] sm:max-w-[85%] ${message.role === 'user' ? 'order-1' : 'order-2'}`}>
+            <div className={`max-w-[90%] sm:max-w-[80%]`}>
                 {/* Message Bubble */}
                 <div
-                    className={`group relative p-3 sm:p-4 shadow-sm transition-all duration-200 ${
+                    className={`group relative p-3 sm:p-4 transition-all duration-200 ${
                         message.role === 'user'
                             ? message.isFromSource
                                 ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-100 border border-amber-200 dark:border-amber-700 rounded-2xl rounded-tr-sm'
-                                : 'bg-gradient-to-br from-violet-600 to-violet-700 text-white rounded-2xl rounded-tr-sm shadow-lg shadow-violet-500/20'
+                                : 'bg-violet-600 text-white rounded-2xl rounded-tr-sm shadow-md'
                             : message.isError
                                 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-200 rounded-2xl rounded-tl-sm'
-                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm hover:shadow-md'
+                                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl rounded-tl-sm'
                     }`}
                 >
                     {/* From Source Badge */}
@@ -156,10 +144,10 @@ const ModernMessageItem = memo(function ModernMessageItem({
 
                     {/* Message Content */}
                     {message.isTyping || (message.isStreaming && !message.content) ? (
-                        <div className="flex gap-1.5 py-2" role="status" aria-label={t('chat.typing', 'Yazıyor...')}>
-                            <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <div className="space-y-2 py-1" role="status" aria-label={t('chat.typing', 'Yazıyor...')}>
+                            <Skeleton className="h-3 w-full bg-slate-200 dark:bg-slate-700" />
+                            <Skeleton className="h-3 w-4/5 bg-slate-200 dark:bg-slate-700" />
+                            <Skeleton className="h-3 w-3/5 bg-slate-200 dark:bg-slate-700" />
                         </div>
                     ) : (
                         <div className="prose prose-slate dark:prose-invert prose-sm max-w-none">
@@ -321,29 +309,9 @@ const ModernMessageItem = memo(function ModernMessageItem({
                             )}
                         </span>
 
-                        {/* Fast Mode Badge */}
-                        {message.fastMode && !message.isStreaming && (
-                            <span
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[8px] sm:text-[9px] font-medium border border-amber-300 dark:border-amber-700"
-                                aria-label={t('chat.fastModeEnabled', 'Hızlı mod aktif')}
-                            >
-                                <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5" aria-hidden="true" />
-                                {t('chat.fastMode', 'Hızlı Mod')}
-                            </span>
-                        )}
                     </div>
                 )}
             </div>
-
-            {/* User Avatar */}
-            {message.role === 'user' && (
-                <div
-                    className="flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center"
-                    aria-hidden="true"
-                >
-                    <User className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 dark:text-slate-400" />
-                </div>
-            )}
         </motion.div>
     );
 });
