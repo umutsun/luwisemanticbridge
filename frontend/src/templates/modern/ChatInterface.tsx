@@ -730,29 +730,29 @@ export default function ChatInterface() {
                                         <User className="w-5 h-5" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 min-w-[220px] shadow-xl">
-                                    <div className="px-3 py-2.5 border-b-2 border-slate-200 dark:border-slate-600">
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
-                                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-0.5">{user?.email}</p>
+                                <DropdownMenuContent align="end" className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 min-w-[200px]">
+                                    <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-600">
+                                        <p className="text-sm text-slate-900 dark:text-white">{user?.name || t('chat.user', 'Kullanıcı')}</p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{user?.email}</p>
                                     </div>
-                                    <DropdownMenuItem className="focus:bg-violet-100 dark:focus:bg-violet-600/30 focus:text-violet-900 dark:focus:text-violet-100 cursor-pointer font-medium" onClick={openProfileDialog}>
-                                        <Edit3 className="w-4 h-4 mr-2 text-violet-500 dark:text-violet-400" /> {t('profile.edit', 'Profili Düzenle')}
+                                    <DropdownMenuItem className="focus:bg-slate-100 dark:focus:bg-slate-700 cursor-pointer" onClick={openProfileDialog}>
+                                        <Edit3 className="w-4 h-4 mr-2 text-slate-500 dark:text-slate-400" /> {t('profile.edit', 'Profili Düzenle')}
                                     </DropdownMenuItem>
                                     <Link href="/profile">
-                                        <DropdownMenuItem className="focus:bg-blue-100 dark:focus:bg-blue-600/30 focus:text-blue-900 dark:focus:text-blue-100 cursor-pointer font-medium">
-                                            <UserCircle className="w-4 h-4 mr-2 text-blue-500 dark:text-blue-400" /> {t('common.profile', 'Profil Sayfası')}
+                                        <DropdownMenuItem className="focus:bg-slate-100 dark:focus:bg-slate-700 cursor-pointer">
+                                            <UserCircle className="w-4 h-4 mr-2 text-slate-500 dark:text-slate-400" /> {t('common.profile', 'Profil Sayfası')}
                                         </DropdownMenuItem>
                                     </Link>
                                     {(user?.role === 'admin' || (user as { role?: string })?.role === 'manager') && (
                                         <Link href="/dashboard/messages">
-                                            <DropdownMenuItem className="focus:bg-green-100 dark:focus:bg-green-600/30 focus:text-green-900 dark:focus:text-green-100 cursor-pointer font-medium">
-                                                <MessageSquare className="w-4 h-4 mr-2 text-green-500 dark:text-green-400" /> {t('dashboard.messages.title', 'Mesaj Analizleri')}
+                                            <DropdownMenuItem className="focus:bg-slate-100 dark:focus:bg-slate-700 cursor-pointer">
+                                                <MessageSquare className="w-4 h-4 mr-2 text-slate-500 dark:text-slate-400" /> {t('dashboard.messages.title', 'Mesaj Analizleri')}
                                             </DropdownMenuItem>
                                         </Link>
                                     )}
                                     <DropdownMenuSeparator className="bg-slate-200 dark:bg-slate-600" />
-                                    <DropdownMenuItem className="focus:bg-red-100 dark:focus:bg-red-600/30 focus:text-red-900 dark:focus:text-red-100 cursor-pointer font-medium" onClick={logout}>
-                                        <LogOut className="w-4 h-4 mr-2 text-red-500 dark:text-red-400" /> {t('nav.logout', 'Çıkış')}
+                                    <DropdownMenuItem className="focus:bg-slate-100 dark:focus:bg-slate-700 cursor-pointer" onClick={logout}>
+                                        <LogOut className="w-4 h-4 mr-2 text-slate-500 dark:text-slate-400" /> {t('nav.logout', 'Çıkış')}
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -905,27 +905,29 @@ export default function ChatInterface() {
                                                                                         <div className="min-w-0 flex-1">
                                                                                             {/* Primary: Natural Language Summary/Excerpt */}
                                                                                             <div className="mb-2.5">
-                                                                                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100 leading-relaxed line-clamp-3">
+                                                                                                <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed line-clamp-3 break-words">
                                                                                                     {source.summary || source.excerpt || source.content || source.title || t('chat.untitledSource', 'İsimsiz Kaynak')}
                                                                                                 </p>
                                                                                             </div>
 
                                                                                             {/* Footer: Source Number + Keywords */}
                                                                                             <div className="flex flex-wrap items-center gap-1.5">
-                                                                                                <span className="text-[10.5px] px-2 py-1 rounded-md bg-violet-500 dark:bg-violet-600 text-white border-0 font-bold shadow-sm">
+                                                                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500 dark:bg-violet-600 text-white">
                                                                                                     #{idx + 1}
                                                                                                 </span>
-                                                                                                {source.category && (
-                                                                                                    <span className="text-[10.5px] px-2 py-1 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 font-medium">
+                                                                                                {source.category && source.category !== 'Document_embeddings' && (
+                                                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                                                                                                         {source.category}
                                                                                                     </span>
                                                                                                 )}
-                                                                                                {getSemanticKeywords(source).slice(0, 3).map((keyword: string, kidx: number) => {
+                                                                                                {getSemanticKeywords(source).slice(0, 2).map((keyword: string, kidx: number) => {
+                                                                                                    // Skip "Document_embeddings" keyword
+                                                                                                    if (keyword === 'Document_embeddings') return null;
                                                                                                     const isBoosted = kidx < 2 && lastUserQuery.length > 0;
                                                                                                     return (
                                                                                                         <span
                                                                                                             key={kidx}
-                                                                                                            className={`text-[10.5px] px-2 py-1 rounded-md border font-medium ${getKeywordColor(keyword, isBoosted)}`}
+                                                                                                            className={`text-[10px] px-1.5 py-0.5 rounded ${getKeywordColor(keyword, isBoosted)}`}
                                                                                                             title={isBoosted ? t('chat.keyword.fromQuery', `🔍 Sorgunuzdan: "${keyword}"`) : ''}
                                                                                                         >
                                                                                                             {keyword}
@@ -1043,11 +1045,11 @@ export default function ChatInterface() {
                             </div>
                         </div>
                         <div className="flex items-center justify-between mt-3 px-2">
-                            <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
                                 {t('chat.input.help', 'Enter ile gönder, Shift+Enter ile yeni satır')}
                             </p>
-                            <p className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold tracking-wide uppercase">
-                                {t('chat.disclaimer', 'YAPAY ZEKA HATA YAPABİLİR.')}
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                {t('chat.disclaimer', 'Yapay zeka hata yapabilir.')}
                             </p>
                         </div>
                     </div>
