@@ -160,6 +160,146 @@ export class RAGChatService {
     console.log(' RAG Chat Service initialized with LLM Manager');
   }
 
+  /**
+   * 🔗 CONVERSATION CONTEXT DETECTION
+   * Detects if the current question is a follow-up to a previous question
+   * Returns enhanced query that includes context from previous messages
+   */
+  private detectFollowUpQuestion(
+    currentMessage: string,
+    history: { role: string; content: string }[]
+  ): { isFollowUp: boolean; enhancedQuery: string; contextInfo: string } {
+    // Turkish follow-up indicators
+    const followUpIndicators = {
+      // Pronouns referring to previous subject
+      pronouns: [
+        'bu', 'bunu', 'bunun', 'bunlar', 'bunları',
+        'o', 'onu', 'onun', 'onlar', 'onları',
+        'şu', 'şunu', 'şunun', 'şunlar',
+        'hangisi', 'hangisini', 'hangileri',
+        'kim', 'kimi', 'kimin',
+        'ne', 'neyi', 'neyin', 'neler', 'neleri',
+        'nerede', 'nereye', 'nereden', 'neresi',
+        'nasıl', 'neden', 'niçin', 'niye',
+        'aynı', 'aynısı', 'diğer', 'diğeri', 'diğerleri',
+        'başka', 'başkası', 'öteki',
+        'kendisi', 'kendisini', 'kendisinin',
+        'burası', 'orası', 'şurası'
+      ],
+      // Continuation words
+      continuation: [
+        'peki', 'ayrıca', 'ek olarak', 'bunun dışında',
+        'bir de', 'başka', 'dahası', 'üstelik',
+        'ya', 'veya', 'yoksa', 'hem de',
+        'fakat', 'ancak', 'lakin', 'ama',
+        'yani', 'mesela', 'örneğin',
+        'daha', 'daha fazla', 'daha az',
+        'tam olarak', 'kesin olarak', 'spesifik olarak',
+        'detaylı', 'özetle', 'kısaca',
+        'sonra', 'önce', 'ardından',
+        'bununla ilgili', 'bu konuda', 'bu durumda',
+        'o zaman', 'öyle ise', 'eğer öyleyse',
+        'tabi', 'tabii ki', 'elbette'
+      ],
+      // Comparative/relative words
+      comparative: [
+        'daha iyi', 'daha kötü', 'daha ucuz', 'daha pahalı',
+        'en iyi', 'en kötü', 'en ucuz', 'en pahalı',
+        'karşılaştır', 'fark', 'farkı', 'benzer', 'benzerlik',
+        'alternatif', 'seçenek', 'diğer seçenekler'
+      ]
+    };
+
+    const lowerMessage = currentMessage.toLowerCase().trim();
+
+    // Check for follow-up indicators at the start of the message
+    const startsWithIndicator = [...followUpIndicators.pronouns, ...followUpIndicators.continuation]
+      .some(word => lowerMessage.startsWith(word + ' ') || lowerMessage.startsWith(word + ',') || lowerMessage === word);
+
+    // Check for pronouns anywhere in short messages (likely referring to previous context)
+    const hasPronouns = lowerMessage.length < 100 &&
+      followUpIndicators.pronouns.some(pronoun => {
+        const regex = new RegExp(`\\b${pronoun}\\b`, 'i');
+        return regex.test(lowerMessage);
+      });
+
+    // Check for continuation words
+    const hasContinuation = followUpIndicators.continuation.some(word =>
+      lowerMessage.includes(word)
+    );
+
+    // Check for comparative words
+    const hasComparative = followUpIndicators.comparative.some(word =>
+      lowerMessage.includes(word)
+    );
+
+    // Determine if this is a follow-up question
+    const isFollowUp = startsWithIndicator || hasPronouns || hasContinuation || hasComparative;
+
+    if (!isFollowUp || history.length === 0) {
+      return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
+    }
+
+    // Find the last user question and assistant response from history
+    let lastUserQuestion = '';
+    let lastAssistantResponse = '';
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].role === 'user' && !lastUserQuestion) {
+        lastUserQuestion = history[i].content;
+      } else if (history[i].role === 'assistant' && !lastAssistantResponse) {
+        // Get just the first 200 chars of assistant response for context
+        lastAssistantResponse = history[i].content.substring(0, 200);
+      }
+      if (lastUserQuestion && lastAssistantResponse) break;
+    }
+
+    if (!lastUserQuestion) {
+      return { isFollowUp: false, enhancedQuery: currentMessage, contextInfo: '' };
+    }
+
+    // Create enhanced query that combines previous context with current question
+    // This helps semantic search find relevant documents
+    const enhancedQuery = `${lastUserQuestion} ${currentMessage}`;
+    const contextInfo = `[Önceki soru: "${lastUserQuestion.substring(0, 100)}..."]`;
+
+    console.log(`🔗 FOLLOW-UP DETECTED:`);
+    console.log(`   Previous: "${lastUserQuestion.substring(0, 50)}..."`);
+    console.log(`   Current: "${currentMessage.substring(0, 50)}..."`);
+    console.log(`   Enhanced: "${enhancedQuery.substring(0, 80)}..."`);
+
+    return { isFollowUp: true, enhancedQuery, contextInfo };
+  }
+
+  /**
+   * ⚡ FAST MODE: Extract keywords for keyword-first hybrid search
+   * Uses simple keyword extraction for faster initial filtering
+   */
+  private extractKeywordsForFastSearch(message: string): string[] {
+    // Turkish stop words to filter out
+    const stopWords = new Set([
+      've', 'veya', 'ile', 'için', 'de', 'da', 'bir', 'bu', 'şu', 'o',
+      'ne', 'nasıl', 'neden', 'niçin', 'nerede', 'kim', 'hangi',
+      'mı', 'mi', 'mu', 'mü', 'dır', 'dir', 'dur', 'dür',
+      'var', 'yok', 'olan', 'olarak', 'gibi', 'kadar', 'daha',
+      'en', 'çok', 'az', 'her', 'hiç', 'bazı', 'tüm', 'bütün',
+      'bana', 'beni', 'sana', 'seni', 'ona', 'onu', 'bize', 'size',
+      'hakkında', 'ile', 'ilgili', 'üzerine', 'üzerinde', 'içinde',
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'how', 'why',
+      'listele', 'göster', 'anlat', 'açıkla', 'söyle', 'bilgi', 'ver'
+    ]);
+
+    // Extract words, filter stop words, keep meaningful ones
+    const words = message
+      .toLowerCase()
+      .replace(/[^\wğüşıöçĞÜŞİÖÇ\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !stopWords.has(word));
+
+    // Return unique keywords, max 5 for fast search
+    return [...new Set(words)].slice(0, 5);
+  }
+
 
   /**
    * Get system prompt from database
@@ -366,6 +506,25 @@ export class RAGChatService {
       const citationsDisabled = maxResults === 0 && minResults === 0;
       console.log(`️ RAG Settings: maxResults=${maxResults}, minResults=${minResults}, batchSize=${batchSize}, threshold=${minThreshold}, citationsDisabled=${citationsDisabled}`);
 
+      // 🔗 EARLY CONVERSATION HISTORY FETCH for follow-up detection
+      // Get history BEFORE search to enable context-aware queries
+      let earlyHistory: { role: string; content: string }[] = [];
+      try {
+        earlyHistory = await this.getConversationHistory(convId, 5);
+        console.log(`📜 Fetched ${earlyHistory.length} previous messages for context detection`);
+      } catch (histError) {
+        console.warn('Could not fetch early history for follow-up detection:', histError);
+      }
+
+      // 🔗 FOLLOW-UP QUESTION DETECTION
+      // Detect if current question references previous context
+      const followUpResult = this.detectFollowUpQuestion(message, earlyHistory);
+      const searchQuery = followUpResult.isFollowUp ? followUpResult.enhancedQuery : message;
+
+      if (followUpResult.isFollowUp) {
+        console.log(`🔗 Using enhanced query for semantic search: "${searchQuery.substring(0, 80)}..."`);
+      }
+
       let searchResults: any[] = [];
       let allResults: any[] = [];
       let initialDisplayCount = 0;
@@ -373,9 +532,9 @@ export class RAGChatService {
       if (!citationsDisabled) {
         // Use semantic search to find related content (only if citations enabled)
         if (useUnifiedEmbeddings) {
-          allResults = await semanticSearch.unifiedSemanticSearch(message, maxResults);
+          allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, maxResults);
         } else {
-          allResults = await semanticSearch.hybridSearch(message, maxResults);
+          allResults = await semanticSearch.hybridSearch(searchQuery, maxResults);
         }
 
         console.log(` DEBUG: unifiedSemanticSearch returned ${allResults.length} results`);
@@ -407,36 +566,67 @@ export class RAGChatService {
           console.log('Using all available results');
         }
       } else {
-        // FAST MODE: Citations disabled but still do semantic search for context
-        console.log('⚡ FAST MODE: Citations disabled - performing lightweight semantic search');
+        // ⚡ FAST MODE: Citations disabled but still do semantic search for context
+        console.log('⚡ FAST MODE: Citations disabled - performing keyword-first hybrid search');
+
+        // Extract keywords for faster initial filtering
+        const keywords = this.extractKeywordsForFastSearch(searchQuery);
+        console.log(`⚡ FAST MODE: Keywords extracted: [${keywords.join(', ')}]`);
 
         // Still perform search but with reduced limit for faster response
-        const fastModeLimit = 10; // Fewer results for speed
+        // Use enhanced searchQuery (includes previous context if follow-up)
+        const fastModeLimit = 15; // Slightly more results for better keyword matching
         if (useUnifiedEmbeddings) {
-          allResults = await semanticSearch.unifiedSemanticSearch(message, fastModeLimit);
+          allResults = await semanticSearch.unifiedSemanticSearch(searchQuery, fastModeLimit);
         } else {
-          allResults = await semanticSearch.hybridSearch(message, fastModeLimit);
+          allResults = await semanticSearch.hybridSearch(searchQuery, fastModeLimit);
         }
 
-        searchResults = allResults.sort((a, b) => {
-          const scoreA = a.score || (a.similarity_score * 100) || 0;
-          const scoreB = b.score || (b.similarity_score * 100) || 0;
+        // ⚡ FAST MODE ENHANCEMENT: Keyword boost for better relevance
+        // Boost results that contain extracted keywords in title or content
+        searchResults = allResults.map(result => {
+          let keywordBoost = 0;
+          const titleLower = (result.title || '').toLowerCase();
+          const contentLower = (result.excerpt || result.content || '').toLowerCase();
+
+          keywords.forEach(keyword => {
+            if (titleLower.includes(keyword)) keywordBoost += 0.15; // Title match = strong boost
+            if (contentLower.includes(keyword)) keywordBoost += 0.05; // Content match = slight boost
+          });
+
+          return {
+            ...result,
+            score: (result.score || (result.similarity_score * 100) || 0) + (keywordBoost * 100),
+            keywordBoost
+          };
+        }).sort((a, b) => {
+          const scoreA = a.score || 0;
+          const scoreB = b.score || 0;
           return scoreB - scoreA;
         });
 
         // Use top 5 results for context in fast mode
         initialDisplayCount = Math.min(5, searchResults.length);
-        console.log(`⚡ FAST MODE: Found ${searchResults.length} results, using top ${initialDisplayCount} for context`);
+
+        // Log keyword boost effects
+        const boostedCount = searchResults.filter(r => r.keywordBoost > 0).length;
+        console.log(`⚡ FAST MODE: Found ${searchResults.length} results, ${boostedCount} boosted by keywords, using top ${initialDisplayCount} for context`);
+
+        if (searchResults.length > 0) {
+          console.log(`⚡ Top result: "${searchResults[0].title?.substring(0, 50)}..." (score: ${searchResults[0].score?.toFixed(1)}, boost: ${(searchResults[0].keywordBoost * 100).toFixed(0)}%)`);
+        }
       }
 
-      // 3. Get conversation history with retry
-      let history = [];
-      try {
-        history = await this.getConversationHistory(convId, 5);
-      } catch (dbError) {
-        console.error('Failed to get conversation history:', dbError);
-        // Continue without history if DB fails
-        history = [];
+      // 3. Get conversation history (use early history if already fetched)
+      let history = earlyHistory;
+      if (history.length === 0) {
+        try {
+          history = await this.getConversationHistory(convId, 5);
+        } catch (dbError) {
+          console.error('Failed to get conversation history:', dbError);
+          // Continue without history if DB fails
+          history = [];
+        }
       }
 
       // 4. Generate response using LLM Manager
@@ -528,11 +718,21 @@ export class RAGChatService {
       // ⚡ FAST MODE: Simplified prompt without citation instructions
       if (citationsDisabled) {
         console.log('⚡ FAST MODE: Using simplified prompt (no citations)');
+
+        // 🔗 Add follow-up context instruction if this is a follow-up question
+        let followUpInstruction = '';
+        if (followUpResult.isFollowUp && followUpResult.contextInfo) {
+          followUpInstruction = responseLanguage === 'en'
+            ? `\n\nIMPORTANT: This is a follow-up question. The user previously asked about a related topic. Consider the conversation context when answering.`
+            : `\n\nÖNEMLİ: Bu bir takip sorusudur. Kullanıcı daha önce ilgili bir konu hakkında sormuştu. Yanıtlarken sohbet bağlamını dikkate al.`;
+          console.log('🔗 Added follow-up context instruction to prompt');
+        }
+
         const fastModeInstruction = responseLanguage === 'en'
           ? `\n\nAnswer directly and concisely based on the context. Write natural paragraphs without citations or source references.`
           : `\n\nBağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı veya atıf olmadan doğal paragraflar yaz.`;
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
+        userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
         // Normal mode with citation instructions
         // Add citation format instruction with STRONG emphasis on NO HEADINGS
