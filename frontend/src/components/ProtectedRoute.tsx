@@ -19,7 +19,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }: Prote
       isAuthenticated,
       user,
       requireAdmin,
-      hasToken: !!localStorage.getItem('token'),
+      hasToken: !!localStorage.getItem('accessToken'),
       hasUser: !!localStorage.getItem('user')
     });
 

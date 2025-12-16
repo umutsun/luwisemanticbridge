@@ -27,7 +27,7 @@ class PDFProgressWSClient {
       return;
     }
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     const cookies = document.cookie.split(';').reduce((acc: Record<string, string>, cookie) => {
       const [key, value] = cookie.trim().split('=');
       if (key) acc[key] = value;

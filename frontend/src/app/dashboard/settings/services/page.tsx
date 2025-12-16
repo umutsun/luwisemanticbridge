@@ -111,7 +111,7 @@ export default function ServicesPage() {
 
   const fetchVectorTables = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch('/api/v2/embeddings/tables', {
         headers: {
           'Authorization': `Bearer ${token}`,

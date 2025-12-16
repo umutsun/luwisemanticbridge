@@ -48,7 +48,7 @@ export const createGraphQLClient = (token?: string) => {
  * Automatically includes token from localStorage
  */
 export const getGraphQLClient = () => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   return createGraphQLClient(token || undefined);
 };
 

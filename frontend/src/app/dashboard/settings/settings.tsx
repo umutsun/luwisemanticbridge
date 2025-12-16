@@ -2413,7 +2413,7 @@ function RAGSettings() {
     try {
       setTablesLoading(true);
       const API_BASE_URL = API_CONFIG.baseUrl;
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -3268,7 +3268,7 @@ function SecuritySettings() {
 
   // Google Drive functions
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     return {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -5056,7 +5056,7 @@ function TemplatesManager() {
 
   const loadTemplates = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       };
@@ -5098,7 +5098,7 @@ function TemplatesManager() {
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       };
@@ -5149,7 +5149,7 @@ function TemplatesManager() {
 
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       };
@@ -5196,7 +5196,7 @@ function TemplatesManager() {
   const handleAddTemplate = async () => {
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       };

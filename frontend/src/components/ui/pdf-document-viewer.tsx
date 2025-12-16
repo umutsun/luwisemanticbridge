@@ -44,7 +44,7 @@ export default function PDFDocumentViewer({
   const [error, setError] = useState<string | null>(null);
 
   // Construct PDF URL
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   const pdfUrl = `${apiBaseUrl}/api/v2/documents/pdf/${documentId}?token=${token}`;
 
   const handleDownload = () => {

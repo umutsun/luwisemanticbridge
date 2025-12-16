@@ -341,7 +341,7 @@ export default function EmbeddingsManagerPage() {
       eventSourceRef.current.close();
     }
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     const sseUrl = `${API_MIGRATION}/progress-stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
     console.log('📡 Connecting to SSE progress stream...');

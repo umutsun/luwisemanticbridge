@@ -199,7 +199,7 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
     if (!jobId) return;
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`/api/v2/documents/table-creation/cancel/${jobId}`, {
         method: 'POST',
         headers: {
@@ -228,7 +228,7 @@ export const useTransformProgressSubscription = (jobId: string | null) => {
     const pollProgress = async () => {
       try {
         // Use raw fetch to avoid redirect on auth failure
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('accessToken');
         const response = await fetch(`/api/v2/documents/table-creation/progress/${jobId}`, {
           headers: {
             'Authorization': token ? `Bearer ${token}` : '',

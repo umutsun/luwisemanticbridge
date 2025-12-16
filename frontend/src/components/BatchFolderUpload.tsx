@@ -67,7 +67,7 @@ export default function BatchFolderUpload() {
 
   // WebSocket connection
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     const newSocket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083', {
       auth: { token },
       transports: ['websocket']
@@ -125,7 +125,7 @@ export default function BatchFolderUpload() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({ folderPath: process.env.NEXT_PUBLIC_MURGAN_FOLDER || 'docs/murgan' })
       });
@@ -185,7 +185,7 @@ export default function BatchFolderUpload() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({ files: selectedFilesList })
       });
@@ -230,7 +230,7 @@ export default function BatchFolderUpload() {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083';
       const response = await fetch(`${baseUrl}/api/v2/batch-folders/documents`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 

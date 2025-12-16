@@ -21,7 +21,7 @@ export const apiConfig: ApiConfig = {
 
 // Helper function for authenticated requests
 export const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
 
   const headers = {
     'Content-Type': 'application/json',

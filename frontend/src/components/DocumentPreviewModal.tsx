@@ -97,7 +97,7 @@ export default function DocumentPreviewModal({
 
   // Helper function to get auth headers
   const getAuthHeaders = (additionalHeaders?: Record<string, string>): Record<string, string> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     const headers: Record<string, string> = { ...additionalHeaders };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;

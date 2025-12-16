@@ -222,7 +222,7 @@ export default function DocumentManagerPage() {
   const fetchDocuments = async (page: number = 1, append: boolean = false) => {
     try {
       if (!append) setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         console.error('No token found in localStorage');
         setDocuments([]);
@@ -307,7 +307,7 @@ export default function DocumentManagerPage() {
     try {
       const response = await fetch(getApiUrl('documentStats'), {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         }
       });
 
@@ -380,7 +380,7 @@ export default function DocumentManagerPage() {
   const fetchSkippedCount = async () => {
     try {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/skipped?limit=1`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -396,7 +396,7 @@ export default function DocumentManagerPage() {
     setSkippedLoading(true);
     try {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/skipped?limit=100`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -421,7 +421,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/migration/skipped`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ ids: Array.from(selectedSkippedIds) })
@@ -446,7 +446,7 @@ export default function DocumentManagerPage() {
   const fetchPhysicalFiles = async () => {
     try {
       setPhysicalFilesLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         console.log('No token found');
         return;
@@ -503,7 +503,7 @@ export default function DocumentManagerPage() {
   const fetchFolders = async () => {
     try {
       setFoldersLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) return;
 
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/batch-folders/list`, {
@@ -534,7 +534,7 @@ export default function DocumentManagerPage() {
   // Google Drive functions
   const checkDriveConnection = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) return;
 
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/config`, {
@@ -556,7 +556,7 @@ export default function DocumentManagerPage() {
   const fetchDriveFiles = async (folderId?: string | null, pageToken?: string) => {
     setDriveLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) return;
 
       const url = new URL(`${API_CONFIG.baseUrl}/api/v2/google-drive/files`);
@@ -669,7 +669,7 @@ export default function DocumentManagerPage() {
     setUploadProgress(0);
     setCurrentOperation('Initializing import...');
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     if (!token) {
       setDriveImporting(false);
       setUploading(false);
@@ -776,7 +776,7 @@ export default function DocumentManagerPage() {
   const handleFolderBatchImport = async (folderName: string) => {
     try {
       setProcessingFolders(prev => new Set(prev).add(folderName));
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) return;
 
       // Step 1: Scan folder to get all files
@@ -880,7 +880,7 @@ export default function DocumentManagerPage() {
       setUploadProgress(0);
       setUploading(true);
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       // Simulate progress for better UX
       const progressInterval = setInterval(() => {
@@ -940,7 +940,7 @@ export default function DocumentManagerPage() {
 
   const handlePreviewPhysicalFile = async (filename: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/preview/${filename}`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -980,7 +980,7 @@ export default function DocumentManagerPage() {
 
   const handleDeletePhysicalFile = async (filePath: string, deleteFromDb: boolean = true) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(getApiUrl('physicalFiles'), {
         method: 'DELETE',
         headers: {
@@ -1086,7 +1086,7 @@ export default function DocumentManagerPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const filePaths = Array.from(selectedPhysicalFiles);
 
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/physical-files/bulk-delete`, {
@@ -1141,7 +1141,7 @@ export default function DocumentManagerPage() {
       setBulkAddInProgress(true);
       setBulkAddProgress({ current: 0, total });
 
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
 
       // Send all files in one bulk request
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/physical-files/bulk-add-to-database`, {
@@ -1230,7 +1230,7 @@ export default function DocumentManagerPage() {
     setCurrentOperation(t('documents.upload.preparing'));
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       console.log('🔑 Token:', token ? 'exists' : 'missing');
       if (!token) {
         throw new Error('No authentication token found');
@@ -1459,7 +1459,7 @@ export default function DocumentManagerPage() {
         const filename = filePath.split(/[/\\]/).pop();
 
         if (filename) {
-          const token = localStorage.getItem('token');
+          const token = localStorage.getItem('accessToken');
           const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/preview/${filename}`, {
             headers: {
               'Authorization': `Bearer ${token}`
@@ -1493,7 +1493,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/ocr/${docId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -1541,7 +1541,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         }
       });
@@ -1574,7 +1574,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         }
       });
@@ -1621,7 +1621,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/bulk-delete`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ documentIds })
@@ -1666,7 +1666,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         }
       });
@@ -1699,7 +1699,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         }
       });
@@ -1759,7 +1759,7 @@ export default function DocumentManagerPage() {
           const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/${docId}/embeddings`, {
             method: 'DELETE',
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
               'Content-Type': 'application/json'
             }
           });
@@ -1813,7 +1813,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/documents/bulk-embed`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ documentIds })
@@ -1877,7 +1877,7 @@ export default function DocumentManagerPage() {
 
     console.log('[WebSocket] Setting up connection for job:', batchJobId);
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
 
     // Decode JWT token to get userId
     let userId: string | null = null;
@@ -2009,7 +2009,7 @@ export default function DocumentManagerPage() {
 
     console.log('[GoogleDrive WebSocket] Setting up connection for job:', driveImportJobId);
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
 
     // Decode JWT token to get userId
     let userId: string | null = null;
@@ -2044,7 +2044,7 @@ export default function DocumentManagerPage() {
       pollingInterval = setInterval(async () => {
         try {
           const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/google-drive/import-job/${driveImportJobId}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
           });
           if (response.ok) {
             const job = await response.json();
@@ -2205,7 +2205,7 @@ export default function DocumentManagerPage() {
 
     console.log('[BatchAnalyze WebSocket] Setting up connection for job:', batchJobId);
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
 
     // Decode JWT token to get userId
     let userId: string | null = null;
@@ -2240,7 +2240,7 @@ export default function DocumentManagerPage() {
       pollingInterval = setInterval(async () => {
         try {
           const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/batch-analyze/status/${batchJobId}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
           });
           if (response.ok) {
             const statusData = await response.json();
@@ -2457,7 +2457,7 @@ export default function DocumentManagerPage() {
     try {
       const response = await fetch(getApiUrl('pdfTemplates'), {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         }
       });
       if (response.ok) {
@@ -2475,7 +2475,7 @@ export default function DocumentManagerPage() {
     try {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/source-tables`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         }
       });
       if (response.ok) {
@@ -2609,7 +2609,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/batch-metadata-transform`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -2638,7 +2638,7 @@ export default function DocumentManagerPage() {
         try {
           const progressResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/job-status/${data.jobId}`, {
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
             }
           });
           const progressData = await progressResponse.json();
@@ -2754,7 +2754,7 @@ export default function DocumentManagerPage() {
           const response = await fetch(getApiUrl('bulkEmbed'), {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ documentIds: [doc.id] })
@@ -2896,7 +2896,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(getApiUrl('pdfBatchAnalyze'), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ documentIds: pdfDocs.map(d => d.id) })
@@ -2916,7 +2916,7 @@ export default function DocumentManagerPage() {
           const statusResponse = await fetch(
             `${getApiUrl('pdfBatchStatus')}/${jobId}`,
             {
-              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
             }
           );
 
@@ -3048,7 +3048,7 @@ export default function DocumentManagerPage() {
       const response = await fetch(getApiUrl('pdfBatchMetadata'), {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -3069,7 +3069,7 @@ export default function DocumentManagerPage() {
         try {
           const progressResponse = await fetch(`${API_CONFIG.baseUrl}/api/v2/pdf/job-status/${data.jobId}`, {
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
             }
           });
           const progressData = await progressResponse.json();

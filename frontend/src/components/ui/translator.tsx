@@ -93,7 +93,7 @@ export default function Translator({ text, title = "Translate Text", className =
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify({
           text: text.substring(0, 5000), // Limit to 5000 chars for demo

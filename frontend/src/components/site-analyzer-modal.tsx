@@ -153,7 +153,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
     setAnalysis(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const fullUrl = `${config.api.baseUrl}/api/v2/scraper/sites/analyze-enhanced`;
 
       // First, start the analysis via POST request
@@ -237,7 +237,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
           },
           body: JSON.stringify({ url, useCache: true })
         });
@@ -312,7 +312,7 @@ export default function SiteAnalyzerModal({ open, onClose, onSiteCreated, initia
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
         },
         body: JSON.stringify({
           name: siteName,

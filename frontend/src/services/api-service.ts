@@ -44,7 +44,7 @@ class APIService {
   // Get auth token
   private getAuthToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('token');
+    return localStorage.getItem('accessToken');
   }
 
   // Check rate limit
