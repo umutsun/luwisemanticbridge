@@ -9,48 +9,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Database,
-  Plus,
-  Trash2,
-  Check,
-  Save,
-  RefreshCw,
-  Settings,
-  ChevronDown,
-  ChevronUp,
-  Star,
-  Crown,
-  Lock,
-  Search,
-  Grid,
-  List,
-  Sparkles,
-  X
+  Database, Plus, Trash2, Check, Save, RefreshCw, Lock, Search, Copy, MoreVertical
 } from 'lucide-react';
-import {
-  DataSchema,
-  SchemaField,
-  DataSchemaGlobalSettings,
-  FieldType,
-  FIELD_TYPE_LABELS,
-  EMPTY_FIELD,
-  LLMConfig,
-  DEFAULT_LLM_CONFIG
-} from '@/types/data-schema';
+import { DataSchema, SchemaField, FieldType, FIELD_TYPE_LABELS, EMPTY_FIELD } from '@/types/data-schema';
 import apiClient from '@/lib/api/client';
 import { toast } from 'sonner';
-import SchemaCard from './schemas/SchemaCard';
-import LLMConfigEditor from './schemas/LLMConfigEditor';
-import PatternManagement from './PatternManagement';
-import { cn } from '@/lib/utils';
-
-interface Industry {
-  code: string;
-  name: string;
-  icon: string;
-}
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 
 interface UnifiedSchema {
   id: string;
@@ -58,91 +25,50 @@ interface UnifiedSchema {
   display_name: string;
   description?: string;
   industry_code?: string;
-  industry_name?: string;
   industry_icon?: string;
   fields: SchemaField[];
-  templates: {
-    analyze: string;
-    citation: string;
-    questions: string[];
-  };
-  llm_guide?: string;
-  llm_config?: LLMConfig;
+  templates: { analyze: string; citation: string; questions: string[] };
   is_active: boolean;
   is_default: boolean;
   is_system?: boolean;
-  source_preset_id?: string;
-  user_id?: string;
   tier?: 'free' | 'pro' | 'enterprise';
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface UserSettings {
-  user_id: string;
-  active_schema_id?: string;
-  enable_auto_detect: boolean;
-  max_fields_in_citation: number;
-  max_questions: number;
-  preferred_industry?: string;
 }
 
 export default function DataSchemaSettings() {
-  // State
-  const [industries, setIndustries] = useState<Industry[]>([]);
-  const [selectedIndustry, setSelectedIndustry] = useState<string>('all');
   const [allSchemas, setAllSchemas] = useState<UnifiedSchema[]>([]);
-  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
+  const [activeSchemaId, setActiveSchemaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
   const [editedSchema, setEditedSchema] = useState<DataSchema | null>(null);
-  const [editedLLMConfig, setEditedLLMConfig] = useState<LLMConfig>(DEFAULT_LLM_CONFIG);
-  const [fieldsExpanded, setFieldsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'basic' | 'llm' | 'patterns'>('basic');
 
-  // Load data on mount
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [industriesRes, schemasRes, settingsRes] = await Promise.all([
-        apiClient.get('/api/v2/data-schema/industries'),
+      const [schemasRes, settingsRes] = await Promise.all([
         apiClient.get('/api/v2/data-schema/all-schemas'),
         apiClient.get('/api/v2/data-schema/user/settings')
       ]);
-
-      const industriesData = industriesRes?.data?.industries || [];
       const schemasData = schemasRes?.data?.schemas || [];
-      const settingsData = settingsRes?.data?.settings || null;
-
-      setIndustries(Array.isArray(industriesData) ? industriesData : []);
       setAllSchemas(Array.isArray(schemasData) ? schemasData : []);
-      setUserSettings(settingsData);
-
-      if (settingsData?.active_schema_id) {
-        setSelectedSchemaId(settingsData.active_schema_id);
-        const activeSchema = schemasData.find((s: UnifiedSchema) => s.id === settingsData.active_schema_id);
-        if (activeSchema) {
-          handleSelectSchema(activeSchema);
-        }
+      const activeId = settingsRes?.data?.settings?.active_schema_id;
+      setActiveSchemaId(activeId);
+      if (activeId) {
+        const active = schemasData.find((s: UnifiedSchema) => s.id === activeId);
+        if (active) selectSchema(active);
       }
     } catch (error) {
-      console.error('Failed to load data:', error);
+      console.error('Failed to load:', error);
       toast.error('Veriler yüklenemedi');
-      setIndustries([]);
-      setAllSchemas([]);
-      setUserSettings(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelectSchema = (schema: UnifiedSchema) => {
+  const selectSchema = (schema: UnifiedSchema) => {
     setSelectedSchemaId(schema.id);
     setEditedSchema({
       id: schema.id,
@@ -151,575 +77,269 @@ export default function DataSchemaSettings() {
       description: schema.description || '',
       fields: schema.fields,
       templates: schema.templates,
-      llmGuide: schema.llm_guide || '',
+      llmGuide: '',
       isActive: schema.is_active,
       isDefault: schema.is_default,
-      createdAt: schema.created_at || '',
-      updatedAt: schema.updated_at || ''
+      createdAt: '', updatedAt: ''
     });
-    setEditedLLMConfig(schema.llm_config || DEFAULT_LLM_CONFIG);
-    setActiveTab('basic');
   };
 
-  const handleSetActive = async (schemaId?: string) => {
-    const targetId = schemaId || selectedSchemaId;
-    if (!targetId) return;
-
+  const setActive = async (id: string) => {
     try {
       setSaving(true);
-      await apiClient.post('/api/v2/data-schema/user/active-schema', {
-        schemaId: targetId
-      });
-      setUserSettings(prev => prev ? {
-        ...prev,
-        active_schema_id: targetId
-      } : null);
+      await apiClient.post('/api/v2/data-schema/user/active-schema', { schemaId: id });
+      setActiveSchemaId(id);
       toast.success('Aktif şema ayarlandı');
-    } catch (error) {
-      console.error('Failed to set active schema:', error);
-      toast.error('Aktif şema ayarlanamadı');
-    } finally {
-      setSaving(false);
-    }
+    } catch { toast.error('Hata'); }
+    finally { setSaving(false); }
   };
 
-  const handleCreateSchema = () => {
-    const newSchema: DataSchema = {
-      id: '',
-      name: 'yeni_sema',
-      displayName: 'Yeni Şema',
-      description: '',
-      fields: [],
-      templates: { analyze: '', citation: '', questions: [] },
-      llmGuide: '',
-      isActive: true,
-      createdAt: '',
-      updatedAt: ''
-    };
+  const createNew = () => {
     setSelectedSchemaId('new');
-    setEditedSchema(newSchema);
-    setEditedLLMConfig(DEFAULT_LLM_CONFIG);
-    setActiveTab('basic');
+    setEditedSchema({
+      id: '', name: 'yeni_sema', displayName: 'Yeni Şema', description: '',
+      fields: [], templates: { analyze: '', citation: '', questions: [] },
+      llmGuide: '', isActive: true, isDefault: false, createdAt: '', updatedAt: ''
+    });
   };
 
-  const handleSaveSchema = async () => {
+  const saveSchema = async () => {
     if (!editedSchema) return;
-
     try {
       setSaving(true);
-      const schemaData = {
+      const data = {
         name: editedSchema.name,
         display_name: editedSchema.displayName,
         description: editedSchema.description,
         fields: editedSchema.fields,
-        templates: editedSchema.templates,
-        llm_guide: editedSchema.llmGuide,
-        llm_config: editedLLMConfig
+        templates: editedSchema.templates
       };
-
-      if (selectedSchemaId === 'new' || !editedSchema.id) {
-        const response = await apiClient.post('/api/v2/data-schema/schemas', schemaData);
-        const newSchema = response?.data?.schema || response?.data;
-        if (!newSchema?.id) {
-          throw new Error('Invalid response: missing schema data');
-        }
-        setAllSchemas([...allSchemas, { ...newSchema, llm_config: editedLLMConfig }]);
+      if (selectedSchemaId === 'new') {
+        const res = await apiClient.post('/api/v2/data-schema/schemas', data);
+        const newSchema = res?.data?.schema || res?.data;
+        setAllSchemas([...allSchemas, newSchema]);
         setSelectedSchemaId(newSchema.id);
         setEditedSchema({ ...editedSchema, id: newSchema.id });
         toast.success('Şema oluşturuldu');
       } else {
-        await apiClient.put(`/api/v2/data-schema/schemas/${editedSchema.id}`, schemaData);
-        setAllSchemas(allSchemas.map(s =>
-          s.id === editedSchema.id
-            ? { ...s, ...schemaData, display_name: schemaData.display_name, llm_config: editedLLMConfig } as UnifiedSchema
-            : s
-        ));
+        await apiClient.put(`/api/v2/data-schema/schemas/${editedSchema.id}`, data);
+        setAllSchemas(allSchemas.map(s => s.id === editedSchema.id ? { ...s, ...data, display_name: data.display_name } as UnifiedSchema : s));
         toast.success('Şema güncellendi');
       }
-    } catch (error) {
-      console.error('Failed to save schema:', error);
-      toast.error('Şema kaydedilemedi');
-    } finally {
-      setSaving(false);
-    }
+    } catch { toast.error('Kaydetme hatası'); }
+    finally { setSaving(false); }
   };
 
-  const handleDeleteSchema = async (schemaId: string) => {
-    if (!confirm('Bu şemayı silmek istediğinizden emin misiniz?')) return;
-
+  const deleteSchema = async (id: string) => {
+    if (!confirm('Silmek istediğinize emin misiniz?')) return;
     try {
-      await apiClient.delete(`/api/v2/data-schema/schemas/${schemaId}`);
-      setAllSchemas(allSchemas.filter(s => s.id !== schemaId));
-      if (selectedSchemaId === schemaId) {
-        setSelectedSchemaId(null);
-        setEditedSchema(null);
-      }
-      toast.success('Şema silindi');
-    } catch (error) {
-      console.error('Failed to delete schema:', error);
-      toast.error('Şema silinemedi');
-    }
+      await apiClient.delete(`/api/v2/data-schema/schemas/${id}`);
+      setAllSchemas(allSchemas.filter(s => s.id !== id));
+      if (selectedSchemaId === id) { setSelectedSchemaId(null); setEditedSchema(null); }
+      toast.success('Silindi');
+    } catch { toast.error('Hata'); }
   };
 
-  const handleCloneSchema = async (schema: UnifiedSchema) => {
-    const clonedSchema: DataSchema = {
-      id: '',
-      name: `${schema.name}_kopya`,
-      displayName: `${schema.display_name} (Kopya)`,
-      description: schema.description || '',
-      fields: [...schema.fields],
-      templates: { ...schema.templates },
-      llmGuide: schema.llm_guide || '',
-      isActive: true,
-      createdAt: '',
-      updatedAt: ''
-    };
+  const cloneSchema = (schema: UnifiedSchema) => {
     setSelectedSchemaId('new');
-    setEditedSchema(clonedSchema);
-    setEditedLLMConfig(schema.llm_config || DEFAULT_LLM_CONFIG);
-    setActiveTab('basic');
-    toast.info('Şema klonlandı. Düzenleyip kaydedin.');
-  };
-
-  // Field handlers
-  const handleFieldChange = (index: number, field: Partial<SchemaField>) => {
-    if (!editedSchema || !editedSchema.fields) return;
-    if (index < 0 || index >= editedSchema.fields.length) return;
-    const newFields = [...editedSchema.fields];
-    newFields[index] = { ...newFields[index], ...field };
-    setEditedSchema({ ...editedSchema, fields: newFields });
-  };
-
-  const handleAddField = () => {
-    if (!editedSchema) return;
-    const newKey = `field_${editedSchema.fields.length + 1}`;
     setEditedSchema({
-      ...editedSchema,
-      fields: [...editedSchema.fields, { ...EMPTY_FIELD, key: newKey }]
+      id: '', name: `${schema.name}_kopya`, displayName: `${schema.display_name} (Kopya)`,
+      description: schema.description || '', fields: [...schema.fields],
+      templates: { ...schema.templates }, llmGuide: '', isActive: true, isDefault: false,
+      createdAt: '', updatedAt: ''
     });
+    toast.info('Klonlandı, kaydedin');
   };
 
-  const handleRemoveField = (index: number) => {
+  const updateField = (i: number, update: Partial<SchemaField>) => {
+    if (!editedSchema) return;
+    const fields = [...editedSchema.fields];
+    fields[i] = { ...fields[i], ...update };
+    setEditedSchema({ ...editedSchema, fields });
+  };
+
+  const addField = () => {
     if (!editedSchema) return;
     setEditedSchema({
       ...editedSchema,
-      fields: editedSchema.fields.filter((_, i) => i !== index)
+      fields: [...editedSchema.fields, { ...EMPTY_FIELD, key: `field_${editedSchema.fields.length + 1}` }]
     });
   };
 
-  // Filter schemas
-  const filteredSchemas = allSchemas.filter(schema => {
-    const matchesIndustry = selectedIndustry === 'all' || schema.industry_code === selectedIndustry;
-    const matchesSearch = !searchQuery ||
-      schema.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      schema.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      schema.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesIndustry && matchesSearch;
-  });
+  const removeField = (i: number) => {
+    if (!editedSchema) return;
+    setEditedSchema({ ...editedSchema, fields: editedSchema.fields.filter((_, idx) => idx !== i) });
+  };
 
-  const selectedSchema = selectedSchemaId && selectedSchemaId !== 'new'
-    ? allSchemas.find(s => s.id === selectedSchemaId)
-    : null;
-  const isSystemSchema = selectedSchema?.is_system || false;
-  const isActiveSchema = userSettings?.active_schema_id === selectedSchemaId;
+  const filtered = allSchemas.filter(s =>
+    !searchQuery || s.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  const selectedSchema = selectedSchemaId && selectedSchemaId !== 'new' ? allSchemas.find(s => s.id === selectedSchemaId) : null;
+  const isSystem = selectedSchema?.is_system || false;
+  const isActive = activeSchemaId === selectedSchemaId;
+
+  if (loading) return <div className="flex justify-center p-8"><RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
-      {/* Header with filters */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3 flex-1 min-w-[300px]">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Şema ara..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9"
-            />
-          </div>
-          <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
-            <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="Tüm sektörler" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tüm Sektörler</SelectItem>
-              {industries.map(industry => (
-                <SelectItem key={industry.code} value={industry.code}>
-                  {industry.icon} {industry.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button onClick={handleCreateSchema} className="gap-2 h-9">
-          <Plus className="w-4 h-4" />
-          Yeni Şema
-        </Button>
-      </div>
-
-      {/* Schema Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredSchemas.map(schema => (
-          <SchemaCard
-            key={schema.id}
-            schema={schema}
-            isActive={userSettings?.active_schema_id === schema.id}
-            isSelected={selectedSchemaId === schema.id}
-            onSelect={() => handleSelectSchema(schema)}
-            onSetActive={() => handleSetActive(schema.id)}
-            onEdit={() => handleSelectSchema(schema)}
-            onClone={() => handleCloneSchema(schema)}
-            onDelete={schema.is_system ? undefined : () => handleDeleteSchema(schema.id)}
-          />
-        ))}
-
-        {/* New schema placeholder */}
-        {selectedSchemaId === 'new' && (
-          <Card className="ring-2 ring-primary border-dashed">
-            <CardContent className="p-4 flex items-center justify-center h-full min-h-[120px]">
-              <div className="text-center">
-                <Plus className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">Yeni Şema</p>
-                <Badge variant="outline" className="mt-2">Kaydedilmedi</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {filteredSchemas.length === 0 && selectedSchemaId !== 'new' && (
-          <div className="col-span-full text-center py-12 text-muted-foreground">
-            <Database className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>Bu kriterlere uygun şema bulunamadı</p>
-          </div>
-        )}
-      </div>
-
-      {/* Selected Schema Editor */}
-      {editedSchema && (
-        <Card className="mt-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="w-5 h-5" />
-                <span>{editedSchema.displayName || 'Yeni Şema'}</span>
-                {isSystemSchema && (
-                  <Badge variant="outline" className="ml-2">
-                    <Lock className="w-3 h-3 mr-1" />
-                    Sistem Şeması
-                  </Badge>
-                )}
-                {isActiveSchema && (
-                  <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 ml-2">
-                    <Check className="w-3 h-3 mr-1" />
-                    Aktif
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {!isActiveSchema && selectedSchemaId && selectedSchemaId !== 'new' && (
-                  <Button variant="outline" size="sm" onClick={() => handleSetActive()} disabled={saving}>
-                    <Check className="w-3 h-3 mr-1" />
-                    Aktif Yap
-                  </Button>
-                )}
-                <Button
-                  onClick={handleSaveSchema}
-                  disabled={saving || !editedSchema?.name || !editedSchema?.displayName || isSystemSchema}
-                  size="sm"
-                >
-                  {saving ? (
-                    <>
-                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Kaydediliyor...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3 h-3 mr-1" />
-                      Kaydet
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedSchemaId(null);
-                    setEditedSchema(null);
-                  }}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
+    <div className="grid grid-cols-[300px_1fr] gap-4">
+      {/* Sol - Şema Listesi */}
+      <Card className="h-fit">
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Database className="w-4 h-4" /> Şemalar
             </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="basic">
-                  <Database className="w-4 h-4 mr-2" />
-                  Temel Bilgiler
-                </TabsTrigger>
-                <TabsTrigger value="llm">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  LLM Ayarları
-                </TabsTrigger>
-                <TabsTrigger value="patterns">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Patterns
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Basic Info Tab */}
-              <TabsContent value="basic" className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Şema Adı</Label>
-                    <Input
-                      value={editedSchema.name}
-                      onChange={(e) => setEditedSchema({ ...editedSchema, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                      placeholder="vergi_mevzuati"
-                      className="mt-1"
-                      disabled={isSystemSchema}
-                    />
-                  </div>
-                  <div>
-                    <Label>Görüntüleme Adı</Label>
-                    <Input
-                      value={editedSchema.displayName}
-                      onChange={(e) => setEditedSchema({ ...editedSchema, displayName: e.target.value })}
-                      placeholder="Vergi Mevzuatı"
-                      className="mt-1"
-                      disabled={isSystemSchema}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Açıklama</Label>
-                  <Textarea
-                    value={editedSchema.description}
-                    onChange={(e) => setEditedSchema({ ...editedSchema, description: e.target.value })}
-                    placeholder="Bu şema hangi tür belgeler için kullanılacak?"
-                    rows={2}
-                    className="mt-1"
-                    disabled={isSystemSchema}
-                  />
-                </div>
-
-                {/* Fields - Collapsible */}
-                <div className="border rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setFieldsExpanded(!fieldsExpanded)}
-                    className="w-full flex items-center justify-between p-3 hover:bg-muted/50"
-                  >
-                    <span className="font-medium text-sm">
-                      Alanlar ({editedSchema.fields.length})
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {!isSystemSchema && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); handleAddField(); }}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      )}
-                      {fieldsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </button>
-                  {fieldsExpanded && (
-                    <div className="border-t p-3 space-y-2 max-h-[250px] overflow-y-auto">
-                      {editedSchema.fields.map((field, index) => (
-                        <div key={index} className="flex items-center gap-2 p-2 bg-muted/50 rounded">
-                          <Input
-                            value={field.key}
-                            onChange={(e) => handleFieldChange(index, { key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-                            placeholder="key"
-                            className="h-8 w-24 text-xs"
-                            disabled={isSystemSchema}
-                          />
-                          <Input
-                            value={field.label}
-                            onChange={(e) => handleFieldChange(index, { label: e.target.value })}
-                            placeholder="Label"
-                            className="h-8 flex-1 text-xs"
-                            disabled={isSystemSchema}
-                          />
-                          <Select
-                            value={field.type}
-                            onValueChange={(value) => handleFieldChange(index, { type: value as FieldType })}
-                            disabled={isSystemSchema}
-                          >
-                            <SelectTrigger className="h-8 w-24 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>{label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Switch
-                            checked={field.showInCitation}
-                            onCheckedChange={(checked) => handleFieldChange(index, { showInCitation: checked })}
-                            title="Citation'da göster"
-                            disabled={isSystemSchema}
-                          />
-                          {!isSystemSchema && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveField(index)}
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      {editedSchema.fields.length === 0 && (
-                        <p className="text-xs text-muted-foreground text-center py-2">
-                          Henüz alan yok
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Citation Template */}
-                <div>
-                  <Label>Citation Template</Label>
-                  <Input
-                    value={editedSchema.templates.citation}
-                    onChange={(e) => setEditedSchema({
-                      ...editedSchema,
-                      templates: { ...editedSchema.templates, citation: e.target.value }
-                    })}
-                    placeholder="{{kanun_no}} Md.{{madde_no}} - {{tarih}}"
-                    className="mt-1"
-                    disabled={isSystemSchema}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {editedSchema?.fields && editedSchema.fields.length > 0
-                      ? editedSchema.fields.map(f => `{{${f.key}}}`).join(', ')
-                      : 'Önce alan ekleyin'}
-                  </p>
-                </div>
-
-                {/* LLM Guide */}
-                <div>
-                  <Label>LLM Kılavuzu</Label>
-                  <Textarea
-                    value={editedSchema.llmGuide}
-                    onChange={(e) => setEditedSchema({ ...editedSchema, llmGuide: e.target.value })}
-                    placeholder="Bu veri hakkında LLM'e rehberlik edecek bilgiler..."
-                    rows={4}
-                    className="mt-1 text-sm"
-                    disabled={isSystemSchema}
-                  />
-                </div>
-              </TabsContent>
-
-              {/* LLM Config Tab */}
-              <TabsContent value="llm">
-                <LLMConfigEditor
-                  config={editedLLMConfig}
-                  onChange={setEditedLLMConfig}
-                  disabled={isSystemSchema}
-                />
-              </TabsContent>
-
-              {/* Patterns Tab */}
-              <TabsContent value="patterns">
-                {selectedSchemaId && selectedSchemaId !== 'new' ? (
-                  <PatternManagement schemaId={selectedSchemaId} />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p>Pattern yönetimi için önce şemayı kaydedin</p>
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* User Settings Card */}
-      {userSettings && !editedSchema && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Settings className="w-4 h-4" />
-              Genel Ayarlar
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm">Otomatik Tespit</Label>
-                <p className="text-xs text-muted-foreground">Belge tipine göre şemayı otomatik seç</p>
-              </div>
-              <Switch
-                checked={userSettings.enable_auto_detect}
-                onCheckedChange={(checked) => setUserSettings({ ...userSettings, enable_auto_detect: checked })}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-sm">Max Citation Alanı</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={userSettings.max_fields_in_citation}
-                  onChange={(e) => setUserSettings({ ...userSettings, max_fields_in_citation: parseInt(e.target.value) || 4 })}
-                  className="h-9 mt-1"
-                />
-              </div>
-              <div>
-                <Label className="text-sm">Max Soru Sayısı</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={userSettings.max_questions}
-                  onChange={(e) => setUserSettings({ ...userSettings, max_questions: parseInt(e.target.value) || 3 })}
-                  className="h-9 mt-1"
-                />
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                try {
-                  setSaving(true);
-                  await apiClient.put('/api/v2/data-schema/user/settings', userSettings);
-                  toast.success('Ayarlar kaydedildi');
-                } catch (error) {
-                  toast.error('Ayarlar kaydedilemedi');
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              disabled={saving}
-            >
-              <Save className="w-3 h-3 mr-2" />
-              Ayarları Kaydet
+            <Button size="sm" variant="ghost" onClick={createNew} className="h-7 px-2">
+              <Plus className="w-4 h-4" />
             </Button>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 pt-0 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input placeholder="Ara..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="h-8 pl-8 text-sm" />
+          </div>
+          <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+            {filtered.map(schema => (
+              <div
+                key={schema.id}
+                onClick={() => selectSchema(schema)}
+                className={`p-2.5 rounded-md border cursor-pointer transition-colors text-sm ${selectedSchemaId === schema.id ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full ${activeSchemaId === schema.id ? 'bg-green-500' : 'bg-gray-300'}`} />
+                    <span className="font-medium truncate max-w-[150px]">{schema.display_name}</span>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" className="h-5 w-5 p-0"><MoreVertical className="w-3 h-3" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-32">
+                      {activeSchemaId !== schema.id && (
+                        <DropdownMenuItem onClick={e => { e.stopPropagation(); setActive(schema.id); }}>
+                          <Check className="w-3 h-3 mr-2" /> Aktif Yap
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={e => { e.stopPropagation(); cloneSchema(schema); }}>
+                        <Copy className="w-3 h-3 mr-2" /> Klonla
+                      </DropdownMenuItem>
+                      {!schema.is_system && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={e => { e.stopPropagation(); deleteSchema(schema.id); }} className="text-destructive">
+                            <Trash2 className="w-3 h-3 mr-2" /> Sil
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 truncate">{schema.fields.length} alan</p>
+              </div>
+            ))}
+            {selectedSchemaId === 'new' && (
+              <div className="p-2.5 rounded-md border-2 border-dashed border-primary bg-primary/5 text-sm">
+                <span className="font-medium">Yeni Şema</span>
+                <Badge variant="outline" className="ml-2 text-xs">Kaydedilmedi</Badge>
+              </div>
+            )}
+            {!filtered.length && selectedSchemaId !== 'new' && (
+              <p className="text-center text-xs text-muted-foreground py-4">Şema yok</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sağ - Editör */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {editedSchema ? (
+                <>
+                  <span className="font-medium">{editedSchema.displayName || 'Yeni Şema'}</span>
+                  {isSystem && <Badge variant="outline" className="text-xs"><Lock className="w-2.5 h-2.5 mr-0.5" />Sistem</Badge>}
+                  {isActive && <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs"><Check className="w-2.5 h-2.5 mr-0.5" />Aktif</Badge>}
+                </>
+              ) : (
+                <span className="text-muted-foreground">Şema seçin</span>
+              )}
+            </div>
+            {editedSchema && (
+              <Button size="sm" onClick={saveSchema} disabled={saving || isSystem} className="h-7">
+                {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <><Save className="w-3 h-3 mr-1" />Kaydet</>}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          {editedSchema ? (
+            <div className="space-y-4">
+              {/* Temel Bilgiler */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Şema ID</Label>
+                  <Input value={editedSchema.name} onChange={e => setEditedSchema({ ...editedSchema, name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                    placeholder="vergi_mevzuati" className="h-8 mt-1" disabled={isSystem} />
+                </div>
+                <div>
+                  <Label className="text-xs">Görünen Ad</Label>
+                  <Input value={editedSchema.displayName} onChange={e => setEditedSchema({ ...editedSchema, displayName: e.target.value })}
+                    placeholder="Vergi Mevzuatı" className="h-8 mt-1" disabled={isSystem} />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Açıklama</Label>
+                <Textarea value={editedSchema.description} onChange={e => setEditedSchema({ ...editedSchema, description: e.target.value })}
+                  placeholder="Kısa açıklama..." rows={2} className="mt-1 text-sm" disabled={isSystem} />
+              </div>
+
+              {/* Alanlar */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs">Alanlar ({editedSchema.fields.length})</Label>
+                  {!isSystem && <Button size="sm" variant="outline" onClick={addField} className="h-6 text-xs"><Plus className="w-3 h-3 mr-1" />Ekle</Button>}
+                </div>
+                <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
+                  {editedSchema.fields.map((field, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-xs">
+                      <Input value={field.key} onChange={e => updateField(i, { key: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                        placeholder="key" className="h-7 w-24" disabled={isSystem} />
+                      <Input value={field.label} onChange={e => updateField(i, { label: e.target.value })}
+                        placeholder="Label" className="h-7 flex-1" disabled={isSystem} />
+                      <Select value={field.type} onValueChange={v => updateField(i, { type: v as FieldType })} disabled={isSystem}>
+                        <SelectTrigger className="h-7 w-20"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(FIELD_TYPE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Switch checked={field.showInCitation} onCheckedChange={c => updateField(i, { showInCitation: c })} disabled={isSystem} />
+                      {!isSystem && <Button variant="ghost" size="sm" onClick={() => removeField(i)} className="h-7 w-7 p-0 text-destructive"><Trash2 className="w-3 h-3" /></Button>}
+                    </div>
+                  ))}
+                  {!editedSchema.fields.length && <p className="text-xs text-muted-foreground text-center py-3">Alan yok</p>}
+                </div>
+              </div>
+
+              {/* Citation */}
+              <div>
+                <Label className="text-xs">Citation Template</Label>
+                <Input value={editedSchema.templates.citation}
+                  onChange={e => setEditedSchema({ ...editedSchema, templates: { ...editedSchema.templates, citation: e.target.value } })}
+                  placeholder="{{madde_no}} - {{tarih}}" className="h-8 mt-1" disabled={isSystem} />
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Database className="w-10 h-10 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">Düzenlemek için şema seçin</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

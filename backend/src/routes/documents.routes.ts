@@ -266,6 +266,9 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200); // Default 50, max 200
     const offset = (page - 1) * limit;
 
+    // Status filter parameter (server-side filtering)
+    const statusFilter = req.query.status as string || 'all';
+
     // First ensure table exists
     await lsembPool.query(`
       CREATE TABLE IF NOT EXISTS documents (
@@ -302,8 +305,50 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
       ADD COLUMN IF NOT EXISTS tokens_used INTEGER DEFAULT 0
     `);
 
-    // Get total count for pagination
-    const countResult = await lsembPool.query('SELECT COUNT(*) as total FROM documents');
+    // Build WHERE clause based on status filter
+    let whereClause = '';
+    let queryParams: any[] = [];
+    let paramIndex = 1;
+
+    switch (statusFilter) {
+      case 'embedded':
+        // Documents that have embeddings in document_embeddings table
+        whereClause = `WHERE EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`;
+        break;
+      case 'not-embedded':
+        // Documents that do NOT have embeddings
+        whereClause = `WHERE NOT EXISTS(SELECT 1 FROM document_embeddings de WHERE de.document_id = d.id)`;
+        break;
+      case 'analyzed':
+        // Documents that are completed or embedded (have been processed)
+        whereClause = `WHERE d.processing_status IN ('completed', 'embedded', 'analyzed')`;
+        break;
+      case 'pending':
+        // Documents that are pending or have no status
+        whereClause = `WHERE d.processing_status = 'pending' OR d.processing_status IS NULL`;
+        break;
+      case 'processing':
+        // Documents currently being processed
+        whereClause = `WHERE d.processing_status IN ('analyzing', 'processing')`;
+        break;
+      case 'completed':
+        // Only completed status
+        whereClause = `WHERE d.processing_status = 'completed'`;
+        break;
+      case 'failed':
+        // Failed documents
+        whereClause = `WHERE d.processing_status = 'failed'`;
+        break;
+      case 'all':
+      default:
+        // No filter
+        whereClause = '';
+        break;
+    }
+
+    // Get total count for pagination (with filter)
+    const countQuery = `SELECT COUNT(*) as total FROM documents d ${whereClause}`;
+    const countResult = await lsembPool.query(countQuery, queryParams);
     const totalCount = parseInt(countResult.rows[0].total);
 
     const result = await lsembPool.query(
@@ -332,9 +377,10 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
          FROM document_embeddings
          GROUP BY document_id, model_name
        ) emb_stats ON d.id = emb_stats.document_id
+       ${whereClause}
        ORDER BY d.created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
+       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...queryParams, limit, offset]
     );
 
     const documents = result.rows.map(doc => ({

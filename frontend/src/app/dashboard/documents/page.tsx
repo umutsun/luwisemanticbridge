@@ -219,7 +219,7 @@ export default function DocumentManagerPage() {
     fetchSkippedCount();
   }, []);
 
-  const fetchDocuments = async (page: number = 1, append: boolean = false) => {
+  const fetchDocuments = async (page: number = 1, append: boolean = false, statusFilter: string = 'all') => {
     try {
       if (!append) setLoading(true);
       const token = localStorage.getItem('accessToken');
@@ -234,6 +234,10 @@ export default function DocumentManagerPage() {
       const url = new URL(getApiUrl('documents'), window.location.origin);
       url.searchParams.append('page', page.toString());
       url.searchParams.append('limit', DOCS_PER_PAGE.toString());
+      // Add status filter for server-side filtering
+      if (statusFilter && statusFilter !== 'all') {
+        url.searchParams.append('status', statusFilter);
+      }
 
       const response = await fetch(url.toString(), {
         headers: {
@@ -2428,10 +2432,16 @@ export default function DocumentManagerPage() {
     return matchesSearch && matchesType;
   });
 
-  // Reset pagination when search or filter changes
+  // Re-fetch documents when filter changes (server-side filtering)
   useEffect(() => {
     setVisibleDocumentsCount(DOCUMENTS_PER_PAGE);
-  }, [searchQuery, filterType]);
+    // Only re-fetch if filterType changes (not on initial mount)
+    if (filterType !== 'all') {
+      fetchDocuments(1, false, filterType);
+    } else {
+      fetchDocuments(1, false, 'all');
+    }
+  }, [filterType]);
 
   const handleSelectAll = () => {
     if (selectAll) {
