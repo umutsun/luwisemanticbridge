@@ -3415,8 +3415,8 @@ export default function DocumentManagerPage() {
                     </Select>
                   </div>
 
-                  {/* Files List - flex-1 to match Documents table height */}
-                  <ScrollArea className="flex-1">
+                  {/* Files List - max height to match Documents table */}
+                  <ScrollArea className="flex-1 max-h-[500px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3772,7 +3772,7 @@ export default function DocumentManagerPage() {
                             </TableCell>
                           </TableRow>
                         ) : (
-                          filteredDocuments.slice(0, visibleDocumentsCount).map(doc => (
+                          filteredDocuments.map(doc => (
                             <TableRow
                               key={doc.id}
                               className={`hover:bg-muted/50 transition-colors duration-150 ${selectedRows.has(doc.id) ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}
@@ -3908,24 +3908,6 @@ export default function DocumentManagerPage() {
                         )}
                       </TableBody>
                     </Table>
-
-                    {/* Load More Button - Inside Scroll Area */}
-                    {(!loading && filteredDocuments.length > visibleDocumentsCount) && (
-                      <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setVisibleDocumentsCount(prev => prev + DOCUMENTS_PER_PAGE)}
-                          className="gap-1 h-7 text-xs"
-                        >
-                          <ChevronDown className="w-3 h-3" />
-                          {t('documents.table.loadMore')}
-                          <span className="text-xs text-muted-foreground">
-                            ({filteredDocuments.length - visibleDocumentsCount})
-                          </span>
-                        </Button>
-                      </div>
-                    )}
 
                     {/* Load More from Server - When there are more pages */}
                     {(!loading && hasMoreDocuments) && (
