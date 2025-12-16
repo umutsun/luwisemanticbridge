@@ -28,7 +28,7 @@ export const chatTemplates: Record<string, TemplateConfig> = {
 
   'modern': {
     id: 'modern',
-    name: 'Modern Dark',
+    name: 'Modern',
     description: 'Sleek dark theme with glassmorphism effects',
     version: '1.0.0',
     ChatInterface: () => import('./modern/ChatInterface'),
