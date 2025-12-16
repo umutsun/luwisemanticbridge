@@ -3415,8 +3415,8 @@ export default function DocumentManagerPage() {
                     </Select>
                   </div>
 
-                  {/* Files List - fills remaining card space */}
-                  <ScrollArea className="flex-1 min-h-0">
+                  {/* Files List - fixed height with inline scroll */}
+                  <ScrollArea className="max-h-[500px]">
                     {(physicalFilesLoading || foldersLoading) ? (
                       <div className="divide-y divide-border">
                         {[...Array(8)].map((_, i) => (
@@ -3753,8 +3753,8 @@ export default function DocumentManagerPage() {
                     </Table>
                   </div>
 
-                  {/* Scrollable Body - fills remaining card space, min-h-0 needed for flex child overflow */}
-                  <ScrollArea className="flex-1 min-h-0">
+                  {/* Scrollable Body - fixed height with inline scroll */}
+                  <ScrollArea className="max-h-[500px]">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
@@ -3911,17 +3911,17 @@ export default function DocumentManagerPage() {
 
                     {/* Load More from Server - When there are more pages */}
                     {(!loading && hasMoreDocuments) && (
-                      <div className="flex items-center justify-center px-4 py-3 border-t bg-blue-50/50 dark:bg-blue-900/20">
+                      <div className="flex items-center justify-center px-4 py-3 border-t bg-gray-50/50 dark:bg-gray-900/50">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={loadMoreDocuments}
-                          className="gap-1 h-7 text-xs border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                          className="gap-1 h-7 text-xs"
                         >
-                          <ChevronDown className="w-3 h-3 text-blue-600" />
-                          <span className="text-blue-600">{t('documents.loadMoreFromServer') || 'Load More from Server'}</span>
-                          <span className="text-xs text-blue-500">
-                            ({documents.length} / {documentsTotal})
+                          <ChevronDown className="w-3 h-3" />
+                          {t('documents.loadMore')}
+                          <span className="text-xs text-muted-foreground">
+                            ({documentsTotal - documents.length})
                           </span>
                         </Button>
                       </div>
