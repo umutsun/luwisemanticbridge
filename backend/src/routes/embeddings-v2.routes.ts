@@ -1543,16 +1543,16 @@ async function processTables(tables: string[], batchSize: number, embeddingMetho
         let nextUnprocessedQuery;
         if (embeddedIds.size > 0) {
           nextUnprocessedQuery = `
-            SELECT MIN(id) as next_id
+            SELECT MIN(${primaryKey}) as next_id
             FROM public."${table}"
             WHERE ${contentColumn.includes('CONCAT') ? 'TRUE' : `${contentColumn} IS NOT NULL`}
-            AND id NOT IN (${Array.from(embeddedIds).join(',')})
+            AND ${primaryKey} NOT IN (${Array.from(embeddedIds).join(',')})
             LIMIT 1
           `;
         } else {
           // If no embedded records, start from the first record
           nextUnprocessedQuery = `
-            SELECT MIN(id) as next_id
+            SELECT MIN(${primaryKey}) as next_id
             FROM public."${table}"
             WHERE ${contentColumn.includes('CONCAT') ? 'TRUE' : `${contentColumn} IS NOT NULL`}
             LIMIT 1
