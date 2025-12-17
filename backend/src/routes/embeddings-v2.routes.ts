@@ -791,7 +791,8 @@ router.post('/generate', createEmbeddingRateLimit.middleware, async (req: Reques
       workerCount = 2,
       resume = false,
       options,
-      embeddingMethod = options?.embeddingMethod || 'google-text-embedding-004'
+      embeddingModel,
+      embeddingMethod = embeddingModel || options?.embeddingMethod || 'openai-text-embedding-3-small'
     } = req.body;
 
     if (!tables || !Array.isArray(tables) || tables.length === 0) {
