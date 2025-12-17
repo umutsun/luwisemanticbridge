@@ -81,18 +81,18 @@ async def start_all_csv_embedding(request: AllCSVEmbeddingRequest) -> Dict[str, 
     try:
         tables = await get_csv_tables()
 
-        # Default column mappings for known tables
+        # Default column mappings for known tables (Vergilex schema)
         column_mappings = {
-            "csv_ozelge": ["baslik", "aciklama", "icerik"],
-            "csv_danistaykararlari": ["baslik", "karar_metni"],
+            "csv_ozelge": ["konusu", "icerik"],
+            "csv_danistaykararlari": ["konusu", "icerik"],
             "csv_sorucevap": ["soru", "cevap"],
-            "csv_maliansiklopedi": ["baslik", "icerik"],
-            "csv_hukdkk": ["baslik", "karar"],
-            "csv_makale_arsiv_2021": ["baslik", "icerik"],
-            "csv_makale_arsiv_2022": ["baslik", "icerik"],
-            "csv_makale_arsiv_2023": ["baslik", "icerik"],
-            "csv_makale_arsiv_2024": ["baslik", "icerik"],
-            "csv_makale_arsiv_2025": ["baslik", "icerik"],
+            "csv_maliansiklopedi": ["konusu", "icerik"],
+            "csv_hukdkk": ["konusu", "icerik"],
+            "csv_makale_arsiv_2021": ["konusu", "icerik"],
+            "csv_makale_arsiv_2022": ["konusu", "icerik"],
+            "csv_makale_arsiv_2023": ["konusu", "icerik"],
+            "csv_makale_arsiv_2024": ["konusu", "icerik"],
+            "csv_makale_arsiv_2025": ["konusu", "icerik"],
         }
 
         # Find first table that needs processing

@@ -103,7 +103,7 @@ class EmbeddingWorker:
                     SELECT source_id FROM unified_embeddings
                     WHERE source_type = 'csv' AND source_table = $1
                 """, table_name)
-                processed_ids = {str(row['source_id']) for row in rows}
+                processed_ids = {int(row['source_id']) for row in rows}
                 logger.info(f"Resuming: {len(processed_ids)} already processed")
 
             self.stats["current_progress"] = len(processed_ids)
@@ -128,7 +128,7 @@ class EmbeddingWorker:
 
                 # Filter out already processed
                 batch = [(row['id'], row['text_content']) for row in rows
-                         if str(row['id']) not in processed_ids and row['text_content'].strip()]
+                         if int(row['id']) not in processed_ids and row['text_content'] and row['text_content'].strip()]
 
                 if batch:
                     await self._embed_batch(batch, table_name)
@@ -179,13 +179,13 @@ class EmbeddingWorker:
 
                 await pool.execute("""
                     INSERT INTO unified_embeddings
-                    (source_type, source_table, source_id, content, embedding, embedding_model, created_at)
+                    (source_type, source_table, source_id, content, embedding, model_used, created_at)
                     VALUES ('csv', $1, $2, $3, $4, $5, NOW())
                     ON CONFLICT (source_type, source_table, source_id) DO UPDATE
                     SET content = EXCLUDED.content,
                         embedding = EXCLUDED.embedding,
                         updated_at = NOW()
-                """, table_name, str(source_id), text[:10000], embedding, EMBEDDING_MODEL)
+                """, table_name, int(source_id), text[:10000], embedding, EMBEDDING_MODEL)
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")
@@ -241,7 +241,7 @@ class EmbeddingWorker:
                     AND NOT EXISTS (
                         SELECT 1 FROM unified_embeddings ue
                         WHERE ue.source_type = 'document'
-                        AND ue.source_id = d.id::text
+                        AND ue.source_id = d.id
                     )
                     ORDER BY d.id
                     LIMIT $1
@@ -254,6 +254,13 @@ class EmbeddingWorker:
                     ORDER BY d.id
                     LIMIT $1
                 """
+
+            # Get total count for progress
+            total_count = await pool.fetchval("""
+                SELECT COUNT(*) FROM documents
+                WHERE content IS NOT NULL AND content != ''
+            """)
+            self.stats["current_total"] = total_count
 
             while self.is_running and not self.is_paused:
                 rows = await pool.fetch(query, batch_size)
@@ -298,13 +305,13 @@ class EmbeddingWorker:
             for i, embedding_data in enumerate(response.data):
                 await pool.execute("""
                     INSERT INTO unified_embeddings
-                    (source_type, source_table, source_id, content, embedding, embedding_model, created_at)
+                    (source_type, source_table, source_id, content, embedding, model_used, created_at)
                     VALUES ('document', 'documents', $1, $2, $3, $4, NOW())
                     ON CONFLICT (source_type, source_table, source_id) DO UPDATE
                     SET content = EXCLUDED.content,
                         embedding = EXCLUDED.embedding,
                         updated_at = NOW()
-                """, str(ids[i]), texts[i][:10000], embedding_data.embedding, EMBEDDING_MODEL)
+                """, ids[i], texts[i][:10000], embedding_data.embedding, EMBEDDING_MODEL)
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")
