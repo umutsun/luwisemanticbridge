@@ -362,7 +362,7 @@ export default function ServicesPage() {
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <Settings className="h-5 w-5" />
+              <SettingsIcon className="h-5 w-5" />
               {services.find(s => s.name === activeService)?.displayName} Configuration
             </CardTitle>
           </CardHeader>
@@ -641,31 +641,216 @@ function GraphQLConfig() {
 }
 
 function PythonConfig() {
+  const [microservices, setMicroservices] = useState<any[]>([]);
+  const [systemInfo, setSystemInfo] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMicroservicesStatus = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/python/health/services');
+      if (!response.ok) throw new Error('Failed to fetch microservices status');
+      const data = await response.json();
+      setMicroservices(data.microservices || []);
+      setSystemInfo(data.system || null);
+    } catch (err: any) {
+      setError(err.message);
+      console.error('Failed to fetch Python microservices:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMicroservicesStatus();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchMicroservicesStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'available':
+      case 'running':
+      case 'idle':
+        return <Badge className="bg-green-500">Aktif</Badge>;
+      case 'degraded':
+      case 'partial':
+        return <Badge className="bg-yellow-500">Kısmi</Badge>;
+      case 'unavailable':
+      case 'error':
+        return <Badge className="bg-red-500">Hata</Badge>;
+      case 'not_configured':
+        return <Badge variant="outline">Yapılandırılmadı</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Workers</Label>
-          <Input type="number" defaultValue="4" />
+    <div className="space-y-6">
+      {/* System Info */}
+      {systemInfo && (
+        <div className="grid grid-cols-4 gap-4">
+          <div className="p-3 bg-muted rounded-lg text-center">
+            <div className="text-xs text-muted-foreground">CPU</div>
+            <div className="text-lg font-bold">{systemInfo.cpu_percent}%</div>
+          </div>
+          <div className="p-3 bg-muted rounded-lg text-center">
+            <div className="text-xs text-muted-foreground">RAM</div>
+            <div className="text-lg font-bold">{systemInfo.memory_percent}%</div>
+          </div>
+          <div className="p-3 bg-muted rounded-lg text-center">
+            <div className="text-xs text-muted-foreground">Disk</div>
+            <div className="text-lg font-bold">{systemInfo.disk_percent}%</div>
+          </div>
+          <div className="p-3 bg-muted rounded-lg text-center">
+            <div className="text-xs text-muted-foreground">Memory</div>
+            <div className="text-lg font-bold">{systemInfo.memory_used_mb} MB</div>
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label>Timeout (s)</Label>
-          <Input type="number" defaultValue="30" />
+      )}
+
+      {/* Microservices List */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <Label className="text-lg font-semibold">Python Mikroservisleri</Label>
+          <Button size="sm" variant="outline" onClick={fetchMicroservicesStatus} disabled={loading}>
+            <RefreshCw className={`h-3 w-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            Yenile
+          </Button>
         </div>
+
+        {error && (
+          <Alert className="mb-4">
+            <XCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {loading && microservices.length === 0 ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            Yükleniyor...
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {microservices.map((service, index) => (
+              <Card key={index} className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium">{service.name}</span>
+                      {getStatusBadge(service.status)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{service.description}</p>
+
+                    {/* Service Details */}
+                    {service.details && (
+                      <div className="mt-2 space-y-1">
+                        {/* Document Analyzer specific */}
+                        {service.name === 'Document Analyzer' && service.details.is_running && (
+                          <div className="text-xs bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                            <span className="font-medium">İşleniyor: </span>
+                            {service.details.stats?.total_processed || 0} döküman
+                            {service.details.stats?.total_success > 0 && (
+                              <span className="text-green-600 ml-2">
+                                ✓ {service.details.stats.total_success} başarılı
+                              </span>
+                            )}
+                            {service.details.stats?.total_errors > 0 && (
+                              <span className="text-red-600 ml-2">
+                                ✗ {service.details.stats.total_errors} hata
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* OCR Details */}
+                        {service.name === 'OCR Service' && service.details.tesseract && (
+                          <div className="text-xs text-muted-foreground">
+                            Tesseract: {service.details.tesseract.status === 'available'
+                              ? `v${service.details.tesseract.version}`
+                              : 'Yüklü değil'}
+                            {service.details.google_vision?.status === 'configured' && (
+                              <span className="ml-2">| Google Vision: Yapılandırılmış</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Embedding Details */}
+                        {service.name === 'Embedding Service' && (
+                          <div className="text-xs text-muted-foreground">
+                            {service.details.openai?.status === 'configured' && (
+                              <span>OpenAI ({service.details.openai.model})</span>
+                            )}
+                            {service.details.google?.status === 'configured' && (
+                              <span className="ml-2">| Google ({service.details.google.model})</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Endpoints */}
+                    {service.endpoints && service.endpoints.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {service.endpoints.slice(0, 2).map((endpoint: string, i: number) => (
+                          <code key={i} className="text-[10px] bg-muted px-1.5 py-0.5 rounded">
+                            {endpoint}
+                          </code>
+                        ))}
+                        {service.endpoints.length > 2 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{service.endpoints.length - 2} more
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Error Message */}
+                    {service.error && (
+                      <div className="mt-2 text-xs text-red-500">
+                        Hata: {service.error.substring(0, 100)}...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="space-y-2">
-        <Label>Log Level</Label>
-        <Select defaultValue="info">
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="debug">Debug</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
-            <SelectItem value="warning">Warning</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </SelectContent>
-        </Select>
+
+      {/* Original Config Options */}
+      <div className="border-t pt-4">
+        <Label className="text-sm font-medium mb-3 block">Genel Ayarlar</Label>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Workers</Label>
+            <Input type="number" defaultValue="4" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs">Timeout (s)</Label>
+            <Input type="number" defaultValue="30" />
+          </div>
+        </div>
+        <div className="space-y-2 mt-3">
+          <Label className="text-xs">Log Level</Label>
+          <Select defaultValue="info">
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="debug">Debug</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );
