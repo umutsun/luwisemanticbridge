@@ -1,7 +1,11 @@
 """
 Document Analyzer Service
 Batch PDF analysis: text extraction from database documents
-Supports both digital PDFs (PyPDF2) and scanned PDFs (Google Vision OCR)
+Supports both digital PDFs (PyPDF2) and scanned PDFs (OCR)
+
+OCR Priority:
+1. Google Vision API (if enabled and API key available)
+2. Tesseract (local, fallback)
 """
 
 import os
@@ -21,6 +25,7 @@ DOCS_BASE_PATH = os.getenv("DOCS_PATH", "/var/www/vergilex/docs")
 BATCH_SIZE = int(os.getenv("ANALYZE_BATCH_SIZE", "10"))
 MIN_TEXT_THRESHOLD = 100  # Minimum chars to consider PDF as having text
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() == "true"
+OCR_PROVIDER = os.getenv("OCR_PROVIDER", "tesseract")  # tesseract | google_vision
 
 
 class DocumentAnalyzerService:
@@ -118,28 +123,63 @@ class DocumentAnalyzerService:
             return {"success": False, "error": str(e), "text": "", "needs_ocr": False}
 
     async def extract_text_with_ocr(self, file_path: str) -> Dict:
-        """Extract text from scanned PDF using Google Vision OCR"""
-        try:
-            from services.google_vision_ocr import google_vision_ocr
+        """
+        Extract text from scanned PDF using OCR
 
-            logger.info(f"Starting OCR for: {file_path}")
-            result = await google_vision_ocr.ocr_pdf(file_path, max_pages=30)
+        Uses OCR_PROVIDER env var to select provider:
+        - tesseract (default): Local Tesseract OCR
+        - google_vision: Google Cloud Vision API
+        """
+        provider = OCR_PROVIDER.lower()
 
-            return {
-                "success": result["success"],
-                "text": result.get("text", ""),
-                "page_count": result.get("pages", 0),
-                "char_count": result.get("chars", 0),
-                "method": "google_vision_ocr",
-                "error": result.get("error")
-            }
+        # Try Tesseract first (default, no API key needed)
+        if provider == "tesseract":
+            try:
+                from services.tesseract_ocr import tesseract_ocr
 
-        except ImportError:
-            logger.error("Google Vision OCR not available")
-            return {"success": False, "text": "", "error": "OCR not available", "method": "none"}
-        except Exception as e:
-            logger.error(f"OCR failed: {e}")
-            return {"success": False, "text": "", "error": str(e), "method": "none"}
+                logger.info(f"Starting Tesseract OCR for: {file_path}")
+                result = tesseract_ocr.ocr_pdf(file_path, max_pages=30)
+
+                if result["success"] and result.get("text") and len(result.get("text", "")) >= MIN_TEXT_THRESHOLD:
+                    return {
+                        "success": True,
+                        "text": result.get("text", ""),
+                        "page_count": result.get("pages", 0),
+                        "char_count": result.get("chars", 0),
+                        "method": "tesseract",
+                        "error": None
+                    }
+                else:
+                    logger.warning(f"Tesseract OCR returned insufficient text: {len(result.get('text', ''))} chars")
+
+            except ImportError as e:
+                logger.error(f"Tesseract not available: {e}")
+            except Exception as e:
+                logger.error(f"Tesseract OCR failed: {e}")
+
+        # Try Google Vision if selected or as fallback
+        if provider == "google_vision":
+            try:
+                from services.google_vision_ocr import google_vision_ocr
+
+                logger.info(f"Starting Google Vision OCR for: {file_path}")
+                result = await google_vision_ocr.ocr_pdf(file_path, max_pages=30)
+
+                return {
+                    "success": result["success"],
+                    "text": result.get("text", ""),
+                    "page_count": result.get("pages", 0),
+                    "char_count": result.get("chars", 0),
+                    "method": "google_vision_ocr",
+                    "error": result.get("error")
+                }
+
+            except ImportError:
+                logger.error("Google Vision OCR not available")
+            except Exception as e:
+                logger.error(f"Google Vision OCR failed: {e}")
+
+        return {"success": False, "text": "", "error": "OCR not available or failed", "method": "none"}
 
     def resolve_file_path(self, doc: Dict) -> Optional[str]:
         """Resolve actual file path for document"""
