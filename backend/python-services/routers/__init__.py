@@ -10,6 +10,7 @@ from .import_router import router as import_router
 from .worker_router import router as worker_router
 from .pdf_router import router as pdf_router
 from .csv_transform_router import router as csv_transform_router
+from .embedding_router import router as embedding_router
 
 __all__ = [
     "health_router",
@@ -19,5 +20,6 @@ __all__ = [
     "import_router",
     "worker_router",
     "pdf_router",
-    "csv_transform_router"
+    "csv_transform_router",
+    "embedding_router"
 ]

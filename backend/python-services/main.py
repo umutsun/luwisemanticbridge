@@ -43,7 +43,7 @@ logger.add(
 )
 
 # Import routers
-from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router
+from routers import crawl_router, pgai_router, health_router, whisper_router, import_router, worker_router, pdf_router, csv_transform_router, embedding_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -143,6 +143,12 @@ app.include_router(
     tags=["csv-transform"]
     # High-performance CSV import using PostgreSQL COPY
 )
+app.include_router(
+    embedding_router,
+    prefix="/api/python/embedding",
+    tags=["embedding"]
+    # Embedding generation service for CSV tables and documents
+)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -168,6 +174,7 @@ async def root():
             "whisper": "/api/python/whisper",
             "import": "/api/python/import",
             "csv_transform": "/api/python/csv",
+            "embedding": "/api/python/embedding",
             "docs": "/docs"
         }
     }
