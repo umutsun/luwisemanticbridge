@@ -310,8 +310,8 @@ export class DocumentTransformService {
         console.log(`[DocumentTransform] Headers:`, columnHeaders.join(', '));
       }
 
-      // Get last 5 rows for preview - sanitize for GraphQL JSON scalar
-      const rawSampleRows = parsedData.slice(-5);
+      // Get last 10 rows for preview - sanitize for GraphQL JSON scalar
+      const rawSampleRows = parsedData.slice(-10);
       // Deep clone via JSON to ensure clean data for GraphQL
       const sampleRows = JSON.parse(JSON.stringify(rawSampleRows));
 
