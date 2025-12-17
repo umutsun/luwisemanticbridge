@@ -435,16 +435,19 @@ async function getContentColumn(table: string): Promise<string> {
       FROM information_schema.columns
       WHERE table_schema = 'public'
       AND table_name = $1
-      AND column_name ILIKE ANY(ARRAY['content', 'text', 'icerik', 'içerik', 'description', 'body', 'message'])
+      AND column_name ILIKE ANY(ARRAY['content', 'text', 'icerik', 'içerik', 'i_cerik', 'description', 'body', 'message', 'ozeti', 'ozet'])
       ORDER BY
         CASE column_name
           WHEN 'content' THEN 1
           WHEN 'text' THEN 2
           WHEN 'icerik' THEN 3
           WHEN 'içerik' THEN 4
-          WHEN 'description' THEN 5
-          WHEN 'body' THEN 6
-          ELSE 7
+          WHEN 'i_cerik' THEN 5
+          WHEN 'ozeti' THEN 6
+          WHEN 'ozet' THEN 7
+          WHEN 'description' THEN 8
+          WHEN 'body' THEN 9
+          ELSE 10
         END
       LIMIT 1
     `, [table]);
