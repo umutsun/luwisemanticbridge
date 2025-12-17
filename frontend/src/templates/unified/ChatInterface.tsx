@@ -1,21 +1,17 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getEndpoint } from '@/config/api.config';
 import { useAuth } from '@/contexts/AuthProvider';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '@/hooks/useLanguage';
-import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
-
-// Import new modular components
-import { ChatHeader, ChatWelcome, ChatMessage, ChatInput } from '@/components/chat';
-
-// Import theme system (force 'modern' theme)
 import { useTheme } from '@/hooks/useTheme';
-import { ChatbotFeatures, defaultFeatures } from '@/types/chatbot-features';
+import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
+import { ChatHeader, ChatWelcome, ChatInput, ChatMessage } from '@/components/chat';
+import { ChatbotFeatures, defaultFeatures, mergeFeatures } from '@/types/chatbot-features';
 
 interface Message {
   id: string;
@@ -49,30 +45,12 @@ interface Message {
     output?: number;
     total?: number;
   };
-  fastMode?: boolean;
 }
 
 export default function ChatInterface() {
   const { token, user, logout } = useAuth();
   const { t } = useTranslation();
   useLanguage();
-
-  // FORCE Modern theme (zen glassmorphism)
-  const theme = useTheme('modern');
-
-  // Modern-specific features (minimal sources, floating input)
-  const features: ChatbotFeatures = useMemo(() => ({
-    ...defaultFeatures,
-    enableSourcesSection: true,
-    enableKeywordHighlighting: false, // Minimal style - no keyword highlighting
-    enableSourceExpansion: true,
-    sourceDisplayStyle: 'minimal', // MINIMAL - not detailed
-    enableResponseTime: true,
-    enableTokenCount: false, // Hide token count for cleaner UX
-    enableConfidenceScore: false,
-    inputStyle: 'floating', // FLOATING input (not inline)
-    messageStyle: 'bubble' // Bubble style messages
-  }), []);
 
   // Chatbot settings state
   const [chatbotSettings, setChatbotSettings] = useState<{
@@ -82,9 +60,10 @@ export default function ChatInterface() {
     placeholder: string;
     primaryColor: string;
     activeChatModel: string;
-    enableSuggestions: boolean;
     welcomeMessage?: string;
     greeting?: string;
+    theme?: string;
+    features?: Partial<ChatbotFeatures>;
   }>({
     title: '',
     subtitle: '',
@@ -92,11 +71,21 @@ export default function ChatInterface() {
     placeholder: '',
     primaryColor: '',
     activeChatModel: '',
-    enableSuggestions: true,
     welcomeMessage: '',
-    greeting: ''
+    greeting: '',
+    theme: 'modern',
+    features: defaultFeatures
   });
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Theme configuration
+  const theme = useTheme(chatbotSettings.theme);
+
+  // Features configuration (merge with defaults)
+  const features = useMemo(
+    () => mergeFeatures(chatbotSettings.features),
+    [chatbotSettings.features]
+  );
 
   // Suggestions cache
   const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
@@ -109,7 +98,6 @@ export default function ChatInterface() {
         return suggestionsCache.current.data;
       }
     }
-
     try {
       const response = await fetch(getEndpoint('chat', 'suggestions'));
       if (response.ok) {
@@ -164,7 +152,9 @@ export default function ChatInterface() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (features.enableAutoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   useEffect(() => {
@@ -179,30 +169,11 @@ export default function ChatInterface() {
 
   useEffect(() => {
     if (settingsLoaded && messages.length === 0) {
-      setShowSuggestions(chatbotSettings.enableSuggestions);
+      setShowSuggestions(features.enableSuggestions);
     }
-  }, [settingsLoaded, chatbotSettings.enableSuggestions]);
+  }, [settingsLoaded, features.enableSuggestions]);
 
-  const [shuffledSuggestions, setShuffledSuggestions] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (suggestedQuestions.length === 0) {
-      setShuffledSuggestions([]);
-      return;
-    }
-
-    const unique = Array.from(new Set(suggestedQuestions));
-    const seed = unique[0]?.charCodeAt(0) || 1;
-    const shuffled = [...unique];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(((i + 1) * seed * 7) % shuffled.length);
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    setShuffledSuggestions(shuffled.slice(0, 4));
-  }, [suggestedQuestions]);
-
-  const memoizedSuggestions = shuffledSuggestions;
-
+  // Initialize
   useEffect(() => {
     setIsClient(true);
 
@@ -215,6 +186,7 @@ export default function ChatInterface() {
 
     loadSuggestions();
 
+    // Fetch all settings
     Promise.all([
       fetch('/api/v2/chatbot/settings'),
       fetch('/api/v2/settings?category=llm'),
@@ -233,8 +205,9 @@ export default function ChatInterface() {
           prompts: promptsData.prompts || {}
         };
 
+        // Find active prompt
         const promptsList = settingsData.prompts?.list || [];
-        const activePromptObj = promptsList.find((p: { isActive?: boolean }) => p.isActive === true);
+        const activePromptObj = promptsList.find((p: any) => p.isActive === true);
 
         let activePromptData = {
           content: '',
@@ -242,6 +215,7 @@ export default function ChatInterface() {
           maxTokens: 2048,
           tone: 'professional'
         };
+
         if (activePromptObj) {
           activePromptData = {
             content: activePromptObj.systemPrompt || '',
@@ -258,9 +232,10 @@ export default function ChatInterface() {
           placeholder: chatbotData.placeholder || '',
           primaryColor: chatbotData.primaryColor || '',
           activeChatModel: settingsData.llmSettings?.activeChatModel || '',
-          enableSuggestions: chatbotData.enableSuggestions !== undefined ? chatbotData.enableSuggestions : true,
           welcomeMessage: chatbotData.welcomeMessage || '',
-          greeting: chatbotData.greeting || ''
+          greeting: chatbotData.greeting || '',
+          theme: chatbotData.theme || 'modern',
+          features: chatbotData.features || defaultFeatures
         };
 
         const rag = {
@@ -298,6 +273,7 @@ export default function ChatInterface() {
       });
   }, []);
 
+  // Update timer during streaming
   useEffect(() => {
     if (isStreaming) {
       const interval = setInterval(() => {
@@ -307,27 +283,27 @@ export default function ChatInterface() {
     }
   }, [isStreaming]);
 
+  // Event listeners
   useEffect(() => {
     const handleTagClick = (event: CustomEvent) => {
       const { query } = event.detail;
       setInputText(query);
       textareaRef.current?.focus();
     };
+    window.addEventListener('tagClick', handleTagClick as EventListener);
+    return () => window.removeEventListener('tagClick', handleTagClick as EventListener);
+  }, []);
 
+  useEffect(() => {
     const handleAddToInput = (event: CustomEvent) => {
       setInputText(event.detail);
       textareaRef.current?.focus();
     };
-
-    window.addEventListener('tagClick', handleTagClick as EventListener);
     window.addEventListener('addToInput', handleAddToInput as EventListener);
-
-    return () => {
-      window.removeEventListener('tagClick', handleTagClick as EventListener);
-      window.removeEventListener('addToInput', handleAddToInput as EventListener);
-    };
+    return () => window.removeEventListener('addToInput', handleAddToInput as EventListener);
   }, []);
 
+  // Handle send message
   const handleSendMessage = async (fromSource: boolean = false) => {
     if (!inputText.trim() || isLoading || isStreaming) return;
 
@@ -346,6 +322,7 @@ export default function ChatInterface() {
     setIsLoading(true);
     setShowSuggestions(false);
 
+    // Create streaming message
     const messageId = (Date.now() + 1).toString();
     const messageStartTime = Date.now();
     const streamingMessage: Message = {
@@ -380,7 +357,7 @@ export default function ChatInterface() {
           systemPrompt,
           enableSemanticAnalysis: true,
           trackUserInsights: true,
-          stream: true
+          stream: features.enableStreaming
         }),
       });
 
@@ -400,9 +377,8 @@ export default function ChatInterface() {
 
         if (response.status === 429 && errorData.code === 'QUERY_LIMIT_EXCEEDED') {
           const subscriptionMessage = user?.role === 'admin'
-            ? t('chat.errors.adminLimit', 'Admin kullanıcılarsınız sınırsız erişiminiz olmalıdır.')
-            : t('chat.errors.queryLimit', 'Aylık soru limitinizi doldurdunuz.');
-
+            ? t('chat.errors.adminLimit', 'Admin limit error')
+            : t('chat.errors.queryLimit', 'Query limit exceeded');
           setMessages(prev => prev.map(msg =>
             msg.id === messageId
               ? { ...msg, content: subscriptionMessage, isStreaming: false, isError: true }
@@ -414,7 +390,8 @@ export default function ChatInterface() {
         throw new Error(`Failed to get response: ${response.status}`);
       }
 
-      if (response.body) {
+      // Handle streaming
+      if (response.body && features.enableStreaming) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let accumulatedContent = '';
@@ -443,15 +420,8 @@ export default function ChatInterface() {
           }
         }
 
-        let finalData: {
-          sources?: Message['sources'];
-          relatedTopics?: Message['relatedTopics'];
-          context?: Message['context'];
-          response?: string;
-          tokens?: Message['tokens'];
-          usage?: Message['tokens'];
-          fastMode?: boolean;
-        } = {};
+        // Get final data with sources
+        let finalData: any = {};
         try {
           const finalResponse = await fetch(getEndpoint('chat', 'send'), {
             method: 'POST',
@@ -478,41 +448,31 @@ export default function ChatInterface() {
           console.error('Failed to get final data:', e);
         }
 
+        // Finalize message
         setMessages(prev => prev.map(msg =>
           msg.id === messageId
             ? {
               ...msg,
               content: accumulatedContent || finalData.response || msg.content,
               isStreaming: false,
-              sources: finalData.fastMode ? [] : finalData.sources,
+              sources: features.enableSourcesSection ? finalData.sources : undefined,
               relatedTopics: finalData.relatedTopics,
               context: finalData.context,
               responseTime: msg.startTime ? Date.now() - msg.startTime : undefined,
-              tokens: finalData.tokens || finalData.usage,
-              fastMode: finalData.fastMode
+              tokens: finalData.tokens || finalData.usage
             }
             : msg
         ));
       }
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage = error instanceof Error ? error.message : '';
-      let userFriendlyMessage = t('chat.errors.general', 'Bir hata oluştu.');
-
-      if (errorMessage.includes(': 429') || errorMessage.includes('QUERY_LIMIT_EXCEEDED')) {
-        userFriendlyMessage = user?.role === 'admin'
-          ? t('chat.errors.adminLimit', 'Admin kullanıcılarsınız.')
-          : t('chat.errors.queryLimit', 'Aylık soru limitinizi doldurdunuz.');
-      }
-
       setMessages(prev => prev.map(msg =>
         msg.id === messageId
           ? {
             ...msg,
-            content: userFriendlyMessage,
+            content: t('chat.errors.general', 'An error occurred'),
             isStreaming: false,
-            isError: true,
-            responseTime: msg.startTime ? Date.now() - msg.startTime : undefined
+            isError: true
           }
           : msg
       ));
@@ -542,9 +502,8 @@ export default function ChatInterface() {
 
   const clearChat = () => {
     setMessages([]);
-    setShowSuggestions(chatbotSettings.enableSuggestions);
+    setShowSuggestions(features.enableSuggestions);
     setConversationId(undefined);
-
     if (typeof window !== 'undefined') {
       setIsSuggestionsLoading(true);
       fetchSuggestedQuestions().then(questions => {
@@ -556,8 +515,8 @@ export default function ChatInterface() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-        {/* Header using new component */}
+      <div className={`min-h-screen bg-gradient-to-br from-background via-background to-muted/20 ${theme.colors.text}`}>
+        {/* Header */}
         <ChatHeader
           chatbotSettings={chatbotSettings}
           user={user}
@@ -569,38 +528,37 @@ export default function ChatInterface() {
         />
 
         {/* Main Chat Area */}
-        <div className="pt-20 pb-32 max-w-4xl mx-auto w-full px-4">
-          <ScrollArea className="h-[calc(100vh-13rem)] pr-4">
-            <div className="space-y-8 py-4">
-              {/* Welcome using new component */}
+        <div className="pt-20 pb-32 max-w-4xl mx-auto w-[95%] md:w-full px-2 md:px-5">
+          <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
+            <div className="space-y-4 py-4 pr-2">
+              {/* Welcome & Suggestions */}
               {isClient && showSuggestions && messages.length === 0 && (
                 <ChatWelcome
-                  chatbotSettings={chatbotSettings}
+                  chatbotSettings={{
+                    welcomeMessage: chatbotSettings.welcomeMessage,
+                    greeting: chatbotSettings.greeting,
+                    enableSuggestions: features.enableSuggestions
+                  }}
                   user={user}
-                  suggestedQuestions={memoizedSuggestions}
+                  suggestedQuestions={suggestedQuestions}
                   isSuggestionsLoading={isSuggestionsLoading}
                   onSuggestionClick={handleSuggestionClick}
                   settingsLoaded={settingsLoaded}
                 />
               )}
 
-              {/* Messages using new component */}
+              {/* Messages */}
               <AnimatePresence mode="popLayout">
                 {messages.map((message) => (
-                  <motion.div
+                  <ChatMessage
                     key={message.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <ChatMessage
-                      message={message}
-                      lastUserQuery={lastUserQuery}
-                      ragSettings={ragSettings}
-                      visibleSourcesCount={visibleSourcesCount}
-                      setVisibleSourcesCount={setVisibleSourcesCount}
-                      onSourceClick={handleSourceClick}
-                    />
-                  </motion.div>
+                    message={message}
+                    lastUserQuery={lastUserQuery}
+                    ragSettings={ragSettings}
+                    visibleSourcesCount={visibleSourcesCount}
+                    setVisibleSourcesCount={setVisibleSourcesCount}
+                    onSourceClick={handleSourceClick}
+                  />
                 ))}
               </AnimatePresence>
               <div ref={messagesEndRef} />
@@ -608,13 +566,13 @@ export default function ChatInterface() {
           </ScrollArea>
         </div>
 
-        {/* FLOATING Input using new component */}
+        {/* Input Area */}
         <ChatInput
           inputText={inputText}
           setInputText={setInputText}
           isLoading={isLoading}
           placeholder={chatbotSettings.placeholder}
-          messagesCount={messages.length}
+          messagesCount={messages.length - 1}
           onSendMessage={handleSendMessage}
           textareaRef={textareaRef}
         />

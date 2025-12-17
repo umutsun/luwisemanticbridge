@@ -3716,11 +3716,6 @@ export default function DocumentManagerPage() {
                         <SelectItem value="pending">Bekleyen</SelectItem>
                         <SelectItem value="analyzed">Analiz Edildi</SelectItem>
                         <SelectItem value="embedded">Gömülü</SelectItem>
-                        <SelectItem value="csv">CSV Dosyaları</SelectItem>
-                        <SelectItem value="transform-pending">CSV (Transform Bekliyor)</SelectItem>
-                        <SelectItem value="transformed">Dönüştürülmüş</SelectItem>
-                        <SelectItem value="pdf">PDF Dosyaları</SelectItem>
-                        <SelectItem value="pdf-pending">PDF (Analiz Bekliyor)</SelectItem>
                       </SelectContent>
                     </Select>
                     <Badge variant="outline" className="px-2 py-1 text-xs whitespace-nowrap">
