@@ -1,6 +1,7 @@
 """
 Document Analyzer Service
 Batch PDF analysis: text extraction from database documents
+Supports both digital PDFs (PyPDF2) and scanned PDFs (Google Vision OCR)
 """
 
 import os
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 DOCS_BASE_PATH = os.getenv("DOCS_PATH", "/var/www/vergilex/docs")
 BATCH_SIZE = int(os.getenv("ANALYZE_BATCH_SIZE", "10"))
+MIN_TEXT_THRESHOLD = 100  # Minimum chars to consider PDF as having text
+OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() == "true"
 
 
 class DocumentAnalyzerService:
@@ -78,10 +81,10 @@ class DocumentAnalyzerService:
         return row['count'] if row else 0
 
     def extract_text_from_pdf(self, file_path: str) -> Dict:
-        """Extract text from PDF file"""
+        """Extract text from PDF file using PyPDF2 (for digital PDFs)"""
         try:
             if not os.path.exists(file_path):
-                return {"success": False, "error": f"File not found: {file_path}", "text": ""}
+                return {"success": False, "error": f"File not found: {file_path}", "text": "", "needs_ocr": False}
 
             with open(file_path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
@@ -98,17 +101,45 @@ class DocumentAnalyzerService:
 
                 text = "\n\n".join(text_parts)
 
+                # Check if PDF needs OCR (scanned document)
+                needs_ocr = len(text) < MIN_TEXT_THRESHOLD
+
                 return {
                     "success": True,
                     "text": text,
                     "page_count": len(reader.pages),
-                    "char_count": len(text)
+                    "char_count": len(text),
+                    "needs_ocr": needs_ocr
                 }
 
         except PyPDF2.errors.PdfReadError as e:
-            return {"success": False, "error": f"Invalid PDF: {e}", "text": ""}
+            return {"success": False, "error": f"Invalid PDF: {e}", "text": "", "needs_ocr": True}
         except Exception as e:
-            return {"success": False, "error": str(e), "text": ""}
+            return {"success": False, "error": str(e), "text": "", "needs_ocr": False}
+
+    async def extract_text_with_ocr(self, file_path: str) -> Dict:
+        """Extract text from scanned PDF using Google Vision OCR"""
+        try:
+            from services.google_vision_ocr import google_vision_ocr
+
+            logger.info(f"Starting OCR for: {file_path}")
+            result = await google_vision_ocr.ocr_pdf(file_path, max_pages=30)
+
+            return {
+                "success": result["success"],
+                "text": result.get("text", ""),
+                "page_count": result.get("pages", 0),
+                "char_count": result.get("chars", 0),
+                "method": "google_vision_ocr",
+                "error": result.get("error")
+            }
+
+        except ImportError:
+            logger.error("Google Vision OCR not available")
+            return {"success": False, "text": "", "error": "OCR not available", "method": "none"}
+        except Exception as e:
+            logger.error(f"OCR failed: {e}")
+            return {"success": False, "text": "", "error": str(e), "method": "none"}
 
     def resolve_file_path(self, doc: Dict) -> Optional[str]:
         """Resolve actual file path for document"""
@@ -132,7 +163,7 @@ class DocumentAnalyzerService:
 
         return None
 
-    async def analyze_document(self, doc: Dict) -> Dict:
+    async def analyze_document(self, doc: Dict, use_ocr: bool = True) -> Dict:
         """Analyze single document and update database"""
         doc_id = doc['id']
         pool = await self.get_pool()
@@ -142,21 +173,27 @@ class DocumentAnalyzerService:
             file_path = self.resolve_file_path(doc)
 
             if not file_path:
-                # Mark as failed - file not found
+                # Mark as missing_file
                 await pool.execute("""
                     UPDATE documents
-                    SET processing_status = 'failed',
+                    SET processing_status = 'missing_file',
                         metadata = COALESCE(metadata, '{}'::jsonb) || '{"error": "File not found"}'::jsonb,
                         updated_at = NOW()
                     WHERE id = $1
                 """, doc_id)
                 return {"id": doc_id, "success": False, "error": "File not found"}
 
-            # Extract text
+            # First try PyPDF2 extraction
             result = self.extract_text_from_pdf(file_path)
 
-            if result["success"] and result["text"]:
+            # If needs OCR and OCR is enabled
+            if result.get("needs_ocr") and use_ocr and OCR_ENABLED:
+                logger.info(f"Document {doc_id} needs OCR, starting...")
+                result = await self.extract_text_with_ocr(file_path)
+
+            if result["success"] and result.get("text") and len(result["text"]) >= MIN_TEXT_THRESHOLD:
                 # Update document with extracted content
+                method = result.get("method", "pypdf2")
                 await pool.execute("""
                     UPDATE documents
                     SET content = $2,
@@ -165,21 +202,23 @@ class DocumentAnalyzerService:
                         updated_at = NOW()
                     WHERE id = $1
                 """, doc_id, result["text"],
-                    f'{{"page_count": {result.get("page_count", 0)}, "char_count": {result.get("char_count", 0)}, "analyzed_at": "{datetime.now().isoformat()}"}}')
+                    f'{{"page_count": {result.get("page_count", 0)}, "char_count": {result.get("char_count", 0)}, "method": "{method}", "analyzed_at": "{datetime.now().isoformat()}"}}')
 
-                return {"id": doc_id, "success": True, "chars": len(result["text"])}
+                return {"id": doc_id, "success": True, "chars": len(result["text"]), "method": method}
             else:
-                # Mark as failed
+                # Mark as needs_ocr if OCR was not available, otherwise failed
                 error_msg = result.get("error", "No text extracted")
+                status = "needs_ocr" if result.get("needs_ocr") and not use_ocr else "failed"
+
                 await pool.execute("""
                     UPDATE documents
-                    SET processing_status = 'failed',
-                        metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+                    SET processing_status = $2,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
                         updated_at = NOW()
                     WHERE id = $1
-                """, doc_id, f'{{"error": "{error_msg}"}}')
+                """, doc_id, status, f'{{"error": "{error_msg}"}}')
 
-                return {"id": doc_id, "success": False, "error": error_msg}
+                return {"id": doc_id, "success": False, "error": error_msg, "status": status}
 
         except Exception as e:
             logger.error(f"Document {doc_id} analysis failed: {e}")
