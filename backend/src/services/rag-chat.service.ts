@@ -456,6 +456,7 @@ export class RAGChatService {
       console.log(`Performing semantic search with pgvector...`);
 
       // PERFORMANCE OPTIMIZATION: Batch fetch all settings in ONE query
+      // Includes all instruction/prompt settings for full customization
       const settingsKeys = [
         'ragSettings.maxResults', 'maxResults',
         'ragSettings.minResults', 'minResults',
@@ -466,8 +467,13 @@ export class RAGChatService {
         'ragSettings.lowConfidenceThreshold', 'lowConfidenceThreshold', 'databaseconfidence',
         'response_language',
         'llmSettings.activeChatModel',
+        // Instruction/prompt settings (customizable from admin panel)
         'ragSettings.followUpInstructionTr',
-        'ragSettings.followUpInstructionEn'
+        'ragSettings.followUpInstructionEn',
+        'ragSettings.fastModeInstructionTr',
+        'ragSettings.fastModeInstructionEn',
+        'ragSettings.citationInstructionTr',
+        'ragSettings.citationInstructionEn'
       ];
 
       const settingsResult = await pool.query(
@@ -739,31 +745,42 @@ export class RAGChatService {
           console.log('🔗 Added follow-up context instruction (from settings:', !!customInstructionTr || !!customInstructionEn, ')');
         }
 
+        // Fast mode instruction - loaded from settings
+        const defaultFastModeEn = 'Answer directly and concisely based on the context. Write natural paragraphs without citations or source references.';
+        const defaultFastModeTr = 'Bağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı veya atıf olmadan doğal paragraflar yaz.';
+
         const fastModeInstruction = responseLanguage === 'en'
-          ? `\n\nAnswer directly and concisely based on the context. Write natural paragraphs without citations or source references.`
-          : `\n\nBağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı veya atıf olmadan doğal paragraflar yaz.`;
+          ? `\n\n${settingsMap.get('ragSettings.fastModeInstructionEn') || defaultFastModeEn}`
+          : `\n\n${settingsMap.get('ragSettings.fastModeInstructionTr') || defaultFastModeTr}`;
 
         userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
-        // Normal mode with citation instructions
-        // Add citation format instruction with STRONG emphasis on NO HEADINGS
-        // IMPORTANT: Tell LLM exactly how many sources are available to prevent hallucination
-        // INLINE CITATIONS: Place citations right after the relevant statement (footnote style)
-        const citationInstruction = responseLanguage === 'en'
-          ? `\n\nCRITICAL FORMATTING RULES:\n` +
+        // Normal mode with citation instructions - loaded from settings
+        // Supports {sourceCount} placeholder for dynamic source count
+        const defaultCitationEn =
+          `CRITICAL FORMATTING RULES:\n` +
           ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
           ` INLINE CITATIONS: Place **[1]** after relevant statements. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
           ` NO DUPLICATE CITATIONS: Each source number should appear only ONCE in the response. Don't repeat **[1]** multiple times.\n` +
-          ` Use ONLY source numbers 1-${initialDisplayCount} (you only have ${initialDisplayCount} sources)\n` +
+          ` Use ONLY source numbers 1-{sourceCount} (you only have {sourceCount} sources)\n` +
           ` NEVER add section headings or labels like "REFERENCES:"\n` +
-          `Write flowing text with unique inline citations.`
-          : `\n\nKRİTİK FORMATLAMA KURALLARI:\n` +
+          `Write flowing text with unique inline citations.`;
+
+        const defaultCitationTr =
+          `KRİTİK FORMATLAMA KURALLARI:\n` +
           ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
           ` INLINE KAYNAKÇA: İlgili bilgiden sonra **[1]** koy. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
           ` TEKRAR ETME: Her kaynak numarası yanıtta sadece BİR KEZ geçsin. **[1]**'i birden fazla kullanma.\n` +
-          ` SADECE 1-${initialDisplayCount} arası kaynak numarası kullan\n` +
+          ` SADECE 1-{sourceCount} arası kaynak numarası kullan\n` +
           ` ASLA bölüm başlığı veya "KAYNAKLAR:" gibi etiket ekleme\n` +
           `Akıcı metin yaz, her kaynağı tek seferde kullan.`;
+
+        // Get instruction from settings or use default, then replace {sourceCount} placeholder
+        let citationTemplate = responseLanguage === 'en'
+          ? (settingsMap.get('ragSettings.citationInstructionEn') || defaultCitationEn)
+          : (settingsMap.get('ragSettings.citationInstructionTr') || defaultCitationTr);
+
+        const citationInstruction = `\n\n${citationTemplate.replace(/{sourceCount}/g, String(initialDisplayCount))}`;
 
         userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
       }
