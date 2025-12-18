@@ -414,8 +414,18 @@ class SemanticSearchService:
             # Build UNION query for multi-source search
             union_parts = []
 
-            # 1. unified_embeddings (main source)
+            # 1. unified_embeddings (main source - excludes scrapes and messages if searched separately)
             if settings.enable_unified_embeddings:
+                # Build exclusion conditions for sources searched separately
+                exclusions = []
+                if settings.enable_scrape_embeddings:
+                    exclusions.append("source_table != 'scrapes'")
+                if settings.enable_message_embeddings:
+                    exclusions.append("source_table NOT IN ('message_embeddings', 'messages')")
+                    exclusions.append("source_type != 'message'")
+
+                exclusion_clause = f"AND ({' AND '.join(exclusions)})" if exclusions else ""
+
                 union_parts.append(f"""
                     SELECT
                         id,
@@ -428,6 +438,7 @@ class SemanticSearchService:
                         'unified' as search_source
                     FROM unified_embeddings
                     WHERE embedding IS NOT NULL
+                    {exclusion_clause}
                 """)
 
             # 2. document_embeddings (PDFs, Word docs)
@@ -456,6 +467,40 @@ class SemanticSearchService:
                         """)
                 except Exception:
                     pass  # Table doesn't exist
+
+            # 3. scrape_embeddings (from unified_embeddings where source_table = 'scrapes')
+            if settings.enable_scrape_embeddings:
+                union_parts.append("""
+                    SELECT
+                        id,
+                        content,
+                        'scrape_embeddings' as source_table,
+                        'web' as source_type,
+                        source_id,
+                        metadata,
+                        1 - (embedding <=> $1::vector) as similarity_score,
+                        'scrapes' as search_source
+                    FROM unified_embeddings
+                    WHERE embedding IS NOT NULL
+                    AND source_table = 'scrapes'
+                """)
+
+            # 4. message_embeddings (chat history)
+            if settings.enable_message_embeddings:
+                union_parts.append("""
+                    SELECT
+                        id,
+                        content,
+                        'message_embeddings' as source_table,
+                        'chat' as source_type,
+                        source_id,
+                        metadata,
+                        1 - (embedding <=> $1::vector) as similarity_score,
+                        'messages' as search_source
+                    FROM unified_embeddings
+                    WHERE embedding IS NOT NULL
+                    AND (source_table = 'message_embeddings' OR source_table = 'messages' OR source_type = 'message')
+                """)
 
             if not union_parts:
                 logger.warning("No embedding sources enabled")
