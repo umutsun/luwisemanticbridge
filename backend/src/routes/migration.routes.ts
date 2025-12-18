@@ -194,11 +194,35 @@ class MigrationProgress extends EventEmitter {
   private stoppedMigrations: Set<string> = new Set();
   private history: any[] = [];
   private redisInitialized = false;
+  // Track actually running migrations (not just restored state)
+  private runningMigrations: Set<string> = new Set();
 
   constructor() {
     super();
     // Initialize Redis and restore state on startup
     this.initRedis();
+  }
+
+  // Mark a migration as actually running (process is active)
+  markAsRunning(id: string) {
+    this.runningMigrations.add(id);
+    console.log(`🏃 Migration ${id} marked as actively running`);
+  }
+
+  // Mark a migration as no longer running
+  markAsStopped(id: string) {
+    this.runningMigrations.delete(id);
+    console.log(`⏹️ Migration ${id} marked as stopped`);
+  }
+
+  // Check if a migration is actually running (not just restored state)
+  isActuallyRunning(id: string): boolean {
+    return this.runningMigrations.has(id);
+  }
+
+  // Check if any migration is actually running
+  hasRunningMigration(): boolean {
+    return this.runningMigrations.size > 0;
   }
 
   private async initRedis() {
@@ -333,6 +357,7 @@ class MigrationProgress extends EventEmitter {
 
   async stopMigration(id: string) {
     this.stoppedMigrations.add(id);
+    this.runningMigrations.delete(id); // Mark as no longer running
     const current = this.progress.get(id);
     if (current) {
       const stoppedData = { ...current, status: 'stopped', stoppedAt: new Date().toISOString() };
@@ -351,6 +376,7 @@ class MigrationProgress extends EventEmitter {
         console.error('Error persisting stopped state to Redis:', error);
       }
     }
+    console.log(`⏹️ Migration ${id} stopped by user`);
   }
 
   isPaused(id: string): boolean {
@@ -698,21 +724,36 @@ router.get('/progress', async (req: Request, res: Response) => {
   }
 });
 
-// Check if migration is active
+// Check if migration is active (actually running, not just restored state)
 router.get('/active', async (req: Request, res: Response) => {
-  const allProgress = migrationProgress.getAllProgress();
-  const activeProgress = allProgress.find(p => p.status === 'processing' || p.status === 'paused');
+  const activeMigrationId = await migrationProgress.getActiveMigrationId();
 
-  if (activeProgress) {
-    res.json({
-      isActive: true,
-      status: activeProgress.status,
-      progress: activeProgress
-    });
-  } else {
-    res.json({
+  if (!activeMigrationId) {
+    return res.json({
       isActive: false,
       status: 'idle'
+    });
+  }
+
+  // Check if this migration is ACTUALLY running
+  const isActuallyRunning = migrationProgress.isActuallyRunning(activeMigrationId);
+  const progress = migrationProgress.getProgress(activeMigrationId);
+
+  if (isActuallyRunning) {
+    res.json({
+      isActive: true,
+      status: progress?.status || 'processing',
+      migrationId: activeMigrationId,
+      progress: progress
+    });
+  } else {
+    // Migration state exists but not actually running - needs recovery
+    res.json({
+      isActive: false,
+      status: 'interrupted',
+      migrationId: activeMigrationId,
+      progress: progress,
+      needsRecovery: true
     });
   }
 });
@@ -820,23 +861,30 @@ router.get('/recoverable', async (req: Request, res: Response) => {
     const activeMigrationId = await migrationProgress.getActiveMigrationId();
 
     if (!activeMigrationId) {
-      return res.json({ hasRecoverable: false });
+      return res.json({ hasRecoverable: false, isActive: false });
     }
 
-    // Check if this migration was interrupted (not currently processing in memory)
-    const allProgress = migrationProgress.getAllProgress();
-    const currentProgress = allProgress.find(p => p.id === activeMigrationId && p.status === 'processing');
+    // Check if this migration is ACTUALLY running (not just restored state)
+    const isActuallyRunning = migrationProgress.isActuallyRunning(activeMigrationId);
 
-    if (currentProgress) {
-      // Migration is still actively running
-      return res.json({ hasRecoverable: false, isActive: true });
+    if (isActuallyRunning) {
+      // Migration process is actively running
+      const progress = migrationProgress.getProgress(activeMigrationId);
+      return res.json({
+        hasRecoverable: false,
+        isActive: true,
+        migrationId: activeMigrationId,
+        progress: progress
+      });
     }
 
-    // Get stored progress from Redis
+    // Migration state exists but process is not running - it was interrupted
+    // Get stored progress from Redis/memory
     const progress = migrationProgress.getProgress(activeMigrationId);
 
     res.json({
       hasRecoverable: true,
+      isActive: false,
       migrationId: activeMigrationId,
       progress: progress,
       message: 'Backend yeniden başlatıldıktan sonra yarıda kalan migration bulundu. Devam etmek istiyor musunuz?'
@@ -1064,8 +1112,9 @@ router.post('/generate', async (req: Request, res: Response) => {
   const activeMigrationId = resumeMigrationId || `migration-${Date.now()}`;
   console.log(`🚀 ${resumeMigrationId ? 'Resuming' : 'Starting new'} migration: ${activeMigrationId}`);
 
-  // Set active migration in Redis
+  // Set active migration in Redis and mark as actually running
   await migrationProgress.setActiveMigrationId(activeMigrationId);
+  migrationProgress.markAsRunning(activeMigrationId);
 
   // Track client connection - embedding continues even if client disconnects
   let clientConnected = true;
@@ -1508,7 +1557,8 @@ router.post('/generate', async (req: Request, res: Response) => {
     migrationProgress.emit('progress', completedProgress);
     safeWrite(`data: ${JSON.stringify(completedProgress)}\n\n`);
 
-    // Clear active migration ID from Redis
+    // Clear active migration ID from Redis and mark as no longer running
+    migrationProgress.markAsStopped(activeMigrationId);
     await migrationProgress.setActiveMigrationId(null);
     await migrationProgress.completeMigration(activeMigrationId);
 
@@ -1517,7 +1567,8 @@ router.post('/generate', async (req: Request, res: Response) => {
     console.error('Generate embeddings error:', error);
     safeWrite(`data: ${JSON.stringify({ status: 'failed', error: (error as Error).message })}\n\n`);
 
-    // Clear active migration ID from Redis on error
+    // Clear active migration ID from Redis on error and mark as stopped
+    migrationProgress.markAsStopped(activeMigrationId);
     await migrationProgress.setActiveMigrationId(null);
 
     if (clientConnected) res.end();
