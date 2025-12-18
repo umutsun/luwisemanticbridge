@@ -6,12 +6,13 @@ dotenv.config();
 const poolConfig: PoolConfig = {
   connectionString: process.env.DATABASE_URL,
   max: parseInt(process.env.DB_POOL_SIZE || '30'),
-  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '60000'),
+  // Increase idle timeout to 10 minutes for long-running operations like embedding
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '600000'),
   connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '120000'),
   allowExitOnIdle: false,
   // Reuse connections
-  statement_timeout: 120000,
-  query_timeout: 120000,
+  statement_timeout: 300000, // 5 minutes for long queries
+  query_timeout: 300000, // 5 minutes
   // Add retry logic
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
