@@ -725,6 +725,20 @@ router.get('/progress', async (req: Request, res: Response) => {
   // Check if process might be stuck
   const mightBeStuck = isProcessStuck();
 
+  // Auto-recover stuck processes
+  if (mightBeStuck && migrationProgress.status === 'processing') {
+    console.log('⚠️ Progress endpoint detected stuck process - auto-recovering...');
+    const timeSinceHeartbeat = migrationProgress.lastHeartbeat
+      ? Math.round((Date.now() - migrationProgress.lastHeartbeat) / 1000 / 60)
+      : 0;
+
+    migrationProgress.status = 'paused';
+    migrationProgress.error = `Process was stuck (no activity for ${timeSinceHeartbeat} minutes). Click Resume to continue.`;
+    await redis.set('embedding:status', 'paused');
+    await saveProgressToRedis();
+    console.log('✅ Stuck process auto-recovered - status: paused');
+  }
+
   // Ensure percentage doesn't exceed 100%
   if (migrationProgress.percentage > 100) {
     migrationProgress.percentage = 100;
@@ -733,7 +747,8 @@ router.get('/progress', async (req: Request, res: Response) => {
   // Add status flag to response
   const response = {
     ...migrationProgress,
-    mightBeStuck
+    mightBeStuck,
+    autoRecovered: mightBeStuck && migrationProgress.status === 'paused'
   };
 
   res.json(response);

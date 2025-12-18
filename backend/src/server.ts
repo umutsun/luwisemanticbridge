@@ -1137,12 +1137,33 @@ async function startServer() {
     }
   }
 
-  // Check embedding progress
+  // Check embedding progress and recover stuck processes
   try {
     const embeddingProgress = await redis.get("embedding:progress");
     if (embeddingProgress) {
       const progress = JSON.parse(embeddingProgress);
       console.log(` Migration Status: ${progress.status || "unknown"}`);
+
+      // Check if process is stuck (processing but no heartbeat in 2+ minutes)
+      if (progress.status === "processing" && progress.lastHeartbeat) {
+        const timeSinceHeartbeat = Date.now() - progress.lastHeartbeat;
+        const STUCK_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+
+        if (timeSinceHeartbeat > STUCK_THRESHOLD_MS) {
+          console.log(`⚠️  STUCK PROCESS DETECTED!`);
+          console.log(`   Last heartbeat: ${Math.round(timeSinceHeartbeat / 1000 / 60)} minutes ago`);
+          console.log(`   Auto-pausing for recovery...`);
+
+          // Mark as paused so user can resume
+          progress.status = "paused";
+          progress.error = `Process was stuck (no activity for ${Math.round(timeSinceHeartbeat / 1000 / 60)} minutes). You can resume to continue.`;
+          await redis.set("embedding:progress", JSON.stringify(progress));
+          await redis.set("embedding:status", "paused");
+
+          console.log(`✅ Process marked as paused - ready for resume`);
+        }
+      }
+
       if (progress.currentTable) {
         console.log(`   Active Table: ${progress.currentTable}`);
         console.log(
