@@ -433,6 +433,25 @@ router.get('/progress', async (req: Request, res: Response) => {
   }
 });
 
+// Check if migration is active
+router.get('/active', async (req: Request, res: Response) => {
+  const allProgress = migrationProgress.getAllProgress();
+  const activeProgress = allProgress.find(p => p.status === 'processing' || p.status === 'paused');
+
+  if (activeProgress) {
+    res.json({
+      isActive: true,
+      status: activeProgress.status,
+      progress: activeProgress
+    });
+  } else {
+    res.json({
+      isActive: false,
+      status: 'idle'
+    });
+  }
+});
+
 // SSE Progress Stream - for real-time updates after page refresh
 router.get('/progress-stream', (req: Request, res: Response) => {
   // Set SSE headers
@@ -704,9 +723,33 @@ router.delete('/skipped', async (req: Request, res: Response) => {
   }
 });
 
+// Track active migration globally
+let activeMigrationId: string | null = null;
+
 // Generate embeddings
 router.post('/generate', async (req: Request, res: Response) => {
   const { batchSize = 50, sourceTable = null, tables: requestedTables = null } = req.body;
+
+  // Check if there's already an active migration
+  if (activeMigrationId) {
+    const activeProgress = migrationProgress.getAllProgress().find(p => p.status === 'processing');
+    if (activeProgress) {
+      console.log(`⚠️ Migration already running: ${activeMigrationId}`);
+      return res.status(409).json({
+        error: 'Migration already in progress',
+        message: 'Zaten aktif bir migration işlemi var. Lütfen tamamlanmasını bekleyin veya durdurun.',
+        activeMigrationId,
+        progress: activeProgress
+      });
+    } else {
+      // Clean up stale migration ID
+      activeMigrationId = null;
+    }
+  }
+
+  // Generate new migration ID
+  activeMigrationId = `migration-${Date.now()}`;
+  console.log(`🚀 Starting new migration: ${activeMigrationId}`);
 
   // Track client connection - embedding continues even if client disconnects
   let clientConnected = true;
@@ -1144,10 +1187,17 @@ router.post('/generate', async (req: Request, res: Response) => {
     migrationProgress.emit('progress', completedProgress);
     safeWrite(`data: ${JSON.stringify(completedProgress)}\n\n`);
 
+    // Clear active migration ID
+    activeMigrationId = null;
+
     if (clientConnected) res.end();
   } catch (error) {
     console.error('Generate embeddings error:', error);
     safeWrite(`data: ${JSON.stringify({ status: 'failed', error: (error as Error).message })}\n\n`);
+
+    // Clear active migration ID on error
+    activeMigrationId = null;
+
     if (clientConnected) res.end();
   }
 });
