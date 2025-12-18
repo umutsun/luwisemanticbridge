@@ -1,29 +1,119 @@
 import { Router, Request, Response } from 'express';
 import { semanticSearch } from '../services/semantic-search.service';
+import { PythonIntegrationService } from '../services/python-integration.service';
 
 const router = Router();
 
+// Get Python integration service instance
+const pythonService = PythonIntegrationService.getInstance();
+
 /**
  * Semantic search endpoint
+ * Uses Python microservice for faster performance with intelligent caching
+ * Falls back to Node.js implementation if Python service is unavailable
  */
 router.post('/api/v2/search/semantic', async (req: Request, res: Response) => {
   try {
-    const { query, limit = 10 } = req.body;
-    
+    const { query, limit = 25, usePython = true } = req.body;
+
     if (!query) {
       return res.status(400).json({ error: 'Query is required' });
     }
 
+    // Try Python microservice first for better performance
+    if (usePython) {
+      try {
+        const pythonResult = await pythonService.semanticSearch(query, { limit });
+
+        // Return Python result with formatted response
+        return res.json({
+          query,
+          results: pythonResult.results,
+          count: pythonResult.total,
+          type: 'semantic',
+          source: 'python',
+          cached: pythonResult.cached,
+          timings: pythonResult.timings,
+          settings: pythonResult.settings
+        });
+      } catch (pythonError) {
+        console.warn('Python semantic search failed, falling back to Node.js:', pythonError.message);
+        // Fall through to Node.js implementation
+      }
+    }
+
+    // Fallback to Node.js implementation
     const results = await semanticSearch.semanticSearch(query, limit);
-    
+
     res.json({
       query,
       results,
       count: results.length,
-      type: 'semantic'
+      type: 'semantic',
+      source: 'nodejs'
     });
   } catch (error) {
     console.error('Semantic search error:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+/**
+ * Main search endpoint - used by chat interface
+ * Automatically uses Python microservice for best performance
+ */
+router.post('/api/v2/search', async (req: Request, res: Response) => {
+  try {
+    const { query, limit = 25, threshold = 0.001 } = req.body;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    // Always try Python microservice first for better performance
+    try {
+      const pythonResult = await pythonService.semanticSearch(query, { limit });
+
+      if (pythonResult.success) {
+        // Transform Python results to expected format
+        const formattedResults = pythonResult.results.map(r => ({
+          id: r.id,
+          title: r.title || 'Kaynak',
+          content: r.content || r.full_content || '',
+          excerpt: r.content || '',
+          source: r.source_table,
+          source_type: r.source_type,
+          score: r.final_score,
+          similarity_score: r.similarity_score,
+          metadata: r.metadata
+        }));
+
+        return res.json({
+          success: true,
+          query,
+          results: formattedResults,
+          count: pythonResult.total,
+          source: 'python',
+          cached: pythonResult.cached,
+          timings: pythonResult.timings
+        });
+      }
+    } catch (pythonError) {
+      console.warn('Python search unavailable, falling back to Node.js:', pythonError.message);
+    }
+
+    // Fallback to Node.js hybrid search
+    const results = await semanticSearch.hybridSearch(query, limit);
+
+    res.json({
+      success: true,
+      query,
+      results,
+      count: results.length,
+      source: 'nodejs'
+    });
+  } catch (error) {
+    console.error('Search error:', error);
     res.status(500).json({ error: 'Search failed' });
   }
 });
