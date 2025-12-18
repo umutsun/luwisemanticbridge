@@ -1,0 +1,18 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="60" height="60" rx="12" fill="#0F172A"/>
+  <!-- Database cylinder -->
+  <ellipse cx="30" cy="18" rx="16" ry="6" fill="#2563EB"/>
+  <path d="M14 18V42C14 45.3 21.2 48 30 48C38.8 48 46 45.3 46 42V18" stroke="#2563EB" stroke-width="2" fill="none"/>
+  <ellipse cx="30" cy="42" rx="16" ry="6" stroke="#2563EB" stroke-width="2" fill="none"/>
+  <!-- Middle ellipse -->
+  <ellipse cx="30" cy="30" rx="16" ry="6" stroke="#2563EB" stroke-width="2" fill="none" opacity="0.5"/>
+  <!-- Vector points -->
+  <circle cx="24" cy="24" r="2.5" fill="#10B981"/>
+  <circle cx="30" cy="26" r="2.5" fill="#10B981"/>
+  <circle cx="36" cy="24" r="2.5" fill="#10B981"/>
+  <circle cx="27" cy="36" r="2.5" fill="#8B5CF6"/>
+  <circle cx="33" cy="38" r="2.5" fill="#8B5CF6"/>
+  <!-- Connection lines -->
+  <path d="M24 24L30 26L36 24" stroke="#10B981" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+</svg>

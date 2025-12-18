@@ -125,7 +125,7 @@ const extractFirstMeaningfulPhrase = (content: string): string => {
     if (trimmed.includes('?')) continue;
 
     // Clean up common prefixes
-    let phrase = trimmed
+    const phrase = trimmed
       .replace(/^Soru:\s*/i, '')
       .replace(/^Cevap:\s*/i, '')
       .trim();

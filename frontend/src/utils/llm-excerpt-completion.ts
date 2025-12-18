@@ -25,7 +25,7 @@ export const completeExcerptWithLLM = async (
   } = options;
 
   // Clean the content
-  let cleanContent = content
+  const cleanContent = content
     .replace(/^Cevap:\s*/i, '')
     .replace(/^Açıklama:\s*/i, '')
     .trim();

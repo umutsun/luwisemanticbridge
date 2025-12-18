@@ -1,0 +1,16 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="60" height="60" rx="12" fill="#0F172A"/>
+  <!-- Magnifying glass -->
+  <circle cx="26" cy="26" r="12" stroke="#2563EB" stroke-width="3" fill="none"/>
+  <path d="M35 35L45 45" stroke="#2563EB" stroke-width="4" stroke-linecap="round"/>
+  <!-- Vector dots inside -->
+  <circle cx="22" cy="23" r="2" fill="#10B981"/>
+  <circle cx="30" cy="23" r="2" fill="#10B981"/>
+  <circle cx="26" cy="30" r="2" fill="#10B981"/>
+  <!-- Semantic waves -->
+  <path d="M22 23C24 21 28 21 30 23" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <path d="M22 23C24 25 28 25 30 23" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <!-- AI sparkle -->
+  <path d="M44 12L46 16L50 18L46 20L44 24L42 20L38 18L42 16L44 12Z" fill="#FFD93D"/>
+</svg>

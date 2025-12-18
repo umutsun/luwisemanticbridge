@@ -1252,7 +1252,7 @@ export default function DocumentManagerPage() {
         // Real-time progress tracking with XMLHttpRequest
         const response = await new Promise<Response>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          let startTime = Date.now();
+          const startTime = Date.now();
           let lastLoaded = 0;
           let lastTime = Date.now();
 

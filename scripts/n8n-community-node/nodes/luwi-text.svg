@@ -1,0 +1,21 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="60" height="60" rx="12" fill="#0F172A"/>
+  <!-- Text block 1 -->
+  <rect x="10" y="12" width="16" height="36" rx="3" fill="#2563EB" opacity="0.8"/>
+  <path d="M14 18H22" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 24H20" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <path d="M14 30H22" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <path d="M14 36H18" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <!-- Arrow -->
+  <path d="M28 30H32" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+  <path d="M30 28L32 30L30 32" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Text chunks -->
+  <rect x="36" y="12" width="14" height="10" rx="2" fill="#8B5CF6"/>
+  <rect x="36" y="26" width="14" height="10" rx="2" fill="#8B5CF6" opacity="0.8"/>
+  <rect x="36" y="40" width="14" height="8" rx="2" fill="#8B5CF6" opacity="0.6"/>
+  <!-- Chunk indicators -->
+  <path d="M40 16H46" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M40 30H46" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M40 44H44" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

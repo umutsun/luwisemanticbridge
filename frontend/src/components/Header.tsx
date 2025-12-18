@@ -243,8 +243,8 @@ export default function Header() {
 
           // Calculate total records and table count from database schema
           // Note: These are not available from /health/system endpoint
-          let totalRecords = 0;
-          let tableCount = 0;
+          const totalRecords = 0;
+          const tableCount = 0;
 
           // Get LLM model information
           let llmModelInfo = {

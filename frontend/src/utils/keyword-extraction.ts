@@ -624,7 +624,7 @@ export function selectNaturalQuestionPattern(
   const selectedPattern = patterns[patternIndex % patterns.length];
 
   // Generate the natural question
-  let question = selectedPattern(keywords, context, details);
+  const question = selectedPattern(keywords, context, details);
 
   // Remove context enhancers to keep questions concise and balanced
 

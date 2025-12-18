@@ -1,47 +1,84 @@
 {
-  "name": "n8n-nodes-lsemb",
-  "version": "0.1.0",
-  "description": "n8n community nodes for Alice Semantic Bridge (LSEMB)",
-  "keywords": ["n8n", "n8n-community-node"],
+  "name": "n8n-nodes-luwi",
+  "version": "1.0.0",
+  "description": "Luwi AI - Enterprise RAG & Semantic Search Platform for n8n Workflow Automation",
+  "keywords": [
+    "n8n",
+    "n8n-community-node",
+    "luwi",
+    "semantic-search",
+    "rag",
+    "retrieval-augmented-generation",
+    "vector-database",
+    "embeddings",
+    "ai",
+    "chatbot",
+    "pgvector",
+    "openai",
+    "document-processing",
+    "web-scraping"
+  ],
+  "author": {
+    "name": "Luwi Software",
+    "email": "info@luwi.dev",
+    "url": "https://luwi.dev"
+  },
   "license": "MIT",
+  "homepage": "https://luwi.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/luwi-software/n8n-nodes-luwi"
+  },
+  "bugs": {
+    "url": "https://github.com/luwi-software/n8n-nodes-luwi/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "postbuild": "node scripts/copy-assets.js",
     "clean": "powershell -NoProfile -Command \"if (Test-Path dist) { Remove-Item -Recurse -Force dist }\"",
-    "test": "echo \"Error: no test specified, but tests are located in the backend package under test/nodes\" && exit 0"
+    "dev": "tsc -w",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "echo \"Tests available in backend package\" && exit 0"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
+    "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/AliceSemanticBridgeApi.credentials.js",
+      "dist/credentials/LuwiApi.credentials.js",
       "dist/credentials/OpenAIApi.credentials.js",
       "dist/credentials/PostgresDb.credentials.js",
       "dist/credentials/PostgresWithVectorApi.credentials.js",
       "dist/credentials/RedisApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/AliceSemanticBridge.node.js",
-      "dist/nodes/PgvectorUpsert.node.js",
-      "dist/nodes/PgvectorQuery.node.js",
+      "dist/nodes/LuwiRAG.node.js",
       "dist/nodes/WebScrape.node.js",
-      "dist/nodes/RedisPublish.node.js",
       "dist/nodes/TextChunk.node.js",
-      "dist/nodes/SitemapFetch.node.js",
-      "dist/nodes/PgHybridQuery.node.js",
-      "dist/nodes/AsembSearch.node.js",
-      "dist/nodes/ASEMBWorkflow.node.js"
+      "dist/nodes/DocumentProcessor.node.js",
+      "dist/nodes/RedisPublish.node.js",
+      "dist/nodes/SitemapFetch.node.js"
     ]
   },
   "dependencies": {
-    "n8n-workflow": "^1.40.0",
-    "pg": "^8.11.3",
-    "pgvector": "^0.1.8",
+    "cheerio": "^1.0.0-rc.12",
     "ioredis": "^5.3.2",
-    "openai": "^4.24.1"
+    "langchain": "^0.1.0",
+    "n8n-workflow": "^1.40.0",
+    "openai": "^4.24.1",
+    "p-limit": "^4.0.0",
+    "pg": "^8.11.3",
+    "pgvector": "^0.1.8"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
     "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

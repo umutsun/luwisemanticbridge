@@ -6,8 +6,34 @@
 import { createHash } from 'crypto';
 import { IExecuteFunctions } from 'n8n-workflow';
 import { ASBError, ErrorType, retryWithBackoff, callOpenAIWithRetry } from './error-handling';
-import { CacheManager } from '../src/shared/cache-manager';
-import { redisPool } from '../src/shared/connection-pool';
+
+// Simple in-memory cache for embeddings
+class SimpleCache {
+  private cache = new Map<string, { data: any; expires: number }>();
+
+  static getInstance() {
+    return new SimpleCache();
+  }
+
+  async get<T>(key: string): Promise<T | null> {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expires) {
+      this.cache.delete(key);
+      return null;
+    }
+    return item.data as T;
+  }
+
+  async set(key: string, data: any, ttl: number = 3600): Promise<void> {
+    this.cache.set(key, {
+      data,
+      expires: Date.now() + ttl * 1000
+    });
+  }
+}
+
+const CacheManager = SimpleCache;
 
 // Provider types
 export enum EmbeddingProvider {
@@ -106,16 +132,14 @@ export interface BatchEmbeddingResponse {
  */
 export class EmbeddingService {
   private static instance: EmbeddingService;
-  private cache: CacheManager;
-  private redisClient: any;
+  private cache: SimpleCache;
   private config: EmbeddingConfig;
   private tokenCount: number = 0;
   private totalCost: number = 0;
-  
+
   private constructor(config: EmbeddingConfig) {
     this.config = config;
     this.cache = CacheManager.getInstance();
-    this.redisClient = redisPool.getClient('cache');
   }
   
   static getInstance(config?: EmbeddingConfig): EmbeddingService {

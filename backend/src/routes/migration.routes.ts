@@ -9,68 +9,125 @@ const router = Router();
 // Database connections will be initialized from settings
 let sourcePool: Pool | null = null;
 let targetPool: Pool | null = null;
+let poolInitPromise: Promise<{ sourcePool: Pool; targetPool: Pool }> | null = null;
+
+// Validate pool connection is alive
+async function validatePoolConnection(pool: Pool): Promise<boolean> {
+  try {
+    const client = await pool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
 
 // Initialize database pools from settings
-async function initializePools(forceRefresh: boolean = false) {
-  // Return cached pools unless force refresh is requested
+async function initializePools(forceRefresh: boolean = false): Promise<{ sourcePool: Pool; targetPool: Pool }> {
+  // Return cached pools if valid (unless force refresh)
   if (!forceRefresh && sourcePool && targetPool) {
-    return { sourcePool, targetPool };
-  }
+    // Quick validation - check if pools are still alive
+    const [sourceValid, targetValid] = await Promise.all([
+      validatePoolConnection(sourcePool),
+      validatePoolConnection(targetPool)
+    ]);
 
-  try {
-    // Close existing pools if refreshing
-    if (forceRefresh) {
-      if (sourcePool) {
-        await sourcePool.end().catch(() => {});
-        sourcePool = null;
-      }
-      if (targetPool) {
-        await targetPool.end().catch(() => {});
-        targetPool = null;
-      }
+    if (sourceValid && targetValid) {
+      return { sourcePool, targetPool };
     }
 
-    const { pool: lsembPool } = await import('../config/database');
-
-    // Get database settings from settings table
-    const result = await lsembPool.query(
-      `SELECT key, value FROM settings WHERE key LIKE 'database.%'`
-    );
-
-    const dbSettings: any = {};
-    result.rows.forEach(row => {
-      const key = row.key.replace('database.', '');
-      try {
-        dbSettings[key] = JSON.parse(row.value);
-      } catch {
-        dbSettings[key] = row.value;
-      }
-    });
-
-    // Build connection strings from settings
-    const username = dbSettings.user || dbSettings.username;
-    const database = dbSettings.name || dbSettings.database;
-    const host = dbSettings.host || process.env.POSTGRES_HOST || 'localhost';
-    const port = dbSettings.port || process.env.POSTGRES_PORT || 5432;
-    const password = dbSettings.password || process.env.POSTGRES_PASSWORD;
-
-    const sourceConnectionString = `postgresql://${username}:${password}@${host}:${port}/${database}`;
-
-    // Target is same as main database (lsemb)
-    const targetConnectionString = process.env.DATABASE_URL || sourceConnectionString;
-
-    console.log(`[Migration] Source DB: ${database} on ${host}:${port}`);
-    console.log(`[Migration] Target DB: Using ${process.env.DATABASE_URL ? 'DATABASE_URL' : 'source connection'}`);
-
-    sourcePool = new Pool({ connectionString: sourceConnectionString });
-    targetPool = new Pool({ connectionString: targetConnectionString });
-
-    console.log(' Migration pools initialized from settings');
-    return { sourcePool, targetPool };
-  } catch (error) {
-    console.error('Failed to initialize migration pools:', error);
-    throw error;
+    // Pools are stale, need to refresh
+    console.log('[Migration] Cached pools are stale, refreshing...');
+    forceRefresh = true;
   }
+
+  // If already initializing, wait for it
+  if (poolInitPromise && !forceRefresh) {
+    return poolInitPromise;
+  }
+
+  // Create initialization promise
+  poolInitPromise = (async () => {
+    try {
+      // Close existing pools if refreshing
+      if (forceRefresh) {
+        if (sourcePool) {
+          await sourcePool.end().catch(() => {});
+          sourcePool = null;
+        }
+        if (targetPool) {
+          await targetPool.end().catch(() => {});
+          targetPool = null;
+        }
+      }
+
+      const { pool: lsembPool } = await import('../config/database');
+
+      // Get database settings from settings table
+      const result = await lsembPool.query(
+        `SELECT key, value FROM settings WHERE key LIKE 'database.%'`
+      );
+
+      const dbSettings: any = {};
+      result.rows.forEach(row => {
+        const key = row.key.replace('database.', '');
+        try {
+          dbSettings[key] = JSON.parse(row.value);
+        } catch {
+          dbSettings[key] = row.value;
+        }
+      });
+
+      // Build connection strings from settings
+      const username = dbSettings.user || dbSettings.username;
+      const database = dbSettings.name || dbSettings.database;
+      const host = dbSettings.host || process.env.POSTGRES_HOST || 'localhost';
+      const port = dbSettings.port || process.env.POSTGRES_PORT || 5432;
+      const password = dbSettings.password || process.env.POSTGRES_PASSWORD;
+
+      const sourceConnectionString = `postgresql://${username}:${password}@${host}:${port}/${database}`;
+
+      // Target is same as main database (lsemb)
+      const targetConnectionString = process.env.DATABASE_URL || sourceConnectionString;
+
+      console.log(`[Migration] Source DB: ${database} on ${host}:${port}`);
+      console.log(`[Migration] Target DB: Using ${process.env.DATABASE_URL ? 'DATABASE_URL' : 'source connection'}`);
+
+      sourcePool = new Pool({
+        connectionString: sourceConnectionString,
+        connectionTimeoutMillis: 10000, // 10 second timeout
+        idleTimeoutMillis: 30000,
+        max: 10
+      });
+      targetPool = new Pool({
+        connectionString: targetConnectionString,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 30000,
+        max: 10
+      });
+
+      // Validate connections before returning
+      const [sourceValid, targetValid] = await Promise.all([
+        validatePoolConnection(sourcePool),
+        validatePoolConnection(targetPool)
+      ]);
+
+      if (!sourceValid || !targetValid) {
+        throw new Error(`Pool validation failed: source=${sourceValid}, target=${targetValid}`);
+      }
+
+      console.log('✓ Migration pools initialized and validated');
+      return { sourcePool, targetPool };
+    } catch (error) {
+      console.error('Failed to initialize migration pools:', error);
+      // Clear the promise so next call will retry
+      poolInitPromise = null;
+      throw error;
+    }
+  })();
+
+  return poolInitPromise;
 }
 
 // OpenAI client (lazy loading)

@@ -611,7 +611,7 @@ export default function DocumentPreviewModal({
   };
 
   const parseCSV = () => {
-    let content = document!.content;
+    const content = document!.content;
 
     // ✅ Priority 1: Use GraphQL data if available (already parsed correctly by backend)
     if (graphqlData?.columnHeaders && graphqlData.sampleRows) {
@@ -804,7 +804,7 @@ export default function DocumentPreviewModal({
 
   const parseJSON = () => {
     try {
-      let jsonData = JSON.parse(document!.content);
+      const jsonData = JSON.parse(document!.content);
 
       // If it's an array, take first 10
       if (Array.isArray(jsonData)) {

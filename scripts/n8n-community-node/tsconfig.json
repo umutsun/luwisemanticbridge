@@ -23,7 +23,14 @@
     "nodes/*Enhanced*.ts",
     "nodes/*optimized*.ts",
     "nodes/*.bak.ts",
-    "nodes/DocumentProcessor.node.ts"
+    "nodes/DocumentProcessor.node.ts",
+    "nodes/Dashboard.node.ts",
+    "nodes/AliceSemanticBridge*.ts",
+    "nodes/ASEMBWorkflow.node.ts",
+    "nodes/AsembSearch.node.ts",
+    "nodes/PgvectorQuery.node.ts",
+    "nodes/PgvectorUpsert.node.ts",
+    "nodes/PgHybridQuery.node.ts"
   ]
 }
 

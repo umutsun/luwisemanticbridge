@@ -134,7 +134,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ isOpen, onClose, docu
             setCsvStats(document.metadata.csvStats);
           }
 
-          let content = document.content;
+          const content = document.content;
 
           // Check if content is in processed format (from contextual-document-processor)
           if (content.includes('Tabular Data Overview:') && content.includes('Data Records:')) {

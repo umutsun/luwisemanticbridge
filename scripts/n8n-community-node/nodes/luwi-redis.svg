@@ -1,0 +1,16 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="60" height="60" rx="12" fill="#0F172A"/>
+  <!-- Redis logo stylized -->
+  <path d="M30 12L14 22V38L30 48L46 38V22L30 12Z" fill="#DC2626" opacity="0.2"/>
+  <path d="M30 12L14 22V38L30 48L46 38V22L30 12Z" stroke="#DC2626" stroke-width="2"/>
+  <!-- Inner diamond -->
+  <path d="M30 20L22 26V34L30 40L38 34V26L30 20Z" fill="#DC2626" opacity="0.6"/>
+  <!-- Pub/Sub arrows -->
+  <path d="M10 30L14 30" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+  <path d="M12 28L14 30L12 32" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M46 30L50 30" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/>
+  <path d="M48 28L50 30L48 32" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Lightning bolt for speed -->
+  <path d="M28 26L32 26L30 30L34 30L28 38L30 32L26 32L28 26Z" fill="#FFD93D"/>
+</svg>

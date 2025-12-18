@@ -1,10 +1,35 @@
 import { Pool } from 'pg';
 import { EmbeddingService } from './embedding';
-import { cacheManager } from '../src/shared/cache-manager';
 import crypto from 'crypto';
 import OpenAI from 'openai';
 
-const redis = cacheManager.getRedisClient();
+// Simple in-memory cache to replace Redis for n8n node
+class SimpleRedisCache {
+  private cache = new Map<string, { data: string; expires: number }>();
+
+  async get(key: string): Promise<string | null> {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expires) {
+      this.cache.delete(key);
+      return null;
+    }
+    return item.data;
+  }
+
+  async setex(key: string, ttl: number, value: string): Promise<void> {
+    this.cache.set(key, {
+      data: value,
+      expires: Date.now() + ttl * 1000
+    });
+  }
+
+  async info(_section: string): Promise<string> {
+    return 'keyspace_hits:0\r\nkeyspace_misses:0';
+  }
+}
+
+const redis = new SimpleRedisCache();
 
 export interface SearchOptions {
   limit?: number;

@@ -1,0 +1,25 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="60" height="60" rx="12" fill="#0F172A"/>
+  <!-- Tree structure -->
+  <circle cx="30" cy="14" r="5" fill="#2563EB"/>
+  <circle cx="16" cy="30" r="4" fill="#10B981"/>
+  <circle cx="30" cy="30" r="4" fill="#10B981"/>
+  <circle cx="44" cy="30" r="4" fill="#10B981"/>
+  <circle cx="12" cy="46" r="3" fill="#8B5CF6"/>
+  <circle cx="24" cy="46" r="3" fill="#8B5CF6"/>
+  <circle cx="36" cy="46" r="3" fill="#8B5CF6"/>
+  <circle cx="48" cy="46" r="3" fill="#8B5CF6"/>
+  <!-- Connections -->
+  <path d="M30 19V25" stroke="#2563EB" stroke-width="2"/>
+  <path d="M26 25L16 26" stroke="#2563EB" stroke-width="2"/>
+  <path d="M34 25L44 26" stroke="#2563EB" stroke-width="2"/>
+  <path d="M16 34V42" stroke="#10B981" stroke-width="2"/>
+  <path d="M14 42L12 43" stroke="#10B981" stroke-width="1.5"/>
+  <path d="M18 42L24 43" stroke="#10B981" stroke-width="1.5"/>
+  <path d="M44 34V42" stroke="#10B981" stroke-width="2"/>
+  <path d="M42 42L36 43" stroke="#10B981" stroke-width="1.5"/>
+  <path d="M46 42L48 43" stroke="#10B981" stroke-width="1.5"/>
+  <!-- XML indicator -->
+  <text x="27" y="11" fill="white" font-size="6" font-family="monospace">&lt;/&gt;</text>
+</svg>

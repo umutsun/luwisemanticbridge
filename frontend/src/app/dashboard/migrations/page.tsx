@@ -186,12 +186,16 @@ export default function EmbeddingsManagerPage() {
     ANALYTICS: 5000
   };
 
-  // Fetch available tables
-  const fetchAvailableTables = useCallback(async () => {
+  // Fetch available tables with retry logic
+  const fetchAvailableTables = useCallback(async (retryCount = 0) => {
     setIsLoadingTables(true);
+    const maxRetries = 2;
     try {
-      console.log('Fetching tables from:', `${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}`);
-      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}`);
+      // Use refresh=true on first load to ensure pools are initialized
+      const isFirstLoad = retryCount === 0;
+      const url = `${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}${isFirstLoad ? '&refresh=true' : ''}`;
+      console.log('Fetching tables from:', url);
+      const response = await fetchWithAuth(url);
 
       if (response.ok) {
         const data = await response.json();
@@ -262,13 +266,25 @@ export default function EmbeddingsManagerPage() {
       }
     } catch (error) {
       console.error('Error fetching tables:', error);
+
+      // Retry logic for connection errors
+      if (retryCount < maxRetries) {
+        console.log(`Retrying fetch tables (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+        setTimeout(() => {
+          fetchAvailableTables(retryCount + 1);
+        }, 1000 * (retryCount + 1)); // Exponential backoff
+        return;
+      }
+
       toast({
         title: "Connection Error",
         description: "Could not connect to the server to fetch tables.",
         variant: "destructive",
       });
     } finally {
-      setIsLoadingTables(false);
+      if (retryCount >= maxRetries || retryCount === 0) {
+        setIsLoadingTables(false);
+      }
     }
   }, [toast]);
 

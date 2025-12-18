@@ -18,7 +18,7 @@ export const completeExcerpt = (content: string, options: ExcerptOptions = {}): 
   } = options;
 
   // Clean up content
-  let cleanContent = content
+  const cleanContent = content
     .replace(/^Cevap:\s*/i, '') // Remove "Cevap:" prefix
     .replace(/^Açıklama:\s*/i, '') // Remove "Açıklama:" prefix
     .replace(/^\d{2}\.\d{2}\.\d{4}\s*/i, '') // Remove date prefixes

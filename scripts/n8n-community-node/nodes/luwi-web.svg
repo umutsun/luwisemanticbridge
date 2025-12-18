@@ -1,0 +1,15 @@
+<svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="60" height="60" rx="12" fill="#0F172A"/>
+  <!-- Globe -->
+  <circle cx="30" cy="30" r="18" stroke="#2563EB" stroke-width="2" fill="none"/>
+  <ellipse cx="30" cy="30" rx="8" ry="18" stroke="#2563EB" stroke-width="2" fill="none"/>
+  <path d="M12 30H48" stroke="#2563EB" stroke-width="2"/>
+  <path d="M14 22H46" stroke="#2563EB" stroke-width="1.5" opacity="0.5"/>
+  <path d="M14 38H46" stroke="#2563EB" stroke-width="1.5" opacity="0.5"/>
+  <!-- Spider/crawler indicator -->
+  <circle cx="24" cy="24" r="3" fill="#10B981"/>
+  <path d="M24 24L32 28L38 24" stroke="#10B981" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 2"/>
+  <!-- Download arrow -->
+  <path d="M44 40L48 44L44 48M48 44H40" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
