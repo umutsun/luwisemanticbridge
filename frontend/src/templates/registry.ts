@@ -35,13 +35,13 @@ export const chatTemplates: Record<string, TemplateConfig> = {
     config: () => import('./modern/config.json')
   },
 
-  'gemini': {
-    id: 'gemini',
-    name: 'Gemini Style',
-    description: 'Clean, minimal chat interface inspired by Google Gemini',
+  'spark': {
+    id: 'spark',
+    name: 'Spark',
+    description: 'AI-inspired design with blue/purple gradient and sparkle effects',
     version: '1.0.0',
-    ChatInterface: () => import('./gemini/ChatInterface'),
-    config: () => import('./gemini/config.json')
+    ChatInterface: () => import('./spark/ChatInterface'),
+    config: () => import('./spark/config.json')
   },
 
   // Example: Add custom templates here
@@ -81,5 +81,5 @@ export function templateExists(templateId: string): boolean {
  * Get default template
  */
 export function getDefaultTemplate(): TemplateConfig {
-  return chatTemplates['gemini'];
+  return chatTemplates['spark'];
 }

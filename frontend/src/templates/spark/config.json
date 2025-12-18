@@ -1,7 +1,7 @@
 {
-    "id": "gemini",
-    "name": "Gemini Style",
-    "description": "Clean and minimalist design inspired by Google Gemini",
+    "id": "spark",
+    "name": "Spark",
+    "description": "AI-inspired design with blue/purple gradient and sparkle effects",
     "version": "1.0.0",
     "extends": "base",
     "theme": {
@@ -25,5 +25,5 @@
         "enableVoiceInput": true,
         "enableFileUpload": true
     },
-    "customCSS": ".gemini-gradient { background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }"
+    "customCSS": ".spark-gradient { background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }"
 }
