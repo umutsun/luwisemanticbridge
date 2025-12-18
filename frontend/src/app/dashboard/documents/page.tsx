@@ -234,7 +234,19 @@ export default function DocumentManagerPage() {
     fetchFolders();
     fetchBatchSchemas();
     fetchSkippedCount();
+    fetchBatchAnalyzeStatus();
   }, []);
+
+  // Poll batch analyze status when running
+  useEffect(() => {
+    if (batchAnalyzeStatus?.is_running && !batchAnalyzeStatus?.is_paused) {
+      const interval = setInterval(() => {
+        fetchBatchAnalyzeStatus();
+        fetchStats(); // Also refresh stats to see progress
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [batchAnalyzeStatus?.is_running, batchAnalyzeStatus?.is_paused]);
 
   const fetchDocuments = async (page: number = 1, append: boolean = false, statusFilter: string = 'all', search: string = '') => {
     try {
@@ -398,6 +410,84 @@ export default function DocumentManagerPage() {
           last_24h_activity: 0
         }
       });
+    }
+  };
+
+  // Batch Analyze API Functions (Python microservice)
+  const fetchBatchAnalyzeStatus = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/python/documents/analyze/status`);
+      if (response.ok) {
+        const data = await response.json();
+        setBatchAnalyzeStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch batch analyze status:', error);
+    }
+  };
+
+  const startBatchAnalyze = async () => {
+    try {
+      setBatchAnalyzeLoading(true);
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/python/documents/analyze/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_size: batchAnalyzeBatchSize })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: "Analiz Başlatıldı",
+          description: `${data.total_pending || 0} doküman analiz edilecek`,
+        });
+        fetchBatchAnalyzeStatus();
+      }
+    } catch (error) {
+      console.error('Failed to start batch analyze:', error);
+      toast({
+        title: "Hata",
+        description: "Analiz başlatılamadı",
+        variant: "destructive"
+      });
+    } finally {
+      setBatchAnalyzeLoading(false);
+    }
+  };
+
+  const stopBatchAnalyze = async () => {
+    try {
+      setBatchAnalyzeLoading(true);
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/python/documents/analyze/stop`, {
+        method: 'POST'
+      });
+      if (response.ok) {
+        toast({
+          title: "Analiz Durduruldu",
+          description: "Batch analiz işlemi durduruldu",
+        });
+        fetchBatchAnalyzeStatus();
+      }
+    } catch (error) {
+      console.error('Failed to stop batch analyze:', error);
+    } finally {
+      setBatchAnalyzeLoading(false);
+    }
+  };
+
+  const pauseBatchAnalyze = async () => {
+    try {
+      const endpoint = batchAnalyzeStatus?.is_paused ? 'resume' : 'pause';
+      const response = await fetch(`${API_CONFIG.baseUrl}/api/python/documents/analyze/${endpoint}`, {
+        method: 'POST'
+      });
+      if (response.ok) {
+        toast({
+          title: batchAnalyzeStatus?.is_paused ? "Analiz Devam Ediyor" : "Analiz Duraklatıldı",
+        });
+        fetchBatchAnalyzeStatus();
+      }
+    } catch (error) {
+      console.error('Failed to pause/resume batch analyze:', error);
     }
   };
 
@@ -3237,6 +3327,111 @@ export default function DocumentManagerPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Batch Analyze Control Card */}
+        <Card className="mb-6 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${batchAnalyzeStatus?.is_running ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                  <Brain className={`w-5 h-5 ${batchAnalyzeStatus?.is_running ? 'text-green-600 animate-pulse' : 'text-gray-500'}`} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                    PDF Analiz (OCR)
+                  </div>
+                  <div className="text-xs text-orange-700 dark:text-orange-300">
+                    {batchAnalyzeStatus?.is_running ? (
+                      <>
+                        <span className="text-green-600 dark:text-green-400">● Çalışıyor</span>
+                        {' - '}
+                        {batchAnalyzeStatus.stats?.total_processed || 0} işlendi,
+                        {' '}{batchAnalyzeStatus.stats?.total_success || 0} başarılı,
+                        {' '}{batchAnalyzeStatus.stats?.total_errors || 0} hata
+                      </>
+                    ) : batchAnalyzeStatus?.is_paused ? (
+                      <span className="text-yellow-600 dark:text-yellow-400">● Duraklatıldı</span>
+                    ) : (
+                      <span className="text-gray-500">● Bekliyor</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Batch Size Selector */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-orange-700 dark:text-orange-300">Batch:</Label>
+                  <Select
+                    value={batchAnalyzeBatchSize.toString()}
+                    onValueChange={(v) => setBatchAnalyzeBatchSize(parseInt(v))}
+                    disabled={batchAnalyzeStatus?.is_running}
+                  >
+                    <SelectTrigger className="w-20 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Control Buttons */}
+                {!batchAnalyzeStatus?.is_running ? (
+                  <Button
+                    size="sm"
+                    onClick={startBatchAnalyze}
+                    disabled={batchAnalyzeLoading || (stats.documents?.pending || 0) === 0}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {batchAnalyzeLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}
+                    Başlat
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={pauseBatchAnalyze}
+                      className="border-yellow-500 text-yellow-600 hover:bg-yellow-50"
+                    >
+                      {batchAnalyzeStatus.is_paused ? 'Devam' : 'Duraklat'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={stopBatchAnalyze}
+                      disabled={batchAnalyzeLoading}
+                      className="border-red-500 text-red-600 hover:bg-red-50"
+                    >
+                      {batchAnalyzeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      Durdur
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Progress Bar when running */}
+            {batchAnalyzeStatus?.is_running && batchAnalyzeStatus.current_job && (
+              <div className="mt-3">
+                <Progress
+                  value={batchAnalyzeStatus.current_job.total > 0
+                    ? (batchAnalyzeStatus.stats?.total_processed || 0) / batchAnalyzeStatus.current_job.total * 100
+                    : 0
+                  }
+                  className="h-2"
+                />
+                <div className="text-xs text-orange-600 dark:text-orange-400 mt-1 text-center">
+                  {batchAnalyzeStatus.stats?.total_processed || 0} / {batchAnalyzeStatus.current_job.total || 0} doküman
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-4 sm:space-y-6">
