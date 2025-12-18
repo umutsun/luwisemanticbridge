@@ -13,6 +13,7 @@ Features:
 """
 
 import os
+import re
 import json
 import hashlib
 import asyncio
@@ -20,6 +21,7 @@ import numpy as np
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from dataclasses import dataclass, asdict
+from urllib.parse import urlparse
 from loguru import logger
 import openai
 
@@ -958,8 +960,75 @@ class SemanticSearchService:
             excerpt = metadata.get("icerik") or metadata.get("ozet") or content
 
         elif source_table == "document_embeddings":
-            title = metadata.get("filename") or metadata.get("title") or metadata.get("name") or "Dokuman"
-            excerpt = content
+            # Extract title from metadata or content
+            title = metadata.get("filename") or metadata.get("title") or metadata.get("name") or metadata.get("document_title") or ""
+
+            # If no title, try to extract from content (first meaningful line)
+            if not title and content:
+                lines = content.split('\n')
+                for line in lines[:5]:
+                    clean_line = line.strip()
+                    # Skip very short lines, numbers, and formatting
+                    if len(clean_line) > 15 and not clean_line.replace('.', '').replace('-', '').isdigit():
+                        title = clean_line[:120]
+                        break
+                if not title:
+                    title = "Döküman"
+
+            # Create intelligent excerpt
+            page_info = metadata.get("page") or metadata.get("page_number", "")
+            chunk_info = metadata.get("chunk_index", "")
+
+            # Build excerpt with context
+            excerpt_parts = []
+            if page_info:
+                excerpt_parts.append(f"[Sayfa {page_info}]")
+            if chunk_info:
+                excerpt_parts.append(f"[Bölüm {chunk_info}]")
+
+            # Clean and format content for excerpt
+            clean_content = content.strip()
+            if clean_content:
+                # Remove excessive whitespace
+                clean_content = re.sub(r'\s+', ' ', clean_content)
+                excerpt_parts.append(clean_content[:800])
+
+            excerpt = " ".join(excerpt_parts) if excerpt_parts else content[:800]
+
+        elif source_table == "scrape_embeddings" or "scrape" in source_table:
+            # Web scrape results
+            title = metadata.get("title") or metadata.get("url") or metadata.get("source_url") or "Web İçeriği"
+            url = metadata.get("url") or metadata.get("source_url", "")
+
+            # Extract domain from URL for context
+            if url and not title.startswith("http"):
+                try:
+                    domain = urlparse(url).netloc
+                    if domain:
+                        title = f"{title} ({domain})"
+                except:
+                    pass
+
+            excerpt = metadata.get("description") or metadata.get("summary") or content[:600]
+
+        elif source_table == "message_embeddings" or "message" in source_table:
+            # Chat message history
+            role = metadata.get("role", "user")
+            conversation_id = metadata.get("conversation_id", "")
+
+            if role == "assistant":
+                title = "Asistan Yanıtı"
+            elif role == "user":
+                title = "Kullanıcı Sorusu"
+            else:
+                title = f"Mesaj ({role})"
+
+            if conversation_id:
+                title += f" [{conversation_id[:8]}]"
+
+            # Clean up message content
+            clean_content = re.sub(r'\s+', ' ', content.strip()) if content else ""
+            excerpt = clean_content[:600]
 
         else:
             # Generic fallback
@@ -969,14 +1038,17 @@ class SemanticSearchService:
             if not title and content:
                 # Extract first meaningful line as title
                 lines = content.split('\n')
-                for line in lines[:3]:
+                for line in lines[:5]:
                     clean_line = line.strip()
-                    if len(clean_line) > 10:
+                    # Skip short lines and pure formatting
+                    if len(clean_line) > 15 and not clean_line.replace('.', '').replace('-', '').replace('_', '').isdigit():
                         title = clean_line[:150]
                         break
 
             if not excerpt:
-                excerpt = content
+                # Clean up and format content
+                clean_content = re.sub(r'\s+', ' ', content.strip()) if content else ""
+                excerpt = clean_content
 
         # Final cleanup
         title = (title or "Kaynak")[:200].strip()
