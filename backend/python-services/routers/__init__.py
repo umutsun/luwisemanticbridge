@@ -12,6 +12,7 @@ from .pdf_router import router as pdf_router
 from .csv_transform_router import router as csv_transform_router
 from .embedding_router import router as embedding_router
 from .document_analyzer_router import router as document_analyzer_router
+from .semantic_search_router import router as semantic_search_router
 
 __all__ = [
     "health_router",
@@ -23,5 +24,6 @@ __all__ = [
     "pdf_router",
     "csv_transform_router",
     "embedding_router",
-    "document_analyzer_router"
+    "document_analyzer_router",
+    "semantic_search_router"
 ]

@@ -47,6 +47,47 @@ export interface VectorizerConfig {
   scheduleInterval?: string;
 }
 
+export interface SemanticSearchOptions {
+  limit?: number;
+  useCache?: boolean;
+}
+
+export interface SemanticSearchResult {
+  id: string;
+  content: string;
+  full_content?: string;
+  title?: string;
+  source_table: string;
+  source_type: string;
+  source_id?: string;
+  similarity_score: number;
+  keyword_boost: number;
+  source_priority: number;
+  final_score: number;
+  metadata?: Record<string, any>;
+}
+
+export interface SemanticSearchResponse {
+  success: boolean;
+  cached: boolean;
+  query: string;
+  results: SemanticSearchResult[];
+  total: number;
+  timings?: {
+    embedding_ms?: number;
+    vector_search_ms?: number;
+    scoring_ms?: number;
+    total_ms: number;
+    cache?: string;
+  };
+  settings?: {
+    similarity_threshold: number;
+    hybrid_search: boolean;
+    keyword_boost: boolean;
+  };
+  error?: string;
+}
+
 export class PythonIntegrationService {
   private static instance: PythonIntegrationService;
   private axiosClient: AxiosInstance;
@@ -385,6 +426,7 @@ export class PythonIntegrationService {
         crawl: `${this.pythonServiceUrl}/api/python/crawl`,
         pgai: `${this.pythonServiceUrl}/api/python/pgai`,
         csv: `${this.pythonServiceUrl}/api/python/csv`,
+        semanticSearch: `${this.pythonServiceUrl}/api/python/semantic-search`,
         health: `${this.pythonServiceUrl}/health`
       }
     };
@@ -510,6 +552,186 @@ export class PythonIntegrationService {
   public shouldUsePythonTransform(fileSizeBytes: number): boolean {
     const THRESHOLD_BYTES = 10 * 1024 * 1024; // 10MB
     return fileSizeBytes > THRESHOLD_BYTES;
+  }
+
+  // ============= Semantic Search Methods (High Performance) =============
+
+  /**
+   * Perform semantic search via Python microservice
+   *
+   * Performance benefits:
+   * - Redis L2 embedding cache (24h TTL)
+   * - Direct asyncpg vector search (no ORM overhead)
+   * - Hybrid scoring with keyword boost
+   *
+   * @param query - Search query text
+   * @param options - Search options (limit, useCache)
+   * @returns Search results with similarity scores
+   */
+  public async semanticSearch(
+    query: string,
+    options: SemanticSearchOptions = {}
+  ): Promise<SemanticSearchResponse> {
+    const startTime = Date.now();
+
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python semantic search service is not available');
+      }
+
+      logger.info(`Python semantic search: "${query.substring(0, 50)}..."`);
+
+      const response = await this.axiosClient.post('/api/python/semantic-search/search', {
+        query,
+        limit: options.limit || 25,
+        use_cache: options.useCache !== false
+      }, {
+        timeout: 30000 // 30 second timeout
+      });
+
+      const elapsedMs = Date.now() - startTime;
+      const resultCount = response.data.results?.length || 0;
+      const cached = response.data.cached ? ' (CACHED)' : '';
+
+      logger.info(`Python semantic search completed: ${resultCount} results in ${elapsedMs}ms${cached}`);
+
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('Python semantic search error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate embedding for text via Python microservice
+   * Uses Redis L2 cache (24h TTL)
+   *
+   * @param text - Text to embed
+   * @param useCache - Whether to use cache (default: true)
+   * @returns Embedding vector (1536 dimensions)
+   */
+  public async generateEmbedding(
+    text: string,
+    useCache: boolean = true
+  ): Promise<number[]> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python embedding service is not available');
+      }
+
+      const response = await this.axiosClient.post('/api/python/semantic-search/embedding', {
+        text,
+        use_cache: useCache
+      });
+
+      return response.data.embedding;
+
+    } catch (error: any) {
+      logger.error('Python embedding generation error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate embeddings for multiple texts in a single API call
+   * More efficient than sequential calls
+   *
+   * @param texts - Array of texts to embed
+   * @returns Array of embedding vectors
+   */
+  public async generateEmbeddingsBatch(texts: string[]): Promise<number[][]> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python embedding service is not available');
+      }
+
+      const response = await this.axiosClient.post('/api/python/semantic-search/embedding/batch', {
+        texts
+      }, {
+        timeout: 60000 // 60 second timeout for batch
+      });
+
+      return response.data.embeddings;
+
+    } catch (error: any) {
+      logger.error('Python batch embedding error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get semantic search statistics
+   */
+  public async getSemanticSearchStats(): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python semantic search service is not available');
+      }
+
+      const response = await this.axiosClient.get('/api/python/semantic-search/stats');
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('Semantic search stats error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Check vector index status
+   * Returns warning if HNSW index is missing
+   */
+  public async checkVectorIndex(): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python semantic search service is not available');
+      }
+
+      const response = await this.axiosClient.get('/api/python/semantic-search/index-status');
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('Vector index check error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current RAG settings from Python service
+   */
+  public async getRAGSettings(): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python semantic search service is not available');
+      }
+
+      const response = await this.axiosClient.get('/api/python/semantic-search/settings');
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('RAG settings error:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear semantic search caches
+   * @param type - 'embedding', 'search', or 'all'
+   */
+  public async clearSemanticSearchCache(type: 'embedding' | 'search' | 'all' = 'all'): Promise<any> {
+    try {
+      if (!await this.isPythonServiceAvailable()) {
+        throw new Error('Python semantic search service is not available');
+      }
+
+      const response = await this.axiosClient.delete(`/api/python/semantic-search/cache?type=${type}`);
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('Clear cache error:', error.message);
+      throw error;
+    }
   }
 }
 

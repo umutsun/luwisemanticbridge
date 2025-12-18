@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import pool, { TABLE_NAMES } from '../config/database';
 import { lsembPool as defaultLsembPool } from '../config/database.config';
 import { LLMManager } from './llm-manager.service';
+import { pythonService, SemanticSearchResponse } from './python-integration.service';
 import Redis from 'ioredis';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -63,6 +64,10 @@ export class SemanticSearchService {
   private sourceTableWeights: Record<string, number> = {};
   private lastWeightsRefresh: number = 0;
   private readonly WEIGHTS_CACHE_TTL = 30000; // 30 seconds
+
+  // Python semantic search settings
+  private usePythonSemanticSearch: boolean = true; // Enable Python by default for performance
+  private pythonSemanticSearchFallback: boolean = true; // Fallback to Node.js if Python unavailable
 
   // Add refresh method for immediate refresh
   async refreshRAGSettingsNow(): Promise<void> {
@@ -376,7 +381,7 @@ export class SemanticSearchService {
 
       const result = await this.pool.query(
         `SELECT key, value FROM settings WHERE key IN (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
         )`,
         [
           'ragSettings.similarityThreshold',
@@ -398,7 +403,9 @@ export class SemanticSearchService {
           'ragSettings.databasePriority',
           'ragSettings.documentsPriority',
           'ragSettings.chatPriority',
-          'ragSettings.webPriority'
+          'ragSettings.webPriority',
+          'ragSettings.usePythonSemanticSearch',
+          'ragSettings.pythonSemanticSearchFallback'
         ]
       );
 
@@ -521,6 +528,20 @@ export class SemanticSearchService {
             }
             break;
           }
+          case 'ragSettings.usePythonSemanticSearch': {
+            const parsed = this.parseBooleanSetting(value);
+            if (parsed !== undefined) {
+              this.usePythonSemanticSearch = parsed;
+            }
+            break;
+          }
+          case 'ragSettings.pythonSemanticSearchFallback': {
+            const parsed = this.parseBooleanSetting(value);
+            if (parsed !== undefined) {
+              this.pythonSemanticSearchFallback = parsed;
+            }
+            break;
+          }
           default:
             break;
         }
@@ -544,7 +565,9 @@ export class SemanticSearchService {
         databasePriority: this.databasePriority,
         documentsPriority: this.documentsPriority,
         chatPriority: this.chatPriority,
-        webPriority: this.webPriority
+        webPriority: this.webPriority,
+        usePythonSemanticSearch: this.usePythonSemanticSearch,
+        pythonSemanticSearchFallback: this.pythonSemanticSearchFallback
       });
     } catch (error) {
       console.warn('[SemanticSearch] Failed to load RAG settings from database, using defaults:', error);
@@ -1009,6 +1032,60 @@ export class SemanticSearchService {
     const embeddingId = `semanticSearch_embedding_${query.substring(0, 10)}_${Date.now()}`;
     const queryId = `semanticSearch_query_${query.substring(0, 10)}_${Date.now()}`;
     let queryTimerStarted = false;
+
+    // === PYTHON SEMANTIC SEARCH (HIGH PERFORMANCE) ===
+    // Try Python service first if enabled - provides 2-5x faster response times
+    if (this.usePythonSemanticSearch) {
+      try {
+        const pythonAvailable = await pythonService.isPythonServiceAvailable();
+
+        if (pythonAvailable) {
+          console.log('[SemanticSearch] Using Python semantic search service');
+          const startTime = Date.now();
+
+          const pythonResult = await pythonService.semanticSearch(query, {
+            limit,
+            useCache: true
+          });
+
+          if (pythonResult.success && pythonResult.results.length > 0) {
+            const elapsedMs = Date.now() - startTime;
+            const cached = pythonResult.cached ? ' (CACHED)' : '';
+            console.log(`[SemanticSearch] Python search completed: ${pythonResult.results.length} results in ${elapsedMs}ms${cached}`);
+
+            // Transform Python results to match Node.js format
+            return pythonResult.results.map(r => ({
+              id: r.id,
+              title: r.title || r.metadata?.title || r.metadata?.name || 'Untitled',
+              excerpt: r.content,
+              full_content: r.full_content,
+              source_table: r.source_table,
+              source_id: r.source_id,
+              similarity_score: r.similarity_score,
+              final_score: r.final_score,
+              keyword_boost: r.keyword_boost,
+              metadata: r.metadata
+            }));
+          }
+
+          // If Python returned no results, fall through to Node.js
+          if (this.pythonSemanticSearchFallback) {
+            console.log('[SemanticSearch] Python returned no results, falling back to Node.js');
+          } else {
+            return [];
+          }
+        } else if (!this.pythonSemanticSearchFallback) {
+          console.warn('[SemanticSearch] Python service unavailable and fallback disabled');
+          return [];
+        }
+      } catch (pythonError: any) {
+        console.warn('[SemanticSearch] Python semantic search error, falling back to Node.js:', pythonError.message);
+        if (!this.pythonSemanticSearchFallback) {
+          throw pythonError;
+        }
+      }
+    }
+    // === END PYTHON SEMANTIC SEARCH ===
 
     try {
       await this.refreshRAGSettings();
