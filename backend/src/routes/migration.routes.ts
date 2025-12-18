@@ -3,8 +3,23 @@ import { Pool } from 'pg';
 import OpenAI from 'openai';
 import { EventEmitter } from 'events';
 import { lsembPool } from '../config/database.config';
+import { initializeRedis, redisClient } from '../config/redis';
 
 const router = Router();
+
+// Redis keys for migration state persistence
+const REDIS_KEYS = {
+  ACTIVE_MIGRATION: 'migration:active',
+  PROGRESS: (id: string) => `migration:progress:${id}`,
+  PAUSED: (id: string) => `migration:paused:${id}`,
+  STOPPED: (id: string) => `migration:stopped:${id}`,
+  STATE: (id: string) => `migration:state:${id}`,
+  PENDING_RECORDS: (id: string) => `migration:pending:${id}`,
+  HISTORY: 'migration:history'
+};
+
+// TTL for migration data in Redis (24 hours)
+const MIGRATION_TTL = 86400;
 
 // Database connections will be initialized from settings
 let sourcePool: Pool | null = null;
@@ -170,48 +185,169 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
   return null;
 }
 
-// Progress tracking
+// Progress tracking with Redis persistence
 class MigrationProgress extends EventEmitter {
   private progress: Map<string, any> = new Map();
   private pausedMigrations: Set<string> = new Set();
   private stoppedMigrations: Set<string> = new Set();
   private history: any[] = [];
+  private redisInitialized = false;
 
-  updateProgress(id: string, data: any) {
+  constructor() {
+    super();
+    // Initialize Redis and restore state on startup
+    this.initRedis();
+  }
+
+  private async initRedis() {
+    try {
+      await initializeRedis();
+      this.redisInitialized = true;
+      console.log('✅ Migration Redis persistence initialized');
+      // Restore state from Redis
+      await this.restoreStateFromRedis();
+    } catch (error) {
+      console.warn('⚠️ Redis not available for migration persistence:', error);
+    }
+  }
+
+  private async restoreStateFromRedis() {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') {
+        console.log('📡 Redis not ready, skipping state restoration');
+        return;
+      }
+
+      // Restore active migration
+      const activeMigrationId = await redis.get(REDIS_KEYS.ACTIVE_MIGRATION);
+      if (activeMigrationId) {
+        console.log(`📥 Found active migration in Redis: ${activeMigrationId}`);
+
+        // Restore progress
+        const progressData = await redis.get(REDIS_KEYS.PROGRESS(activeMigrationId));
+        if (progressData) {
+          const parsed = JSON.parse(progressData);
+          this.progress.set(activeMigrationId, parsed);
+          console.log(`📥 Restored progress for migration ${activeMigrationId}: ${parsed.current}/${parsed.total}`);
+        }
+
+        // Restore paused state
+        const isPaused = await redis.get(REDIS_KEYS.PAUSED(activeMigrationId));
+        if (isPaused === 'true') {
+          this.pausedMigrations.add(activeMigrationId);
+          console.log(`📥 Migration ${activeMigrationId} was paused`);
+        }
+
+        // Restore stopped state
+        const isStopped = await redis.get(REDIS_KEYS.STOPPED(activeMigrationId));
+        if (isStopped === 'true') {
+          this.stoppedMigrations.add(activeMigrationId);
+          console.log(`📥 Migration ${activeMigrationId} was stopped`);
+        }
+      }
+
+      // Restore history
+      const historyData = await redis.get(REDIS_KEYS.HISTORY);
+      if (historyData) {
+        this.history = JSON.parse(historyData);
+        console.log(`📥 Restored ${this.history.length} migration history entries`);
+      }
+
+      console.log('✅ Migration state restored from Redis');
+    } catch (error) {
+      console.error('❌ Error restoring migration state from Redis:', error);
+    }
+  }
+
+  private async persistToRedis(id: string, data: any) {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return;
+
+      // Save progress data
+      await redis.setex(REDIS_KEYS.PROGRESS(id), MIGRATION_TTL, JSON.stringify(data));
+
+      // Save active migration ID if processing
+      if (data.status === 'processing' || data.status === 'paused') {
+        await redis.setex(REDIS_KEYS.ACTIVE_MIGRATION, MIGRATION_TTL, id);
+      }
+    } catch (error) {
+      console.error('Error persisting migration to Redis:', error);
+    }
+  }
+
+  async updateProgress(id: string, data: any) {
     const progressData = {
       ...data,
       timestamp: new Date().toISOString()
     };
     this.progress.set(id, progressData);
     this.emit('progress', { id, ...progressData });
+
+    // Persist to Redis
+    await this.persistToRedis(id, progressData);
   }
 
   getProgress(id: string) {
     return this.progress.get(id);
   }
 
-  pauseMigration(id: string) {
+  async pauseMigration(id: string) {
     this.pausedMigrations.add(id);
     const current = this.progress.get(id);
     if (current) {
-      this.updateProgress(id, { ...current, status: 'paused' });
+      await this.updateProgress(id, { ...current, status: 'paused' });
+    }
+
+    // Persist paused state to Redis
+    try {
+      const redis = redisClient();
+      if (redis && redis.status === 'ready') {
+        await redis.setex(REDIS_KEYS.PAUSED(id), MIGRATION_TTL, 'true');
+      }
+    } catch (error) {
+      console.error('Error persisting paused state to Redis:', error);
     }
   }
 
-  resumeMigration(id: string) {
+  async resumeMigration(id: string) {
     this.pausedMigrations.delete(id);
     const current = this.progress.get(id);
     if (current) {
-      this.updateProgress(id, { ...current, status: 'processing' });
+      await this.updateProgress(id, { ...current, status: 'processing' });
+    }
+
+    // Clear paused state from Redis
+    try {
+      const redis = redisClient();
+      if (redis && redis.status === 'ready') {
+        await redis.del(REDIS_KEYS.PAUSED(id));
+      }
+    } catch (error) {
+      console.error('Error clearing paused state from Redis:', error);
     }
   }
 
-  stopMigration(id: string) {
+  async stopMigration(id: string) {
     this.stoppedMigrations.add(id);
     const current = this.progress.get(id);
     if (current) {
-      this.updateProgress(id, { ...current, status: 'stopped' });
-      this.history.push({ id, ...current, stoppedAt: new Date().toISOString() });
+      const stoppedData = { ...current, status: 'stopped', stoppedAt: new Date().toISOString() };
+      await this.updateProgress(id, stoppedData);
+      this.history.push({ id, ...stoppedData });
+
+      // Persist to Redis
+      try {
+        const redis = redisClient();
+        if (redis && redis.status === 'ready') {
+          await redis.setex(REDIS_KEYS.STOPPED(id), MIGRATION_TTL, 'true');
+          await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+          await redis.setex(REDIS_KEYS.HISTORY, MIGRATION_TTL * 7, JSON.stringify(this.history));
+        }
+      } catch (error) {
+        console.error('Error persisting stopped state to Redis:', error);
+      }
     }
   }
 
@@ -223,10 +359,137 @@ class MigrationProgress extends EventEmitter {
     return this.stoppedMigrations.has(id);
   }
 
-  clearMigration(id: string) {
+  async clearMigration(id: string) {
     this.progress.delete(id);
     this.pausedMigrations.delete(id);
     this.stoppedMigrations.delete(id);
+
+    // Clear from Redis
+    try {
+      const redis = redisClient();
+      if (redis && redis.status === 'ready') {
+        await redis.del(REDIS_KEYS.PROGRESS(id));
+        await redis.del(REDIS_KEYS.PAUSED(id));
+        await redis.del(REDIS_KEYS.STOPPED(id));
+        await redis.del(REDIS_KEYS.STATE(id));
+        await redis.del(REDIS_KEYS.PENDING_RECORDS(id));
+
+        // Clear active migration if this was it
+        const activeMigration = await redis.get(REDIS_KEYS.ACTIVE_MIGRATION);
+        if (activeMigration === id) {
+          await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+        }
+      }
+    } catch (error) {
+      console.error('Error clearing migration from Redis:', error);
+    }
+  }
+
+  async completeMigration(id: string) {
+    const current = this.progress.get(id);
+    if (current) {
+      const completedData = { ...current, status: 'completed', completedAt: new Date().toISOString() };
+      this.progress.set(id, completedData);
+      this.history.push({ id, ...completedData });
+    }
+
+    // Clear active migration from Redis
+    try {
+      const redis = redisClient();
+      if (redis && redis.status === 'ready') {
+        await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+        await redis.del(REDIS_KEYS.PENDING_RECORDS(id));
+        await redis.setex(REDIS_KEYS.HISTORY, MIGRATION_TTL * 7, JSON.stringify(this.history));
+      }
+    } catch (error) {
+      console.error('Error completing migration in Redis:', error);
+    }
+  }
+
+  async savePendingRecords(id: string, records: any[]) {
+    try {
+      const redis = redisClient();
+      if (redis && redis.status === 'ready') {
+        // Save in batches of 1000 to avoid memory issues
+        const chunks = [];
+        for (let i = 0; i < records.length; i += 1000) {
+          chunks.push(records.slice(i, i + 1000));
+        }
+
+        // Save total count and chunk info
+        await redis.setex(
+          REDIS_KEYS.STATE(id),
+          MIGRATION_TTL,
+          JSON.stringify({ totalChunks: chunks.length, totalRecords: records.length })
+        );
+
+        // Save each chunk
+        for (let i = 0; i < chunks.length; i++) {
+          await redis.setex(
+            `${REDIS_KEYS.PENDING_RECORDS(id)}:${i}`,
+            MIGRATION_TTL,
+            JSON.stringify(chunks[i])
+          );
+        }
+
+        console.log(`💾 Saved ${records.length} pending records to Redis in ${chunks.length} chunks`);
+      }
+    } catch (error) {
+      console.error('Error saving pending records to Redis:', error);
+    }
+  }
+
+  async getPendingRecords(id: string): Promise<any[]> {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return [];
+
+      const stateData = await redis.get(REDIS_KEYS.STATE(id));
+      if (!stateData) return [];
+
+      const state = JSON.parse(stateData);
+      const records: any[] = [];
+
+      // Load each chunk
+      for (let i = 0; i < state.totalChunks; i++) {
+        const chunkData = await redis.get(`${REDIS_KEYS.PENDING_RECORDS(id)}:${i}`);
+        if (chunkData) {
+          records.push(...JSON.parse(chunkData));
+        }
+      }
+
+      console.log(`📥 Loaded ${records.length} pending records from Redis`);
+      return records;
+    } catch (error) {
+      console.error('Error loading pending records from Redis:', error);
+      return [];
+    }
+  }
+
+  async getActiveMigrationId(): Promise<string | null> {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return null;
+      return await redis.get(REDIS_KEYS.ACTIVE_MIGRATION);
+    } catch (error) {
+      console.error('Error getting active migration ID from Redis:', error);
+      return null;
+    }
+  }
+
+  async setActiveMigrationId(id: string | null) {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return;
+
+      if (id) {
+        await redis.setex(REDIS_KEYS.ACTIVE_MIGRATION, MIGRATION_TTL, id);
+      } else {
+        await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+      }
+    } catch (error) {
+      console.error('Error setting active migration ID in Redis:', error);
+    }
   }
 
   getHistory() {
@@ -504,7 +767,7 @@ router.post('/pause', async (req: Request, res: Response) => {
     const allProgress = migrationProgress.getAllProgress();
     const activeProgress = allProgress.find(p => p.status === 'processing');
     if (activeProgress) {
-      migrationProgress.pauseMigration(activeProgress.id);
+      await migrationProgress.pauseMigration(activeProgress.id);
       res.json({ success: true, message: 'Migration paused', id: activeProgress.id });
     } else {
       res.status(404).json({ error: 'No active migration to pause' });
@@ -521,7 +784,7 @@ router.post('/resume', async (req: Request, res: Response) => {
     const allProgress = migrationProgress.getAllProgress();
     const pausedProgress = allProgress.find(p => p.status === 'paused');
     if (pausedProgress) {
-      migrationProgress.resumeMigration(pausedProgress.id);
+      await migrationProgress.resumeMigration(pausedProgress.id);
       res.json({ success: true, message: 'Migration resumed', id: pausedProgress.id });
     } else {
       res.status(404).json({ error: 'No paused migration to resume' });
@@ -538,7 +801,7 @@ router.post('/stop', async (req: Request, res: Response) => {
     const allProgress = migrationProgress.getAllProgress();
     const activeProgress = allProgress.find(p => p.status === 'processing' || p.status === 'paused');
     if (activeProgress) {
-      migrationProgress.stopMigration(activeProgress.id);
+      await migrationProgress.stopMigration(activeProgress.id);
       res.json({ success: true, message: 'Migration stopped', id: activeProgress.id });
     } else {
       res.status(404).json({ error: 'No active migration to stop' });
@@ -549,12 +812,62 @@ router.post('/stop', async (req: Request, res: Response) => {
   }
 });
 
+// Check for interrupted migration that can be recovered (after backend restart)
+router.get('/recoverable', async (req: Request, res: Response) => {
+  try {
+    const activeMigrationId = await migrationProgress.getActiveMigrationId();
+
+    if (!activeMigrationId) {
+      return res.json({ hasRecoverable: false });
+    }
+
+    // Check if this migration was interrupted (not currently processing in memory)
+    const allProgress = migrationProgress.getAllProgress();
+    const currentProgress = allProgress.find(p => p.id === activeMigrationId && p.status === 'processing');
+
+    if (currentProgress) {
+      // Migration is still actively running
+      return res.json({ hasRecoverable: false, isActive: true });
+    }
+
+    // Get stored progress from Redis
+    const progress = migrationProgress.getProgress(activeMigrationId);
+
+    res.json({
+      hasRecoverable: true,
+      migrationId: activeMigrationId,
+      progress: progress,
+      message: 'Backend yeniden başlatıldıktan sonra yarıda kalan migration bulundu. Devam etmek istiyor musunuz?'
+    });
+  } catch (error) {
+    console.error('Recovery check error:', error);
+    res.status(500).json({ error: 'Failed to check for recoverable migration' });
+  }
+});
+
+// Clear interrupted migration state (dismiss recovery)
+router.post('/dismiss-recovery', async (req: Request, res: Response) => {
+  try {
+    const activeMigrationId = await migrationProgress.getActiveMigrationId();
+
+    if (activeMigrationId) {
+      await migrationProgress.clearMigration(activeMigrationId);
+      console.log(`🗑️ Dismissed recovery for migration: ${activeMigrationId}`);
+    }
+
+    res.json({ success: true, message: 'Recovery dismissed' });
+  } catch (error) {
+    console.error('Dismiss recovery error:', error);
+    res.status(500).json({ error: 'Failed to dismiss recovery' });
+  }
+});
+
 // Pause migration
 router.post('/pause/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    migrationProgress.pauseMigration(id);
+    await migrationProgress.pauseMigration(id);
     res.json({ success: true, message: 'Migration paused' });
   } catch (error) {
     console.error('Pause error:', error);
@@ -567,7 +880,7 @@ router.post('/resume/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    migrationProgress.resumeMigration(id);
+    await migrationProgress.resumeMigration(id);
     res.json({ success: true, message: 'Migration resumed' });
   } catch (error) {
     console.error('Resume error:', error);
@@ -580,7 +893,7 @@ router.post('/stop/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    migrationProgress.stopMigration(id);
+    await migrationProgress.stopMigration(id);
     res.json({ success: true, message: 'Migration stopped' });
   } catch (error) {
     console.error('Stop error:', error);
@@ -723,33 +1036,34 @@ router.delete('/skipped', async (req: Request, res: Response) => {
   }
 });
 
-// Track active migration globally
-let activeMigrationId: string | null = null;
-
 // Generate embeddings
 router.post('/generate', async (req: Request, res: Response) => {
-  const { batchSize = 50, sourceTable = null, tables: requestedTables = null } = req.body;
+  const { batchSize = 50, sourceTable = null, tables: requestedTables = null, resumeMigrationId = null } = req.body;
 
-  // Check if there's already an active migration
-  if (activeMigrationId) {
+  // Check if there's already an active migration (from Redis)
+  const existingMigrationId = await migrationProgress.getActiveMigrationId();
+  if (existingMigrationId && !resumeMigrationId) {
     const activeProgress = migrationProgress.getAllProgress().find(p => p.status === 'processing');
     if (activeProgress) {
-      console.log(`⚠️ Migration already running: ${activeMigrationId}`);
+      console.log(`⚠️ Migration already running: ${existingMigrationId}`);
       return res.status(409).json({
         error: 'Migration already in progress',
         message: 'Zaten aktif bir migration işlemi var. Lütfen tamamlanmasını bekleyin veya durdurun.',
-        activeMigrationId,
+        activeMigrationId: existingMigrationId,
         progress: activeProgress
       });
     } else {
-      // Clean up stale migration ID
-      activeMigrationId = null;
+      // Clean up stale migration ID from Redis
+      await migrationProgress.setActiveMigrationId(null);
     }
   }
 
-  // Generate new migration ID
-  activeMigrationId = `migration-${Date.now()}`;
-  console.log(`🚀 Starting new migration: ${activeMigrationId}`);
+  // Use existing migration ID if resuming, otherwise generate new one
+  const activeMigrationId = resumeMigrationId || `migration-${Date.now()}`;
+  console.log(`🚀 ${resumeMigrationId ? 'Resuming' : 'Starting new'} migration: ${activeMigrationId}`);
+
+  // Set active migration in Redis
+  await migrationProgress.setActiveMigrationId(activeMigrationId);
 
   // Track client connection - embedding continues even if client disconnects
   let clientConnected = true;
@@ -1187,16 +1501,17 @@ router.post('/generate', async (req: Request, res: Response) => {
     migrationProgress.emit('progress', completedProgress);
     safeWrite(`data: ${JSON.stringify(completedProgress)}\n\n`);
 
-    // Clear active migration ID
-    activeMigrationId = null;
+    // Clear active migration ID from Redis
+    await migrationProgress.setActiveMigrationId(null);
+    await migrationProgress.completeMigration(activeMigrationId);
 
     if (clientConnected) res.end();
   } catch (error) {
     console.error('Generate embeddings error:', error);
     safeWrite(`data: ${JSON.stringify({ status: 'failed', error: (error as Error).message })}\n\n`);
 
-    // Clear active migration ID on error
-    activeMigrationId = null;
+    // Clear active migration ID from Redis on error
+    await migrationProgress.setActiveMigrationId(null);
 
     if (clientConnected) res.end();
   }
