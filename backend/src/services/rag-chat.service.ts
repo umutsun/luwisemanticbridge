@@ -465,7 +465,9 @@ export class RAGChatService {
         'ragSettings.similarityThreshold', 'similarityThreshold', 'semantic_search_threshold',
         'ragSettings.lowConfidenceThreshold', 'lowConfidenceThreshold', 'databaseconfidence',
         'response_language',
-        'llmSettings.activeChatModel'
+        'llmSettings.activeChatModel',
+        'ragSettings.followUpInstructionTr',
+        'ragSettings.followUpInstructionEn'
       ];
 
       const settingsResult = await pool.query(
@@ -720,13 +722,21 @@ export class RAGChatService {
         console.log('⚡ FAST MODE: Using simplified prompt (no citations)');
 
         // 🔗 Add follow-up context instruction if this is a follow-up question
-        // NOTE: Instruction is subtle - tells LLM to use context without revealing it's a follow-up
+        // NOTE: Instruction loaded from settings (ragSettings.followUpInstructionTr/En)
         let followUpInstruction = '';
         if (followUpResult.isFollowUp && followUpResult.contextInfo) {
+          // Default instructions (used if settings not configured)
+          const defaultInstructionEn = '[INTERNAL: Use conversation history for context. Do NOT mention that this relates to a previous question - answer naturally as if continuing a conversation.]';
+          const defaultInstructionTr = '[DAHİLİ: Konuşma geçmişini bağlam olarak kullan. Bunun önceki bir soruyla ilgili olduğundan BAHSETME - doğal bir sohbet devam ediyormuş gibi yanıt ver.]';
+
+          // Get from settings or use defaults
+          const customInstructionTr = settingsMap.get('ragSettings.followUpInstructionTr');
+          const customInstructionEn = settingsMap.get('ragSettings.followUpInstructionEn');
+
           followUpInstruction = responseLanguage === 'en'
-            ? `\n\n[INTERNAL: Use conversation history for context. Do NOT mention that this relates to a previous question - answer naturally as if continuing a conversation.]`
-            : `\n\n[DAHİLİ: Konuşma geçmişini bağlam olarak kullan. Bunun önceki bir soruyla ilgili olduğundan BAHSETME - doğal bir sohbet devam ediyormuş gibi yanıt ver.]`;
-          console.log('🔗 Added subtle follow-up context instruction');
+            ? `\n\n${customInstructionEn || defaultInstructionEn}`
+            : `\n\n${customInstructionTr || defaultInstructionTr}`;
+          console.log('🔗 Added follow-up context instruction (from settings:', !!customInstructionTr || !!customInstructionEn, ')');
         }
 
         const fastModeInstruction = responseLanguage === 'en'
