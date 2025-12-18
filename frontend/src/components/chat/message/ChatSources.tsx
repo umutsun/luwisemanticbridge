@@ -115,20 +115,6 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
                   </p>
                 )}
 
-                {/* Score bar - only on desktop */}
-                {source.score && (
-                  <div className="hidden sm:flex items-center gap-1 mt-2 flex-shrink-0">
-                    <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-400 dark:to-blue-500 transition-all duration-300"
-                        style={{ width: `${Math.min(100, Math.round(source.score))}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium w-10 text-right">
-                      %{Math.min(100, Math.round(source.score))}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
