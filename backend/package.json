@@ -4,7 +4,7 @@
   "description": "LSEMB Context Engine - Intelligent data transformation middleware with template-based LLM analysis",
   "main": "dist/server.js",
   "scripts": {
-    "start": "npx ts-node src/server.ts",
+    "start": "NODE_OPTIONS='--max-old-space-size=2048' npx ts-node src/server.ts",
     "dev": "nodemon -r dotenv/config src/server.ts dotenv_config_path=../.env.lsemb",
     "test": "npx jest",
     "test:watch": "npx jest --watch",
