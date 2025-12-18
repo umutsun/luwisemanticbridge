@@ -3328,6 +3328,111 @@ export default function DocumentManagerPage() {
           </Card>
         </div>
 
+        {/* Batch Analyze Control Card */}
+        <Card className="mb-6 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${batchAnalyzeStatus?.is_running ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                  <Brain className={`w-5 h-5 ${batchAnalyzeStatus?.is_running ? 'text-green-600 animate-pulse' : 'text-gray-500'}`} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                    PDF Analiz (OCR)
+                  </div>
+                  <div className="text-xs text-orange-700 dark:text-orange-300">
+                    {batchAnalyzeStatus?.is_running ? (
+                      <>
+                        <span className="text-green-600 dark:text-green-400">● Çalışıyor</span>
+                        {' - '}
+                        {batchAnalyzeStatus.stats?.total_processed || 0} işlendi,
+                        {' '}{batchAnalyzeStatus.stats?.total_success || 0} başarılı,
+                        {' '}{batchAnalyzeStatus.stats?.total_errors || 0} hata
+                      </>
+                    ) : batchAnalyzeStatus?.is_paused ? (
+                      <span className="text-yellow-600 dark:text-yellow-400">● Duraklatıldı</span>
+                    ) : (
+                      <span className="text-gray-500">● Bekliyor</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Batch Size Selector */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-orange-700 dark:text-orange-300">Batch:</Label>
+                  <Select
+                    value={batchAnalyzeBatchSize.toString()}
+                    onValueChange={(v) => setBatchAnalyzeBatchSize(parseInt(v))}
+                    disabled={batchAnalyzeStatus?.is_running}
+                  >
+                    <SelectTrigger className="w-20 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Control Buttons */}
+                {!batchAnalyzeStatus?.is_running ? (
+                  <Button
+                    size="sm"
+                    onClick={startBatchAnalyze}
+                    disabled={batchAnalyzeLoading || (stats.documents?.pending || 0) === 0}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {batchAnalyzeLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}
+                    Başlat
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={pauseBatchAnalyze}
+                      className="border-yellow-500 text-yellow-600 hover:bg-yellow-50"
+                    >
+                      {batchAnalyzeStatus.is_paused ? 'Devam' : 'Duraklat'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={stopBatchAnalyze}
+                      disabled={batchAnalyzeLoading}
+                      className="border-red-500 text-red-600 hover:bg-red-50"
+                    >
+                      {batchAnalyzeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      Durdur
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Progress Bar when running */}
+            {batchAnalyzeStatus?.is_running && batchAnalyzeStatus.current_job && (
+              <div className="mt-3">
+                <Progress
+                  value={batchAnalyzeStatus.current_job.total > 0
+                    ? (batchAnalyzeStatus.stats?.total_processed || 0) / batchAnalyzeStatus.current_job.total * 100
+                    : 0
+                  }
+                  className="h-2"
+                />
+                <div className="text-xs text-orange-600 dark:text-orange-400 mt-1 text-center">
+                  {batchAnalyzeStatus.stats?.total_processed || 0} / {batchAnalyzeStatus.current_job.total || 0} doküman
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-4 sm:space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-stretch min-h-[600px]">
@@ -4157,87 +4262,6 @@ export default function DocumentManagerPage() {
                             <Trash2 className="w-4 h-4 text-red-600" />
                           </Button>
                         </ConfirmTooltip>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Batch Analyze Footer Bar - Always visible when there are pending documents */}
-                {(stats.documents?.pending || 0) > 0 && (
-                  <div className="px-4 py-2 bg-amber-50/50 dark:bg-amber-950/20 border-t border-amber-200/50 dark:border-amber-800/30 rounded-b-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Brain className={`w-4 h-4 ${batchAnalyzeStatus?.is_running ? 'text-green-600 animate-pulse' : 'text-amber-600'}`} />
-                        <span className="text-xs text-amber-700 dark:text-amber-300">
-                          {batchAnalyzeStatus?.is_running ? (
-                            <>
-                              <span className="text-green-600">Analiz ediliyor:</span>{' '}
-                              {batchAnalyzeStatus.stats?.total_processed || 0}/{batchAnalyzeStatus.current_job?.total || stats.documents?.pending || 0}
-                            </>
-                          ) : batchAnalyzeStatus?.is_paused ? (
-                            <span className="text-yellow-600">Duraklatıldı</span>
-                          ) : (
-                            <>{stats.documents?.pending || 0} bekliyor</>
-                          )}
-                        </span>
-                        {batchAnalyzeStatus?.is_running && batchAnalyzeStatus.current_job && (
-                          <div className="w-24 h-1.5 bg-amber-200 dark:bg-amber-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-green-500 transition-all duration-300"
-                              style={{
-                                width: `${batchAnalyzeStatus.current_job.total > 0
-                                  ? (batchAnalyzeStatus.stats?.total_processed || 0) / batchAnalyzeStatus.current_job.total * 100
-                                  : 0}%`
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Select
-                          value={batchAnalyzeBatchSize.toString()}
-                          onValueChange={(v) => setBatchAnalyzeBatchSize(parseInt(v))}
-                          disabled={batchAnalyzeStatus?.is_running}
-                        >
-                          <SelectTrigger className="w-16 h-6 text-xs border-amber-300 dark:border-amber-700">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="20">20</SelectItem>
-                            <SelectItem value="50">50</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {!batchAnalyzeStatus?.is_running ? (
-                          <Button
-                            size="sm"
-                            onClick={startBatchAnalyze}
-                            disabled={batchAnalyzeLoading}
-                            className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            {batchAnalyzeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                          </Button>
-                        ) : (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={pauseBatchAnalyze}
-                              className="h-6 px-2 text-xs border-yellow-500 text-yellow-600"
-                            >
-                              {batchAnalyzeStatus.is_paused ? '▶' : '⏸'}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={stopBatchAnalyze}
-                              disabled={batchAnalyzeLoading}
-                              className="h-6 px-2 text-xs border-red-500 text-red-600"
-                            >
-                              ⏹
-                            </Button>
-                          </>
-                        )}
                       </div>
                     </div>
                   </div>
