@@ -57,10 +57,13 @@ class RAGSettings:
     enable_unified_embeddings: bool = True
     enable_document_embeddings: bool = True
     enable_scrape_embeddings: bool = True
+    enable_message_embeddings: bool = True
     database_priority: float = 0.8
     documents_priority: float = 0.5
     chat_priority: float = 0.3
     web_priority: float = 0.4
+    unified_embeddings_priority: int = 1
+    source_table_weights: Dict[str, float] = None  # Individual table weights
 
 
 @dataclass
@@ -248,6 +251,14 @@ class SemanticSearchService:
 
             settings_dict = {row['key']: row['value'] for row in rows}
 
+            # Parse source table weights JSON
+            source_table_weights = {}
+            weights_str = settings_dict.get('search.sourceTableWeights', '{}')
+            try:
+                source_table_weights = json.loads(weights_str) if weights_str else {}
+            except (json.JSONDecodeError, TypeError):
+                source_table_weights = {}
+
             # Parse settings
             settings = RAGSettings(
                 similarity_threshold=float(settings_dict.get('ragSettings.similarityThreshold', 0.001)),
@@ -258,16 +269,20 @@ class SemanticSearchService:
                 enable_unified_embeddings=settings_dict.get('ragSettings.enableUnifiedEmbeddings', 'true').lower() == 'true',
                 enable_document_embeddings=settings_dict.get('ragSettings.enableDocumentEmbeddings', 'true').lower() == 'true',
                 enable_scrape_embeddings=settings_dict.get('ragSettings.enableScrapeEmbeddings', 'true').lower() == 'true',
+                enable_message_embeddings=settings_dict.get('ragSettings.enableMessageEmbeddings', 'true').lower() == 'true',
                 database_priority=float(settings_dict.get('ragSettings.databasePriority', 8)) / 10,
                 documents_priority=float(settings_dict.get('ragSettings.documentsPriority', 5)) / 10,
                 chat_priority=float(settings_dict.get('ragSettings.chatPriority', 3)) / 10,
                 web_priority=float(settings_dict.get('ragSettings.webPriority', 4)) / 10,
+                unified_embeddings_priority=int(settings_dict.get('ragSettings.unifiedEmbeddingsPriority', 1)),
+                source_table_weights=source_table_weights,
             )
 
             # Update cache
             self._settings_cache = settings
             self._settings_cache_time = current_time
 
+            logger.info(f"RAG settings loaded: threshold={settings.similarity_threshold}, max={settings.max_results}, weights={len(source_table_weights)} tables")
             return settings
 
         except Exception as e:
@@ -374,10 +389,14 @@ class SemanticSearchService:
         query_embedding: List[float],
         limit: int = 25,
         similarity_threshold: float = 0.001,
-        source_tables: Optional[List[str]] = None
+        settings: Optional[RAGSettings] = None
     ) -> List[Dict[str, Any]]:
         """
-        Direct pgvector similarity search
+        Multi-source pgvector similarity search
+
+        Searches across:
+        - unified_embeddings (main table)
+        - document_embeddings (PDFs, Word docs)
 
         Performance:
         - With HNSW index: 10-50ms
@@ -387,45 +406,93 @@ class SemanticSearchService:
 
         try:
             pool = await get_db()
-
-            # Build source table filter
-            source_filter = ""
-            if source_tables:
-                tables_str = ", ".join([f"'{t}'" for t in source_tables])
-                source_filter = f"AND source_table IN ({tables_str})"
-
-            # Main vector search query using pgvector
-            # Uses cosine distance operator <=>
-            query = f"""
-                WITH vector_results AS (
-                    SELECT
-                        id,
-                        content,
-                        source_table,
-                        source_type,
-                        source_id,
-                        metadata,
-                        1 - (embedding <=> $1::vector) as similarity_score
-                    FROM unified_embeddings
-                    WHERE embedding IS NOT NULL
-                    {source_filter}
-                    ORDER BY embedding <=> $1::vector
-                    LIMIT $2 * 2
-                )
-                SELECT *
-                FROM vector_results
-                WHERE similarity_score >= $3
-                ORDER BY similarity_score DESC
-                LIMIT $2
-            """
+            settings = settings or RAGSettings()
 
             # Convert embedding to pgvector format
             embedding_str = f"[{','.join(map(str, query_embedding))}]"
+
+            # Build UNION query for multi-source search
+            union_parts = []
+
+            # 1. unified_embeddings (main source)
+            if settings.enable_unified_embeddings:
+                union_parts.append(f"""
+                    SELECT
+                        id,
+                        content,
+                        COALESCE(metadata->>'table', metadata->>'_sourceTable', metadata->>'source_table', source_table) as source_table,
+                        source_type,
+                        source_id,
+                        metadata,
+                        1 - (embedding <=> $1::vector) as similarity_score,
+                        'unified' as search_source
+                    FROM unified_embeddings
+                    WHERE embedding IS NOT NULL
+                """)
+
+            # 2. document_embeddings (PDFs, Word docs)
+            if settings.enable_document_embeddings:
+                # Check if table exists
+                try:
+                    table_exists = await pool.fetchval("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables
+                            WHERE table_name = 'document_embeddings'
+                        )
+                    """)
+                    if table_exists:
+                        union_parts.append("""
+                            SELECT
+                                id,
+                                chunk_text as content,
+                                'document_embeddings' as source_table,
+                                'document' as source_type,
+                                document_id as source_id,
+                                metadata,
+                                1 - (embedding <=> $1::vector) as similarity_score,
+                                'documents' as search_source
+                            FROM document_embeddings
+                            WHERE embedding IS NOT NULL
+                        """)
+                except Exception:
+                    pass  # Table doesn't exist
+
+            if not union_parts:
+                logger.warning("No embedding sources enabled")
+                return []
+
+            # Combine queries with UNION ALL
+            combined_query = " UNION ALL ".join(union_parts)
+
+            # Main search query
+            query = f"""
+                WITH all_results AS (
+                    {combined_query}
+                ),
+                ranked_results AS (
+                    SELECT *
+                    FROM all_results
+                    WHERE similarity_score >= $3
+                    ORDER BY similarity_score DESC
+                    LIMIT $2 * 2
+                )
+                SELECT * FROM ranked_results
+                ORDER BY similarity_score DESC
+                LIMIT $2
+            """
 
             rows = await pool.fetch(query, embedding_str, limit, similarity_threshold)
 
             results = []
             for row in rows:
+                # Parse metadata safely
+                metadata = {}
+                if row['metadata']:
+                    try:
+                        metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                    except (json.JSONDecodeError, TypeError):
+                        metadata = {}
+
                 result = {
                     "id": str(row['id']),
                     "content": row['content'],
@@ -433,18 +500,96 @@ class SemanticSearchService:
                     "source_type": row['source_type'],
                     "source_id": str(row['source_id']) if row['source_id'] else None,
                     "similarity_score": float(row['similarity_score']),
-                    "metadata": json.loads(row['metadata']) if row['metadata'] else {}
+                    "metadata": metadata,
+                    "search_source": row['search_source']
                 }
                 results.append(result)
 
             elapsed = (datetime.now() - start_time).total_seconds() * 1000
-            logger.info(f"Vector search completed: {len(results)} results in {elapsed:.1f}ms")
+            logger.info(f"Multi-source vector search: {len(results)} results in {elapsed:.1f}ms")
 
             return results
 
         except Exception as e:
             logger.error(f"Vector search error: {e}")
             raise
+
+    async def keyword_search(
+        self,
+        query: str,
+        limit: int = 25
+    ) -> List[Dict[str, Any]]:
+        """
+        Fallback keyword search when embedding fails
+
+        Uses PostgreSQL ILIKE for text matching
+        """
+        try:
+            pool = await get_db()
+
+            # Keyword search query
+            search_query = """
+                SELECT
+                    id::text as id,
+                    CASE
+                        WHEN content ILIKE '%' || $1 || '%' THEN
+                            LEFT(SUBSTRING(content, POSITION($1 IN content) - 50, 200), 150)
+                        ELSE LEFT(content, 150)
+                    END as title,
+                    source_table,
+                    source_id,
+                    CASE
+                        WHEN content ILIKE '%' || $1 || '%' THEN
+                            LEFT(SUBSTRING(content, POSITION($1 IN content) - 50, 300), 250)
+                        ELSE LEFT(content, 250)
+                    END as content,
+                    metadata,
+                    CASE
+                        WHEN content ILIKE '%' || $1 || '%' THEN 0.90
+                        WHEN source_table ILIKE '%' || $1 || '%' THEN 0.70
+                        ELSE 0.50
+                    END as similarity_score
+                FROM unified_embeddings
+                WHERE content ILIKE '%' || $1 || '%'
+                   OR source_table ILIKE '%' || $1 || '%'
+                ORDER BY
+                    CASE
+                        WHEN content ILIKE '%' || $1 || '%' THEN 0.90
+                        WHEN source_table ILIKE '%' || $1 || '%' THEN 0.70
+                        ELSE 0.50
+                    END DESC,
+                    id DESC
+                LIMIT $2
+            """
+
+            rows = await pool.fetch(search_query, query, limit)
+
+            results = []
+            for row in rows:
+                metadata = {}
+                if row['metadata']:
+                    try:
+                        metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
+                    except (json.JSONDecodeError, TypeError):
+                        metadata = {}
+
+                results.append({
+                    "id": str(row['id']),
+                    "content": row['content'],
+                    "title": row['title'],
+                    "source_table": row['source_table'],
+                    "source_id": str(row['source_id']) if row['source_id'] else None,
+                    "similarity_score": float(row['similarity_score']),
+                    "metadata": metadata,
+                    "search_source": "keyword"
+                })
+
+            logger.info(f"Keyword search: {len(results)} results for '{query[:30]}...'")
+            return results
+
+        except Exception as e:
+            logger.error(f"Keyword search error: {e}")
+            return []
 
     def _calculate_keyword_boost(
         self,
@@ -482,16 +627,139 @@ class SemanticSearchService:
 
     def _get_source_priority(self, source_table: str, settings: RAGSettings) -> float:
         """Get priority multiplier for source table"""
-        table_lower = source_table.lower()
+        table_lower = (source_table or '').lower()
 
         if 'document' in table_lower or 'pdf' in table_lower:
-            return settings.documents_priority
+            return max(0.1, settings.documents_priority)
         elif 'chat' in table_lower or 'message' in table_lower:
-            return settings.chat_priority
+            return max(0.1, settings.chat_priority)
         elif 'scrape' in table_lower or 'web' in table_lower or 'crawl' in table_lower:
-            return settings.web_priority
+            return max(0.1, settings.web_priority)
         else:
-            return settings.database_priority
+            return max(0.1, settings.database_priority)
+
+    def _get_table_weight(self, source_table: str, settings: RAGSettings) -> float:
+        """Get individual table weight from settings"""
+        if not settings.source_table_weights:
+            return 1.0
+
+        # Check exact match first
+        if source_table in settings.source_table_weights:
+            return settings.source_table_weights[source_table]
+
+        # Check case-insensitive
+        table_lower = (source_table or '').lower()
+        for key, weight in settings.source_table_weights.items():
+            if key.lower() == table_lower:
+                return weight
+
+        return 1.0  # Default weight
+
+    def _format_content(self, result: Dict[str, Any]) -> Dict[str, str]:
+        """
+        Format search result for human-readable display
+
+        Transforms raw metadata into proper title and excerpt
+        """
+        metadata = result.get("metadata", {})
+        source_table = (result.get("source_table") or "").lower()
+        content = result.get("content", "")
+
+        title = ""
+        excerpt = ""
+
+        # Source-specific formatting for Turkish legal/tax content
+        if source_table == "maddeler":
+            madde_no = metadata.get("madde_numarasi", "")
+            mevzuat_id = metadata.get("mevzuat_id", "")
+            orijinal_metin = metadata.get("orijinal_metin", "")
+            ozet = metadata.get("ozet", "")
+
+            title = f"Madde {madde_no}" if madde_no else (ozet or "Madde")
+            if mevzuat_id:
+                title += f" ({mevzuat_id})"
+            excerpt = orijinal_metin or ozet or content
+
+        elif source_table == "mevzuat":
+            mevzuat_adi = metadata.get("mevzuat_adi") or metadata.get("title", "")
+            mevzuat_tipi = metadata.get("mevzuat_tipi", "")
+            durum = metadata.get("durum", "")
+
+            title = mevzuat_adi or "Mevzuat"
+            if mevzuat_tipi:
+                title = f"{mevzuat_tipi}: {title}"
+
+            excerpt_parts = []
+            if durum:
+                excerpt_parts.append(f"Durum: {durum}")
+            excerpt = " | ".join(excerpt_parts) if excerpt_parts else content
+
+        elif source_table in ["sorucevap", "soru_cevap"] or "soru" in source_table:
+            title = metadata.get("question") or metadata.get("soru") or "Soru-Cevap"
+            excerpt = metadata.get("answer") or metadata.get("cevap") or content
+
+        elif source_table == "ozelgeler":
+            title = metadata.get("ozelge_no") or metadata.get("konu") or "Ozelge"
+            excerpt = metadata.get("icerik") or metadata.get("ozet") or content
+
+        elif source_table in ["danistaykararlari", "danistay_kararlari"] or "karar" in source_table:
+            daire = metadata.get("daire", "")
+            karar_no = metadata.get("karar_no", "")
+            title = f"{daire} {karar_no}" if karar_no else (metadata.get("konu") or "Danistay Karari")
+            excerpt = metadata.get("karar") or metadata.get("ozet") or content
+
+        elif source_table == "makaleler":
+            title = metadata.get("baslik") or metadata.get("title") or "Makale"
+            excerpt = metadata.get("icerik") or metadata.get("ozet") or content
+
+        elif source_table == "document_embeddings":
+            title = metadata.get("filename") or metadata.get("title") or metadata.get("name") or "Dokuman"
+            excerpt = content
+
+        else:
+            # Generic fallback
+            title = metadata.get("title") or metadata.get("baslik") or metadata.get("name") or metadata.get("konu") or ""
+            excerpt = metadata.get("content") or metadata.get("icerik") or metadata.get("text") or metadata.get("ozet") or ""
+
+            if not title and content:
+                # Extract first meaningful line as title
+                lines = content.split('\n')
+                for line in lines[:3]:
+                    clean_line = line.strip()
+                    if len(clean_line) > 10:
+                        title = clean_line[:150]
+                        break
+
+            if not excerpt:
+                excerpt = content
+
+        # Final cleanup
+        title = (title or "Kaynak")[:200].strip()
+        excerpt = (excerpt or "")[:1500].strip()
+
+        return {"title": title, "excerpt": excerpt}
+
+    def _get_source_display_name(self, source_table: str) -> str:
+        """Get human-readable source name"""
+        mapping = {
+            "unified_embeddings": "Veritabani",
+            "document_embeddings": "Dokumanlar",
+            "scrape_embeddings": "Web Icerigi",
+            "message_embeddings": "Soru-Cevap",
+            "sorucevap": "Soru-Cevap",
+            "makaleler": "Makaleler",
+            "ozelgeler": "Ozelgeler",
+            "danistaykararlari": "Danistay Kararlari",
+            "maddeler": "Maddeler",
+            "mevzuat": "Mevzuat",
+        }
+
+        source_lower = (source_table or "").lower()
+        if source_lower in mapping:
+            return mapping[source_lower]
+
+        # Format unknown tables
+        return source_table.replace("_", " ").title() if source_table else "Kaynak"
 
     async def semantic_search(
         self,
@@ -500,18 +768,20 @@ class SemanticSearchService:
         use_cache: bool = True
     ) -> Dict[str, Any]:
         """
-        Full semantic search pipeline
+        Full semantic search pipeline with all features
 
-        1. Check result cache
-        2. Generate query embedding (with cache)
-        3. Vector search
-        4. Apply hybrid scoring
-        5. Return ranked results
+        Features:
+        1. Multi-source search (unified_embeddings, document_embeddings)
+        2. Source table weights (user configurable per table)
+        3. Hybrid scoring (semantic + keyword boost)
+        4. Content formatting for Turkish legal/tax content
+        5. Keyword search fallback when embedding fails
 
         Performance target: <300ms for cached queries, <500ms for new queries
         """
         start_time = datetime.now()
         timings = {}
+        use_keyword_fallback = False
 
         # Load settings
         settings = await self.get_rag_settings()
@@ -535,55 +805,93 @@ class SemanticSearchService:
         try:
             # Generate query embedding
             embed_start = datetime.now()
-            query_embedding = await self.generate_embedding(query)
-            timings["embedding_ms"] = (datetime.now() - embed_start).total_seconds() * 1000
+            try:
+                query_embedding = await self.generate_embedding(query)
+                timings["embedding_ms"] = (datetime.now() - embed_start).total_seconds() * 1000
+            except Exception as embed_error:
+                logger.warning(f"Embedding failed, using keyword fallback: {embed_error}")
+                use_keyword_fallback = True
+                timings["embedding_ms"] = 0
+                timings["embedding_error"] = str(embed_error)
 
-            # Vector search
+            # Vector search or keyword fallback
             search_start = datetime.now()
-            raw_results = await self.vector_search(
-                query_embedding,
-                limit=limit * 2,  # Get extra for filtering
-                similarity_threshold=settings.similarity_threshold
-            )
-            timings["vector_search_ms"] = (datetime.now() - search_start).total_seconds() * 1000
 
-            # Apply hybrid scoring
+            if use_keyword_fallback:
+                # Keyword search fallback
+                raw_results = await self.keyword_search(query, limit * 2)
+                timings["keyword_search_ms"] = (datetime.now() - search_start).total_seconds() * 1000
+            else:
+                # Vector search with settings
+                raw_results = await self.vector_search(
+                    query_embedding,
+                    limit=limit * 2,  # Get extra for filtering
+                    similarity_threshold=settings.similarity_threshold,
+                    settings=settings
+                )
+                timings["vector_search_ms"] = (datetime.now() - search_start).total_seconds() * 1000
+
+            # Apply hybrid scoring with table weights
             score_start = datetime.now()
             scored_results = []
 
             for result in raw_results:
-                # Get title from metadata
-                title = result.get("metadata", {}).get("title") or result.get("metadata", {}).get("name")
+                # Format content for human-readable display
+                formatted = self._format_content(result)
+
+                # Get title from formatted content or metadata
+                title = formatted["title"]
 
                 # Calculate keyword boost
                 keyword_boost = 0.0
                 if settings.enable_hybrid_search and settings.enable_keyword_boost:
                     keyword_boost = self._calculate_keyword_boost(
                         query,
-                        result["content"],
+                        result["content"] or "",
                         title
                     )
 
-                # Apply source priority
+                # Apply source category priority (database, documents, chat, web)
                 source_priority = self._get_source_priority(result["source_table"], settings)
 
-                # Calculate final score
+                # Apply individual table weight
+                table_weight = self._get_table_weight(result["source_table"], settings)
+
+                # Skip tables with weight = 0 (disabled by user)
+                if table_weight <= 0:
+                    continue
+
+                # Calculate weighted similarity
                 similarity = result["similarity_score"]
-                final_score = (similarity * source_priority) + keyword_boost
+                weighted_similarity = similarity * source_priority * table_weight
+
+                # Calculate final score (includes keyword boost)
+                final_score = weighted_similarity + keyword_boost
 
                 scored_results.append({
                     "id": result["id"],
-                    "content": result["content"][:500] if result["content"] else "",
+                    "content": formatted["excerpt"][:500] if formatted["excerpt"] else "",
                     "full_content": result["content"],
                     "title": title,
+                    "excerpt": formatted["excerpt"],
                     "source_table": result["source_table"],
-                    "source_type": result["source_type"],
+                    "source_type": self._get_source_display_name(result["source_table"]),
                     "source_id": result["source_id"],
-                    "similarity_score": round(similarity * 100, 2),
+                    "similarity_score": round(weighted_similarity * 100, 2),
                     "keyword_boost": round(keyword_boost * 100, 2),
                     "source_priority": round(source_priority, 2),
+                    "table_weight": round(table_weight, 2),
                     "final_score": round(final_score * 100, 2),
-                    "metadata": result["metadata"]
+                    "metadata": result.get("metadata", {}),
+                    "search_source": result.get("search_source", "unknown"),
+                    "_debug": {
+                        "pure_similarity": round(similarity * 100, 2),
+                        "weighted_similarity": round(weighted_similarity * 100, 2),
+                        "source_priority": round(source_priority, 2),
+                        "table_weight": round(table_weight, 2),
+                        "keyword_boost": round(keyword_boost * 100, 2),
+                        "final": round(final_score * 100, 2)
+                    }
                 })
 
             # Sort by final score and limit
@@ -604,7 +912,7 @@ class SemanticSearchService:
 
             logger.info(
                 f"Semantic search completed: {len(final_results)} results in {timings['total_ms']:.1f}ms "
-                f"(embed: {timings['embedding_ms']:.1f}ms, search: {timings['vector_search_ms']:.1f}ms)"
+                f"(embed: {timings.get('embedding_ms', 0):.1f}ms, search: {timings.get('vector_search_ms', timings.get('keyword_search_ms', 0)):.1f}ms)"
             )
 
             # Load prompt settings for response context
@@ -624,7 +932,9 @@ class SemanticSearchService:
                     "max_results": settings.max_results,
                     "database_priority": settings.database_priority,
                     "documents_priority": settings.documents_priority,
-                    "web_priority": settings.web_priority
+                    "web_priority": settings.web_priority,
+                    "table_weights_count": len(settings.source_table_weights or {}),
+                    "used_keyword_fallback": use_keyword_fallback
                 },
                 "prompt_context": {
                     "conversation_tone": prompt_settings.conversation_tone,
@@ -637,6 +947,25 @@ class SemanticSearchService:
 
         except Exception as e:
             logger.error(f"Semantic search error: {e}")
+
+            # Try keyword fallback on any error if hybrid search is enabled
+            if settings.enable_hybrid_search and not use_keyword_fallback:
+                logger.info("Attempting keyword search fallback...")
+                try:
+                    fallback_results = await self.keyword_search(query, limit)
+                    if fallback_results:
+                        return {
+                            "success": True,
+                            "cached": False,
+                            "query": query,
+                            "results": fallback_results,
+                            "total": len(fallback_results),
+                            "timings": {"total_ms": (datetime.now() - start_time).total_seconds() * 1000, "fallback": "keyword"},
+                            "settings": {"used_keyword_fallback": True}
+                        }
+                except Exception as fallback_error:
+                    logger.error(f"Keyword fallback also failed: {fallback_error}")
+
             return {
                 "success": False,
                 "error": str(e),
