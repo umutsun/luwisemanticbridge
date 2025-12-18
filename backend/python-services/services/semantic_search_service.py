@@ -608,15 +608,14 @@ class SemanticSearchService:
         settings: Optional[RAGSettings] = None
     ) -> List[Dict[str, Any]]:
         """
-        Multi-source pgvector similarity search
+        Optimized pgvector similarity search using unified_embeddings only
 
-        Searches across:
-        - unified_embeddings (main table)
-        - document_embeddings (PDFs, Word docs)
+        Uses single table query with HNSW index for best performance.
+        Source differentiation done via source_table/source_type columns.
 
         Performance:
-        - With HNSW index: 10-50ms
-        - Without index: 100-500ms (depends on table size)
+        - With HNSW index: 10-100ms
+        - Without index: 500ms+ (depends on table size)
         """
         start_time = datetime.now()
 
@@ -627,118 +626,27 @@ class SemanticSearchService:
             # Convert embedding to pgvector format
             embedding_str = f"[{','.join(map(str, query_embedding))}]"
 
-            # Build UNION query for multi-source search
-            union_parts = []
-
-            # 1. unified_embeddings (main source - excludes scrapes and messages if searched separately)
-            if settings.enable_unified_embeddings:
-                # Build exclusion conditions for sources searched separately
-                exclusions = []
-                if settings.enable_scrape_embeddings:
-                    exclusions.append("source_table != 'scrapes'")
-                if settings.enable_message_embeddings:
-                    exclusions.append("source_table NOT IN ('message_embeddings', 'messages')")
-                    exclusions.append("source_type != 'message'")
-
-                exclusion_clause = f"AND ({' AND '.join(exclusions)})" if exclusions else ""
-
-                union_parts.append(f"""
-                    SELECT
-                        id,
-                        content,
-                        COALESCE(metadata->>'table', metadata->>'_sourceTable', metadata->>'source_table', source_table) as source_table,
-                        source_type,
-                        source_id,
-                        metadata,
-                        1 - (embedding <=> $1::vector) as similarity_score,
-                        'unified' as search_source
-                    FROM unified_embeddings
-                    WHERE embedding IS NOT NULL
-                    {exclusion_clause}
-                """)
-
-            # 2. document_embeddings (PDFs, Word docs)
-            if settings.enable_document_embeddings:
-                # Check if table exists
-                try:
-                    table_exists = await pool.fetchval("""
-                        SELECT EXISTS (
-                            SELECT FROM information_schema.tables
-                            WHERE table_name = 'document_embeddings'
-                        )
-                    """)
-                    if table_exists:
-                        union_parts.append("""
-                            SELECT
-                                id,
-                                chunk_text as content,
-                                'document_embeddings' as source_table,
-                                'document' as source_type,
-                                document_id as source_id,
-                                metadata,
-                                1 - (embedding <=> $1::vector) as similarity_score,
-                                'documents' as search_source
-                            FROM document_embeddings
-                            WHERE embedding IS NOT NULL
-                        """)
-                except Exception:
-                    pass  # Table doesn't exist
-
-            # 3. scrape_embeddings (from unified_embeddings where source_table = 'scrapes')
-            if settings.enable_scrape_embeddings:
-                union_parts.append("""
-                    SELECT
-                        id,
-                        content,
-                        'scrape_embeddings' as source_table,
-                        'web' as source_type,
-                        source_id,
-                        metadata,
-                        1 - (embedding <=> $1::vector) as similarity_score,
-                        'scrapes' as search_source
-                    FROM unified_embeddings
-                    WHERE embedding IS NOT NULL
-                    AND source_table = 'scrapes'
-                """)
-
-            # 4. message_embeddings (chat history)
-            if settings.enable_message_embeddings:
-                union_parts.append("""
-                    SELECT
-                        id,
-                        content,
-                        'message_embeddings' as source_table,
-                        'chat' as source_type,
-                        source_id,
-                        metadata,
-                        1 - (embedding <=> $1::vector) as similarity_score,
-                        'messages' as search_source
-                    FROM unified_embeddings
-                    WHERE embedding IS NOT NULL
-                    AND (source_table = 'message_embeddings' OR source_table = 'messages' OR source_type = 'message')
-                """)
-
-            if not union_parts:
-                logger.warning("No embedding sources enabled")
-                return []
-
-            # Combine queries with UNION ALL
-            combined_query = " UNION ALL ".join(union_parts)
-
-            # Main search query
-            query = f"""
-                WITH all_results AS (
-                    {combined_query}
-                ),
-                ranked_results AS (
-                    SELECT *
-                    FROM all_results
-                    WHERE similarity_score >= $3
-                    ORDER BY similarity_score DESC
-                    LIMIT $2 * 2
-                )
-                SELECT * FROM ranked_results
-                ORDER BY similarity_score DESC
+            # Simplified single-table query - unified_embeddings contains all data
+            # HNSW index will be used for fast similarity search
+            query = """
+                SELECT
+                    id,
+                    content,
+                    COALESCE(
+                        metadata->>'table',
+                        metadata->>'_sourceTable',
+                        metadata->>'source_table',
+                        source_table
+                    ) as source_table,
+                    source_type,
+                    source_id,
+                    metadata,
+                    1 - (embedding <=> $1::vector) as similarity_score,
+                    'unified' as search_source
+                FROM unified_embeddings
+                WHERE embedding IS NOT NULL
+                  AND 1 - (embedding <=> $1::vector) >= $3
+                ORDER BY embedding <=> $1::vector
                 LIMIT $2
             """
 
