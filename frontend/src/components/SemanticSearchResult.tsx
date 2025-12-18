@@ -179,7 +179,8 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
         </p>
       </div>
 
-      {/* Contextual Keywords */}
+      {/* Contextual Keywords - Hidden temporarily until meaningful extraction is implemented */}
+      {/* TODO: Re-enable when keyword extraction provides meaningful tags
       <div className="flex flex-wrap gap-1.5 mb-3 pl-11">
         {contextualKeywords.map((keyword, idx) => (
           <div key={idx} className="flex items-center gap-1">
@@ -211,6 +212,7 @@ const SemanticSearchResult: React.FC<SemanticSearchResultProps> = ({
           </div>
         ))}
       </div>
+      */}
 
       {/* Question Options */}
       {showQuestions && (
