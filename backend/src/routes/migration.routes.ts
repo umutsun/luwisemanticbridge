@@ -1329,8 +1329,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         if (batchResult.rows.length === 0) break; // No more records
 
         // Filter out already embedded records
+        // Note: row.id might be string or number depending on source table, so we compare as numbers
         const pendingBatch = unifiedEmbeddingsExists
-          ? batchResult.rows.filter(row => !embeddedIds.has(row.id))
+          ? batchResult.rows.filter(row => !embeddedIds.has(parseInt(row.id, 10)))
           : batchResult.rows;
 
         // Process each record in this batch
