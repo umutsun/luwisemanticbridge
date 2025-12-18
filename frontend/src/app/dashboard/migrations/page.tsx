@@ -189,8 +189,13 @@ export default function EmbeddingsManagerPage() {
   // Fetch available tables with retry logic
   const fetchAvailableTables = useCallback(async (retryCount = 0) => {
     setIsLoadingTables(true);
-    const maxRetries = 2;
+    const maxRetries = 4; // Increased from 2 to 4 for database startup
     try {
+      // Add initial delay on first load to let database initialize
+      if (retryCount === 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       // Use refresh=true on first load to ensure pools are initialized
       const isFirstLoad = retryCount === 0;
       const url = `${config.api.baseUrl}/api/v2/migration/stats?t=${Date.now()}${isFirstLoad ? '&refresh=true' : ''}`;
@@ -269,10 +274,12 @@ export default function EmbeddingsManagerPage() {
 
       // Retry logic for connection errors
       if (retryCount < maxRetries) {
-        console.log(`Retrying fetch tables (attempt ${retryCount + 2}/${maxRetries + 1})...`);
+        // Longer delays for database startup: 2s, 3s, 4s, 5s
+        const delayMs = 2000 + (1000 * retryCount);
+        console.log(`Retrying fetch tables (attempt ${retryCount + 2}/${maxRetries + 1}) in ${delayMs}ms...`);
         setTimeout(() => {
           fetchAvailableTables(retryCount + 1);
-        }, 1000 * (retryCount + 1)); // Exponential backoff
+        }, delayMs);
         return;
       }
 
