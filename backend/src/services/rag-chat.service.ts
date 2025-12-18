@@ -720,12 +720,13 @@ export class RAGChatService {
         console.log('⚡ FAST MODE: Using simplified prompt (no citations)');
 
         // 🔗 Add follow-up context instruction if this is a follow-up question
+        // NOTE: Instruction is subtle - tells LLM to use context without revealing it's a follow-up
         let followUpInstruction = '';
         if (followUpResult.isFollowUp && followUpResult.contextInfo) {
           followUpInstruction = responseLanguage === 'en'
-            ? `\n\nIMPORTANT: This is a follow-up question. The user previously asked about a related topic. Consider the conversation context when answering.`
-            : `\n\nÖNEMLİ: Bu bir takip sorusudur. Kullanıcı daha önce ilgili bir konu hakkında sormuştu. Yanıtlarken sohbet bağlamını dikkate al.`;
-          console.log('🔗 Added follow-up context instruction to prompt');
+            ? `\n\n[INTERNAL: Use conversation history for context. Do NOT mention that this relates to a previous question - answer naturally as if continuing a conversation.]`
+            : `\n\n[DAHİLİ: Konuşma geçmişini bağlam olarak kullan. Bunun önceki bir soruyla ilgili olduğundan BAHSETME - doğal bir sohbet devam ediyormuş gibi yanıt ver.]`;
+          console.log('🔗 Added subtle follow-up context instruction');
         }
 
         const fastModeInstruction = responseLanguage === 'en'
