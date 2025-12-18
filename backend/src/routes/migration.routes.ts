@@ -111,15 +111,17 @@ async function initializePools(forceRefresh: boolean = false): Promise<{ sourceP
 
       sourcePool = new Pool({
         connectionString: sourceConnectionString,
-        connectionTimeoutMillis: 10000, // 10 second timeout
-        idleTimeoutMillis: 30000,
-        max: 10
+        connectionTimeoutMillis: 30000, // 30 second timeout for initial connection
+        idleTimeoutMillis: 300000, // 5 minutes idle timeout (longer for slow embedding API)
+        max: 15,
+        allowExitOnIdle: false, // Keep pool alive
       });
       targetPool = new Pool({
         connectionString: targetConnectionString,
-        connectionTimeoutMillis: 10000,
-        idleTimeoutMillis: 30000,
-        max: 10
+        connectionTimeoutMillis: 30000,
+        idleTimeoutMillis: 300000, // 5 minutes idle timeout
+        max: 15,
+        allowExitOnIdle: false,
       });
 
       // Validate connections before returning
@@ -1476,8 +1478,13 @@ router.post('/generate', async (req: Request, res: Response) => {
           tokenUsage: globalTokenUsage
         };
 
-        // Also emit to progress stream listeners
-        migrationProgress.emit('progress', progress);
+        // Persist to Redis every 10 records to allow recovery after restart
+        if (processed % 10 === 0 || processed === total) {
+          await migrationProgress.updateProgress(activeMigrationId, progress);
+        }
+
+        // Also emit to progress stream listeners for immediate SSE updates
+        migrationProgress.emit('progress', { id: activeMigrationId, ...progress });
         safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
       } catch (error) {
         console.error('Embedding error:', error);
