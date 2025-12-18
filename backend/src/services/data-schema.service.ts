@@ -22,6 +22,31 @@ import {
   DEFAULT_LLM_CONFIG
 } from '../types/data-schema.types';
 
+/**
+ * Clean title/text from PDF/file metadata and technical noise
+ * Used to ensure questions don't contain file names
+ */
+function cleanMetadataValue(value: string): string {
+  if (!value || typeof value !== 'string') return value;
+
+  return value
+    // Remove PDF/file extensions and patterns
+    .replace(/\.pdf$/i, '')
+    .replace(/\s*-\s*(?:page|sayfa|bölüm|part)\s*\d+/gi, '')
+    .replace(/\s*\((?:page|sayfa|bölüm|part)\s*\d+[^)]*\)/gi, '')
+    // Remove ID patterns
+    .replace(/\s*-\s*ID:\s*\d+/gi, '')
+    .replace(/\s*\[ID:\s*\d+\]/gi, '')
+    // Remove chunk/part indicators
+    .replace(/\s*\(Part\s*\d+\/\d+\)/gi, '')
+    .replace(/\s*\(Chunk\s*\d+\)/gi, '')
+    // Remove common prefixes from table names
+    .replace(/^(?:sorucevap|ozelgeler|mevzuat|makaleler)\s*-\s*/gi, '')
+    // Clean up multiple spaces and trim
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Industry Preset from database
 export interface IndustryPreset {
   id: string;
@@ -912,10 +937,19 @@ class DataSchemaService {
     if (!schema) return [];
     const limit = maxQuestions || config.globalSettings.maxQuestionsToGenerate;
     const context: TemplateContext = {};
+
+    // Fields that should be cleaned from PDF/file metadata noise
+    const cleanableFields = ['title', 'name', 'document_name', 'filename', 'subject', 'heading'];
+
     for (const field of schema.fields) {
       const value = metadata[field.key];
       if (value !== undefined && value !== null) {
-        context[field.key] = value as string | number | boolean;
+        // Clean text-based fields to remove PDF names, page numbers, IDs, etc.
+        if (typeof value === 'string' && cleanableFields.includes(field.key)) {
+          context[field.key] = cleanMetadataValue(value);
+        } else {
+          context[field.key] = value as string | number | boolean;
+        }
       }
     }
     context['source_table'] = sourceTable;
