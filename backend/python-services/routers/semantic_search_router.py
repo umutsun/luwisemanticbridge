@@ -203,6 +203,56 @@ async def get_rag_settings():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/prompt-settings")
+async def get_prompt_settings():
+    """
+    Get current prompt settings (system prompt, LLM guide, conversation tone)
+    """
+    try:
+        settings = await semantic_search_service.get_prompt_settings()
+        full_prompt = semantic_search_service.build_full_system_prompt(settings)
+
+        return {
+            "success": True,
+            "prompt_settings": {
+                "conversation_tone": settings.conversation_tone,
+                "schema_name": settings.schema_name,
+                "active_prompt_id": settings.active_prompt_id,
+                "system_prompt_length": len(settings.system_prompt),
+                "llm_guide_length": len(settings.llm_guide),
+                "full_prompt_length": len(full_prompt),
+                "system_prompt_preview": settings.system_prompt[:300] if settings.system_prompt else None,
+                "llm_guide_preview": settings.llm_guide[:300] if settings.llm_guide else None
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Prompt settings error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/full-prompt")
+async def get_full_system_prompt():
+    """
+    Get the complete built system prompt (for debugging/preview)
+    """
+    try:
+        settings = await semantic_search_service.get_prompt_settings()
+        full_prompt = semantic_search_service.build_full_system_prompt(settings)
+
+        return {
+            "success": True,
+            "conversation_tone": settings.conversation_tone,
+            "schema_name": settings.schema_name,
+            "full_prompt": full_prompt,
+            "total_length": len(full_prompt)
+        }
+
+    except Exception as e:
+        logger.error(f"Full prompt error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/cache")
 async def clear_cache(
     type: str = Query("all", description="Cache type: 'embedding', 'search', or 'all'")

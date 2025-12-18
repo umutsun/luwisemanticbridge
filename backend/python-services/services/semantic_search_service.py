@@ -63,14 +63,36 @@ class RAGSettings:
     web_priority: float = 0.4
 
 
+@dataclass
+class PromptSettings:
+    """System prompt and LLM guide settings"""
+    system_prompt: str = ""
+    llm_guide: str = ""
+    conversation_tone: str = "professional"
+    active_prompt_id: Optional[str] = None
+    schema_name: Optional[str] = None
+
+
 class SemanticSearchService:
     """High-performance semantic search service"""
+
+    # Tone instructions for different conversation styles
+    TONE_INSTRUCTIONS = {
+        "professional": "Yanıtlarınızda profesyonel ve resmi bir dil kullanın. Net, özlü ve bilgilendirici olun.",
+        "friendly": "Samimi ve sıcak bir dil kullanın. Konuşma tarzında, anlaşılır açıklamalar yapın.",
+        "academic": "Akademik ve detaylı bir dil kullanın. Kaynaklara atıf yapın ve teknik terimleri açıklayın.",
+        "casual": "Günlük konuşma dili kullanın. Basit ve anlaşılır ifadeler tercih edin.",
+        "formal": "Çok resmi bir dil kullanın. Kısa ve öz cümleler kurun."
+    }
 
     def __init__(self):
         self.openai_client = None
         self._settings_cache: Optional[RAGSettings] = None
         self._settings_cache_time: Optional[float] = None
         self._settings_cache_ttl = 5  # 5 seconds
+        self._prompt_cache: Optional[PromptSettings] = None
+        self._prompt_cache_time: Optional[float] = None
+        self._prompt_cache_ttl = 10  # 10 seconds
 
     async def _get_openai_client(self):
         """Get or create OpenAI client"""
@@ -80,6 +102,128 @@ class SemanticSearchService:
                 raise ValueError("OPENAI_API_KEY not configured")
             self.openai_client = openai.AsyncOpenAI(api_key=api_key)
         return self.openai_client
+
+    async def get_prompt_settings(self) -> PromptSettings:
+        """Load system prompt and LLM guide from database with caching"""
+        import time
+        current_time = time.time()
+
+        # Check cache
+        if (self._prompt_cache is not None and
+            self._prompt_cache_time is not None and
+            current_time - self._prompt_cache_time < self._prompt_cache_ttl):
+            return self._prompt_cache
+
+        try:
+            pool = await get_db()
+            settings = PromptSettings()
+
+            # 1. Get active prompt from settings table
+            active_prompt_row = await pool.fetchrow("""
+                SELECT key, value FROM settings
+                WHERE key LIKE 'prompts.%.active' AND value = 'true'
+                LIMIT 1
+            """)
+
+            if active_prompt_row:
+                # Extract prompt ID (e.g., 'prompts.abc123.active' -> 'abc123')
+                active_key = active_prompt_row['key']
+                prompt_id = active_key.split('.')[1]
+                settings.active_prompt_id = prompt_id
+
+                # Get prompt content
+                content_row = await pool.fetchrow(
+                    "SELECT value FROM settings WHERE key = $1",
+                    f"prompts.{prompt_id}.content"
+                )
+                if content_row:
+                    settings.system_prompt = content_row['value'] or ""
+
+                # Get conversation tone
+                tone_row = await pool.fetchrow(
+                    "SELECT value FROM settings WHERE key = $1",
+                    f"prompts.{prompt_id}.tone"
+                )
+                if tone_row:
+                    settings.conversation_tone = tone_row['value'] or "professional"
+
+            # 2. Fallback: Try old chatbot_settings table
+            if not settings.system_prompt:
+                old_prompt_row = await pool.fetchrow("""
+                    SELECT setting_value FROM chatbot_settings
+                    WHERE setting_key = 'system_prompt'
+                """)
+                if old_prompt_row and old_prompt_row['setting_value']:
+                    settings.system_prompt = old_prompt_row['setting_value']
+
+            # 3. Get LLM Guide from active schema (industry_presets or user_schemas)
+            # First try to get active schema from user_schema_settings
+            active_schema_row = await pool.fetchrow("""
+                SELECT active_schema_id, active_schema_type
+                FROM user_schema_settings
+                WHERE active_schema_id IS NOT NULL
+                LIMIT 1
+            """)
+
+            if active_schema_row:
+                schema_id = active_schema_row['active_schema_id']
+                schema_type = active_schema_row['active_schema_type']
+
+                if schema_type == 'preset':
+                    llm_guide_row = await pool.fetchrow(
+                        "SELECT llm_guide, schema_name FROM industry_presets WHERE id = $1",
+                        schema_id
+                    )
+                else:
+                    llm_guide_row = await pool.fetchrow(
+                        "SELECT llm_guide, name as schema_name FROM user_schemas WHERE id = $1",
+                        schema_id
+                    )
+
+                if llm_guide_row:
+                    settings.llm_guide = llm_guide_row['llm_guide'] or ""
+                    settings.schema_name = llm_guide_row['schema_name']
+
+            # Fallback: Get default schema (genel_dokuman)
+            if not settings.llm_guide:
+                default_schema_row = await pool.fetchrow("""
+                    SELECT llm_guide, schema_name FROM industry_presets
+                    WHERE schema_name = 'genel_dokuman' AND is_active = true
+                    LIMIT 1
+                """)
+                if default_schema_row:
+                    settings.llm_guide = default_schema_row['llm_guide'] or ""
+                    settings.schema_name = default_schema_row['schema_name']
+
+            # Update cache
+            self._prompt_cache = settings
+            self._prompt_cache_time = current_time
+
+            logger.info(f"Prompt settings loaded: tone={settings.conversation_tone}, prompt_len={len(settings.system_prompt)}, guide_len={len(settings.llm_guide)}")
+            return settings
+
+        except Exception as e:
+            logger.error(f"Error loading prompt settings: {e}")
+            return PromptSettings()
+
+    def build_full_system_prompt(self, prompt_settings: PromptSettings) -> str:
+        """Build complete system prompt with tone instruction and LLM guide"""
+        parts = []
+
+        # Add tone instruction
+        tone = prompt_settings.conversation_tone.lower()
+        tone_instruction = self.TONE_INSTRUCTIONS.get(tone, self.TONE_INSTRUCTIONS["professional"])
+        parts.append(tone_instruction)
+
+        # Add base system prompt
+        if prompt_settings.system_prompt:
+            parts.append(prompt_settings.system_prompt)
+
+        # Add LLM guide if available
+        if prompt_settings.llm_guide:
+            parts.append(f"\n--- VERİ BAĞLAMI ---\n{prompt_settings.llm_guide}")
+
+        return "\n\n".join(parts)
 
     async def get_rag_settings(self) -> RAGSettings:
         """Load RAG settings from database with caching"""
@@ -463,6 +607,9 @@ class SemanticSearchService:
                 f"(embed: {timings['embedding_ms']:.1f}ms, search: {timings['vector_search_ms']:.1f}ms)"
             )
 
+            # Load prompt settings for response context
+            prompt_settings = await self.get_prompt_settings()
+
             return {
                 "success": True,
                 "cached": False,
@@ -473,7 +620,18 @@ class SemanticSearchService:
                 "settings": {
                     "similarity_threshold": settings.similarity_threshold,
                     "hybrid_search": settings.enable_hybrid_search,
-                    "keyword_boost": settings.enable_keyword_boost
+                    "keyword_boost": settings.enable_keyword_boost,
+                    "max_results": settings.max_results,
+                    "database_priority": settings.database_priority,
+                    "documents_priority": settings.documents_priority,
+                    "web_priority": settings.web_priority
+                },
+                "prompt_context": {
+                    "conversation_tone": prompt_settings.conversation_tone,
+                    "schema_name": prompt_settings.schema_name,
+                    "has_system_prompt": bool(prompt_settings.system_prompt),
+                    "has_llm_guide": bool(prompt_settings.llm_guide),
+                    "system_prompt_preview": prompt_settings.system_prompt[:200] if prompt_settings.system_prompt else None
                 }
             }
 
