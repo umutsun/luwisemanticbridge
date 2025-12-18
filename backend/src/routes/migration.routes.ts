@@ -65,17 +65,13 @@ async function initializePools(forceRefresh: boolean = false): Promise<{ sourceP
   // Create initialization promise
   poolInitPromise = (async () => {
     try {
-      // Close existing pools if refreshing
-      if (forceRefresh) {
-        if (sourcePool) {
-          await sourcePool.end().catch(() => {});
-          sourcePool = null;
-        }
-        if (targetPool) {
-          await targetPool.end().catch(() => {});
-          targetPool = null;
-        }
-      }
+      // IMPORTANT: Never end pools - just let them drain naturally
+      // Ending pools while migration is running causes "Cannot use pool after end" errors
+      // Old pools will be garbage collected when no longer referenced
+      const oldSourcePool = sourcePool;
+      const oldTargetPool = targetPool;
+      sourcePool = null;
+      targetPool = null;
 
       const { pool: lsembPool } = await import('../config/database');
 
