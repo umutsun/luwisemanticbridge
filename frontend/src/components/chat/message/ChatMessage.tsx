@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bot, User, ExternalLink } from 'lucide-react';
 import { MessageSkeleton } from '@/components/chat/message-skeleton';
 import { ChatSources } from './ChatSources';
@@ -69,22 +68,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   return (
     <motion.div
       key={message.id}
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+      exit={{ opacity: 0, y: -10 }}
+      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
     >
-      {/* Assistant Avatar */}
-      {message.role === 'assistant' && (
-        <Avatar className="w-8 h-8">
-          <AvatarFallback className="bg-primary/10">
-            <Bot className="w-5 h-5 text-primary" />
-          </AvatarFallback>
-        </Avatar>
-      )}
-
-      {/* Message Content */}
-      <div className={`w-full ${message.role === 'user' ? 'order-1' : 'order-2'}`}>
+      {/* Message Content - Full width on mobile */}
+      <div className={`w-full max-w-[95%] sm:max-w-[85%] md:max-w-[80%] ${message.role === 'user' ? 'ml-auto' : 'mr-auto'}`}>
         <Card className={`${message.role === 'user'
           ? message.isFromSource
             ? 'bg-yellow-100 text-black border-yellow-400 dark:bg-yellow-900 dark:text-yellow-100 dark:border-yellow-600'
@@ -92,8 +82,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           : message.isError
             ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
             : 'bg-card'
-          }`}>
-          <CardContent className="p-3">
+          } shadow-sm`}>
+          <CardContent className="p-2.5 sm:p-3">
             {message.isTyping ? (
               <MessageSkeleton />
             ) : (
@@ -102,11 +92,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   <MessageSkeleton type="generating" />
                 ) : (
                   <div className="flex items-start gap-2">
-                    {message.role === 'user' && message.isFromSource && (
-                      <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    )}
+                    {/* Inline Icon */}
+                    <div className="flex-shrink-0 mt-0.5">
+                      {message.role === 'user' ? (
+                        message.isFromSource ? (
+                          <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 opacity-70" />
+                        ) : (
+                          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 opacity-70" />
+                        )
+                      ) : (
+                        <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                      )}
+                    </div>
                     <p
-                      className="text-sm whitespace-pre-wrap flex-1"
+                      className="text-[13px] sm:text-sm whitespace-pre-wrap flex-1 leading-relaxed"
                       dangerouslySetInnerHTML={{
                         __html: message.content
                           .replace(/\*\*\[([0-9,\s]+)\]\*\*/g, '<strong>[$1]</strong>')
@@ -130,30 +129,30 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   />
                 )}
 
-                {/* Timestamp & Metrics */}
-                <div className="flex justify-end mt-2">
-                  <div className="text-[9px] font-semibold opacity-50 text-right">
+                {/* Timestamp & Metrics - Compact on mobile */}
+                <div className="flex justify-end mt-1.5 sm:mt-2">
+                  <div className="text-[8px] sm:text-[9px] font-medium opacity-40 text-right">
                     {message.role === 'assistant' && message.isStreaming ? (
                       <span className="tabular-nums">
                         {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
                           hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit'
+                          minute: '2-digit'
                         })} • {Math.floor((Date.now() - message.timestamp.getTime()) / 1000)}s
                       </span>
                     ) : (
                       <span className="tabular-nums">
                         {new Date(message.timestamp).toLocaleTimeString('tr-TR', {
                           hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit'
+                          minute: '2-digit'
                         })}
                         {message.responseTime && message.role === 'assistant' && (
                           <>
-                            {' • '}{(message.responseTime / 1000).toFixed(2)}s
-                            {message.tokens?.total && (
-                              <> • {message.tokens.total.toLocaleString('tr-TR')} tokens</>
-                            )}
+                            <span className="hidden sm:inline">
+                              {' • '}{(message.responseTime / 1000).toFixed(1)}s
+                              {message.tokens?.total && (
+                                <> • {message.tokens.total.toLocaleString('tr-TR')} tk</>
+                              )}
+                            </span>
                           </>
                         )}
                       </span>
@@ -165,15 +164,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </CardContent>
         </Card>
       </div>
-
-      {/* User Avatar */}
-      {message.role === 'user' && (
-        <Avatar className="w-8 h-8 order-2">
-          <AvatarFallback>
-            <User className="w-5 h-5" />
-          </AvatarFallback>
-        </Avatar>
-      )}
     </motion.div>
   );
 };

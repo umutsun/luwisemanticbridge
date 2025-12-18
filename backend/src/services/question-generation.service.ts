@@ -20,6 +20,28 @@ export interface GeneratedQuestion {
 }
 
 /**
+ * Clean title from PDF/file metadata and technical noise
+ */
+function cleanTitle(title: string): string {
+  return title
+    // Remove PDF/file extensions and patterns
+    .replace(/\.pdf$/i, '')
+    .replace(/\s*-\s*(?:page|sayfa|bölüm|part)\s*\d+/gi, '')
+    .replace(/\s*\((?:page|sayfa|bölüm|part)\s*\d+[^)]*\)/gi, '')
+    // Remove ID patterns
+    .replace(/\s*-\s*ID:\s*\d+/gi, '')
+    .replace(/\s*\[ID:\s*\d+\]/gi, '')
+    // Remove chunk/part indicators
+    .replace(/\s*\(Part\s*\d+\/\d+\)/gi, '')
+    .replace(/\s*\(Chunk\s*\d+\)/gi, '')
+    // Remove common prefixes from table names
+    .replace(/^(?:sorucevap|ozelgeler|mevzuat|makaleler)\s*-\s*/gi, '')
+    // Clean up multiple spaces and trim
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Dynamic Question Generation Service
  * Generates diverse, context-aware questions without hardcoded templates
  */
@@ -155,6 +177,7 @@ class QuestionGenerationService {
    */
   private buildDynamicPrompt(context: QuestionGenerationContext, analysis: any, count: number): string {
     const { title, content, sourceTable } = context;
+    const cleanedTitle = cleanTitle(title);
     const { language, type, complexity } = analysis;
 
     const isTurkish = language === 'tr';
@@ -163,9 +186,9 @@ class QuestionGenerationService {
       `Aşağıdaki belge analizine dayalı olarak ${count} adet farklı ve anlamlı soru üret:\n\n` :
       `Generate ${count} diverse and meaningful questions based on the following document analysis:\n\n`;
 
-    prompt += `Başlık: ${title}\n`;
+    prompt += `Konu: ${cleanedTitle}\n`;
     prompt += `İçerik: ${content.substring(0, 500)}...\n`;
-    prompt += `Tablo: ${sourceTable}\n`;
+    prompt += `Kaynak: ${sourceTable}\n`;
     prompt += `Tür: ${type}\n`;
     prompt += `Karmaşıklık: ${complexity}\n\n`;
 
@@ -175,14 +198,18 @@ class QuestionGenerationService {
       prompt += `2. Sorular doğal ve insan gibi olmalı, robotik değil\n`;
       prompt += `3. Her soru farklı bir açıdan yaklaşmalı\n`;
       prompt += `4. Sorular 15-20 kelime arasında olmalı\n`;
-      prompt += `5. Numaralandırma kullanmadan her soruyu yeni satıra yaz\n\n`;
+      prompt += `5. Numaralandırma kullanmadan her soruyu yeni satıra yaz\n`;
+      prompt += `6. ASLA dosya adı (.pdf, .docx vb.) veya teknik terimler (ID, chunk, page) kullanma\n`;
+      prompt += `7. Bağlama uygun, konuya odaklı sorular üret\n\n`;
     } else {
       prompt += `Guidelines:\n`;
       prompt += `1. Questions should be diverse types (definition, procedure, calculation, legal reference)\n`;
       prompt += `2. Questions should be natural and human-like, not robotic\n`;
       prompt += `3. Each question should approach from different angle\n`;
       prompt += `4. Questions should be 15-20 words each\n`;
-      prompt += `5. Write each question on new line without numbering\n\n`;
+      prompt += `5. Write each question on new line without numbering\n`;
+      prompt += `6. NEVER use file names (.pdf, .docx etc.) or technical terms (ID, chunk, page)\n`;
+      prompt += `7. Generate context-aware, topic-focused questions\n\n`;
     }
 
     return prompt;
@@ -260,12 +287,15 @@ class QuestionGenerationService {
     count: number
   ): GeneratedQuestion[] {
     const questions: GeneratedQuestion[] = [];
-    const { title, content, sourceTable } = context;
-    const { type, language, hasPercentages, hasLegalRefs } = analysis;
+    const { title, content } = context;
+    const cleanedTitle = cleanTitle(title);
+    const { language, hasPercentages } = analysis;
     const isTurkish = language === 'tr';
 
-    // Extract key entities from content
+    // Extract key entities from content (not from title to avoid PDF names)
     const entities = this.extractEntities(content);
+    // Use cleanedTitle as fallback if no entities found
+    const topic = entities[0] || cleanedTitle;
 
     for (let i = 0; i < count; i++) {
       let question: string;
@@ -275,50 +305,50 @@ class QuestionGenerationService {
       switch (i % 5) {
         case 0: // Definition type
           question = isTurkish ?
-            `${entities[0] || title} kavramının kapsamı ve uygulama alanları nelerdir?` :
-            `What are the scope and application areas of ${entities[0] || title}?`;
+            `${topic} kavramının kapsamı ve uygulama alanları nelerdir?` :
+            `What are the scope and application areas of ${topic}?`;
           questionType = 'definition';
           break;
 
         case 1: // Procedure type
           question = isTurkish ?
-            `${entities[1] || title} sürecinde dikkat edilmesi gereken hususlar var mıdır?` :
-            `Are there important considerations to be aware of in the ${entities[1] || title} process?`;
+            `${entities[1] || topic} sürecinde dikkat edilmesi gereken hususlar var mıdır?` :
+            `Are there important considerations to be aware of in the ${entities[1] || topic} process?`;
           questionType = 'procedure';
           break;
 
         case 2: // Calculation type (if percentages/numbers exist)
           if (hasPercentages) {
             question = isTurkish ?
-              `${title} ile ilgili oranların hesaplama yöntemi nasıldır?` :
-              `What is the calculation method for the rates related to ${title}?`;
+              `Bu konu ile ilgili oranların hesaplama yöntemi nasıldır?` :
+              `What is the calculation method for the rates related to this topic?`;
             questionType = 'calculation';
           } else {
             question = isTurkish ?
-              `${title} konusundaki mali yükümlülükler nelerdir?` :
-              `What are the financial obligations related to ${title}?`;
+              `${topic} konusundaki mali yükümlülükler nelerdir?` :
+              `What are the financial obligations related to ${topic}?`;
             questionType = 'general';
           }
           break;
 
         case 3: // Legal reference type
           question = isTurkish ?
-            `${title} ile ilgili yasal düzenlemeler ve temel referanslar hangileridir?` :
-            `What are the legal regulations and fundamental references related to ${title}?`;
+            `${topic} ile ilgili yasal düzenlemeler ve temel referanslar hangileridir?` :
+            `What are the legal regulations and fundamental references related to ${topic}?`;
           questionType = 'legal_reference';
           break;
 
         case 4: // Scenario type
           question = isTurkish ?
-            `${entities[2] || title} konusunda pratik uygulamada karşılaşılan durumlar nelerdir?` :
-            `What are the practical situations encountered regarding ${entities[2] || title}?`;
+            `${entities[2] || topic} konusunda pratik uygulamada karşılaşılan durumlar nelerdir?` :
+            `What are the practical situations encountered regarding ${entities[2] || topic}?`;
           questionType = 'scenario';
           break;
 
         default:
           question = isTurkish ?
-            `${title} hakkında detaylı bilgi alabilir miyim?` :
-            `Can I get detailed information about ${title}?`;
+            `${topic} hakkında detaylı bilgi alabilir miyim?` :
+            `Can I get detailed information about ${topic}?`;
           questionType = 'general';
       }
 
@@ -364,15 +394,19 @@ class QuestionGenerationService {
    * Generate fallback questions without LLM
    */
   private generateFallbackQuestions(context: QuestionGenerationContext, count: number): GeneratedQuestion[] {
-    const { title, sourceTable } = context;
+    const { title, content, sourceTable } = context;
+    const cleanedTitle = cleanTitle(title);
+    // Try to extract a topic from content if title is generic
+    const entities = this.extractEntities(content);
+    const topic = entities[0] || cleanedTitle;
     const questions: GeneratedQuestion[] = [];
 
     for (let i = 0; i < count; i++) {
       questions.push({
-        question: `${title} hakkında bilgi verir misiniz?`,
+        question: `${topic} hakkında bilgi verir misiniz?`,
         type: 'general',
         confidence: 0.3,
-        keywords: [title, sourceTable]
+        keywords: entities.slice(0, 2)
       });
     }
 
@@ -383,25 +417,28 @@ class QuestionGenerationService {
    * Generate single dynamic fallback question
    */
   private generateDynamicFallback(context: QuestionGenerationContext, analysis: any, index: number): GeneratedQuestion {
-    const { title } = context;
+    const { title, content } = context;
+    const cleanedTitle = cleanTitle(title);
+    const entities = this.extractEntities(content);
+    const topic = entities[0] || cleanedTitle;
     const { type } = analysis;
 
     const templates = {
       definition: [
-        `${title} ne anlama gelir?`,
-        `${title} kavramını açıklar mısınız?`
+        `${topic} ne anlama gelir?`,
+        `Bu kavramı açıklar mısınız?`
       ],
       procedure: [
-        `${title} nasıl yapılır?`,
-        `${title} sürecini izah eder misiniz?`
+        `Bu işlem nasıl yapılır?`,
+        `${topic} sürecini izah eder misiniz?`
       ],
       calculation: [
-        `${title} hesabı nasıl yapılır?`,
-        `${title} için formül nedir?`
+        `Hesaplama nasıl yapılır?`,
+        `Bu konudaki oran ve tutarlar nedir?`
       ],
       legal_reference: [
-        `${title} ile ilgili yasal dayanaklar?`,
-        `${title} hangi kanuna tabidir?`
+        `${topic} ile ilgili yasal dayanaklar nelerdir?`,
+        `Bu konu hangi mevzuata tabidir?`
       ]
     };
 
@@ -412,7 +449,7 @@ class QuestionGenerationService {
       question,
       type: type as GeneratedQuestion['type'],
       confidence: 0.5,
-      keywords: [title]
+      keywords: entities.slice(0, 2)
     };
   }
 
