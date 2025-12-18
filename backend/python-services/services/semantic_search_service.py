@@ -9,12 +9,14 @@ Features:
 - Hybrid search with keyword boost
 - RAG settings integration
 - Batch embedding support
+- Multi-provider embedding support (OpenAI, Google Gemini)
 """
 
 import os
 import json
 import hashlib
 import asyncio
+import numpy as np
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from dataclasses import dataclass, asdict
@@ -26,10 +28,21 @@ from services.redis_client import get_redis, cache_get, cache_set
 
 # Configuration
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-EMBEDDING_DIMENSIONS = 1536
+EMBEDDING_DIMENSIONS = 1536  # Standard dimension for unified_embeddings
+GEMINI_EMBEDDING_MODEL = "text-embedding-004"
+GEMINI_DIMENSIONS = 768
 EMBEDDING_CACHE_TTL = 86400  # 24 hours
 SEARCH_RESULT_CACHE_TTL = 600  # 10 minutes
 MAX_QUERY_LENGTH = 8000
+
+
+@dataclass
+class EmbeddingConfig:
+    """Embedding provider configuration"""
+    provider: str = "openai"  # openai, gemini
+    model: str = "text-embedding-3-small"
+    dimensions: int = 1536
+    api_key: Optional[str] = None
 
 
 @dataclass
@@ -77,7 +90,7 @@ class PromptSettings:
 
 
 class SemanticSearchService:
-    """High-performance semantic search service"""
+    """High-performance semantic search service with multi-provider support"""
 
     # Tone instructions for different conversation styles
     TONE_INSTRUCTIONS = {
@@ -90,6 +103,10 @@ class SemanticSearchService:
 
     def __init__(self):
         self.openai_client = None
+        self.gemini_client = None
+        self._embedding_config: Optional[EmbeddingConfig] = None
+        self._embedding_config_time: Optional[float] = None
+        self._embedding_config_ttl = 60  # 60 seconds
         self._settings_cache: Optional[RAGSettings] = None
         self._settings_cache_time: Optional[float] = None
         self._settings_cache_ttl = 5  # 5 seconds
@@ -97,14 +114,142 @@ class SemanticSearchService:
         self._prompt_cache_time: Optional[float] = None
         self._prompt_cache_ttl = 10  # 10 seconds
 
-    async def _get_openai_client(self):
+    async def _get_embedding_config(self) -> EmbeddingConfig:
+        """Load embedding provider configuration from database settings"""
+        import time
+        current_time = time.time()
+
+        # Check cache
+        if (self._embedding_config is not None and
+            self._embedding_config_time is not None and
+            current_time - self._embedding_config_time < self._embedding_config_ttl):
+            return self._embedding_config
+
+        try:
+            pool = await get_db()
+
+            # Query embedding settings from database
+            rows = await pool.fetch("""
+                SELECT key, value FROM settings
+                WHERE key IN (
+                    'embeddingProvider', 'embedding_provider', 'llmSettings.embeddingProvider',
+                    'embeddingModel', 'embedding_model', 'llmSettings.embeddingModel',
+                    'openai.apiKey', 'google.apiKey', 'OPENAI_API_KEY', 'GOOGLE_API_KEY'
+                )
+            """)
+
+            settings_dict = {row['key']: row['value'] for row in rows}
+
+            # Determine provider (priority: embeddingProvider > llmSettings.embeddingProvider)
+            provider = (
+                settings_dict.get('embeddingProvider') or
+                settings_dict.get('embedding_provider') or
+                settings_dict.get('llmSettings.embeddingProvider') or
+                'openai'
+            ).lower()
+
+            # Get model
+            model = (
+                settings_dict.get('embeddingModel') or
+                settings_dict.get('embedding_model') or
+                settings_dict.get('llmSettings.embeddingModel') or
+                EMBEDDING_MODEL
+            )
+
+            # Get API key from database or environment
+            api_key = None
+            if provider == 'gemini' or provider == 'google':
+                provider = 'gemini'
+                api_key = settings_dict.get('google.apiKey') or os.getenv('GOOGLE_API_KEY')
+                model = model if 'embedding' in model else GEMINI_EMBEDDING_MODEL
+                dimensions = GEMINI_DIMENSIONS
+            else:
+                provider = 'openai'
+                api_key = settings_dict.get('openai.apiKey') or os.getenv('OPENAI_API_KEY')
+                dimensions = EMBEDDING_DIMENSIONS
+
+            config = EmbeddingConfig(
+                provider=provider,
+                model=model,
+                dimensions=dimensions,
+                api_key=api_key
+            )
+
+            # Update cache
+            self._embedding_config = config
+            self._embedding_config_time = current_time
+
+            logger.info(f"Embedding config loaded: provider={provider}, model={model}, has_key={bool(api_key)}")
+            return config
+
+        except Exception as e:
+            logger.error(f"Error loading embedding config: {e}")
+            # Return default config with env vars
+            return EmbeddingConfig(
+                provider='openai',
+                model=EMBEDDING_MODEL,
+                dimensions=EMBEDDING_DIMENSIONS,
+                api_key=os.getenv('OPENAI_API_KEY')
+            )
+
+    async def _get_openai_client(self, api_key: Optional[str] = None):
         """Get or create OpenAI client"""
-        if self.openai_client is None:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY not configured")
-            self.openai_client = openai.AsyncOpenAI(api_key=api_key)
+        key = api_key or os.getenv("OPENAI_API_KEY")
+        if not key:
+            raise ValueError("OPENAI_API_KEY not configured")
+
+        if self.openai_client is None or api_key:
+            self.openai_client = openai.AsyncOpenAI(api_key=key)
         return self.openai_client
+
+    async def _get_gemini_embedding(self, text: str, api_key: str, model: str = GEMINI_EMBEDDING_MODEL) -> List[float]:
+        """Generate embedding using Google Gemini API"""
+        try:
+            import google.generativeai as genai
+
+            genai.configure(api_key=api_key)
+            result = genai.embed_content(
+                model=f"models/{model}",
+                content=text,
+                task_type="retrieval_query"
+            )
+
+            embedding = result['embedding']
+            logger.info(f"Gemini embedding generated: {len(embedding)} dimensions")
+            return embedding
+
+        except ImportError:
+            logger.error("google-generativeai package not installed. Run: pip install google-generativeai")
+            raise ValueError("Google Generative AI package not installed")
+
+    def _scale_embedding(self, embedding: List[float], target_dims: int = EMBEDDING_DIMENSIONS) -> List[float]:
+        """Scale embedding to target dimensions using interpolation or padding"""
+        current_dims = len(embedding)
+
+        if current_dims == target_dims:
+            return embedding
+
+        if current_dims < target_dims:
+            # Upsample: Use linear interpolation to expand dimensions
+            arr = np.array(embedding)
+            indices = np.linspace(0, current_dims - 1, target_dims)
+            scaled = np.interp(indices, np.arange(current_dims), arr)
+
+            # Normalize to preserve magnitude
+            original_norm = np.linalg.norm(arr)
+            scaled_norm = np.linalg.norm(scaled)
+            if scaled_norm > 0:
+                scaled = scaled * (original_norm / scaled_norm)
+
+            logger.debug(f"Scaled embedding from {current_dims} to {target_dims} dims")
+            return scaled.tolist()
+        else:
+            # Downsample: Take every nth element or average pools
+            ratio = current_dims / target_dims
+            arr = np.array(embedding)
+            indices = np.linspace(0, current_dims - 1, target_dims).astype(int)
+            scaled = arr[indices]
+            return scaled.tolist()
 
     async def get_prompt_settings(self) -> PromptSettings:
         """Load system prompt and LLM guide from database with caching"""
@@ -301,7 +446,11 @@ class SemanticSearchService:
 
     async def generate_embedding(self, text: str, use_cache: bool = True) -> List[float]:
         """
-        Generate embedding for text with Redis L2 caching
+        Generate embedding for text with Redis L2 caching and multi-provider support
+
+        Supports:
+        - OpenAI (text-embedding-3-small, 1536 dims)
+        - Google Gemini (text-embedding-004, 768 dims -> scaled to 1536)
 
         Performance:
         - Cached: ~1ms
@@ -321,34 +470,101 @@ class SemanticSearchService:
                 logger.debug(f"Embedding cache HIT: {cache_key[:50]}...")
                 return cached if isinstance(cached, list) else json.loads(cached)
 
-        # Generate embedding via OpenAI API
+        # Load embedding configuration
+        config = await self._get_embedding_config()
         start_time = datetime.now()
+        embedding = None
+        provider_used = None
+
+        # Try primary provider
         try:
-            client = await self._get_openai_client()
-            response = await client.embeddings.create(
-                input=text,
-                model=EMBEDDING_MODEL
-            )
-            embedding = response.data[0].embedding
+            if config.provider == 'gemini' and config.api_key:
+                # Use Google Gemini
+                embedding = await self._get_gemini_embedding(text, config.api_key, config.model)
+                provider_used = 'gemini'
 
-            elapsed = (datetime.now() - start_time).total_seconds() * 1000
-            logger.info(f"Embedding generated in {elapsed:.1f}ms ({len(text)} chars)")
+                # Scale to 1536 dims for compatibility with existing embeddings
+                if len(embedding) != EMBEDDING_DIMENSIONS:
+                    embedding = self._scale_embedding(embedding, EMBEDDING_DIMENSIONS)
 
-            # Cache the embedding
-            if use_cache:
-                await cache_set(cache_key, embedding, EMBEDDING_CACHE_TTL)
-                logger.debug(f"Embedding cached: {cache_key[:50]}...")
-
-            return embedding
+            elif config.provider == 'openai' and config.api_key:
+                # Use OpenAI
+                client = await self._get_openai_client(config.api_key)
+                response = await client.embeddings.create(
+                    input=text,
+                    model=config.model
+                )
+                embedding = response.data[0].embedding
+                provider_used = 'openai'
 
         except openai.RateLimitError:
-            logger.warning("OpenAI rate limited, waiting 5 seconds...")
+            logger.warning(f"{config.provider} rate limited, waiting 5 seconds...")
             await asyncio.sleep(5)
             return await self.generate_embedding(text, use_cache=False)
 
+        except openai.AuthenticationError as auth_err:
+            logger.warning(f"OpenAI auth error: {auth_err}. Trying fallback...")
+            embedding = None
+
+        except Exception as primary_error:
+            logger.warning(f"Primary provider ({config.provider}) failed: {primary_error}")
+            embedding = None
+
+        # Fallback to alternative provider
+        if embedding is None:
+            try:
+                # If OpenAI failed, try Gemini
+                if config.provider == 'openai':
+                    gemini_key = await self._get_api_key_from_db('google.apiKey')
+                    if gemini_key:
+                        logger.info("Falling back to Gemini embedding...")
+                        embedding = await self._get_gemini_embedding(text, gemini_key)
+                        embedding = self._scale_embedding(embedding, EMBEDDING_DIMENSIONS)
+                        provider_used = 'gemini_fallback'
+
+                # If Gemini failed, try OpenAI
+                elif config.provider == 'gemini':
+                    openai_key = await self._get_api_key_from_db('openai.apiKey') or os.getenv('OPENAI_API_KEY')
+                    if openai_key:
+                        logger.info("Falling back to OpenAI embedding...")
+                        client = await self._get_openai_client(openai_key)
+                        response = await client.embeddings.create(
+                            input=text,
+                            model=EMBEDDING_MODEL
+                        )
+                        embedding = response.data[0].embedding
+                        provider_used = 'openai_fallback'
+
+            except Exception as fallback_error:
+                logger.error(f"Fallback provider also failed: {fallback_error}")
+                raise ValueError(f"All embedding providers failed. Primary: {config.provider}, Error: {fallback_error}")
+
+        if embedding is None:
+            raise ValueError(f"No embedding provider available. Check API keys in database settings or environment.")
+
+        elapsed = (datetime.now() - start_time).total_seconds() * 1000
+        logger.info(f"Embedding generated via {provider_used} in {elapsed:.1f}ms ({len(text)} chars, {len(embedding)} dims)")
+
+        # Cache the embedding
+        if use_cache:
+            cache_key = self._get_embedding_cache_key(text)
+            await cache_set(cache_key, embedding, EMBEDDING_CACHE_TTL)
+            logger.debug(f"Embedding cached: {cache_key[:50]}...")
+
+        return embedding
+
+    async def _get_api_key_from_db(self, key_name: str) -> Optional[str]:
+        """Get API key from database settings"""
+        try:
+            pool = await get_db()
+            row = await pool.fetchrow(
+                "SELECT value FROM settings WHERE key = $1",
+                key_name
+            )
+            return row['value'] if row else None
         except Exception as e:
-            logger.error(f"Embedding generation error: {e}")
-            raise
+            logger.error(f"Error fetching API key {key_name}: {e}")
+            return None
 
     async def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
         """
