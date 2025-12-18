@@ -181,6 +181,22 @@ export default function DocumentManagerPage() {
   const [skippedCount, setSkippedCount] = useState(0);
   const [selectedSkippedIds, setSelectedSkippedIds] = useState<Set<number>>(new Set());
 
+  // Batch Analyze states (Python microservice)
+  const [batchAnalyzeStatus, setBatchAnalyzeStatus] = useState<{
+    is_running: boolean;
+    is_paused: boolean;
+    current_job: any;
+    stats: {
+      total_processed: number;
+      total_success: number;
+      total_errors: number;
+      started_at: string | null;
+      last_activity: string | null;
+    };
+  } | null>(null);
+  const [batchAnalyzeBatchSize, setBatchAnalyzeBatchSize] = useState(20);
+  const [batchAnalyzeLoading, setBatchAnalyzeLoading] = useState(false);
+
   // Pagination state for documents
   const [documentsPage, setDocumentsPage] = useState(1);
   const [documentsTotal, setDocumentsTotal] = useState(0);
