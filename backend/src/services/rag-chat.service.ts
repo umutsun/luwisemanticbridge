@@ -342,32 +342,63 @@ export class RAGChatService {
     let llmGuide = '';
 
     try {
-      // First try to get active prompt from settings table
-      const activePromptResult = await pool.query(
-        "SELECT key, value FROM settings WHERE key LIKE 'prompts.%.active' AND value = 'true' LIMIT 1"
+      // Try to get prompts from prompts.list (new format - JSON array)
+      const promptsListResult = await pool.query(
+        "SELECT value FROM settings WHERE key = 'prompts.list'"
       );
 
-      if (activePromptResult.rows.length > 0) {
-        // Extract prompt ID from the key (e.g., 'prompts.abc123.active' -> 'abc123')
-        const activeKey = activePromptResult.rows[0].key;
-        const promptId = activeKey.split('.')[1];
+      if (promptsListResult.rows.length > 0) {
+        try {
+          // Parse the JSON array of prompts
+          const promptsList = typeof promptsListResult.rows[0].value === 'string'
+            ? JSON.parse(promptsListResult.rows[0].value)
+            : promptsListResult.rows[0].value;
 
-        // Get conversation tone for this prompt
-        const tone = await this.getConversationTone(promptId);
-        const toneInstruction = this.getToneInstruction(tone);
+          // Find the active prompt
+          const activePrompt = Array.isArray(promptsList)
+            ? promptsList.find((p: any) => p.isActive === true)
+            : null;
 
-        // Get the actual prompt content
-        const promptResult = await pool.query(
-          "SELECT value FROM settings WHERE key = $1",
-          [`prompts.${promptId}.content`]
+          if (activePrompt) {
+            const tone = activePrompt.conversationTone || 'professional';
+            const toneInstruction = this.getToneInstruction(tone);
+            const content = activePrompt.systemPrompt || '';
+
+            if (content) {
+              console.log(`✅ Using active prompt: ${activePrompt.name || activePrompt.id} with ${tone} tone`);
+              basePrompt = `${toneInstruction}\n\n${content}`;
+            }
+          }
+        } catch (parseError) {
+          console.warn('Failed to parse prompts.list:', parseError);
+        }
+      }
+
+      // Fallback: Try old format (prompts.{id}.active keys)
+      if (!basePrompt) {
+        const activePromptResult = await pool.query(
+          "SELECT key, value FROM settings WHERE key LIKE 'prompts.%.active' AND value = 'true' LIMIT 1"
         );
 
-        if (promptResult.rows.length > 0) {
-          const content = typeof promptResult.rows[0].value === 'string'
-            ? promptResult.rows[0].value
-            : promptResult.rows[0].value;
-          console.log(` Using active prompt: ${promptId} with ${tone} tone`);
-          basePrompt = `${toneInstruction}\n\n${content}`;
+        if (activePromptResult.rows.length > 0) {
+          const activeKey = activePromptResult.rows[0].key;
+          const promptId = activeKey.split('.')[1];
+
+          const tone = await this.getConversationTone(promptId);
+          const toneInstruction = this.getToneInstruction(tone);
+
+          const promptResult = await pool.query(
+            "SELECT value FROM settings WHERE key = $1",
+            [`prompts.${promptId}.content`]
+          );
+
+          if (promptResult.rows.length > 0) {
+            const content = typeof promptResult.rows[0].value === 'string'
+              ? promptResult.rows[0].value
+              : promptResult.rows[0].value;
+            console.log(`✅ Using active prompt (legacy): ${promptId} with ${tone} tone`);
+            basePrompt = `${toneInstruction}\n\n${content}`;
+          }
         }
       }
 
@@ -378,7 +409,7 @@ export class RAGChatService {
         );
 
         if (oldResult.rows[0]?.setting_value) {
-          console.log('️ Using system prompt from old chatbot_settings table');
+          console.log('⚠️ Using system prompt from old chatbot_settings table');
           basePrompt = oldResult.rows[0].setting_value;
         }
       }
