@@ -1321,8 +1321,9 @@ router.post('/generate', async (req: Request, res: Response) => {
 
       while (true) {
         // Fetch a batch of records from source (with pagination)
+        // Note: ORDER BY id::int ensures numeric sorting even if id column is text type
         const batchResult = await pools.sourcePool.query(
-          `SELECT id, * FROM public."${table}" ORDER BY id LIMIT $1 OFFSET $2`,
+          `SELECT id, * FROM public."${table}" ORDER BY id::int LIMIT $1 OFFSET $2`,
           [BATCH_FETCH_SIZE, offset]
         );
 
