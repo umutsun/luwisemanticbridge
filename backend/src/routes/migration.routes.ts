@@ -708,6 +708,27 @@ router.delete('/skipped', async (req: Request, res: Response) => {
 router.post('/generate', async (req: Request, res: Response) => {
   const { batchSize = 50, sourceTable = null, tables: requestedTables = null } = req.body;
 
+  // Track client connection - embedding continues even if client disconnects
+  let clientConnected = true;
+  req.on('close', () => {
+    clientConnected = false;
+    console.log('📡 Client disconnected - embedding continues in background');
+  });
+
+  // Safe write helper - only writes if client is still connected
+  const safeWrite = (data: string) => {
+    if (clientConnected) {
+      try {
+        res.write(data);
+        if (typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+      } catch (e) {
+        clientConnected = false;
+      }
+    }
+  };
+
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -764,7 +785,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         console.log(` Auto-discovered tables: ${tables.join(', ')}`);
 
         if (tables.length === 0) {
-          res.write(`data: ${JSON.stringify({
+          safeWrite(`data: ${JSON.stringify({
             current: 0,
             total: 0,
             percentage: 100,
@@ -772,13 +793,13 @@ router.post('/generate', async (req: Request, res: Response) => {
             message: 'No source tables found in database',
             tokenUsage: globalTokenUsage
           })}\n\n`);
-          res.end();
+          if (clientConnected) res.end();
           return;
         }
       } catch (err) {
         console.error('Error discovering tables:', err);
-        res.write(`data: ${JSON.stringify({ status: 'failed', error: 'Could not discover source tables' })}\n\n`);
-        res.end();
+        safeWrite(`data: ${JSON.stringify({ status: 'failed', error: 'Could not discover source tables' })}\n\n`);
+        if (clientConnected) res.end();
         return;
       }
     }
@@ -844,7 +865,7 @@ router.post('/generate', async (req: Request, res: Response) => {
     if (total === 0) {
       console.log(` No pending records found in tables: ${tables.join(', ')}`);
       console.log(` All selected tables are fully embedded`);
-      res.write(`data: ${JSON.stringify({
+      safeWrite(`data: ${JSON.stringify({
         current: 0,
         total: 0,
         percentage: 100,
@@ -854,12 +875,12 @@ router.post('/generate', async (req: Request, res: Response) => {
         completedTables: tables,
         tokenUsage: globalTokenUsage
       })}\n\n`);
-      res.end();
+      if (clientConnected) res.end();
       return;
     }
 
     // Send initial progress update
-    res.write(`data: ${JSON.stringify({
+    safeWrite(`data: ${JSON.stringify({
       current: 0,
       total: total,
       percentage: 0,
@@ -868,9 +889,6 @@ router.post('/generate', async (req: Request, res: Response) => {
       message: `Starting migration for ${tables.length} table(s): ${tables.join(', ')}`,
       tokenUsage: globalTokenUsage
     })}\n\n`);
-    if (typeof (res as any).flush === 'function') {
-      (res as any).flush();
-    }
 
     for (const row of allPending) {
       try {
@@ -1090,7 +1108,7 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         processed++;
 
-        // Send progress
+        // Send progress (only if client is still connected)
         const progress = {
           current: processed,
           total: total,
@@ -1101,18 +1119,17 @@ router.post('/generate', async (req: Request, res: Response) => {
           tokenUsage: globalTokenUsage
         };
 
-        res.write(`data: ${JSON.stringify(progress)}\n\n`);
-        // Ensure data is flushed immediately for real-time updates
-        if (typeof (res as any).flush === 'function') {
-          (res as any).flush();
-        }
+        // Also emit to progress stream listeners
+        migrationProgress.emit('progress', progress);
+        safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
       } catch (error) {
         console.error('Embedding error:', error);
         processed++;
       }
     }
 
-    res.write(`data: ${JSON.stringify({
+    // Migration completed
+    const completedProgress = {
       current: processed,
       total: total,
       percentage: 100,
@@ -1121,16 +1138,17 @@ router.post('/generate', async (req: Request, res: Response) => {
       message: ` Migration completed! Processed ${processed} record(s) from ${tables.length} table(s).`,
       completedTables: tables,
       tokenUsage: globalTokenUsage
-    })}\n\n`);
-    if (typeof (res as any).flush === 'function') {
-      (res as any).flush();
-    }
+    };
 
-    res.end();
+    console.log(`✅ Migration completed: ${processed}/${total} records from ${tables.length} table(s)`);
+    migrationProgress.emit('progress', completedProgress);
+    safeWrite(`data: ${JSON.stringify(completedProgress)}\n\n`);
+
+    if (clientConnected) res.end();
   } catch (error) {
     console.error('Generate embeddings error:', error);
-    res.write(`data: ${JSON.stringify({ status: 'failed', error: (error as Error).message })}\n\n`);
-    res.end();
+    safeWrite(`data: ${JSON.stringify({ status: 'failed', error: (error as Error).message })}\n\n`);
+    if (clientConnected) res.end();
   }
 });
 
