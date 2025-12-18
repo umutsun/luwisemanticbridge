@@ -1221,10 +1221,23 @@ router.post('/generate', async (req: Request, res: Response) => {
       console.log(`️ unified_embeddings table does not exist, will process all records`);
     }
 
-    const allPending: any[] = [];
+    // MEMORY OPTIMIZATION: Count pending records first, then process in batches
+    // This prevents loading all records into memory at once (was causing OOM for 130k+ records)
+
+    interface TablePendingInfo {
+      table: string;
+      normalizedName: string;
+      pendingCount: number;
+      totalCount: number;
+      embeddedIds: Set<number>;
+    }
+
+    const tablePendingInfo: TablePendingInfo[] = [];
+    let totalPending = 0;
+
+    // Phase 1: Count pending records per table (memory efficient - only IDs)
     for (const table of tables) {
       try {
-        // Normalize table name to lowercase ASCII (remove Turkish characters)
         const normalizedTableName = table.toLowerCase()
           .replace(/ö/g, 'o')
           .replace(/ü/g, 'u')
@@ -1233,41 +1246,43 @@ router.post('/generate', async (req: Request, res: Response) => {
           .replace(/ç/g, 'c')
           .replace(/ı/g, 'i');
 
+        // Get total count from source
+        const countResult = await pools.sourcePool.query(
+          `SELECT COUNT(*)::int as count FROM public."${table}"`
+        );
+        const totalCount = countResult.rows[0]?.count || 0;
+
+        let embeddedIds = new Set<number>();
+        let pendingCount = totalCount;
+
         if (unifiedEmbeddingsExists) {
-          // First, get already embedded IDs from target database
+          // Only get IDs of already embedded records (not full rows)
           const embeddedIdsResult = await pools.targetPool.query(
             `SELECT source_id FROM unified_embeddings WHERE source_table = $1`,
             [normalizedTableName]
           );
-          const embeddedIds = new Set(embeddedIdsResult.rows.map(row => row.source_id));
-
-          // Then, get ALL records from source table (no LIMIT)
-          const allRecordsResult = await pools.sourcePool.query(
-            `SELECT id, * FROM public."${table}"`
-          );
-
-          // Filter out already embedded records
-          const pendingRecords = allRecordsResult.rows
-            .filter(row => !embeddedIds.has(row.id));
-
-          console.log(` Table ${table}: ${allRecordsResult.rows.length} total records, ${embeddedIds.size} already embedded, ${pendingRecords.length} pending`);
-
-          pendingRecords.forEach(row => allPending.push({ ...row, _sourceTable: normalizedTableName }));
-        } else {
-          // If unified_embeddings doesn't exist, get ALL records (no LIMIT)
-          const result = await pools.sourcePool.query(
-            `SELECT id, * FROM public."${table}"`
-          );
-          console.log(` Table ${table}: ${result.rows.length} records to process (no embeddings table exists)`);
-          result.rows.forEach(row => allPending.push({ ...row, _sourceTable: normalizedTableName }));
+          embeddedIds = new Set(embeddedIdsResult.rows.map(row => row.source_id));
+          pendingCount = totalCount - embeddedIds.size;
         }
-      } catch (err) {
-        // Silently skip tables that don't exist or have errors
+
+        console.log(` Table ${table}: ${totalCount} total, ${embeddedIds.size} embedded, ${pendingCount} pending`);
+
+        if (pendingCount > 0) {
+          tablePendingInfo.push({
+            table,
+            normalizedName: normalizedTableName,
+            pendingCount,
+            totalCount,
+            embeddedIds
+          });
+          totalPending += pendingCount;
+        }
+      } catch (err: any) {
         console.log(`Skipping table ${table}: ${err.message}`);
       }
     }
 
-    const total = allPending.length;
+    const total = totalPending;
     let processed = 0;
 
     if (total === 0) {
@@ -1294,23 +1309,44 @@ router.post('/generate', async (req: Request, res: Response) => {
       percentage: 0,
       status: 'processing',
       currentTable: tables[0] || null,
-      message: `Starting migration for ${tables.length} table(s): ${tables.join(', ')}`,
+      message: `Starting migration for ${tables.length} table(s): ${tables.join(', ')} (${total} pending records)`,
       tokenUsage: globalTokenUsage
     })}\n\n`);
 
-    for (const row of allPending) {
-      try {
-        const table = row._sourceTable;
+    // Phase 2: Process each table with pagination (memory efficient)
+    const BATCH_FETCH_SIZE = batchSize * 2; // Fetch 2x batch at a time for efficiency
 
-        // Note: LEFT JOIN already filters out duplicates (WHERE u.id IS NULL)
-        // No need for additional existence check here
+    for (const tableInfo of tablePendingInfo) {
+      const { table, normalizedName: normalizedTableName, embeddedIds } = tableInfo;
+      let offset = 0;
+      let tableProcessed = 0;
 
-        // Dynamic content extraction - auto-detect content columns
-        let content = '';
-        let title = '';
-        let sourceType = 'document';
+      console.log(`📊 Processing table: ${table} (${tableInfo.pendingCount} pending)`);
 
-        const tableLower = table.toLowerCase();
+      while (true) {
+        // Fetch a batch of records from source (with pagination)
+        const batchResult = await pools.sourcePool.query(
+          `SELECT id, * FROM public."${table}" ORDER BY id LIMIT $1 OFFSET $2`,
+          [BATCH_FETCH_SIZE, offset]
+        );
+
+        if (batchResult.rows.length === 0) break; // No more records
+
+        // Filter out already embedded records
+        const pendingBatch = unifiedEmbeddingsExists
+          ? batchResult.rows.filter(row => !embeddedIds.has(row.id))
+          : batchResult.rows;
+
+        // Process each record in this batch
+        for (const row of pendingBatch) {
+          try {
+            // Use table name from outer loop (already normalized)
+            const tableLower = normalizedTableName;
+
+            // Dynamic content extraction - auto-detect content columns
+            let content = '';
+            let title = '';
+            let sourceType = 'document';
 
         // Helper: Case-insensitive column value lookup (handles Soru, SORU, soru, etc.)
         const getColumnValue = (row: any, keys: string[]): string | null => {
@@ -1535,11 +1571,23 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Also emit to progress stream listeners for immediate SSE updates
         migrationProgress.emit('progress', { id: activeMigrationId, ...progress });
         safeWrite(`data: ${JSON.stringify(progress)}\n\n`);
-      } catch (error) {
-        console.error('Embedding error:', error);
-        processed++;
-      }
-    }
+          } catch (error) {
+            console.error('Embedding error:', error);
+            processed++;
+          }
+        } // end for (row of pendingBatch)
+
+        // Move to next batch
+        offset += BATCH_FETCH_SIZE;
+
+        // Memory cleanup hint
+        if (global.gc) {
+          global.gc();
+        }
+      } // end while (true) - pagination loop
+
+      console.log(`✅ Completed table ${table}: ${tableProcessed} records processed`);
+    } // end for (tableInfo of tablePendingInfo)
 
     // Migration completed
     const completedProgress = {
