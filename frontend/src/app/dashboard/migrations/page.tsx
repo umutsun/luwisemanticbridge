@@ -696,10 +696,18 @@ export default function EmbeddingsManagerPage() {
   // Note: Progress updates now come from SSE stream (connectToProgressStream)
 
   const startMigration = async () => {
-    console.log('Starting migration with selectedTables:', selectedTables);
+    // Merge queued tables with currently selected table rows (checkboxes)
+    const tablesToProcess = Array.from(new Set([
+      ...selectedTables,
+      ...Array.from(selectedTableRows)
+    ]));
+
+    console.log('Starting migration with tables:', tablesToProcess);
+    console.log('From queue:', selectedTables);
+    console.log('From checkboxes:', Array.from(selectedTableRows));
     console.log('Available tables:', availableTables.map(t => ({name: t.name, total: t.totalRecords, embedded: t.embeddedRecords})));
 
-    if (selectedTables.length === 0) {
+    if (tablesToProcess.length === 0) {
       toast({
         title: "Error",
         description: "Please select at least one table.",
@@ -707,12 +715,19 @@ export default function EmbeddingsManagerPage() {
       });
       return;
     }
+
+    // Add checkbox selections to queue automatically
+    if (selectedTableRows.size > 0) {
+      setSelectedTables(tablesToProcess);
+      setSelectedTableRows(new Set()); // Clear checkboxes after adding to queue
+    }
+
     setIsStartingMigration(true);
 
     try {
       // Calculate real total from selected tables
       const selectedTotal = availableTables
-        .filter(t => selectedTables.includes(t.name))
+        .filter(t => tablesToProcess.includes(t.name))
         .reduce((sum, t) => sum + (t.totalRecords - t.embeddedRecords), 0);
 
       // Set initial progress state immediately with real total
@@ -721,7 +736,7 @@ export default function EmbeddingsManagerPage() {
         current: 0,
         total: selectedTotal || 1, // Avoid division by zero
         percentage: 0,
-        currentTable: selectedTables[0] || null,
+        currentTable: tablesToProcess[0] || null,
         error: null,
         tokensUsed: 0,
         startTime: Date.now()
@@ -731,7 +746,7 @@ export default function EmbeddingsManagerPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tables: selectedTables,
+          tables: tablesToProcess,
           ...settings
         })
       });
