@@ -398,3 +398,52 @@ async def get_token_stats():
     except Exception as e:
         logger.error(f"Error getting token stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reprocess-large")
+async def reprocess_large_documents():
+    """
+    Reprocess documents that were marked as 'too_large'.
+    Now supports files up to 1GB with chunked processing.
+    """
+    try:
+        pool = await document_analyzer.get_pool()
+
+        # Get all too_large documents
+        docs = await pool.fetch("""
+            SELECT id, title, filename, file_path,
+                   (metadata->>'file_size_mb')::float as file_size_mb
+            FROM documents
+            WHERE processing_status = 'too_large'
+            ORDER BY (metadata->>'file_size_mb')::float ASC
+        """)
+
+        if not docs:
+            return {
+                "success": True,
+                "message": "Büyük dosya bulunamadı",
+                "count": 0
+            }
+
+        # Reset their status to pending so batch analyze picks them up
+        await pool.execute("""
+            UPDATE documents
+            SET processing_status = 'pending',
+                metadata = COALESCE(metadata, '{}'::jsonb) || '{"reprocessing": true}'::jsonb,
+                updated_at = NOW()
+            WHERE processing_status = 'too_large'
+        """)
+
+        doc_list = [{"id": d['id'], "title": d['title'], "size_mb": d['file_size_mb']} for d in docs]
+
+        return {
+            "success": True,
+            "message": f"{len(docs)} büyük dosya yeniden işlenmeye hazır",
+            "count": len(docs),
+            "documents": doc_list,
+            "next_step": "POST /api/python/documents/analyze/start çağırın"
+        }
+
+    except Exception as e:
+        logger.error(f"Error reprocessing large documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

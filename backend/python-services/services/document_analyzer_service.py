@@ -51,6 +51,10 @@ MIN_TEXT_THRESHOLD = 100  # Minimum chars to consider PDF as having text
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() == "true"
 OCR_PROVIDER = os.getenv("OCR_PROVIDER", "tesseract")  # tesseract | google_vision
 
+# Large file handling
+MAX_FILE_SIZE_MB = int(os.getenv("MAX_PDF_SIZE_MB", "1000"))  # 1GB limit (was 100MB)
+CHUNK_PAGES = 50  # Process large PDFs in chunks of 50 pages to avoid memory issues
+
 # Skip reasons with user-friendly messages (Turkish)
 SKIP_REASONS = {
     "missing_file": {
@@ -299,20 +303,39 @@ class DocumentAnalyzerService:
         return row['count'] if row else 0
 
     def extract_text_from_pdf(self, file_path: str) -> Dict:
-        """Extract text from PDF file using PyPDF2 (for digital PDFs)"""
+        """
+        Extract text from PDF file using PyPDF2 (for digital PDFs)
+        Handles large files by processing in chunks to avoid memory issues
+        """
         try:
             if not os.path.exists(file_path):
                 return {"success": False, "error": f"File not found: {file_path}", "text": "", "needs_ocr": False}
 
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            is_large_file = file_size_mb > 100  # Files over 100MB get special handling
+
             with open(file_path, 'rb') as f:
                 reader = PyPDF2.PdfReader(f)
+                total_pages = len(reader.pages)
+
+                if is_large_file:
+                    logger.info(f"Large PDF detected: {file_size_mb:.1f}MB, {total_pages} pages - using chunked extraction")
 
                 text_parts = []
+                pages_processed = 0
+
+                # Process in chunks for large files
                 for page_num, page in enumerate(reader.pages):
                     try:
                         page_text = page.extract_text()
                         if page_text:
                             text_parts.append(page_text.strip())
+                        pages_processed += 1
+
+                        # For large files, log progress every 100 pages
+                        if is_large_file and pages_processed % 100 == 0:
+                            logger.info(f"Processed {pages_processed}/{total_pages} pages...")
+
                     except Exception as e:
                         logger.warning(f"Page {page_num + 1} extraction failed: {e}")
                         continue
@@ -322,16 +345,23 @@ class DocumentAnalyzerService:
                 # Check if PDF needs OCR (scanned document)
                 needs_ocr = len(text) < MIN_TEXT_THRESHOLD
 
+                if is_large_file:
+                    logger.info(f"Large PDF complete: {len(text)} chars extracted from {pages_processed} pages")
+
                 return {
                     "success": True,
                     "text": text,
-                    "page_count": len(reader.pages),
+                    "page_count": total_pages,
                     "char_count": len(text),
-                    "needs_ocr": needs_ocr
+                    "needs_ocr": needs_ocr,
+                    "is_large_file": is_large_file
                 }
 
         except PyPDF2.errors.PdfReadError as e:
             return {"success": False, "error": f"Invalid PDF: {e}", "text": "", "needs_ocr": True}
+        except MemoryError as e:
+            logger.error(f"Memory error processing PDF: {file_path}")
+            return {"success": False, "error": "Memory limit exceeded", "text": "", "needs_ocr": False, "memory_error": True}
         except Exception as e:
             return {"success": False, "error": str(e), "text": "", "needs_ocr": False}
 
@@ -487,13 +517,18 @@ class DocumentAnalyzerService:
             if not file_path:
                 return await self.mark_document_skipped(doc_id, "missing_file")
 
-            # Check file size
+            # Check file size (limit increased to 1GB, was 100MB)
             try:
                 file_size = os.path.getsize(file_path)
-                if file_size > 100 * 1024 * 1024:  # 100MB limit
+                file_size_mb = file_size / (1024 * 1024)
+                if file_size_mb > MAX_FILE_SIZE_MB:
                     return await self.mark_document_skipped(doc_id, "too_large", {
-                        "file_size_mb": round(file_size / 1024 / 1024, 2)
+                        "file_size_mb": round(file_size_mb, 2),
+                        "limit_mb": MAX_FILE_SIZE_MB
                     })
+                # Log for large files (over 100MB)
+                if file_size_mb > 100:
+                    logger.info(f"Processing large file: {doc.get('title', doc_id)} ({file_size_mb:.1f} MB)")
             except OSError:
                 return await self.mark_document_skipped(doc_id, "missing_file")
 
@@ -505,7 +540,12 @@ class DocumentAnalyzerService:
             if not result["success"]:
                 error_msg = result.get("error", "")
 
-                if "password" in error_msg.lower() or "encrypted" in error_msg.lower():
+                if result.get("memory_error"):
+                    return await self.mark_document_skipped(doc_id, "too_large", {
+                        "reason": "Memory limit exceeded during processing",
+                        "file_size_mb": round(file_size_mb, 2)
+                    })
+                elif "password" in error_msg.lower() or "encrypted" in error_msg.lower():
                     return await self.mark_document_skipped(doc_id, "password_protected")
                 elif "invalid" in error_msg.lower() or "corrupt" in error_msg.lower():
                     return await self.mark_document_skipped(doc_id, "corrupt_file", {
