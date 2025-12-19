@@ -279,3 +279,122 @@ async def get_document_stats():
     except Exception as e:
         logger.error(f"Error getting document stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/fix-missing-tokens")
+async def fix_missing_tokens():
+    """
+    Fix documents with missing estimated_tokens in metadata.
+    Also validates Turkish character support.
+    """
+    try:
+        pool = await document_analyzer.get_pool()
+
+        # 1. Count documents with missing tokens
+        missing_count = await pool.fetchval("""
+            SELECT COUNT(*)
+            FROM documents
+            WHERE processing_status = 'analyzed'
+            AND content IS NOT NULL
+            AND LENGTH(content) > 0
+            AND (metadata->>'estimated_tokens' IS NULL)
+        """)
+
+        if missing_count == 0:
+            # Get total tokens for already processed docs
+            total_tokens = await pool.fetchval("""
+                SELECT COALESCE(SUM((metadata->>'estimated_tokens')::bigint), 0)
+                FROM documents
+                WHERE processing_status = 'analyzed'
+                AND metadata->>'estimated_tokens' IS NOT NULL
+            """)
+
+            return {
+                "success": True,
+                "message": "Tüm dökümanların token değeri mevcut",
+                "missing_count": 0,
+                "updated": 0,
+                "total_tokens": total_tokens
+            }
+
+        # 2. Count Turkish character documents
+        turkish_count = await pool.fetchval("""
+            SELECT COUNT(*)
+            FROM documents
+            WHERE processing_status = 'analyzed'
+            AND content ~ '[şğüöıçŞĞÜÖİÇ]'
+        """)
+
+        # 3. Update missing tokens in batches
+        updated = await pool.execute("""
+            UPDATE documents
+            SET metadata = COALESCE(metadata, '{}'::jsonb) ||
+                jsonb_build_object(
+                    'estimated_tokens', LENGTH(content) / 4,
+                    'char_count', LENGTH(content),
+                    'tokens_fixed_at', NOW()::text
+                )
+            WHERE processing_status = 'analyzed'
+            AND content IS NOT NULL
+            AND LENGTH(content) > 0
+            AND (metadata->>'estimated_tokens' IS NULL)
+        """)
+
+        # 4. Get total tokens after update
+        total_tokens = await pool.fetchval("""
+            SELECT COALESCE(SUM((metadata->>'estimated_tokens')::bigint), 0)
+            FROM documents
+            WHERE processing_status = 'analyzed'
+            AND metadata->>'estimated_tokens' IS NOT NULL
+        """)
+
+        return {
+            "success": True,
+            "message": f"{missing_count} döküman güncellendi",
+            "missing_count": missing_count,
+            "turkish_docs": turkish_count,
+            "updated": missing_count,
+            "total_tokens": total_tokens
+        }
+
+    except Exception as e:
+        logger.error(f"Error fixing missing tokens: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/token-stats")
+async def get_token_stats():
+    """
+    Get token usage statistics for all analyzed documents.
+    """
+    try:
+        pool = await document_analyzer.get_pool()
+
+        stats = await pool.fetchrow("""
+            SELECT
+                COUNT(*) as total_analyzed,
+                COUNT(*) FILTER (WHERE metadata->>'estimated_tokens' IS NOT NULL) as with_tokens,
+                COUNT(*) FILTER (WHERE metadata->>'estimated_tokens' IS NULL) as missing_tokens,
+                COALESCE(SUM((metadata->>'estimated_tokens')::bigint), 0) as total_tokens,
+                COALESCE(AVG((metadata->>'estimated_tokens')::bigint), 0) as avg_tokens_per_doc,
+                COUNT(*) FILTER (WHERE content ~ '[şğüöıçŞĞÜÖİÇ]') as turkish_docs
+            FROM documents
+            WHERE processing_status = 'analyzed'
+            AND content IS NOT NULL
+        """)
+
+        return {
+            "success": True,
+            "stats": {
+                "total_analyzed": stats['total_analyzed'],
+                "with_tokens": stats['with_tokens'],
+                "missing_tokens": stats['missing_tokens'],
+                "total_tokens": stats['total_tokens'],
+                "avg_tokens_per_doc": int(stats['avg_tokens_per_doc']),
+                "turkish_docs": stats['turkish_docs']
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting token stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
