@@ -13,8 +13,11 @@ import fitz  # PyMuPDF for PDF to image conversion
 logger = logging.getLogger(__name__)
 
 # DeepSeek API configuration
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-ba4ea7b2ffab48a39eb10e10a8a9f540")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+
+if not DEEPSEEK_API_KEY:
+    logger.warning("DEEPSEEK_API_KEY not set in environment")
 
 
 class DeepSeekOCR:
