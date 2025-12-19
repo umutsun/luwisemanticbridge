@@ -2020,13 +2020,19 @@ router.post('/generate', async (req: Request, res: Response) => {
           }
         });
 
-        // Insert into unified_embeddings (skip if duplicate)
-        // Use normalized table name for consistency
+        // Insert into unified_embeddings with token tracking
+        // Calculate token estimate: ~3 chars per token for Turkish text
+        const estimatedTokens = Math.ceil(content.length / 3);
+
         await pools.targetPool.query(`
           INSERT INTO unified_embeddings
-          (source_table, source_type, source_id, source_name, content, embedding, metadata)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT (source_table, source_id) DO NOTHING
+          (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ON CONFLICT (source_table, source_id) DO UPDATE SET
+            tokens_used = EXCLUDED.tokens_used,
+            model_used = EXCLUDED.model_used,
+            embedding_provider = EXCLUDED.embedding_provider,
+            updated_at = NOW()
         `, [
           tableLower, // Use normalized lowercase table name
           sourceType,
@@ -2034,7 +2040,10 @@ router.post('/generate', async (req: Request, res: Response) => {
           title,
           content,
           `[${embedding.join(',')}]`,
-          JSON.stringify(metadata)
+          JSON.stringify(metadata),
+          estimatedTokens,
+          metadata.embeddingModel || 'text-embedding-ada-002',
+          metadata.embeddingProvider || 'openai'
         ]);
 
         processed++;
