@@ -329,7 +329,8 @@ class MigrationProgress extends EventEmitter {
       // Restore state from Redis
       await this.restoreStateFromRedis();
       // Check for stale migrations and trigger auto-resume after a delay
-      setTimeout(() => this.checkAndAutoResume(), 10000); // 10 second delay after startup
+      // Wait 30 seconds to ensure all services (database, OpenAI) are ready
+      setTimeout(() => this.checkAndAutoResume(), 30000);
     } catch (error) {
       console.warn('⚠️ Redis not available for migration persistence:', error);
     }
@@ -763,12 +764,26 @@ async function executeAutoResume(migrationId: string, progress: any, state: any)
 
     console.log(`📋 Tables to process: ${tables.join(', ')}`);
 
-    // Get embedding settings
-    const embeddingSettings = await getEmbeddingSettings();
-    const openaiClient = await getOpenAIClient();
+    // Get embedding settings with retry for startup timing
+    let embeddingSettings: { provider: string; model: string; apiKey: string | null };
+    let openaiClient: OpenAI | null = null;
+    let retryCount = 0;
+    const maxRetries = 5;
+
+    while (retryCount < maxRetries) {
+      try {
+        embeddingSettings = await getEmbeddingSettings();
+        openaiClient = await getOpenAIClient();
+        if (openaiClient) break;
+      } catch (err) {
+        console.log(`⏳ Waiting for OpenAI client (attempt ${retryCount + 1}/${maxRetries})...`);
+      }
+      retryCount++;
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds between retries
+    }
 
     if (!openaiClient) {
-      throw new Error('OpenAI client not available');
+      throw new Error('OpenAI client not available after retries');
     }
 
     // Get already embedded IDs
