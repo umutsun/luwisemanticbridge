@@ -48,7 +48,9 @@ class EmbeddingWorker:
             "last_activity": None,
             "current_table": None,
             "current_progress": 0,
-            "current_total": 0
+            "current_total": 0,
+            "total_tokens_used": 0,  # OpenAI API token usage
+            "model_used": EMBEDDING_MODEL
         }
         self._redis: Optional[redis.Redis] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
@@ -288,7 +290,7 @@ class EmbeddingWorker:
                     self.stats["total_processed"] += len(batch)
                     self.stats["last_activity"] = datetime.utcnow().isoformat()
 
-                    logger.info(f"Progress: {self.stats['current_progress']}/{total_count} ({table_name})")
+                    logger.info(f"Progress: {self.stats['current_progress']}/{total_count} ({table_name}) [tokens: {self.stats.get('total_tokens_used', 0):,}]")
 
                 offset += batch_size
 
@@ -307,12 +309,12 @@ class EmbeddingWorker:
         batch: List[tuple],
         table_name: str
     ):
-        """Generate embeddings for a batch of texts"""
+        """Generate embeddings for a batch of texts (CSV tables -> unified_embeddings)"""
 
         try:
             client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-            texts = [text for _, text in batch]
+            texts = [text[:8000] for _, text in batch]  # Truncate long texts
             ids = [id for id, _ in batch]
 
             # Call OpenAI API
@@ -321,23 +323,35 @@ class EmbeddingWorker:
                 model=EMBEDDING_MODEL
             )
 
+            # Track API token usage
+            api_tokens = response.usage.total_tokens if response.usage else 0
+            self.stats["total_tokens_used"] = self.stats.get("total_tokens_used", 0) + api_tokens
+
             # Insert into unified_embeddings
             pool = await get_db()
 
+            # Calculate per-text token distribution
+            total_chars = sum(len(t) for t in texts)
+
             for i, embedding_data in enumerate(response.data):
-                embedding = embedding_data.embedding
+                # Convert embedding list to pgvector string format
+                embedding_vector = '[' + ','.join(str(x) for x in embedding_data.embedding) + ']'
                 source_id = ids[i]
                 text = texts[i]
 
+                # Estimate tokens for this text
+                text_tokens = int(api_tokens * len(text) / total_chars) if total_chars > 0 else 0
+
                 await pool.execute("""
                     INSERT INTO unified_embeddings
-                    (source_type, source_table, source_id, content, embedding, model_used, created_at)
-                    VALUES ('csv', $1, $2, $3, $4, $5, NOW())
-                    ON CONFLICT (source_type, source_table, source_id) DO UPDATE
+                    (source_type, source_table, source_id, content, embedding, model_used, tokens_used, created_at)
+                    VALUES ('csv', $1, $2, $3, $4::vector, $5, $6, NOW())
+                    ON CONFLICT (source_table, source_id) DO UPDATE
                     SET content = EXCLUDED.content,
                         embedding = EXCLUDED.embedding,
+                        tokens_used = EXCLUDED.tokens_used,
                         updated_at = NOW()
-                """, table_name, int(source_id), text[:10000], embedding, EMBEDDING_MODEL)
+                """, table_name, int(source_id), text[:10000], embedding_vector, EMBEDDING_MODEL, text_tokens)
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")
@@ -374,6 +388,8 @@ class EmbeddingWorker:
         self.stats["total_processed"] = 0
         self.stats["total_errors"] = 0
         self.stats["current_progress"] = 0
+        self.stats["total_tokens_used"] = 0
+        self.stats["model_used"] = EMBEDDING_MODEL
 
         self.current_job = {
             "type": "document_embedding",
@@ -481,7 +497,7 @@ class EmbeddingWorker:
                     if self.stats["total_processed"] % (batch_size * 5) == 0:
                         self._save_state_to_redis()
 
-                    logger.info(f"Documents embedded: {self.stats['current_progress']}/{total_count} -> {target_table}")
+                    logger.info(f"Documents embedded: {self.stats['current_progress']}/{total_count} -> {target_table} (tokens: {self.stats['total_tokens_used']:,})")
 
                 except Exception as batch_error:
                     logger.error(f"Batch error: {batch_error}")
@@ -531,11 +547,21 @@ class EmbeddingWorker:
                 model=EMBEDDING_MODEL
             )
 
+            # Track API token usage
+            api_tokens = response.usage.total_tokens if response.usage else 0
+            self.stats["total_tokens_used"] += api_tokens
+
             pool = await get_db()
+
+            # Calculate per-text token distribution (API gives total, we distribute proportionally)
+            total_chars = sum(len(t) for t in texts)
 
             for i, embedding_data in enumerate(response.data):
                 # Convert embedding list to pgvector string format: [1.0, 2.0, 3.0]
                 embedding_vector = '[' + ','.join(str(x) for x in embedding_data.embedding) + ']'
+
+                # Estimate tokens for this text (proportional to char count)
+                text_tokens = int(api_tokens * len(texts[i]) / total_chars) if total_chars > 0 else 0
 
                 if target_table == "document_embeddings":
                     # Insert into document_embeddings table (simple insert, duplicates handled by resume query)
@@ -544,19 +570,20 @@ class EmbeddingWorker:
                         (document_id, chunk_text, embedding, model_name, tokens_used, content_type, embedding_dimension, created_at)
                         VALUES ($1, $2, $3::vector, $4, $5, 'document', $6, NOW())
                     """, ids[i], texts[i][:10000], embedding_vector, EMBEDDING_MODEL,
-                        len(texts[i]) // 4, EMBEDDING_DIMENSIONS)
+                        text_tokens, EMBEDDING_DIMENSIONS)
                 else:
                     # Insert into unified_embeddings table
                     source_name = f"document_{ids[i]}"
                     await pool.execute("""
                         INSERT INTO unified_embeddings
-                        (source_type, source_table, source_id, source_name, content, embedding, model_used, created_at)
-                        VALUES ('document', 'documents', $1, $2, $3, $4::vector, $5, NOW())
+                        (source_type, source_table, source_id, source_name, content, embedding, model_used, tokens_used, created_at)
+                        VALUES ('document', 'documents', $1, $2, $3, $4::vector, $5, $6, NOW())
                         ON CONFLICT (source_table, source_id) DO UPDATE
                         SET content = EXCLUDED.content,
                             embedding = EXCLUDED.embedding,
+                            tokens_used = EXCLUDED.tokens_used,
                             updated_at = NOW()
-                    """, ids[i], source_name, texts[i][:10000], embedding_vector, EMBEDDING_MODEL)
+                    """, ids[i], source_name, texts[i][:10000], embedding_vector, EMBEDDING_MODEL, text_tokens)
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")
