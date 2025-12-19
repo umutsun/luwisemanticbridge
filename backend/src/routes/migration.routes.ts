@@ -2405,12 +2405,13 @@ async function performMigration(migrationId: string, config: any) {
         }
 
         // OPTIMIZATION: Batch-check existing IDs in one query instead of per-record
-        const batchIds = result.rows.map(r => r.id);
+        // Convert IDs to integers (source tables may have text IDs)
+        const batchIds = result.rows.map(r => parseInt(r.id, 10)).filter(id => !isNaN(id));
         const existingCheck = await pools.targetPool.query(
-          `SELECT source_id FROM unified_embeddings WHERE source_table = $1 AND source_id = ANY($2::int[])`,
+          `SELECT source_id FROM unified_embeddings WHERE source_table = $1 AND source_id = ANY($2::bigint[])`,
           [table, batchIds]
         );
-        const existingIds = new Set(existingCheck.rows.map(r => r.source_id));
+        const existingIds = new Set(existingCheck.rows.map(r => Number(r.source_id)));
 
         // Count skipped duplicates in batch
         const skippedCount = existingIds.size;
@@ -2433,7 +2434,9 @@ async function performMigration(migrationId: string, config: any) {
             }
 
             // Skip if already exists (using batch-fetched Set)
-            if (existingIds.has(row.id)) {
+            // Convert row.id to number for comparison (may be text type)
+            const rowIdNum = parseInt(row.id, 10);
+            if (existingIds.has(rowIdNum)) {
               continue;
             }
 
