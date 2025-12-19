@@ -894,18 +894,22 @@ async function executeAutoResume(migrationId: string, progress: any, state: any)
               const content = texts[j];
 
               await pools.targetPool.query(`
-                INSERT INTO unified_embeddings (
-                  source_table, source_id, content, embedding,
-                  metadata, embedding_model, created_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                INSERT INTO unified_embeddings
+                (source_table, source_type, source_id, source_name, content, embedding, metadata)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (source_table, source_id) DO NOTHING
               `, [
                 table,
+                'csv',
                 record.id,
+                record.title || record.baslik || `Record ${record.id}`,
                 content,
                 JSON.stringify(embedding),
-                JSON.stringify({ originalId: record.id, table }),
-                embeddingSettings.model || 'text-embedding-3-small'
+                JSON.stringify({
+                  originalId: record.id,
+                  table,
+                  embeddingModel: embeddingSettings.model || 'text-embedding-3-small'
+                })
               ]);
 
               totalProcessed++;
