@@ -79,40 +79,49 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                {/* Source type and score - compact on mobile */}
-                {source.sourceType && (
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                      {source.sourceType}
-                    </span>
-                    {source.score && (
-                      <span className="text-[10px] sm:text-xs text-muted-foreground">
-                        %{Math.min(100, Math.round(source.score))}
-                      </span>
-                    )}
-                  </div>
+                {/* Document title from schema */}
+                {source.title && (
+                  <h4 className="text-xs sm:text-sm font-medium text-foreground line-clamp-1 mb-1">
+                    {source.title}
+                  </h4>
+                )}
+
+                {/* Content - fewer lines on mobile */}
+                {source.content && (
+                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4">
+                    {source.content}
+                  </p>
+                )}
+
+                {source.excerpt && !source.content && (
+                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4">
+                    {source.excerpt}
+                  </p>
                 )}
 
                 {/* LLM-generated summary - hidden on mobile */}
                 {source.summary && (
-                  <div className="hidden sm:block mt-2 p-2 rounded bg-primary/5 border-l-2 border-primary/30">
+                  <div className="hidden sm:block mt-1.5 p-2 rounded bg-primary/5 border-l-2 border-primary/30">
                     <p className="text-xs text-primary font-medium">
                       💡 {source.summary}
                     </p>
                   </div>
                 )}
 
-                {/* Content - fewer lines on mobile */}
-                {source.content && (
-                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4 mt-1 sm:mt-1.5">
-                    {source.content}
-                  </p>
-                )}
-
-                {source.excerpt && !source.content && (
-                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4 mt-1 sm:mt-1.5">
-                    {source.excerpt}
-                  </p>
+                {/* Source type/category at the bottom - smaller font */}
+                {(source.sourceType || source.category) && (
+                  <div className="flex items-center gap-1.5 mt-1.5 sm:mt-2">
+                    {source.sourceType && (
+                      <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {source.sourceType}
+                      </span>
+                    )}
+                    {source.category && (
+                      <span className="text-[9px] sm:text-[10px] text-muted-foreground/70">
+                        • {source.category}
+                      </span>
+                    )}
+                  </div>
                 )}
 
               </div>
