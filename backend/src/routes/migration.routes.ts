@@ -2394,8 +2394,10 @@ async function performMigration(migrationId: string, config: any) {
       let hasMore = true;
 
       while (hasMore) {
+        // Order by id as integer to match how embeddings were originally created
+        // (text sorting differs from numeric sorting: '10001' < '1806' in text but not numerically)
         const result = await pools.sourcePool.query(
-          `SELECT * FROM public."${table}" ORDER BY id LIMIT $1 OFFSET $2`,
+          `SELECT * FROM public."${table}" ORDER BY id::int LIMIT $1 OFFSET $2`,
           [batchSize, offset]
         );
 
