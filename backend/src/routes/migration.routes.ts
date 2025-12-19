@@ -892,12 +892,16 @@ async function executeAutoResume(migrationId: string, progress: any, state: any)
               const record = batch[j];
               const embedding = embeddingResponse.data[j].embedding;
               const content = texts[j];
+              const tokenEstimate = Math.ceil(content.length / 3); // ~3 chars/token for Turkish
 
               await pools.targetPool.query(`
                 INSERT INTO unified_embeddings
-                (source_table, source_type, source_id, source_name, content, embedding, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (source_table, source_id) DO NOTHING
+                (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (source_table, source_id) DO UPDATE SET
+                  tokens_used = EXCLUDED.tokens_used,
+                  model_used = EXCLUDED.model_used,
+                  updated_at = NOW()
               `, [
                 table,
                 'csv',
@@ -909,7 +913,10 @@ async function executeAutoResume(migrationId: string, progress: any, state: any)
                   originalId: record.id,
                   table,
                   embeddingModel: embeddingSettings.model || 'text-embedding-3-small'
-                })
+                }),
+                tokenEstimate,
+                embeddingSettings.model || 'text-embedding-3-small',
+                'openai'
               ]);
 
               totalProcessed++;
@@ -2478,12 +2485,17 @@ async function performMigration(migrationId: string, config: any) {
               metadata.kurum = row.kurum;
             }
 
-            // Insert into unified_embeddings (skip if duplicate)
+            // Insert into unified_embeddings with token tracking
+            const tokensUsed = Math.ceil(truncatedContent.length / 3);
+
             await pools.targetPool.query(`
               INSERT INTO unified_embeddings
-              (source_table, source_type, source_id, source_name, content, embedding, metadata)
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
-              ON CONFLICT (source_table, source_id) DO NOTHING
+              (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              ON CONFLICT (source_table, source_id) DO UPDATE SET
+                tokens_used = EXCLUDED.tokens_used,
+                model_used = EXCLUDED.model_used,
+                updated_at = NOW()
             `, [
               table,
               sourceType,
@@ -2491,7 +2503,10 @@ async function performMigration(migrationId: string, config: any) {
               title,
               truncatedContent,
               `[${embedding.join(',')}]`,
-              JSON.stringify(metadata)
+              JSON.stringify(metadata),
+              tokensUsed,
+              metadata.embeddingModel || 'text-embedding-ada-002',
+              metadata.embeddingProvider || 'openai'
             ]);
             
             totalProcessed++;
