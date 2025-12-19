@@ -2429,7 +2429,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
           text,
           `[${embedding.join(',')}]`,
           JSON.stringify({ table, id, content_hash: contentHash }),
-          150,
+          Math.ceil(text.length / 3), // Estimated tokens
           model,
           contentHash  // $10: NEW content_hash parameter
         ]
@@ -2453,7 +2453,7 @@ async function saveEmbedding(table: string, row: any, id: any, text: string, emb
             `[${embedding.join(',')}]`,
             text,
             contentHash,  // NEW: Update content_hash on update
-            150,
+            Math.ceil(text.length / 3), // Estimated tokens: ~3 chars/token for Turkish
             model,
             canonicalName,
             numericId
