@@ -112,17 +112,23 @@ async function initializePools(forceRefresh: boolean = false): Promise<{ sourceP
 
       sourcePool = new Pool({
         connectionString: sourceConnectionString,
-        connectionTimeoutMillis: 30000, // 30 second timeout for initial connection
-        idleTimeoutMillis: 300000, // 5 minutes idle timeout (longer for slow embedding API)
-        max: 15,
+        connectionTimeoutMillis: 60000, // 60 second timeout for initial connection
+        idleTimeoutMillis: 60000, // 1 minute idle timeout - release connections quickly
+        max: 5, // Reduced from 15 - we don't need many concurrent connections
+        min: 1, // Keep at least 1 connection alive
         allowExitOnIdle: false, // Keep pool alive
+        statement_timeout: 120000, // 2 minute statement timeout
+        query_timeout: 120000, // 2 minute query timeout
       });
       targetPool = new Pool({
         connectionString: targetConnectionString,
-        connectionTimeoutMillis: 30000,
-        idleTimeoutMillis: 300000, // 5 minutes idle timeout
-        max: 15,
+        connectionTimeoutMillis: 60000,
+        idleTimeoutMillis: 60000, // 1 minute idle timeout
+        max: 5, // Reduced from 15
+        min: 1,
         allowExitOnIdle: false,
+        statement_timeout: 120000,
+        query_timeout: 120000,
       });
 
       // Validate connections before returning
@@ -1243,7 +1249,7 @@ router.post('/generate', async (req: Request, res: Response) => {
   });
 
   try {
-    const pools = await initializePools();
+    let pools = await initializePools();
 
     // Get embedding settings (will be used for metadata tracking)
     const { pool: lsembPool } = await import('../config/database');
@@ -1422,12 +1428,39 @@ router.post('/generate', async (req: Request, res: Response) => {
       while (true) {
         // Fetch a batch of records from source (with pagination)
         // Note: ORDER BY id::int ensures numeric sorting even if id column is text type
-        const batchResult = await pools.sourcePool.query(
-          `SELECT id, * FROM public."${table}" ORDER BY id::int LIMIT $1 OFFSET $2`,
-          [BATCH_FETCH_SIZE, offset]
-        );
+        let batchResult;
+        let retryCount = 0;
+        const maxRetries = 3;
 
-        if (batchResult.rows.length === 0) break; // No more records
+        while (retryCount < maxRetries) {
+          try {
+            batchResult = await pools.sourcePool.query(
+              `SELECT id, * FROM public."${table}" ORDER BY id::int LIMIT $1 OFFSET $2`,
+              [BATCH_FETCH_SIZE, offset]
+            );
+            break; // Success, exit retry loop
+          } catch (dbError: any) {
+            retryCount++;
+            console.error(`❌ DB query failed (attempt ${retryCount}/${maxRetries}):`, dbError.message);
+
+            if (retryCount >= maxRetries) {
+              throw dbError; // Give up after max retries
+            }
+
+            // Wait before retry (exponential backoff)
+            const waitTime = Math.min(5000 * retryCount, 15000);
+            console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+
+            // Refresh pools on connection errors
+            if (dbError.message.includes('timeout') || dbError.message.includes('terminated') || dbError.message.includes('ECONNRESET')) {
+              console.log('🔄 Refreshing database pools...');
+              pools = await initializePools(true);
+            }
+          }
+        }
+
+        if (!batchResult || batchResult.rows.length === 0) break; // No more records
 
         // Filter out already embedded records
         // Note: row.id might be string or number depending on source table, so we compare as numbers
