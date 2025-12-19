@@ -249,13 +249,46 @@ export default function DashboardPage() {
     port?: number;
   } | null>(null);
 
-  // Real-time resources data for animations
+  // Real-time resources data from SSE stream
   const [realtimeResources, setRealtimeResources] = useState({
-    cpu: 24,
-    memory: 67,
-    disk: 45,
-    gpu: 12
+    cpu: 0,
+    memory: 0,
+    disk: 0,
+    gpu: 0,
+    loadAvg: [0, 0, 0],
+    memoryDetails: {
+      used: 0,
+      total: 0,
+      free: 0,
+      heapUsed: 0,
+      heapTotal: 0
+    }
   });
+
+  // Pipeline status for active processes
+  const [pipelines, setPipelines] = useState<Array<{
+    name: string;
+    type: string;
+    status: string;
+    progress?: number;
+    current?: number;
+    total?: number;
+    speed?: number;
+    eta?: string;
+    error?: string;
+  }>>([]);
+
+  // Services status
+  const [servicesStatus, setServicesStatus] = useState<Array<{
+    name: string;
+    status: string;
+    uptime?: number;
+    memory?: number;
+    port?: number;
+  }>>([]);
+
+  // SSE connection status
+  const [sseConnected, setSseConnected] = useState(false);
 
   // Component mount'da verileri çek
   useEffect(() => {
@@ -313,18 +346,93 @@ export default function DashboardPage() {
   //   }
   // }, [isConsolePaused]);
 
-  // Simulate real-time resource updates
+  // Real-time SSE connection for system metrics
   useEffect(() => {
-    const interval = setInterval(() => {
-      setRealtimeResources(prev => ({
-        cpu: Math.max(5, Math.min(95, prev.cpu + (Math.random() - 0.5) * 10)),
-        memory: Math.max(20, Math.min(90, prev.memory + (Math.random() - 0.5) * 5)),
-        disk: Math.max(30, Math.min(80, prev.disk + (Math.random() - 0.5) * 2)),
-        gpu: Math.max(0, Math.min(100, prev.gpu + (Math.random() - 0.5) * 15))
-      }));
-    }, 2000); // Update every 2 seconds
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
 
-    return () => clearInterval(interval);
+    const connect = () => {
+      try {
+        const sseUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/dashboard/stream`;
+        eventSource = new EventSource(sseUrl);
+
+        eventSource.onopen = () => {
+          setSseConnected(true);
+          addConsoleLog('[SSE] Real-time dashboard stream connected', 'success', 'system');
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            // Update system resources
+            if (data.systemMetrics) {
+              setRealtimeResources({
+                cpu: data.systemMetrics.cpu || 0,
+                memory: data.systemMetrics.memory || 0,
+                disk: data.systemMetrics.disk || 0,
+                gpu: 0, // GPU not tracked on server
+                loadAvg: data.systemMetrics.loadAvg || [0, 0, 0],
+                memoryDetails: data.systemMetrics.memoryDetails || {
+                  used: 0,
+                  total: 0,
+                  free: 0,
+                  heapUsed: 0,
+                  heapTotal: 0
+                }
+              });
+            }
+
+            // Update pipelines status
+            if (data.pipelines) {
+              setPipelines(data.pipelines);
+            }
+
+            // Update services status
+            if (data.services) {
+              setServicesStatus(data.services);
+            }
+
+            // Update database stats
+            if (data.database) {
+              setEmbeddingStats(prev => ({
+                ...prev,
+                total_embeddings: data.database.embeddings || 0
+              }));
+              setDocumentStats(prev => ({
+                ...prev,
+                total: data.database.documents || 0
+              }));
+            }
+
+          } catch (err) {
+            console.error('SSE parse error:', err);
+          }
+        };
+
+        eventSource.onerror = () => {
+          setSseConnected(false);
+          eventSource?.close();
+
+          // Reconnect after 5 seconds
+          reconnectTimeout = setTimeout(() => {
+            addConsoleLog('[SSE] Reconnecting to dashboard stream...', 'warn', 'system');
+            connect();
+          }, 5000);
+        };
+
+      } catch (err) {
+        console.error('SSE connection error:', err);
+        setSseConnected(false);
+      }
+    };
+
+    connect();
+
+    return () => {
+      eventSource?.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
   }, []);
 
   // Fetch chat statistics
@@ -1597,6 +1705,196 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Active Pipelines & Services Status */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+          {/* Active Pipelines */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${pipelines.some(p => p.status === 'running') ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                  <h3 className="text-sm font-semibold tracking-tight">Active Pipelines</h3>
+                </div>
+                <Badge variant={sseConnected ? "default" : "secondary"} className="text-xs">
+                  {sseConnected ? 'Live' : 'Offline'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {pipelines.length === 0 || pipelines.every(p => p.status === 'idle') ? (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <div className="text-2xl mb-2">✓</div>
+                  <p className="text-sm">No active pipelines</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pipelines.filter(p => p.status !== 'idle').map((pipeline, idx) => (
+                    <div key={idx} className={`p-4 rounded-lg border ${
+                      pipeline.status === 'running' ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' :
+                      pipeline.status === 'paused' ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800' :
+                      pipeline.status === 'error' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800' :
+                      pipeline.status === 'completed' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' :
+                      'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                    }`}>
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-medium text-sm">{pipeline.name}</h4>
+                          <span className="text-xs text-gray-500 capitalize">{pipeline.type}</span>
+                        </div>
+                        <Badge variant={
+                          pipeline.status === 'running' ? 'default' :
+                          pipeline.status === 'paused' ? 'secondary' :
+                          pipeline.status === 'error' ? 'destructive' :
+                          'outline'
+                        } className="text-xs capitalize">
+                          {pipeline.status === 'running' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                          {pipeline.status === 'completed' && <CheckCircle className="w-3 h-3 mr-1" />}
+                          {pipeline.status === 'error' && <AlertTriangle className="w-3 h-3 mr-1" />}
+                          {pipeline.status}
+                        </Badge>
+                      </div>
+
+                      {pipeline.progress !== undefined && (
+                        <>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                pipeline.status === 'error' ? 'bg-red-500' :
+                                pipeline.status === 'paused' ? 'bg-yellow-500' :
+                                'bg-blue-500'
+                              }`}
+                              style={{ width: `${pipeline.progress}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                            <span>{pipeline.current?.toLocaleString() || 0} / {pipeline.total?.toLocaleString() || 0}</span>
+                            <span>{pipeline.progress}%</span>
+                          </div>
+                        </>
+                      )}
+
+                      {(pipeline.speed || pipeline.eta) && (
+                        <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                          {pipeline.speed && <span>Speed: {pipeline.speed}/min</span>}
+                          {pipeline.eta && <span>ETA: {pipeline.eta}</span>}
+                        </div>
+                      )}
+
+                      {pipeline.error && (
+                        <div className="mt-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 p-2 rounded">
+                          {pipeline.error}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Services Status */}
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${servicesStatus.every(s => s.status === 'running') ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                <h3 className="text-sm font-semibold tracking-tight">Services Status</h3>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-3">
+                {servicesStatus.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                    <p className="text-sm">Loading services...</p>
+                  </div>
+                ) : (
+                  servicesStatus.map((service, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${
+                          service.status === 'running' ? 'bg-green-500' :
+                          service.status === 'error' ? 'bg-red-500' :
+                          'bg-gray-400'
+                        }`} />
+                        <div>
+                          <div className="font-medium text-sm">{service.name}</div>
+                          {service.port && <div className="text-xs text-gray-500">Port: {service.port}</div>}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={service.status === 'running' ? 'default' : 'secondary'} className="text-xs capitalize">
+                          {service.status}
+                        </Badge>
+                        {service.uptime && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Uptime: {Math.floor(service.uptime / 60)}m
+                          </div>
+                        )}
+                        {service.memory && (
+                          <div className="text-xs text-gray-500">
+                            Memory: {service.memory} MB
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Memory Details */}
+              {realtimeResources.memoryDetails.total > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-800 rounded-lg">
+                  <div className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">Memory Details</div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-gray-500">Used:</span>
+                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.used} MB</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Free:</span>
+                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.free} MB</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Total:</span>
+                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.total} MB</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs mt-2 pt-2 border-t border-blue-100 dark:border-blue-700">
+                    <div>
+                      <span className="text-gray-500">Heap Used:</span>
+                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.heapUsed} MB</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Heap Total:</span>
+                      <span className="font-medium ml-1">{realtimeResources.memoryDetails.heapTotal} MB</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Load Average */}
+              {realtimeResources.loadAvg[0] > 0 && (
+                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-lg">
+                  <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Load Average</div>
+                  <div className="flex gap-4 text-xs">
+                    <div>
+                      <span className="text-gray-500">1 min:</span>
+                      <span className="font-medium ml-1">{realtimeResources.loadAvg[0]?.toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">5 min:</span>
+                      <span className="font-medium ml-1">{realtimeResources.loadAvg[1]?.toFixed(2)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">15 min:</span>
+                      <span className="font-medium ml-1">{realtimeResources.loadAvg[2]?.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

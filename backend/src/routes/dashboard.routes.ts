@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { getDatabaseSettings, getCustomerPool, getAiSettings } from '../config/database.config';
 import { pgPool as lsembPool } from '../server'; // Import the centralized pool
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { SystemMetricsService } from '../services/system-metrics.service';
 
 const router = Router();
 const ragAnythingRouter = Router();
@@ -1414,64 +1415,30 @@ router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
   try {
     const { pgPool, redis } = require('../server');
 
+    // Initialize metrics service
+    const metricsService = new SystemMetricsService(pgPool, redis);
+
     const sendDashboardData = async () => {
       if (isConnectionClosed) return;
 
       try {
-        let documentsCount = 0, conversationsCount = 0, messagesCount = 0, dbSize = 0;
-
-        try {
-          if (!pgPool || !pgPool.query) {
-            throw new Error('pgPool is not available');
-          }
-          const convResult = await pgPool.query(`SELECT COUNT(*) as count FROM conversations`);
-          conversationsCount = convResult.rows[0].count || 0;
-        } catch (err) { /* ignore */ }
-
-        try {
-          if (!pgPool || !pgPool.query) {
-            throw new Error('pgPool is not available');
-          }
-          const msgResult = await pgPool.query(`SELECT COUNT(*) as count FROM messages`);
-          messagesCount = msgResult.rows[0].count || 0;
-        } catch (err) { /* ignore */ }
-
-        try {
-          if (!pgPool || !pgPool.query) {
-            throw new Error('pgPool is not available');
-          }
-          const sizeResult = await pgPool.query(`SELECT pg_database_size(current_database()) as db_size`);
-          dbSize = sizeResult.rows[0].db_size || 0;
-        } catch (err) { /* ignore */ }
-
-        let redisStats = { connected: false, used_memory: '0 MB' };
-        try {
-          if (redis && redis.status === 'ready') {
-            const info = await redis.info('memory');
-            const memMatch = info.match(/used_memory_human:(.+)/);
-            redisStats.connected = true;
-            redisStats.used_memory = memMatch ? memMatch[1].trim() : '0 MB';
-          }
-        } catch (err) { /* ignore */ }
-
-        // LightRAG disabled
-        let lightragStats = { initialized: false, documentCount: 0, error: 'Service disabled' };
+        // Get all system metrics using the service
+        const metrics = await metricsService.getAllMetrics();
 
         // Get recent activity
         let recentActivity = [];
         try {
-          if (!pgPool || !pgPool.query) {
-            throw new Error('pgPool is not available');
+          if (pgPool && pgPool.query) {
+            const activityResult = await pgPool.query(`
+              SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
+              FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id
+              GROUP BY c.id ORDER BY c.created_at DESC LIMIT 10
+            `);
+            recentActivity = activityResult.rows;
           }
-          const activityResult = await pgPool.query(`
-            SELECT c.id, c.title, COUNT(m.id) as message_count, c.created_at
-            FROM conversations c LEFT JOIN messages m ON m.conversation_id = c.id
-            GROUP BY c.id ORDER BY c.created_at DESC LIMIT 10
-          `);
-          recentActivity = activityResult.rows;
         } catch (err) { /* ignore */ }
 
-        // Get embedding progress
+        // Get embedding progress from Redis
         let embeddingProgress = { status: 'idle', percentage: 0 };
         try {
           const progressData = await redis.get('embedding:progress');
@@ -1480,28 +1447,55 @@ router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
           }
         } catch (err) { /* ignore */ }
 
-        // Get system metrics
-        const systemMetrics = {
-          cpu: Math.random() * 100, // Mock CPU usage
-          memory: Math.random() * 100, // Mock Memory usage
-          disk: Math.random() * 100, // Mock Disk usage
-          timestamp: Date.now()
-        };
-
-        const formattedSize = dbSize > 1073741824 ? `${(dbSize / 1073741824).toFixed(2)} GB` : `${(dbSize / 1048576).toFixed(2)} MB`;
-
         const dashboardData = {
-          database: {
-            documents: documentsCount,
-            conversations: conversationsCount,
-            messages: messagesCount,
-            size: formattedSize
+          // System resources (real data)
+          systemMetrics: {
+            cpu: metrics.cpu.usage,
+            memory: metrics.memory.percentage,
+            disk: metrics.disk.percentage,
+            loadAvg: metrics.cpu.loadAvg,
+            memoryDetails: {
+              used: metrics.memory.used,
+              total: metrics.memory.total,
+              free: metrics.memory.free,
+              heapUsed: metrics.memory.heapUsed,
+              heapTotal: metrics.memory.heapTotal
+            },
+            timestamp: Date.now()
           },
-          redis: redisStats,
-          lightrag: lightragStats,
+          // Database stats
+          database: {
+            documents: metrics.database.documents,
+            conversations: 0,
+            messages: 0,
+            size: metrics.database.size,
+            embeddings: metrics.database.embeddings,
+            tables: metrics.database.tables,
+            connectionPool: metrics.database.connectionPool
+          },
+          // Redis stats
+          redis: {
+            connected: metrics.redis.connected,
+            used_memory: metrics.redis.usedMemory,
+            totalKeys: metrics.redis.totalKeys,
+            hitRate: metrics.redis.hitRate
+          },
+          // Services status
+          services: metrics.services,
+          // Active pipelines (embedding, crawlers, etc.)
+          pipelines: metrics.pipelines,
+          // Process info
+          process: {
+            uptime: metrics.process.uptime,
+            nodeVersion: metrics.process.nodeVersion,
+            platform: metrics.process.platform
+          },
+          // Recent activity
           recentActivity: recentActivity,
+          // Legacy embedding progress for backward compatibility
           embeddingProgress: embeddingProgress,
-          systemMetrics: systemMetrics,
+          // LightRAG disabled
+          lightrag: { initialized: false, documentCount: 0, error: 'Service disabled' },
           timestamp: new Date().toISOString()
         };
 
@@ -1517,8 +1511,8 @@ router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
     // Send initial data
     await sendDashboardData();
 
-    // Send updates every 5 seconds
-    intervalId = setInterval(sendDashboardData, 5000);
+    // Send updates every 3 seconds for more responsive monitoring
+    intervalId = setInterval(sendDashboardData, 3000);
 
     req.on('close', () => {
       cleanup();
