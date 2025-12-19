@@ -496,9 +496,9 @@ class EmbeddingWorker:
                 embedding_vector = '[' + ','.join(str(x) for x in embedding_data.embedding) + ']'
                 await pool.execute("""
                     INSERT INTO unified_embeddings
-                    (source_type, source_table, source_id, content, embedding, model_used, created_at)
-                    VALUES ('document', 'documents', $1, $2, $3::vector, $4, NOW())
-                    ON CONFLICT (source_type, source_table, source_id) DO UPDATE
+                    (source_type, source_table, source_id, source_name, content, embedding, model_used, created_at)
+                    VALUES ('document', 'documents', $1, 'document_' || $1::text, $2, $3::vector, $4, NOW())
+                    ON CONFLICT (source_table, source_id) DO UPDATE
                     SET content = EXCLUDED.content,
                         embedding = EXCLUDED.embedding,
                         updated_at = NOW()
