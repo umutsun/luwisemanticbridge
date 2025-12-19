@@ -58,6 +58,10 @@ async def lifespan(app: FastAPI):
         await init_db()
         await init_redis()
         logger.info("✅ All services initialized successfully")
+
+        # Auto-recovery: Check for crashed batch jobs and resume them
+        await check_and_recover_crashed_jobs()
+
     except Exception as e:
         logger.error(f"❌ Failed to initialize services: {e}")
         raise
@@ -72,6 +76,41 @@ async def lifespan(app: FastAPI):
     await close_db()
     await close_redis()
     logger.info("👋 Shutdown complete")
+
+
+async def check_and_recover_crashed_jobs():
+    """
+    Auto-recovery: Check Redis for crashed batch jobs and resume them.
+    This runs at startup to handle cases where the service crashed mid-processing.
+    """
+    logger.info("🔍 Checking for crashed batch jobs to recover...")
+
+    recovered_count = 0
+
+    try:
+        # Check document analyzer for crashed state
+        from services.document_analyzer_service import document_analyzer
+        analyzer_result = await document_analyzer.check_and_recover()
+        if analyzer_result and analyzer_result.get("recovered"):
+            logger.info(f"📄 Recovered document analyzer job: {analyzer_result}")
+            recovered_count += 1
+    except Exception as e:
+        logger.warning(f"Could not check document analyzer recovery: {e}")
+
+    try:
+        # Check embedding worker for crashed state
+        from services.embedding_service import embedding_worker
+        embedding_result = await embedding_worker.check_and_recover()
+        if embedding_result and embedding_result.get("recovered"):
+            logger.info(f"🔢 Recovered embedding job: {embedding_result}")
+            recovered_count += 1
+    except Exception as e:
+        logger.warning(f"Could not check embedding recovery: {e}")
+
+    if recovered_count > 0:
+        logger.info(f"✅ Auto-recovered {recovered_count} crashed job(s)")
+    else:
+        logger.info("✅ No crashed jobs to recover")
 
 # Create FastAPI app
 app = FastAPI(
