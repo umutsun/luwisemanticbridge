@@ -494,15 +494,16 @@ class EmbeddingWorker:
             for i, embedding_data in enumerate(response.data):
                 # Convert embedding list to pgvector string format: [1.0, 2.0, 3.0]
                 embedding_vector = '[' + ','.join(str(x) for x in embedding_data.embedding) + ']'
+                source_name = f"document_{ids[i]}"
                 await pool.execute("""
                     INSERT INTO unified_embeddings
                     (source_type, source_table, source_id, source_name, content, embedding, model_used, created_at)
-                    VALUES ('document', 'documents', $1, 'document_' || $1::text, $2, $3::vector, $4, NOW())
+                    VALUES ('document', 'documents', $1, $2, $3, $4::vector, $5, NOW())
                     ON CONFLICT (source_table, source_id) DO UPDATE
                     SET content = EXCLUDED.content,
                         embedding = EXCLUDED.embedding,
                         updated_at = NOW()
-                """, ids[i], texts[i][:10000], embedding_vector, EMBEDDING_MODEL)
+                """, ids[i], source_name, texts[i][:10000], embedding_vector, EMBEDDING_MODEL)
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")
