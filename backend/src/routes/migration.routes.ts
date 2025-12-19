@@ -163,9 +163,16 @@ async function getOpenAIClient(): Promise<OpenAI | null> {
   }
 
   try {
-    // Get API key from settings table
-    const { lsembPool } = await import('../config/database');
-    const result = await lsembPool.query(
+    // Get API key from settings table - use default export 'pool'
+    const dbModule = await import('../config/database');
+    const dbPool = dbModule.default || dbModule.pool;
+
+    if (!dbPool) {
+      console.error('Database pool not available yet');
+      return null;
+    }
+
+    const result = await dbPool.query(
       'SELECT value FROM settings WHERE key = $1',
       ['openai.apiKey']
     );

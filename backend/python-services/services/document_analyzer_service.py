@@ -28,11 +28,20 @@ import io
 import logging
 import json
 import re
+import redis
 from typing import Dict, List, Optional
 from pathlib import Path
 from datetime import datetime
+import time
 
 logger = logging.getLogger(__name__)
+
+# Redis configuration for auto-recovery (minimal state only)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_DB = int(os.getenv("REDIS_DB", "2"))  # Vergilex uses DB 2
+REDIS_KEY_PREFIX = "doc_analyzer"
+HEARTBEAT_INTERVAL = 10  # seconds
+HEARTBEAT_TIMEOUT = 30  # seconds - if no heartbeat, consider crashed
 
 # Configuration
 DOCS_BASE_PATH = os.getenv("DOCS_PATH", "/var/www/vergilex/docs")
@@ -95,7 +104,7 @@ SKIP_REASONS = {
 
 
 class DocumentAnalyzerService:
-    """Service for batch PDF text extraction"""
+    """Service for batch PDF text extraction with Redis auto-recovery"""
 
     def __init__(self):
         self.is_running = False
@@ -109,6 +118,139 @@ class DocumentAnalyzerService:
             "last_activity": None
         }
         self._pool: Optional[asyncpg.Pool] = None
+        self._redis: Optional[redis.Redis] = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
+
+    def _get_redis(self) -> redis.Redis:
+        """Get Redis connection (lazy initialization)"""
+        if self._redis is None:
+            try:
+                self._redis = redis.from_url(REDIS_URL, db=REDIS_DB, decode_responses=True)
+                self._redis.ping()
+                logger.info(f"Redis connected: {REDIS_URL} DB {REDIS_DB}")
+            except Exception as e:
+                logger.warning(f"Redis connection failed: {e} - auto-recovery disabled")
+                self._redis = None
+        return self._redis
+
+    def _redis_key(self, suffix: str) -> str:
+        """Generate Redis key with prefix"""
+        return f"{REDIS_KEY_PREFIX}:{suffix}"
+
+    def _save_state_to_redis(self):
+        """Save minimal state to Redis (just flags, no arrays)"""
+        r = self._get_redis()
+        if not r:
+            return
+
+        try:
+            # Only save essential flags - NO arrays or heavy data
+            state = {
+                "is_running": "1" if self.is_running else "0",
+                "batch_size": str(self.current_job.get("batch_size", 10)) if self.current_job else "10",
+                "started_at": self.stats.get("started_at", ""),
+                "processed": str(self.stats.get("total_processed", 0)),
+                "success": str(self.stats.get("total_success", 0)),
+                "errors": str(self.stats.get("total_errors", 0))
+            }
+            r.hset(self._redis_key("state"), mapping=state)
+            r.set(self._redis_key("heartbeat"), str(int(time.time())))
+            logger.debug("State saved to Redis")
+        except Exception as e:
+            logger.warning(f"Failed to save state to Redis: {e}")
+
+    def _clear_redis_state(self):
+        """Clear Redis state when stopping"""
+        r = self._get_redis()
+        if not r:
+            return
+
+        try:
+            r.delete(self._redis_key("state"))
+            r.delete(self._redis_key("heartbeat"))
+            logger.info("Redis state cleared")
+        except Exception as e:
+            logger.warning(f"Failed to clear Redis state: {e}")
+
+    def _check_crashed_state(self) -> Optional[Dict]:
+        """Check if there's a crashed state that needs recovery"""
+        r = self._get_redis()
+        if not r:
+            return None
+
+        try:
+            state = r.hgetall(self._redis_key("state"))
+            if not state or state.get("is_running") != "1":
+                return None
+
+            # Check heartbeat
+            heartbeat = r.get(self._redis_key("heartbeat"))
+            if not heartbeat:
+                return None
+
+            last_heartbeat = int(heartbeat)
+            elapsed = int(time.time()) - last_heartbeat
+
+            if elapsed > HEARTBEAT_TIMEOUT:
+                logger.warning(f"Found crashed state! Last heartbeat {elapsed}s ago")
+                return {
+                    "batch_size": int(state.get("batch_size", 10)),
+                    "started_at": state.get("started_at", ""),
+                    "processed": int(state.get("processed", 0)),
+                    "success": int(state.get("success", 0)),
+                    "errors": int(state.get("errors", 0))
+                }
+
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to check crashed state: {e}")
+            return None
+
+    async def check_and_recover(self) -> Optional[Dict]:
+        """Check for crashed state and auto-recover if found"""
+        crashed = self._check_crashed_state()
+        if not crashed:
+            return None
+
+        logger.info(f"Auto-recovering from crashed state: {crashed}")
+
+        # Clear old state first
+        self._clear_redis_state()
+
+        # Get current pending count from DB (fresh query, no stored arrays)
+        total_pending = await self.get_total_pending()
+
+        if total_pending == 0:
+            logger.info("No pending documents, recovery not needed")
+            return {"recovered": False, "reason": "no_pending_documents"}
+
+        # Start fresh batch with same batch_size
+        batch_size = crashed.get("batch_size", 10)
+        result = await self.start_batch_analyze(batch_size=batch_size)
+
+        return {
+            "recovered": True,
+            "previous_processed": crashed.get("processed", 0),
+            "previous_success": crashed.get("success", 0),
+            "previous_errors": crashed.get("errors", 0),
+            "pending_now": total_pending,
+            "batch_size": batch_size,
+            "start_result": result
+        }
+
+    async def _heartbeat_loop(self):
+        """Background heartbeat to Redis"""
+        while self.is_running:
+            try:
+                r = self._get_redis()
+                if r:
+                    r.set(self._redis_key("heartbeat"), str(int(time.time())))
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Heartbeat error: {e}")
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
 
     async def get_pool(self) -> asyncpg.Pool:
         """Get or create database connection pool"""
@@ -464,7 +606,7 @@ class DocumentAnalyzerService:
                 return {"id": doc_id, "success": False, "error": str(e)}
 
     async def start_batch_analyze(self, batch_size: int = 10, limit: int = 0) -> Dict:
-        """Start batch analysis of pending documents"""
+        """Start batch analysis of pending documents with auto-recovery support"""
         if self.is_running:
             return {"success": False, "message": "Analysis already running"}
 
@@ -490,8 +632,16 @@ class DocumentAnalyzerService:
             "started_at": datetime.now().isoformat()
         }
 
+        # Save initial state to Redis for recovery
+        self._save_state_to_redis()
+
+        # Start heartbeat task
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
         # Start background processing
         asyncio.create_task(self._process_batch_analyze(batch_size, limit))
+
+        logger.info(f"Started batch analysis: {total_pending} pending, batch_size={batch_size}")
 
         return {
             "success": True,
@@ -500,7 +650,7 @@ class DocumentAnalyzerService:
         }
 
     async def _process_batch_analyze(self, batch_size: int, limit: int):
-        """Background batch processing"""
+        """Background batch processing with Redis state persistence"""
         try:
             processed = 0
             max_docs = limit if limit > 0 else float('inf')
@@ -523,21 +673,32 @@ class DocumentAnalyzerService:
                     if not self.is_running:
                         break
 
-                    result = await self.analyze_document(doc)
+                    try:
+                        result = await self.analyze_document(doc)
 
-                    self.stats["total_processed"] += 1
-                    if result.get("success"):
-                        self.stats["total_success"] += 1
-                    else:
+                        self.stats["total_processed"] += 1
+                        if result.get("success"):
+                            self.stats["total_success"] += 1
+                        else:
+                            self.stats["total_errors"] += 1
+
+                        self.stats["last_activity"] = datetime.now().isoformat()
+                        processed += 1
+
+                        # Save state to Redis every 5 documents (minimal overhead)
+                        if processed % 5 == 0:
+                            self._save_state_to_redis()
+
+                        if processed % 10 == 0:
+                            logger.info(f"Analyzed {processed} documents - Success: {self.stats['total_success']}, Errors: {self.stats['total_errors']}")
+
+                    except Exception as doc_error:
+                        logger.error(f"Document {doc.get('id')} failed: {doc_error}")
                         self.stats["total_errors"] += 1
+                        processed += 1
+                        # Continue with next document, don't crash entire batch
 
-                    self.stats["last_activity"] = datetime.now().isoformat()
-                    processed += 1
-
-                    if processed % 10 == 0:
-                        logger.info(f"Analyzed {processed} documents - Success: {self.stats['total_success']}, Errors: {self.stats['total_errors']}")
-
-                # Small delay between batches
+                # Small delay between batches to prevent resource exhaustion
                 await asyncio.sleep(0.5)
 
             logger.info(f"Batch analysis completed: {self.stats}")
@@ -545,8 +706,23 @@ class DocumentAnalyzerService:
         except Exception as e:
             logger.error(f"Batch analysis error: {e}")
         finally:
+            # Cleanup
             self.is_running = False
             self.current_job = None
+
+            # Cancel heartbeat task
+            if self._heartbeat_task:
+                self._heartbeat_task.cancel()
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                self._heartbeat_task = None
+
+            # Clear Redis state (job completed or stopped)
+            self._clear_redis_state()
+
+            logger.info("Batch analysis finished, Redis state cleared")
 
     def pause(self):
         """Pause analysis"""
@@ -559,8 +735,10 @@ class DocumentAnalyzerService:
         return {"success": True, "message": "Analysis resumed"}
 
     def stop(self):
-        """Stop analysis"""
+        """Stop analysis and clear Redis state"""
         self.is_running = False
+        self._clear_redis_state()
+        logger.info("Analysis stopped by user")
         return {"success": True, "message": "Analysis stopped"}
 
     def get_status(self) -> Dict:

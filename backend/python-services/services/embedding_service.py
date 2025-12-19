@@ -2,10 +2,17 @@
 Embedding Service
 Handles embedding generation for CSV tables and documents
 Uses OpenAI text-embedding-3-small (1536 dimensions)
+
+Features:
+- Redis-based auto-recovery: if process crashes, automatically resumes on restart
+- Heartbeat mechanism: detects crashed states
+- Minimal Redis usage: only stores flags, not arrays
 """
 
 import os
 import asyncio
+import redis
+import time
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from loguru import logger
@@ -19,9 +26,16 @@ DEFAULT_BATCH_SIZE = 100
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
+# Redis configuration for auto-recovery (minimal state only)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_DB = int(os.getenv("REDIS_DB", "2"))  # Vergilex uses DB 2
+REDIS_KEY_PREFIX = "embedding_worker"
+HEARTBEAT_INTERVAL = 10  # seconds
+HEARTBEAT_TIMEOUT = 30  # seconds - if no heartbeat, consider crashed
+
 
 class EmbeddingWorker:
-    """Background worker for embedding generation"""
+    """Background worker for embedding generation with Redis auto-recovery"""
 
     def __init__(self):
         self.is_running = False
@@ -36,6 +50,144 @@ class EmbeddingWorker:
             "current_progress": 0,
             "current_total": 0
         }
+        self._redis: Optional[redis.Redis] = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
+
+    def _get_redis(self) -> redis.Redis:
+        """Get Redis connection (lazy initialization)"""
+        if self._redis is None:
+            try:
+                self._redis = redis.from_url(REDIS_URL, db=REDIS_DB, decode_responses=True)
+                self._redis.ping()
+                logger.info(f"Redis connected for embedding worker: {REDIS_URL} DB {REDIS_DB}")
+            except Exception as e:
+                logger.warning(f"Redis connection failed: {e} - auto-recovery disabled")
+                self._redis = None
+        return self._redis
+
+    def _redis_key(self, suffix: str) -> str:
+        """Generate Redis key with prefix"""
+        return f"{REDIS_KEY_PREFIX}:{suffix}"
+
+    def _save_state_to_redis(self):
+        """Save minimal state to Redis (just flags, no arrays)"""
+        r = self._get_redis()
+        if not r:
+            return
+
+        try:
+            # Only save essential flags - NO arrays or heavy data
+            state = {
+                "is_running": "1" if self.is_running else "0",
+                "job_type": self.current_job.get("type", "") if self.current_job else "",
+                "table_name": self.current_job.get("table_name", "") if self.current_job else "",
+                "batch_size": str(self.current_job.get("batch_size", DEFAULT_BATCH_SIZE)) if self.current_job else str(DEFAULT_BATCH_SIZE),
+                "started_at": self.stats.get("started_at", ""),
+                "processed": str(self.stats.get("total_processed", 0)),
+                "errors": str(self.stats.get("total_errors", 0))
+            }
+            r.hset(self._redis_key("state"), mapping=state)
+            r.set(self._redis_key("heartbeat"), str(int(time.time())))
+            logger.debug("Embedding state saved to Redis")
+        except Exception as e:
+            logger.warning(f"Failed to save embedding state to Redis: {e}")
+
+    def _clear_redis_state(self):
+        """Clear Redis state when stopping"""
+        r = self._get_redis()
+        if not r:
+            return
+
+        try:
+            r.delete(self._redis_key("state"))
+            r.delete(self._redis_key("heartbeat"))
+            logger.info("Embedding Redis state cleared")
+        except Exception as e:
+            logger.warning(f"Failed to clear embedding Redis state: {e}")
+
+    def _check_crashed_state(self) -> Optional[Dict]:
+        """Check if there's a crashed state that needs recovery"""
+        r = self._get_redis()
+        if not r:
+            return None
+
+        try:
+            state = r.hgetall(self._redis_key("state"))
+            if not state or state.get("is_running") != "1":
+                return None
+
+            # Check heartbeat
+            heartbeat = r.get(self._redis_key("heartbeat"))
+            if not heartbeat:
+                return None
+
+            last_heartbeat = int(heartbeat)
+            elapsed = int(time.time()) - last_heartbeat
+
+            if elapsed > HEARTBEAT_TIMEOUT:
+                logger.warning(f"Found crashed embedding state! Last heartbeat {elapsed}s ago")
+                return {
+                    "job_type": state.get("job_type", ""),
+                    "table_name": state.get("table_name", ""),
+                    "batch_size": int(state.get("batch_size", DEFAULT_BATCH_SIZE)),
+                    "started_at": state.get("started_at", ""),
+                    "processed": int(state.get("processed", 0)),
+                    "errors": int(state.get("errors", 0))
+                }
+
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to check crashed embedding state: {e}")
+            return None
+
+    async def check_and_recover(self) -> Optional[Dict]:
+        """Check for crashed state and auto-recover if found"""
+        crashed = self._check_crashed_state()
+        if not crashed:
+            return None
+
+        logger.info(f"Auto-recovering embedding from crashed state: {crashed}")
+
+        # Clear old state first
+        self._clear_redis_state()
+
+        job_type = crashed.get("job_type", "")
+        batch_size = crashed.get("batch_size", DEFAULT_BATCH_SIZE)
+
+        if job_type == "document_embedding":
+            # Resume document embedding
+            result = await self.start_document_embedding(batch_size=batch_size)
+            return {
+                "recovered": True,
+                "job_type": "document_embedding",
+                "previous_processed": crashed.get("processed", 0),
+                "start_result": result
+            }
+        elif job_type == "csv_embedding" and crashed.get("table_name"):
+            # For CSV embedding, we can't easily resume without column info
+            # Just log and return info
+            return {
+                "recovered": False,
+                "reason": "csv_embedding_needs_columns",
+                "table_name": crashed.get("table_name"),
+                "message": "CSV embedding needs to be restarted with column info"
+            }
+
+        return {"recovered": False, "reason": "unknown_job_type"}
+
+    async def _heartbeat_loop(self):
+        """Background heartbeat to Redis"""
+        while self.is_running:
+            try:
+                r = self._get_redis()
+                if r:
+                    r.set(self._redis_key("heartbeat"), str(int(time.time())))
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Embedding heartbeat error: {e}")
+                await asyncio.sleep(HEARTBEAT_INTERVAL)
 
     async def start_csv_embedding(
         self,
@@ -200,7 +352,7 @@ class EmbeddingWorker:
         batch_size: int = DEFAULT_BATCH_SIZE,
         resume: bool = True
     ) -> Dict[str, Any]:
-        """Start embedding generation for documents"""
+        """Start embedding generation for documents with auto-recovery support"""
 
         if self.is_running and not self.is_paused:
             return {
@@ -212,6 +364,9 @@ class EmbeddingWorker:
         self.is_paused = False
         self.stats["started_at"] = datetime.utcnow().isoformat()
         self.stats["current_table"] = "documents"
+        self.stats["total_processed"] = 0
+        self.stats["total_errors"] = 0
+        self.stats["current_progress"] = 0
 
         self.current_job = {
             "type": "document_embedding",
@@ -219,7 +374,15 @@ class EmbeddingWorker:
             "started_at": datetime.utcnow().isoformat()
         }
 
+        # Save initial state to Redis for recovery
+        self._save_state_to_redis()
+
+        # Start heartbeat task
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
         asyncio.create_task(self._process_documents(batch_size, resume))
+
+        logger.info(f"Started document embedding with batch_size={batch_size}")
 
         return {
             "success": True,
@@ -227,7 +390,7 @@ class EmbeddingWorker:
         }
 
     async def _process_documents(self, batch_size: int, resume: bool):
-        """Process documents in batches"""
+        """Process documents in batches with Redis state persistence"""
 
         try:
             pool = await get_db()
@@ -269,22 +432,48 @@ class EmbeddingWorker:
                     logger.info("✅ Completed document embedding")
                     break
 
-                batch = [(row['id'], f"{row['title'] or ''}\n{row['content']}") for row in rows]
-                await self._embed_document_batch(batch)
+                try:
+                    batch = [(row['id'], f"{row['title'] or ''}\n{row['content']}") for row in rows]
+                    await self._embed_document_batch(batch)
 
-                self.stats["current_progress"] += len(batch)
-                self.stats["total_processed"] += len(batch)
-                self.stats["last_activity"] = datetime.utcnow().isoformat()
+                    self.stats["current_progress"] += len(batch)
+                    self.stats["total_processed"] += len(batch)
+                    self.stats["last_activity"] = datetime.utcnow().isoformat()
 
-                logger.info(f"Documents processed: {self.stats['current_progress']}")
+                    # Save state to Redis every 5 batches (minimal overhead)
+                    if self.stats["total_processed"] % (batch_size * 5) == 0:
+                        self._save_state_to_redis()
+
+                    logger.info(f"Documents embedded: {self.stats['current_progress']}/{total_count}")
+
+                except Exception as batch_error:
+                    logger.error(f"Batch error: {batch_error}")
+                    self.stats["total_errors"] += 1
+                    # Continue with next batch, don't crash entire job
+
                 await asyncio.sleep(0.5)
 
         except Exception as e:
             logger.error(f"Error processing documents: {e}")
             self.stats["total_errors"] += 1
         finally:
+            # Cleanup
             self.is_running = False
             self.current_job = None
+
+            # Cancel heartbeat task
+            if self._heartbeat_task:
+                self._heartbeat_task.cancel()
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                self._heartbeat_task = None
+
+            # Clear Redis state (job completed or stopped)
+            self._clear_redis_state()
+
+            logger.info("Document embedding finished, Redis state cleared")
 
     async def _embed_document_batch(self, batch: List[tuple]):
         """Generate embeddings for document batch"""
@@ -332,9 +521,11 @@ class EmbeddingWorker:
         return {"success": True, "message": "Job resumed"}
 
     def stop(self):
-        """Stop the current job"""
+        """Stop the current job and clear Redis state"""
         self.is_running = False
         self.is_paused = False
+        self._clear_redis_state()
+        logger.info("Embedding job stopped by user")
         return {"success": True, "message": "Job stopped"}
 
     def get_status(self) -> Dict[str, Any]:
