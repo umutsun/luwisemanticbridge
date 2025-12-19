@@ -36,6 +36,7 @@ class DocumentEmbeddingRequest(BaseModel):
     """Request model for document embedding"""
     batch_size: int = Field(100, ge=10, le=500, description="Batch size")
     resume: bool = Field(True, description="Resume from last position")
+    target_table: str = Field("document_embeddings", description="Target table: 'document_embeddings' or 'unified_embeddings'")
 
 
 # ============== CSV EMBEDDING ENDPOINTS ==============
@@ -131,11 +132,18 @@ async def start_all_csv_embedding(request: AllCSVEmbeddingRequest) -> Dict[str, 
 
 @router.post("/documents/start")
 async def start_document_embedding(request: DocumentEmbeddingRequest) -> Dict[str, Any]:
-    """Start embedding generation for documents"""
+    """Start embedding generation for documents
+
+    Args:
+        batch_size: Documents per batch (10-500)
+        resume: Skip already embedded documents
+        target_table: 'document_embeddings' (default) or 'unified_embeddings'
+    """
     try:
         result = await embedding_worker.start_document_embedding(
             batch_size=request.batch_size,
-            resume=request.resume
+            resume=request.resume,
+            target_table=request.target_table
         )
         return result
     except Exception as e:

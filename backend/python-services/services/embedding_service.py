@@ -350,9 +350,16 @@ class EmbeddingWorker:
     async def start_document_embedding(
         self,
         batch_size: int = DEFAULT_BATCH_SIZE,
-        resume: bool = True
+        resume: bool = True,
+        target_table: str = "document_embeddings"  # NEW: target table
     ) -> Dict[str, Any]:
-        """Start embedding generation for documents with auto-recovery support"""
+        """Start embedding generation for documents with auto-recovery support
+
+        Args:
+            batch_size: Number of documents per batch
+            resume: Skip already embedded documents
+            target_table: 'document_embeddings' (default) or 'unified_embeddings'
+        """
 
         if self.is_running and not self.is_paused:
             return {
@@ -371,6 +378,7 @@ class EmbeddingWorker:
         self.current_job = {
             "type": "document_embedding",
             "batch_size": batch_size,
+            "target_table": target_table,
             "started_at": datetime.utcnow().isoformat()
         }
 
@@ -380,43 +388,72 @@ class EmbeddingWorker:
         # Start heartbeat task
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-        asyncio.create_task(self._process_documents(batch_size, resume))
+        asyncio.create_task(self._process_documents(batch_size, resume, target_table))
 
-        logger.info(f"Started document embedding with batch_size={batch_size}")
+        logger.info(f"Started document embedding with batch_size={batch_size}, target={target_table}")
 
         return {
             "success": True,
-            "message": "Started document embedding job"
+            "message": f"Started document embedding job (target: {target_table})"
         }
 
-    async def _process_documents(self, batch_size: int, resume: bool):
-        """Process documents in batches with Redis state persistence"""
+    async def _process_documents(self, batch_size: int, resume: bool, target_table: str = "document_embeddings"):
+        """Process documents in batches with Redis state persistence
+
+        Args:
+            batch_size: Number of documents per batch
+            resume: Skip already embedded documents
+            target_table: 'document_embeddings' or 'unified_embeddings'
+        """
 
         try:
             pool = await get_db()
 
-            # Get documents with content
-            if resume:
-                query = """
-                    SELECT d.id, d.title, d.content
-                    FROM documents d
-                    WHERE d.content IS NOT NULL AND d.content != ''
-                    AND NOT EXISTS (
-                        SELECT 1 FROM unified_embeddings ue
-                        WHERE ue.source_type = 'document'
-                        AND ue.source_id = d.id
-                    )
-                    ORDER BY d.id
-                    LIMIT $1
-                """
+            # Build query based on target table
+            if target_table == "document_embeddings":
+                if resume:
+                    query = """
+                        SELECT d.id, d.title, d.content
+                        FROM documents d
+                        WHERE d.content IS NOT NULL AND d.content != ''
+                        AND NOT EXISTS (
+                            SELECT 1 FROM document_embeddings de
+                            WHERE de.document_id = d.id
+                        )
+                        ORDER BY d.id
+                        LIMIT $1
+                    """
+                else:
+                    query = """
+                        SELECT d.id, d.title, d.content
+                        FROM documents d
+                        WHERE d.content IS NOT NULL AND d.content != ''
+                        ORDER BY d.id
+                        LIMIT $1
+                    """
             else:
-                query = """
-                    SELECT d.id, d.title, d.content
-                    FROM documents d
-                    WHERE d.content IS NOT NULL AND d.content != ''
-                    ORDER BY d.id
-                    LIMIT $1
-                """
+                # unified_embeddings
+                if resume:
+                    query = """
+                        SELECT d.id, d.title, d.content
+                        FROM documents d
+                        WHERE d.content IS NOT NULL AND d.content != ''
+                        AND NOT EXISTS (
+                            SELECT 1 FROM unified_embeddings ue
+                            WHERE ue.source_type = 'document'
+                            AND ue.source_id = d.id
+                        )
+                        ORDER BY d.id
+                        LIMIT $1
+                    """
+                else:
+                    query = """
+                        SELECT d.id, d.title, d.content
+                        FROM documents d
+                        WHERE d.content IS NOT NULL AND d.content != ''
+                        ORDER BY d.id
+                        LIMIT $1
+                    """
 
             # Get total count for progress
             total_count = await pool.fetchval("""
@@ -429,12 +466,12 @@ class EmbeddingWorker:
                 rows = await pool.fetch(query, batch_size)
 
                 if not rows:
-                    logger.info("✅ Completed document embedding")
+                    logger.info(f"✅ Completed document embedding to {target_table}")
                     break
 
                 try:
                     batch = [(row['id'], f"{row['title'] or ''}\n{row['content']}") for row in rows]
-                    await self._embed_document_batch(batch)
+                    await self._embed_document_batch(batch, target_table)
 
                     self.stats["current_progress"] += len(batch)
                     self.stats["total_processed"] += len(batch)
@@ -444,7 +481,7 @@ class EmbeddingWorker:
                     if self.stats["total_processed"] % (batch_size * 5) == 0:
                         self._save_state_to_redis()
 
-                    logger.info(f"Documents embedded: {self.stats['current_progress']}/{total_count}")
+                    logger.info(f"Documents embedded: {self.stats['current_progress']}/{total_count} -> {target_table}")
 
                 except Exception as batch_error:
                     logger.error(f"Batch error: {batch_error}")
@@ -475,8 +512,13 @@ class EmbeddingWorker:
 
             logger.info("Document embedding finished, Redis state cleared")
 
-    async def _embed_document_batch(self, batch: List[tuple]):
-        """Generate embeddings for document batch"""
+    async def _embed_document_batch(self, batch: List[tuple], target_table: str = "document_embeddings"):
+        """Generate embeddings for document batch
+
+        Args:
+            batch: List of (document_id, text) tuples
+            target_table: 'document_embeddings' or 'unified_embeddings'
+        """
 
         try:
             client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -494,16 +536,27 @@ class EmbeddingWorker:
             for i, embedding_data in enumerate(response.data):
                 # Convert embedding list to pgvector string format: [1.0, 2.0, 3.0]
                 embedding_vector = '[' + ','.join(str(x) for x in embedding_data.embedding) + ']'
-                source_name = f"document_{ids[i]}"
-                await pool.execute("""
-                    INSERT INTO unified_embeddings
-                    (source_type, source_table, source_id, source_name, content, embedding, model_used, created_at)
-                    VALUES ('document', 'documents', $1, $2, $3, $4::vector, $5, NOW())
-                    ON CONFLICT (source_table, source_id) DO UPDATE
-                    SET content = EXCLUDED.content,
-                        embedding = EXCLUDED.embedding,
-                        updated_at = NOW()
-                """, ids[i], source_name, texts[i][:10000], embedding_vector, EMBEDDING_MODEL)
+
+                if target_table == "document_embeddings":
+                    # Insert into document_embeddings table (simple insert, duplicates handled by resume query)
+                    await pool.execute("""
+                        INSERT INTO document_embeddings
+                        (document_id, chunk_text, embedding, model_name, tokens_used, content_type, embedding_dimension, created_at)
+                        VALUES ($1, $2, $3::vector, $4, $5, 'document', $6, NOW())
+                    """, ids[i], texts[i][:10000], embedding_vector, EMBEDDING_MODEL,
+                        len(texts[i]) // 4, EMBEDDING_DIMENSIONS)
+                else:
+                    # Insert into unified_embeddings table
+                    source_name = f"document_{ids[i]}"
+                    await pool.execute("""
+                        INSERT INTO unified_embeddings
+                        (source_type, source_table, source_id, source_name, content, embedding, model_used, created_at)
+                        VALUES ('document', 'documents', $1, $2, $3, $4::vector, $5, NOW())
+                        ON CONFLICT (source_table, source_id) DO UPDATE
+                        SET content = EXCLUDED.content,
+                            embedding = EXCLUDED.embedding,
+                            updated_at = NOW()
+                    """, ids[i], source_name, texts[i][:10000], embedding_vector, EMBEDDING_MODEL)
 
         except openai.RateLimitError:
             logger.warning("Rate limited, waiting 60 seconds...")
