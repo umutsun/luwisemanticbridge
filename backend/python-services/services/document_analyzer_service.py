@@ -33,6 +33,7 @@ from typing import Dict, List, Optional
 from pathlib import Path
 from datetime import datetime
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,8 @@ class DocumentAnalyzerService:
         self._pool: Optional[asyncpg.Pool] = None
         self._redis: Optional[redis.Redis] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
+        # Thread pool for CPU-bound PDF operations (prevents blocking event loop)
+        self._thread_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pdf_")
 
     def _get_redis(self) -> redis.Redis:
         """Get Redis connection (lazy initialization)"""
@@ -494,8 +497,9 @@ class DocumentAnalyzerService:
             except OSError:
                 return await self.mark_document_skipped(doc_id, "missing_file")
 
-            # First try PyPDF2 extraction
-            result = self.extract_text_from_pdf(file_path)
+            # First try PyPDF2 extraction (run in thread pool to avoid blocking event loop)
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(self._thread_pool, self.extract_text_from_pdf, file_path)
 
             # Handle PDF read errors
             if not result["success"]:
@@ -705,13 +709,17 @@ class DocumentAnalyzerService:
                             self._save_state_to_redis()
 
                         if processed % 10 == 0:
-                            logger.info(f"Analyzed {processed} documents - Success: {self.stats['total_success']}, Errors: {self.stats['total_errors']}")
+                            logger.info(f"Analyzed {processed} documents - Success: {self.stats['total_success']}, Errors: {self.stats['total_errors']}, Tokens: {self.stats['total_tokens']}")
 
                     except Exception as doc_error:
                         logger.error(f"Document {doc.get('id')} failed: {doc_error}")
                         self.stats["total_errors"] += 1
                         processed += 1
                         # Continue with next document, don't crash entire batch
+
+                    # Yield control to event loop after each document
+                    # This prevents blocking the FastAPI event loop
+                    await asyncio.sleep(0.1)
 
                 # Small delay between batches to prevent resource exhaustion
                 await asyncio.sleep(0.5)
