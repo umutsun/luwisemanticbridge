@@ -2442,7 +2442,30 @@ async function performMigration(migrationId: string, config: any) {
             let title = '';
             let sourceType = 'document';
 
-            if (table === 'SORUCEVAP') {
+            // Handle csv_* tables (Vergilex format)
+            if (table === 'csv_sorucevap') {
+              content = `Soru: ${row.soru || ''}\n\nCevap: ${row.cevap || ''}`;
+              title = (row.soru || '').substring(0, 255);
+              sourceType = 'qa';
+            } else if (table === 'csv_danistaykararlari') {
+              content = row.icerik || '';
+              title = row.konusu || `Karar ${row.id}`;
+              sourceType = 'court_decision';
+            } else if (table.startsWith('csv_makale_arsiv')) {
+              content = row.icerik || '';
+              title = row.konusu || `Makale ${row.id}`;
+              sourceType = 'article';
+            } else if (table === 'csv_ozelge') {
+              content = row.icerik || '';
+              title = row.konusu || `Özelge ${row.id}`;
+              sourceType = 'official_letter';
+            } else if (table === 'csv_hukdkk' || table === 'csv_maliansiklopedi') {
+              content = row.icerik || '';
+              title = row.konusu || `${table} ${row.id}`;
+              sourceType = 'legal_document';
+            }
+            // Legacy uppercase tables (original format)
+            else if (table === 'SORUCEVAP') {
               content = `Soru: ${row.soru || ''}\n\nCevap: ${row.cevap || ''}`;
               title = (row.soru || '').substring(0, 255);
               sourceType = 'qa';
@@ -2458,6 +2481,12 @@ async function performMigration(migrationId: string, config: any) {
               content = row.metin || '';
               title = row.ozelge_no || `Özelge ${row.id}`;
               sourceType = 'official_letter';
+            }
+            // Generic fallback for any other table with icerik/konusu columns
+            else if (row.icerik) {
+              content = row.icerik || '';
+              title = row.konusu || row.baslik || `${table} ${row.id}`;
+              sourceType = 'document';
             }
 
             if (!content || content.trim().length === 0) continue;
@@ -2478,7 +2507,21 @@ async function performMigration(migrationId: string, config: any) {
               tokens_used: Math.ceil(truncatedContent.length / 4)
             };
 
-            if (table === 'DANISTAYKARARLARI') {
+            // Add table-specific metadata for csv_* tables
+            if (table === 'csv_danistaykararlari') {
+              metadata.karar_no = row.kararno;
+              metadata.esas_no = row.esasno;
+              metadata.karar_tarihi = row.tarih;
+              metadata.daire = row.daire;
+            } else if (table === 'csv_sorucevap') {
+              metadata.tarih = row.tarih;
+            } else if (table.startsWith('csv_makale_arsiv')) {
+              metadata.yil = table.replace('csv_makale_arsiv_', '');
+            } else if (table === 'csv_ozelge') {
+              metadata.tarih = row.tarih;
+            }
+            // Legacy uppercase tables
+            else if (table === 'DANISTAYKARARLARI') {
               metadata.karar_no = row.karar_no;
               metadata.karar_tarihi = row.karar_tarihi;
               metadata.daire = row.daire;
