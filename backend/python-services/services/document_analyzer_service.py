@@ -656,7 +656,9 @@ class DocumentAnalyzerService:
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
         # Start background processing
-        asyncio.create_task(self._process_batch_analyze(batch_size, limit))
+        logger.info(f"Creating background task for batch analysis...")
+        task = asyncio.create_task(self._process_batch_analyze(batch_size, limit))
+        logger.info(f"Background task created: {task}")
 
         logger.info(f"Started batch analysis: {total_pending} pending, batch_size={batch_size}")
 
@@ -668,9 +670,11 @@ class DocumentAnalyzerService:
 
     async def _process_batch_analyze(self, batch_size: int, limit: int):
         """Background batch processing with Redis state persistence"""
+        logger.info(f"_process_batch_analyze started: batch_size={batch_size}, limit={limit}")
         try:
             processed = 0
             max_docs = limit if limit > 0 else float('inf')
+            logger.info(f"Starting processing loop, max_docs={max_docs}")
 
             while self.is_running and processed < max_docs:
                 if self.is_paused:
@@ -679,7 +683,9 @@ class DocumentAnalyzerService:
 
                 # Get batch
                 remaining = int(max_docs - processed) if limit > 0 else batch_size
+                logger.info(f"Fetching pending documents, remaining={remaining}")
                 docs = await self.get_pending_documents(min(batch_size, remaining))
+                logger.info(f"Fetched {len(docs)} pending documents")
 
                 if not docs:
                     logger.info("No more pending documents")
