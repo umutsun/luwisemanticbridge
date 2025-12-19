@@ -114,6 +114,7 @@ class DocumentAnalyzerService:
             "total_processed": 0,
             "total_success": 0,
             "total_errors": 0,
+            "total_tokens": 0,  # Token usage tracking
             "started_at": None,
             "last_activity": None
         }
@@ -151,7 +152,8 @@ class DocumentAnalyzerService:
                 "started_at": self.stats.get("started_at", ""),
                 "processed": str(self.stats.get("total_processed", 0)),
                 "success": str(self.stats.get("total_success", 0)),
-                "errors": str(self.stats.get("total_errors", 0))
+                "errors": str(self.stats.get("total_errors", 0)),
+                "tokens": str(self.stats.get("total_tokens", 0))
             }
             r.hset(self._redis_key("state"), mapping=state)
             r.set(self._redis_key("heartbeat"), str(int(time.time())))
@@ -334,58 +336,57 @@ class DocumentAnalyzerService:
         """
         Extract text from scanned PDF using OCR
 
-        Uses OCR_PROVIDER env var to select provider:
-        - tesseract (default): Local Tesseract OCR
-        - google_vision: Google Cloud Vision API
+        OCR Priority (Tesseract devre dışı):
+        1. Google Vision API (preferred)
+        2. DeepSeek Vision (fallback)
         """
         provider = OCR_PROVIDER.lower()
 
-        # Try Tesseract first (default, no API key needed)
-        if provider == "tesseract":
-            try:
-                from services.tesseract_ocr import tesseract_ocr
-
-                logger.info(f"Starting Tesseract OCR for: {file_path}")
-                result = tesseract_ocr.ocr_pdf(file_path, max_pages=30)
-
-                if result["success"] and result.get("text") and len(result.get("text", "")) >= MIN_TEXT_THRESHOLD:
-                    return {
-                        "success": True,
-                        "text": result.get("text", ""),
-                        "page_count": result.get("pages", 0),
-                        "char_count": result.get("chars", 0),
-                        "method": "tesseract",
-                        "error": None
-                    }
-                else:
-                    logger.warning(f"Tesseract OCR returned insufficient text: {len(result.get('text', ''))} chars")
-
-            except ImportError as e:
-                logger.error(f"Tesseract not available: {e}")
-            except Exception as e:
-                logger.error(f"Tesseract OCR failed: {e}")
-
-        # Try Google Vision if selected or as fallback
-        if provider == "google_vision":
+        # Try Google Vision first (preferred)
+        if provider in ("google_vision", "google"):
             try:
                 from services.google_vision_ocr import google_vision_ocr
 
                 logger.info(f"Starting Google Vision OCR for: {file_path}")
                 result = await google_vision_ocr.ocr_pdf(file_path, max_pages=30)
 
-                return {
-                    "success": result["success"],
-                    "text": result.get("text", ""),
-                    "page_count": result.get("pages", 0),
-                    "char_count": result.get("chars", 0),
-                    "method": "google_vision_ocr",
-                    "error": result.get("error")
-                }
+                if result["success"]:
+                    return {
+                        "success": True,
+                        "text": result.get("text", ""),
+                        "page_count": result.get("pages", 0),
+                        "char_count": result.get("chars", 0),
+                        "method": "google_vision",
+                        "error": None
+                    }
 
             except ImportError:
-                logger.error("Google Vision OCR not available")
+                logger.warning("Google Vision OCR not available, trying DeepSeek...")
             except Exception as e:
-                logger.error(f"Google Vision OCR failed: {e}")
+                logger.warning(f"Google Vision OCR failed: {e}, trying DeepSeek...")
+
+        # Try DeepSeek Vision as fallback
+        if provider in ("deepseek", "google_vision", "google"):
+            try:
+                from services.deepseek_ocr import deepseek_ocr
+
+                logger.info(f"Starting DeepSeek OCR for: {file_path}")
+                result = await deepseek_ocr.ocr_pdf(file_path, max_pages=30)
+
+                if result["success"]:
+                    return {
+                        "success": True,
+                        "text": result.get("text", ""),
+                        "page_count": result.get("pages", 0),
+                        "char_count": result.get("chars", 0),
+                        "method": "deepseek",
+                        "error": None
+                    }
+
+            except ImportError:
+                logger.error("DeepSeek OCR not available")
+            except Exception as e:
+                logger.error(f"DeepSeek OCR failed: {e}")
 
         return {"success": False, "text": "", "error": "OCR not available or failed", "method": "none"}
 
@@ -548,9 +549,19 @@ class DocumentAnalyzerService:
             # Success - update document with extracted content
             if len(text) >= MIN_TEXT_THRESHOLD:
                 method = result.get("method", "pypdf2")
+
+                # Clean text: Remove null bytes and invalid UTF-8 characters
+                # This prevents PostgreSQL UTF-8 encoding errors
+                cleaned_text = text.replace('\x00', '')  # Remove null bytes
+                cleaned_text = ''.join(char for char in cleaned_text if ord(char) >= 32 or char in '\n\r\t')
+
+                # Calculate estimated tokens (rough: ~4 chars per token for Turkish)
+                estimated_tokens = len(cleaned_text) // 4
+
                 metadata = {
                     "page_count": result.get("page_count", 0),
-                    "char_count": len(text),
+                    "char_count": len(cleaned_text),
+                    "estimated_tokens": estimated_tokens,
                     "method": method,
                     "analyzed_at": datetime.now().isoformat()
                 }
@@ -562,12 +573,13 @@ class DocumentAnalyzerService:
                         metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
                         updated_at = NOW()
                     WHERE id = $1
-                """, doc_id, text, json.dumps(metadata))
+                """, doc_id, cleaned_text, json.dumps(metadata))
 
                 return {
                     "id": doc_id,
                     "success": True,
-                    "chars": len(text),
+                    "chars": len(cleaned_text),
+                    "estimated_tokens": estimated_tokens,
                     "method": method
                 }
             else:
@@ -616,6 +628,7 @@ class DocumentAnalyzerService:
             "total_processed": 0,
             "total_success": 0,
             "total_errors": 0,
+            "total_tokens": 0,
             "started_at": datetime.now().isoformat(),
             "last_activity": datetime.now().isoformat()
         }
@@ -679,6 +692,8 @@ class DocumentAnalyzerService:
                         self.stats["total_processed"] += 1
                         if result.get("success"):
                             self.stats["total_success"] += 1
+                            # Track token usage
+                            self.stats["total_tokens"] += result.get("estimated_tokens", 0)
                         else:
                             self.stats["total_errors"] += 1
 
