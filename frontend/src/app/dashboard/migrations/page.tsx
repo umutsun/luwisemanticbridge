@@ -684,8 +684,33 @@ export default function EmbeddingsManagerPage() {
     // Connect to SSE progress stream for real-time updates
     connectToProgressStream();
 
+    // Polling fallback - check progress every 3 seconds (SSE backup)
+    const pollingInterval = setInterval(async () => {
+      try {
+        const response = await fetchWithAuth(`${API_MIGRATION}/progress`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status && data.status !== 'idle') {
+            setProgress({
+              status: data.status,
+              current: data.current || 0,
+              total: data.total || 0,
+              percentage: data.percentage || 0,
+              currentTable: data.currentTable || null,
+              error: data.error || null,
+              tokensUsed: data.tokenUsage?.total_tokens || data.tokenUsage?.total || 0,
+              message: data.message || null
+            });
+          }
+        }
+      } catch (e) {
+        // Polling failed, SSE should handle it
+      }
+    }, 3000);
+
     // Cleanup on unmount
     return () => {
+      clearInterval(pollingInterval);
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -693,7 +718,7 @@ export default function EmbeddingsManagerPage() {
     };
   }, [fetchAvailableTables, fetchTokenStats, connectToProgressStream]);
 
-  // Note: Progress updates now come from SSE stream (connectToProgressStream)
+  // Note: Progress updates now come from SSE stream + polling fallback
 
   const startMigration = async () => {
     // Merge queued tables with currently selected table rows (checkboxes)
@@ -753,6 +778,17 @@ export default function EmbeddingsManagerPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
+
+        // "Migration already in progress" is info, not error
+        if (errorData.error?.includes('already in progress') || errorData.error?.includes('zaten')) {
+          toast({
+            title: "Migration Running",
+            description: "Migration is already running. Progress will update automatically.",
+          });
+          setIsStartingMigration(false);
+          return;
+        }
+
         toast({
           title: "Migration Error",
           description: errorData.error || 'Failed to start migration.',
