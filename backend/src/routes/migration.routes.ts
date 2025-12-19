@@ -15,11 +15,16 @@ const REDIS_KEYS = {
   STOPPED: (id: string) => `migration:stopped:${id}`,
   STATE: (id: string) => `migration:state:${id}`,
   PENDING_RECORDS: (id: string) => `migration:pending:${id}`,
-  HISTORY: 'migration:history'
+  HISTORY: 'migration:history',
+  HEARTBEAT: (id: string) => `migration:heartbeat:${id}`
 };
 
 // TTL for migration data in Redis (24 hours)
 const MIGRATION_TTL = 86400;
+
+// Heartbeat interval (30 seconds) and stale threshold (2 minutes)
+const HEARTBEAT_INTERVAL_MS = 30000;
+const STALE_THRESHOLD_MS = 120000;
 
 // Database connections will be initialized from settings
 let sourcePool: Pool | null = null;
@@ -192,6 +197,8 @@ class MigrationProgress extends EventEmitter {
   private redisInitialized = false;
   // Track actually running migrations (not just restored state)
   private runningMigrations: Set<string> = new Set();
+  // Heartbeat intervals for each migration
+  private heartbeatIntervals: Map<string, NodeJS.Timeout> = new Map();
 
   constructor() {
     super();
@@ -199,16 +206,103 @@ class MigrationProgress extends EventEmitter {
     this.initRedis();
   }
 
-  // Mark a migration as actually running (process is active)
+  // Mark a migration as actually running (process is active) and start heartbeat
   markAsRunning(id: string) {
     this.runningMigrations.add(id);
+    this.startHeartbeat(id);
     console.log(`🏃 Migration ${id} marked as actively running`);
   }
 
-  // Mark a migration as no longer running
+  // Mark a migration as no longer running and stop heartbeat
   markAsStopped(id: string) {
     this.runningMigrations.delete(id);
+    this.stopHeartbeat(id);
     console.log(`⏹️ Migration ${id} marked as stopped`);
+  }
+
+  // Start heartbeat for a migration
+  private async startHeartbeat(id: string) {
+    // Clear any existing heartbeat
+    this.stopHeartbeat(id);
+
+    // Update heartbeat immediately
+    await this.updateHeartbeat(id);
+
+    // Set up interval
+    const interval = setInterval(async () => {
+      await this.updateHeartbeat(id);
+    }, HEARTBEAT_INTERVAL_MS);
+
+    this.heartbeatIntervals.set(id, interval);
+    console.log(`💓 Heartbeat started for migration ${id}`);
+  }
+
+  // Stop heartbeat for a migration
+  private stopHeartbeat(id: string) {
+    const interval = this.heartbeatIntervals.get(id);
+    if (interval) {
+      clearInterval(interval);
+      this.heartbeatIntervals.delete(id);
+      console.log(`💔 Heartbeat stopped for migration ${id}`);
+    }
+  }
+
+  // Update heartbeat timestamp in Redis
+  private async updateHeartbeat(id: string) {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return;
+
+      const timestamp = Date.now();
+      await redis.setex(REDIS_KEYS.HEARTBEAT(id), 300, timestamp.toString()); // 5 min TTL
+      // console.log(`💓 Heartbeat updated for ${id}: ${timestamp}`);
+    } catch (error) {
+      console.error(`❌ Failed to update heartbeat for ${id}:`, error);
+    }
+  }
+
+  // Check if a migration is stale (no heartbeat for STALE_THRESHOLD_MS)
+  async isStale(id: string): Promise<boolean> {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return false;
+
+      const heartbeat = await redis.get(REDIS_KEYS.HEARTBEAT(id));
+      if (!heartbeat) return true; // No heartbeat = stale
+
+      const lastHeartbeat = parseInt(heartbeat, 10);
+      const elapsed = Date.now() - lastHeartbeat;
+
+      return elapsed > STALE_THRESHOLD_MS;
+    } catch (error) {
+      console.error(`❌ Failed to check heartbeat for ${id}:`, error);
+      return false;
+    }
+  }
+
+  // Clean up stale migration
+  async cleanupStaleMigration(id: string) {
+    console.log(`🧹 Cleaning up stale migration: ${id}`);
+
+    try {
+      const redis = redisClient();
+      if (redis && redis.status === 'ready') {
+        await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+        await redis.del(REDIS_KEYS.HEARTBEAT(id));
+        await redis.del(REDIS_KEYS.PROGRESS(id));
+        await redis.del(REDIS_KEYS.PAUSED(id));
+        await redis.del(REDIS_KEYS.STOPPED(id));
+      }
+
+      this.runningMigrations.delete(id);
+      this.pausedMigrations.delete(id);
+      this.stoppedMigrations.delete(id);
+      this.progress.delete(id);
+
+      console.log(`✅ Stale migration ${id} cleaned up`);
+    } catch (error) {
+      console.error(`❌ Failed to cleanup stale migration ${id}:`, error);
+    }
   }
 
   // Check if a migration is actually running (not just restored state)
@@ -1089,18 +1183,24 @@ router.post('/generate', async (req: Request, res: Response) => {
   // Check if there's already an active migration (from Redis)
   const existingMigrationId = await migrationProgress.getActiveMigrationId();
   if (existingMigrationId && !resumeMigrationId) {
-    const activeProgress = migrationProgress.getAllProgress().find(p => p.status === 'processing');
-    if (activeProgress) {
-      console.log(`⚠️ Migration already running: ${existingMigrationId}`);
+    // Check if migration is actually running (has recent heartbeat)
+    const isStale = await migrationProgress.isStale(existingMigrationId);
+    const isActuallyRunning = migrationProgress.isActuallyRunning(existingMigrationId);
+
+    if (isStale || !isActuallyRunning) {
+      // Migration is stale (no heartbeat) or not actually running - clean it up
+      console.log(`🧹 Found stale migration ${existingMigrationId}, cleaning up...`);
+      await migrationProgress.cleanupStaleMigration(existingMigrationId);
+    } else {
+      // Migration is actually running - reject new migration
+      const activeProgress = migrationProgress.getAllProgress().find(p => p.status === 'processing');
+      console.log(`⚠️ Migration actually running: ${existingMigrationId}`);
       return res.status(409).json({
         error: 'Migration already in progress',
         message: 'Zaten aktif bir migration işlemi var. Lütfen tamamlanmasını bekleyin veya durdurun.',
         activeMigrationId: existingMigrationId,
         progress: activeProgress
       });
-    } else {
-      // Clean up stale migration ID from Redis
-      await migrationProgress.setActiveMigrationId(null);
     }
   }
 
