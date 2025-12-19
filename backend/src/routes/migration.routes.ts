@@ -2404,6 +2404,21 @@ async function performMigration(migrationId: string, config: any) {
           break;
         }
 
+        // OPTIMIZATION: Batch-check existing IDs in one query instead of per-record
+        const batchIds = result.rows.map(r => r.id);
+        const existingCheck = await pools.targetPool.query(
+          `SELECT source_id FROM unified_embeddings WHERE source_table = $1 AND source_id = ANY($2::int[])`,
+          [table, batchIds]
+        );
+        const existingIds = new Set(existingCheck.rows.map(r => r.source_id));
+
+        // Count skipped duplicates in batch
+        const skippedCount = existingIds.size;
+        if (skippedCount > 0) {
+          console.log(`Batch check: ${skippedCount}/${batchIds.length} already exist in ${table}, processing ${batchIds.length - skippedCount} new`);
+          totalProcessed += skippedCount;
+        }
+
         for (const row of result.rows) {
           try {
             // Check if migration is paused or stopped
@@ -2417,15 +2432,8 @@ async function performMigration(migrationId: string, config: any) {
               await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            // Check if record already exists to avoid duplicate processing
-            const existsCheck = await pools.targetPool.query(
-              'SELECT id FROM unified_embeddings WHERE source_table = $1 AND source_id = $2',
-              [table, row.id]
-            );
-
-            if (existsCheck.rows.length > 0) {
-              totalProcessed++;
-              console.log(`Skipping duplicate: ${table}[${row.id}] already exists`);
+            // Skip if already exists (using batch-fetched Set)
+            if (existingIds.has(row.id)) {
               continue;
             }
 
