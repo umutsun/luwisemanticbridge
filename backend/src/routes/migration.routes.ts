@@ -328,9 +328,76 @@ class MigrationProgress extends EventEmitter {
       console.log('✅ Migration Redis persistence initialized');
       // Restore state from Redis
       await this.restoreStateFromRedis();
+      // Check for stale migrations and trigger auto-resume after a delay
+      setTimeout(() => this.checkAndAutoResume(), 10000); // 10 second delay after startup
     } catch (error) {
       console.warn('⚠️ Redis not available for migration persistence:', error);
     }
+  }
+
+  // Auto-resume stale migrations on startup
+  private async checkAndAutoResume() {
+    try {
+      const redis = redisClient();
+      if (!redis || redis.status !== 'ready') return;
+
+      const activeMigrationId = await redis.get(REDIS_KEYS.ACTIVE_MIGRATION);
+      if (!activeMigrationId) {
+        console.log('📋 No active migration to resume');
+        return;
+      }
+
+      // Check if migration is already running in this process
+      if (this.runningMigrations.has(activeMigrationId)) {
+        console.log(`✅ Migration ${activeMigrationId} already running`);
+        return;
+      }
+
+      // Check if migration was stopped or paused
+      const isStopped = await redis.get(REDIS_KEYS.STOPPED(activeMigrationId));
+      const isPaused = await redis.get(REDIS_KEYS.PAUSED(activeMigrationId));
+
+      if (isStopped === 'true') {
+        console.log(`⏹️ Migration ${activeMigrationId} was stopped, cleaning up`);
+        await this.cleanupStaleMigration(activeMigrationId);
+        return;
+      }
+
+      if (isPaused === 'true') {
+        console.log(`⏸️ Migration ${activeMigrationId} is paused, waiting for manual resume`);
+        return;
+      }
+
+      // Migration was interrupted (crash/restart) - trigger auto-resume
+      const progressData = await redis.get(REDIS_KEYS.PROGRESS(activeMigrationId));
+      if (progressData) {
+        const progress = JSON.parse(progressData);
+        console.log(`🔄 AUTO-RESUME: Found interrupted migration ${activeMigrationId}`);
+        console.log(`   Progress: ${progress.current}/${progress.total} (${progress.percentage}%)`);
+        console.log(`   Last table: ${progress.currentTable}`);
+        console.log(`   Triggering auto-resume in 5 seconds...`);
+
+        // Trigger auto-resume after a short delay
+        setTimeout(async () => {
+          try {
+            await this.triggerAutoResume(activeMigrationId);
+          } catch (error) {
+            console.error('❌ Auto-resume failed:', error);
+          }
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('❌ Error checking for auto-resume:', error);
+    }
+  }
+
+  // Trigger auto-resume by calling the internal resume logic
+  private async triggerAutoResume(migrationId: string) {
+    console.log(`🚀 AUTO-RESUME: Starting migration ${migrationId}`);
+
+    // Import and call the resume function
+    // This will be handled by the resumeMigration function
+    this.emit('auto-resume', migrationId);
   }
 
   private async restoreStateFromRedis() {
@@ -629,6 +696,269 @@ class MigrationProgress extends EventEmitter {
 }
 
 const migrationProgress = new MigrationProgress();
+
+// Auto-resume event listener - triggered on startup if there's an interrupted migration
+migrationProgress.on('auto-resume', async (migrationId: string) => {
+  console.log(`🔄 AUTO-RESUME EVENT: Handling migration ${migrationId}`);
+
+  try {
+    // Get saved state from Redis
+    const redis = redisClient();
+    if (!redis || redis.status !== 'ready') {
+      console.error('❌ Redis not available for auto-resume');
+      return;
+    }
+
+    const progressData = await redis.get(REDIS_KEYS.PROGRESS(migrationId));
+    if (!progressData) {
+      console.error('❌ No progress data found for auto-resume');
+      return;
+    }
+
+    const progress = JSON.parse(progressData);
+
+    // Get the state (tables, settings, etc.)
+    const stateData = await redis.get(REDIS_KEYS.STATE(migrationId));
+    let state: any = {};
+    if (stateData) {
+      state = JSON.parse(stateData);
+    }
+
+    console.log(`📊 Auto-resume state:`, {
+      current: progress.current,
+      total: progress.total,
+      currentTable: progress.currentTable,
+      tables: state.tables?.length || 'unknown'
+    });
+
+    // Call the internal resume function
+    await executeAutoResume(migrationId, progress, state);
+  } catch (error) {
+    console.error('❌ Auto-resume handler error:', error);
+    // Clean up on failure
+    await migrationProgress.cleanupStaleMigration(migrationId);
+  }
+});
+
+// Internal function to execute auto-resume
+async function executeAutoResume(migrationId: string, progress: any, state: any) {
+  console.log(`🚀 Executing auto-resume for migration ${migrationId}`);
+
+  // Mark as running
+  migrationProgress.markAsRunning(migrationId);
+
+  try {
+    const pools = await initializePools();
+
+    // Get tables from state or re-discover
+    let tables = state.tables || [];
+    if (tables.length === 0) {
+      const tablesResult = await pools.sourcePool.query(`
+        SELECT tablename FROM pg_tables
+        WHERE schemaname = 'public' AND tablename LIKE 'csv_%'
+        ORDER BY tablename
+      `);
+      tables = tablesResult.rows.map((r: any) => r.tablename);
+    }
+
+    console.log(`📋 Tables to process: ${tables.join(', ')}`);
+
+    // Get embedding settings
+    const embeddingSettings = await getEmbeddingSettings();
+    const openaiClient = await getOpenAIClient();
+
+    if (!openaiClient) {
+      throw new Error('OpenAI client not available');
+    }
+
+    // Get already embedded IDs
+    const embeddedResult = await pools.targetPool.query(`
+      SELECT DISTINCT source_id, source_table FROM unified_embeddings
+    `);
+    const embeddedMap = new Map<string, Set<number>>();
+    for (const row of embeddedResult.rows) {
+      if (!embeddedMap.has(row.source_table)) {
+        embeddedMap.set(row.source_table, new Set());
+      }
+      embeddedMap.get(row.source_table)!.add(parseInt(row.source_id, 10));
+    }
+
+    console.log(`📊 Already embedded records across ${embeddedMap.size} tables`);
+
+    // Continue processing from where we left off
+    let totalProcessed = progress.current || 0;
+    const BATCH_SIZE = 10;
+    const BATCH_FETCH_SIZE = 50;
+
+    let tokenUsage = progress.tokenUsage || {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+      estimated_cost: 0
+    };
+
+    for (const table of tables) {
+      // Check if stopped
+      if (migrationProgress.isStopped(migrationId)) {
+        console.log(`⏹️ Migration ${migrationId} stopped during auto-resume`);
+        break;
+      }
+
+      // Check if paused
+      while (migrationProgress.isPaused(migrationId)) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      const tableEmbeddedIds = embeddedMap.get(table) || new Set();
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        // Fetch batch
+        const batchResult = await pools.sourcePool.query(
+          `SELECT id, * FROM public."${table}" ORDER BY id::int LIMIT $1 OFFSET $2`,
+          [BATCH_FETCH_SIZE, offset]
+        );
+
+        if (batchResult.rows.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        // Filter out already embedded
+        const pendingBatch = batchResult.rows.filter(
+          (row: any) => !tableEmbeddedIds.has(parseInt(row.id, 10))
+        );
+
+        // Process in smaller batches
+        for (let i = 0; i < pendingBatch.length; i += BATCH_SIZE) {
+          const batch = pendingBatch.slice(i, i + BATCH_SIZE);
+
+          if (batch.length === 0) continue;
+
+          // Check pause/stop
+          if (migrationProgress.isStopped(migrationId)) break;
+          while (migrationProgress.isPaused(migrationId)) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+
+          // Generate embeddings
+          const texts = batch.map((record: any) => {
+            const content = Object.entries(record)
+              .filter(([key]) => !['id', 'created_at', 'updated_at', 'embedding'].includes(key))
+              .map(([key, value]) => `${key}: ${value || ''}`)
+              .join('\n');
+            return content.substring(0, 8000);
+          });
+
+          try {
+            const embeddingResponse = await openaiClient.embeddings.create({
+              model: embeddingSettings.model || 'text-embedding-3-small',
+              input: texts,
+              dimensions: 1536
+            });
+
+            // Update token usage
+            if (embeddingResponse.usage) {
+              tokenUsage.prompt_tokens += embeddingResponse.usage.prompt_tokens;
+              tokenUsage.total_tokens += embeddingResponse.usage.total_tokens;
+              tokenUsage.estimated_cost = tokenUsage.total_tokens * 0.0001 / 1000;
+            }
+
+            // Save embeddings
+            for (let j = 0; j < batch.length; j++) {
+              const record = batch[j];
+              const embedding = embeddingResponse.data[j].embedding;
+              const content = texts[j];
+
+              await pools.targetPool.query(`
+                INSERT INTO unified_embeddings (
+                  source_table, source_id, content, embedding,
+                  metadata, embedding_model, created_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                ON CONFLICT (source_table, source_id) DO NOTHING
+              `, [
+                table,
+                record.id,
+                content,
+                JSON.stringify(embedding),
+                JSON.stringify({ originalId: record.id, table }),
+                embeddingSettings.model || 'text-embedding-3-small'
+              ]);
+
+              totalProcessed++;
+            }
+
+            // Update progress
+            const percentage = Math.round((totalProcessed / progress.total) * 100);
+            migrationProgress.updateProgress(migrationId, {
+              current: totalProcessed,
+              total: progress.total,
+              percentage,
+              status: 'processing',
+              currentRecord: batch[0]?.id || '',
+              currentTable: table,
+              tokenUsage,
+              timestamp: new Date().toISOString()
+            });
+
+            console.log(`📊 Auto-resume progress: ${totalProcessed}/${progress.total} (${percentage}%)`);
+
+            // Small delay between batches
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+          } catch (embeddingError: any) {
+            console.error(`❌ Embedding error in auto-resume:`, embeddingError.message);
+            // Continue with next batch on error
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+
+        offset += BATCH_FETCH_SIZE;
+        hasMore = batchResult.rows.length === BATCH_FETCH_SIZE;
+
+        // Memory cleanup
+        if (offset % 500 === 0 && global.gc) {
+          global.gc();
+        }
+      }
+    }
+
+    // Migration complete
+    console.log(`✅ Auto-resume migration ${migrationId} completed!`);
+    console.log(`📊 Total processed: ${totalProcessed}/${progress.total}`);
+    console.log(`💰 Token usage: ${tokenUsage.total_tokens} tokens (~$${tokenUsage.estimated_cost.toFixed(4)})`);
+
+    migrationProgress.updateProgress(migrationId, {
+      current: totalProcessed,
+      total: progress.total,
+      percentage: 100,
+      status: 'completed',
+      currentTable: 'Done',
+      tokenUsage,
+      timestamp: new Date().toISOString()
+    });
+
+    migrationProgress.markAsStopped(migrationId);
+
+    // Clean up Redis
+    const redis = redisClient();
+    if (redis && redis.status === 'ready') {
+      await redis.del(REDIS_KEYS.ACTIVE_MIGRATION);
+    }
+
+  } catch (error: any) {
+    console.error(`❌ Auto-resume execution error:`, error);
+    migrationProgress.markAsStopped(migrationId);
+
+    migrationProgress.updateProgress(migrationId, {
+      ...progress,
+      status: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
 
 // Token tracking
 interface TokenUsage {
