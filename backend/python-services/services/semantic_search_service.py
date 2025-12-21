@@ -499,12 +499,17 @@ class SemanticSearchService:
                 embedding = response.data[0].embedding
                 provider_used = 'openai'
 
-        except openai.RateLimitError:
-            logger.warning(f"{config.provider} rate limited, trying fallback provider...")
+        except openai.RateLimitError as rate_err:
+            logger.warning(f"{config.provider} rate limited: {rate_err}. Trying fallback...")
             embedding = None  # Force fallback instead of infinite retry
 
         except openai.AuthenticationError as auth_err:
             logger.warning(f"OpenAI auth error: {auth_err}. Trying fallback...")
+            embedding = None
+
+        except openai.APIStatusError as api_err:
+            # Catch 403 leaked key and other API errors
+            logger.warning(f"OpenAI API error (status {api_err.status_code}): {api_err.message}. Trying fallback...")
             embedding = None
 
         except Exception as primary_error:
