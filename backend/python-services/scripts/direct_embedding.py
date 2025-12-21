@@ -12,6 +12,7 @@ import json
 import psycopg2
 from psycopg2.extras import execute_values
 from openai import OpenAI
+import redis
 
 # Configuration
 SOURCE_DB = os.environ.get('SOURCE_DB', 'vergilex_db')
@@ -24,6 +25,17 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 EMBEDDING_MODEL = 'text-embedding-3-small'
 BATCH_SIZE = 10
 PROGRESS_FILE = '/var/www/vergilex/embedding_progress.json'
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
+
+# Initialize Redis connection
+try:
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    redis_client.ping()
+    print("✅ Redis connected")
+except:
+    redis_client = None
+    print("⚠️  Redis not available, progress won't be visible in UI")
 
 def get_connection(dbname):
     """Get database connection"""
@@ -46,9 +58,24 @@ def load_progress():
     return {'table': 'csv_danistaykararlari', 'offset': 0, 'processed': 0}
 
 def save_progress(progress):
-    """Save progress to file"""
+    """Save progress to file and Redis"""
     with open(PROGRESS_FILE, 'w') as f:
         json.dump(progress, f)
+
+    # Also update Redis for real-time UI updates
+    if redis_client:
+        try:
+            redis_progress = {
+                'status': 'processing',
+                'currentTable': progress.get('table'),
+                'current': progress.get('processed', 0),
+                'offset': progress.get('offset', 0),
+                'percentage': 0,  # Will be calculated by backend
+                'startTime': int(time.time() * 1000)
+            }
+            redis_client.setex('embedding:progress', 86400, json.dumps(redis_progress))  # 24h expiry
+        except Exception as e:
+            print(f"  ⚠️  Redis update failed: {e}")
 
 def get_existing_ids(target_conn, table_name, ids):
     """Get existing source IDs in one query"""
