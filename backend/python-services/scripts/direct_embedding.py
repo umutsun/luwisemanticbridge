@@ -139,7 +139,17 @@ def process_table(client, table_name, progress):
     # Column mapping for different tables
     if table_name == 'csv_sorucevap':
         content_query = "SELECT id::int, soru || E'\\n\\nCevap: ' || cevap as content, soru as title FROM {}"
+    elif table_name.startswith('csv_makale_arsiv'):
+        # Makale tables use 'baslik' instead of 'konusu', row_id instead of id
+        content_query = "SELECT row_id as id, icerik as content, baslik as title FROM {}"
+    elif table_name == 'csv_hukdkk':
+        # HUK-DKK uses i_cerik and ozeti, row_id instead of id
+        content_query = "SELECT row_id as id, i_cerik as content, ozeti as title FROM {}"
+    elif table_name == 'csv_maliansiklopedi':
+        # Mali Ansiklopedi uses i_cerik and kavram
+        content_query = "SELECT id, i_cerik as content, kavram as title FROM {}"
     else:
+        # Default for csv_danistaykararlari, csv_ozelge
         content_query = "SELECT id::int, icerik as content, konusu as title FROM {}"
 
     # Get total count
