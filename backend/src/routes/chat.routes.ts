@@ -282,17 +282,31 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
 
         const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);
 
-        if (activeSchema?.templates?.questions && activeSchema.templates.questions.length > 0) {
-          // Use schema's question templates
-          suggestions = [...activeSchema.templates.questions];
+        if (activeSchema?.templates) {
+          // First priority: Use example_questions (static, no placeholders)
+          const exampleQuestions = (activeSchema.templates as any).example_questions;
+          if (exampleQuestions && Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
+            suggestions = [...exampleQuestions];
+            console.log(`[Suggestions] Using example_questions for schema: ${activeSchema.name}`);
+          }
+          // Second priority: Use question templates that don't have placeholders
+          else if (activeSchema.templates.questions && activeSchema.templates.questions.length > 0) {
+            // Filter out templates with {{placeholders}} - only use static questions
+            const staticQuestions = activeSchema.templates.questions.filter(
+              (q: string) => !q.includes('{{') && !q.includes('}}')
+            );
+            if (staticQuestions.length > 0) {
+              suggestions = [...staticQuestions];
+              console.log(`[Suggestions] Using static questions from schema: ${activeSchema.name}`);
+            }
+          }
 
-          // Shuffle for variety
-          suggestions = suggestions.sort(() => Math.random() - 0.5);
-
-          // Limit to 4 suggestions
-          suggestions = suggestions.slice(0, 4);
-
-          console.log(`[Suggestions] Using schema-aware questions for user ${userId}:`, activeSchema.name);
+          if (suggestions.length > 0) {
+            // Shuffle for variety
+            suggestions = suggestions.sort(() => Math.random() - 0.5);
+            // Limit to 4 suggestions
+            suggestions = suggestions.slice(0, 4);
+          }
         }
       } catch (schemaError) {
         console.error('[Suggestions] Failed to get schema-aware suggestions:', schemaError);
