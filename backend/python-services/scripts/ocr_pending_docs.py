@@ -19,13 +19,11 @@ load_dotenv(env_path)
 
 from loguru import logger
 from services.database import get_db, close_db
-from services.google_vision_ocr import google_vision_ocr
-from services.deepseek_ocr import deepseek_ocr
+from services.openai_vision_ocr import openai_vision_ocr
 
 # Configuration
 DOCS_BASE_PATH = os.getenv("DOCS_PATH", "/var/www/vergilex/docs")
 MAX_PAGES_PER_DOC = 30
-USE_DEEPSEEK_FIRST = True  # If True, try DeepSeek first (Google Vision API is disabled)
 
 
 async def get_ocr_pending_docs():
@@ -65,26 +63,17 @@ def resolve_file_path(doc: dict) -> str:
     return None
 
 
-async def try_deepseek_ocr(file_path: str) -> dict:
-    """Try DeepSeek Vision OCR"""
+async def try_openai_vision_ocr(file_path: str) -> dict:
+    """Try OpenAI GPT-4 Vision OCR"""
     try:
-        result = await deepseek_ocr.ocr_pdf(file_path, max_pages=MAX_PAGES_PER_DOC)
-        return result
-    except Exception as e:
-        return {"success": False, "text": "", "error": str(e)}
-
-
-async def try_google_vision_ocr(file_path: str) -> dict:
-    """Try Google Vision OCR"""
-    try:
-        result = await google_vision_ocr.ocr_pdf(file_path, max_pages=MAX_PAGES_PER_DOC)
+        result = await openai_vision_ocr.ocr_pdf(file_path, max_pages=MAX_PAGES_PER_DOC)
         return result
     except Exception as e:
         return {"success": False, "text": "", "error": str(e)}
 
 
 async def process_document_with_ocr(doc: dict) -> dict:
-    """Process single document with OCR (DeepSeek first, then Google Vision)"""
+    """Process single document with OpenAI GPT-4 Vision OCR"""
     doc_id = doc['id']
     title = doc.get('title', f'Document {doc_id}')
 
@@ -98,40 +87,13 @@ async def process_document_with_ocr(doc: dict) -> dict:
         return {"success": False, "doc_id": doc_id, "error": "File not found"}
 
     try:
-        ocr_method = None
-        result = None
-
-        if USE_DEEPSEEK_FIRST:
-            # Try DeepSeek first
-            logger.info(f"Trying DeepSeek OCR for: {file_path}")
-            result = await try_deepseek_ocr(file_path)
-
-            if result.get("success") and len(result.get("text", "")) >= 100:
-                ocr_method = "deepseek_vision"
-                logger.info(f"DeepSeek OCR succeeded: {len(result.get('text', ''))} chars")
-            else:
-                # Fall back to Google Vision
-                logger.warning(f"DeepSeek OCR failed or minimal text, trying Google Vision...")
-                result = await try_google_vision_ocr(file_path)
-                if result.get("success"):
-                    ocr_method = "google_vision"
-        else:
-            # Try Google Vision first
-            logger.info(f"Trying Google Vision OCR for: {file_path}")
-            result = await try_google_vision_ocr(file_path)
-
-            if result.get("success") and len(result.get("text", "")) >= 100:
-                ocr_method = "google_vision"
-                logger.info(f"Google Vision OCR succeeded: {len(result.get('text', ''))} chars")
-            else:
-                # Fall back to DeepSeek
-                logger.warning(f"Google Vision OCR failed or minimal text, trying DeepSeek...")
-                result = await try_deepseek_ocr(file_path)
-                if result.get("success"):
-                    ocr_method = "deepseek_vision"
+        # Use OpenAI GPT-4 Vision for OCR
+        logger.info(f"Using OpenAI GPT-4 Vision OCR for: {file_path}")
+        result = await try_openai_vision_ocr(file_path)
+        ocr_method = "gpt4_vision"
 
         if not result or not result.get("success"):
-            error_msg = result.get("error", "Both OCR methods failed") if result else "No OCR result"
+            error_msg = result.get("error", "OCR failed") if result else "No OCR result"
             logger.error(f"OCR failed for {doc_id}: {error_msg}")
             return {"success": False, "doc_id": doc_id, "error": error_msg}
 
@@ -144,20 +106,24 @@ async def process_document_with_ocr(doc: dict) -> dict:
         # Update document in database
         pool = await get_db()
 
+        pages = result.get("pages", 0)
+        chars = len(text)
+        ocr_at = datetime.now().isoformat()
+
         await pool.execute("""
             UPDATE documents
             SET content = $2,
                 processing_status = 'analyzed',
                 metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-                    'ocr_method', $3,
-                    'ocr_pages', $4,
-                    'ocr_chars', $5,
-                    'ocr_at', $6,
+                    'ocr_method', $3::text,
+                    'ocr_pages', $4::int,
+                    'ocr_chars', $5::int,
+                    'ocr_at', $6::text,
                     'estimated_tokens', LENGTH($2) / 4
                 ),
                 updated_at = NOW()
             WHERE id = $1
-        """, doc_id, text, ocr_method, result.get("pages", 0), len(text), datetime.now().isoformat())
+        """, doc_id, text, str(ocr_method), int(pages), int(chars), str(ocr_at))
 
         logger.info(f"✅ Document {doc_id} OCR complete ({ocr_method}): {len(text)} chars, {result.get('pages', 0)} pages")
 
@@ -178,7 +144,7 @@ async def main():
     """Main function to process all OCR pending documents"""
     logger.info("=" * 60)
     logger.info("OCR PENDING DOCUMENTS PROCESSOR")
-    logger.info(f"Primary OCR: {'DeepSeek' if USE_DEEPSEEK_FIRST else 'Google Vision'}")
+    logger.info("Using: OpenAI GPT-4 Vision")
     logger.info("=" * 60)
 
     # Get pending docs
@@ -195,7 +161,6 @@ async def main():
         "failed": 0,
         "total_chars": 0,
         "total_pages": 0,
-        "by_method": {"deepseek_vision": 0, "google_vision": 0},
         "errors": []
     }
 
@@ -208,9 +173,6 @@ async def main():
             results["success"] += 1
             results["total_chars"] += result.get("chars", 0)
             results["total_pages"] += result.get("pages", 0)
-            method = result.get("method", "unknown")
-            if method in results["by_method"]:
-                results["by_method"][method] += 1
         else:
             results["failed"] += 1
             results["errors"].append({
@@ -229,9 +191,6 @@ async def main():
     logger.info(f"Failed: {results['failed']}")
     logger.info(f"Total chars extracted: {results['total_chars']:,}")
     logger.info(f"Total pages processed: {results['total_pages']}")
-    logger.info(f"\nBy OCR Method:")
-    logger.info(f"  - DeepSeek Vision: {results['by_method']['deepseek_vision']}")
-    logger.info(f"  - Google Vision: {results['by_method']['google_vision']}")
 
     if results["errors"]:
         logger.warning("\nFailed documents:")
@@ -240,7 +199,6 @@ async def main():
 
     # Close connections
     await close_db()
-    await deepseek_ocr.close()
 
 
 if __name__ == "__main__":

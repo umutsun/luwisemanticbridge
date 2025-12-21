@@ -500,9 +500,8 @@ class SemanticSearchService:
                 provider_used = 'openai'
 
         except openai.RateLimitError:
-            logger.warning(f"{config.provider} rate limited, waiting 5 seconds...")
-            await asyncio.sleep(5)
-            return await self.generate_embedding(text, use_cache=False)
+            logger.warning(f"{config.provider} rate limited, trying fallback provider...")
+            embedding = None  # Force fallback instead of infinite retry
 
         except openai.AuthenticationError as auth_err:
             logger.warning(f"OpenAI auth error: {auth_err}. Trying fallback...")

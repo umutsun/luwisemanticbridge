@@ -23,7 +23,7 @@ DB_PASS = os.environ.get('DB_PASS', 'Luwi2025SecurePGx7749')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 EMBEDDING_MODEL = 'text-embedding-3-small'
 BATCH_SIZE = 10
-PROGRESS_FILE = '/tmp/embedding_progress.json'
+PROGRESS_FILE = '/var/www/vergilex/embedding_progress.json'
 
 def get_connection(dbname):
     """Get database connection"""
@@ -73,10 +73,16 @@ def generate_embeddings(texts, client):
         print(f"Embedding error: {e}")
         return None
 
-def process_table(source_conn, target_conn, client, table_name, progress):
-    """Process a single table"""
+def process_table(client, table_name, progress):
+    """Process a single table with auto-reconnection"""
     offset = progress.get('offset', 0)
     processed = progress.get('processed', 0)
+
+    # Create fresh connections
+    source_conn = get_connection(SOURCE_DB)
+    target_conn = get_connection(TARGET_DB)
+    reconnect_count = 0
+    max_reconnects = 5
 
     # Column mapping for different tables
     if table_name == 'csv_sorucevap':
@@ -93,6 +99,25 @@ def process_table(source_conn, target_conn, client, table_name, progress):
 
     while offset < total:
         try:
+            # Check if connections are closed and reconnect
+            if source_conn.closed or target_conn.closed:
+                print(f"  Reconnecting to databases...")
+                try:
+                    source_conn.close()
+                except:
+                    pass
+                try:
+                    target_conn.close()
+                except:
+                    pass
+                source_conn = get_connection(SOURCE_DB)
+                target_conn = get_connection(TARGET_DB)
+                reconnect_count += 1
+                if reconnect_count > max_reconnects:
+                    print(f"  Too many reconnects ({reconnect_count}), waiting 30s...")
+                    time.sleep(30)
+                    reconnect_count = 0
+
             # Fetch batch
             with source_conn.cursor() as cur:
                 cur.execute(
@@ -131,8 +156,8 @@ def process_table(source_conn, target_conn, client, table_name, progress):
                                 if i < len(embeddings) and row[1] and row[1].strip():
                                     cur.execute("""
                                         INSERT INTO unified_embeddings
-                                        (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used, embedding_provider)
-                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        (source_table, source_type, source_id, source_name, content, embedding, metadata, tokens_used, model_used)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                                         ON CONFLICT (source_table, source_id) DO NOTHING
                                     """, (
                                         table_name,
@@ -143,8 +168,7 @@ def process_table(source_conn, target_conn, client, table_name, progress):
                                         embeddings[i],
                                         json.dumps({'model': EMBEDDING_MODEL}),
                                         len(row[1]) // 4,
-                                        EMBEDDING_MODEL,
-                                        'openai'
+                                        EMBEDDING_MODEL
                                     ))
                         target_conn.commit()
                         processed += len(texts)
@@ -158,11 +182,34 @@ def process_table(source_conn, target_conn, client, table_name, progress):
             # Small delay to avoid rate limiting
             time.sleep(0.1)
 
+        except psycopg2.OperationalError as e:
+            print(f"DB Error at offset {offset}: {e}")
+            save_progress(progress)
+            # Force reconnection
+            try:
+                source_conn.close()
+            except:
+                pass
+            try:
+                target_conn.close()
+            except:
+                pass
+            source_conn = get_connection(SOURCE_DB)
+            target_conn = get_connection(TARGET_DB)
+            time.sleep(5)
+            continue
         except Exception as e:
             print(f"Error at offset {offset}: {e}")
             save_progress(progress)
             time.sleep(5)  # Wait before retry
             continue
+
+    # Close connections
+    try:
+        source_conn.close()
+        target_conn.close()
+    except:
+        pass
 
     return processed
 
@@ -209,32 +256,24 @@ def main():
         'csv_maliansiklopedi'
     ]
 
-    source_conn = get_connection(SOURCE_DB)
-    target_conn = get_connection(TARGET_DB)
+    for table in tables:
+        if progress.get('table') and table != progress['table']:
+            continue  # Skip until we reach the current table
 
-    try:
-        for table in tables:
-            if progress.get('table') and table != progress['table']:
-                continue  # Skip until we reach the current table
-
-            progress['table'] = table
-            if table != progress.get('table'):
-                progress['offset'] = 0
-
-            process_table(source_conn, target_conn, client, table, progress)
-
-            # Reset offset for next table
+        progress['table'] = table
+        if table != progress.get('table'):
             progress['offset'] = 0
-            save_progress(progress)
 
-        print("\n" + "=" * 60)
-        print("EMBEDDING COMPLETE!")
-        print(f"Total processed: {progress.get('processed', 0)}")
-        print("=" * 60)
+        process_table(client, table, progress)
 
-    finally:
-        source_conn.close()
-        target_conn.close()
+        # Reset offset for next table
+        progress['offset'] = 0
+        save_progress(progress)
+
+    print("\n" + "=" * 60)
+    print("EMBEDDING COMPLETE!")
+    print(f"Total processed: {progress.get('processed', 0)}")
+    print("=" * 60)
 
 if __name__ == '__main__':
     main()
