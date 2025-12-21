@@ -69,25 +69,26 @@ def embed_missing_records(table_name, content_query, id_column='id'):
         if not records:
             continue
 
-        # Create embeddings
-        texts = [f"{r[2] or ''}\n\n{r[1] or ''}" for r in records]  # title + content
+        # Create embeddings - truncate to avoid token limit (max ~8000 tokens = ~30000 chars)
+        MAX_CHARS = 25000
+        texts = [f"{r[2] or ''}\n\n{r[1] or ''}"[:MAX_CHARS] for r in records]
 
         try:
             response = client.embeddings.create(input=texts, model=EMBEDDING_MODEL)
             embeddings = [e.embedding for e in response.data]
 
-            # Insert
+            # Insert with correct column names
             with target_conn.cursor() as cur:
                 values = [
-                    (table_name, records[j][0], texts[j][:500], embeddings[j])
+                    (table_name, 'csv', records[j][0], str(records[j][2] or '')[:255], texts[j], embeddings[j])
                     for j in range(len(records))
                 ]
                 execute_values(
                     cur,
-                    """INSERT INTO unified_embeddings (source_table, source_id, content_preview, embedding)
+                    """INSERT INTO unified_embeddings (source_table, source_type, source_id, source_name, content, embedding)
                        VALUES %s ON CONFLICT (source_table, source_id) DO NOTHING""",
                     values,
-                    template="(%s, %s, %s, %s::vector)"
+                    template="(%s, %s, %s, %s, %s, %s::vector)"
                 )
                 target_conn.commit()
                 total_created += len(records)
