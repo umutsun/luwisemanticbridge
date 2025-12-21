@@ -1480,6 +1480,13 @@ router.get('/stream', async (req: Request, res: Response) => {
             totalKeys: metrics.redis.totalKeys,
             hitRate: metrics.redis.hitRate
           },
+          // Performance metrics (real data)
+          performance: {
+            avgResponseTime: metrics.performance.avgResponseTime,
+            dailyQueries: metrics.performance.dailyQueries,
+            cacheHitRate: metrics.performance.cacheHitRate,
+            totalDocuments: metrics.performance.totalDocuments
+          },
           // Services status
           services: metrics.services,
           // Active pipelines (embedding, crawlers, etc.)

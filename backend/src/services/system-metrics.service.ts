@@ -77,6 +77,13 @@ interface RedisStats {
   hitRate: number;
 }
 
+interface PerformanceMetrics {
+  avgResponseTime: number;  // milliseconds
+  dailyQueries: number;
+  cacheHitRate: number;     // percentage
+  totalDocuments: number;
+}
+
 export interface SystemMetrics {
   timestamp: Date;
   cpu: CpuInfo;
@@ -87,6 +94,7 @@ export interface SystemMetrics {
   pipelines: PipelineStatus[];
   database: DatabaseStats;
   redis: RedisStats;
+  performance: PerformanceMetrics;
 }
 
 export class SystemMetricsService {
@@ -386,6 +394,60 @@ export class SystemMetricsService {
   }
 
   /**
+   * Get performance metrics from Redis
+   */
+  async getPerformanceMetrics(): Promise<PerformanceMetrics> {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    let avgResponseTime = 0;
+    let dailyQueries = 0;
+    let cacheHitRate = 0;
+    let totalDocuments = 0;
+
+    // Get document count from database
+    try {
+      const docResult = await this.pool.query(`SELECT COUNT(*) as count FROM documents`);
+      totalDocuments = parseInt(docResult.rows[0]?.count || 0);
+    } catch {
+      totalDocuments = 0;
+    }
+
+    if (this.redis && this.redis.status === 'ready') {
+      try {
+        // Get daily query count
+        const queryCount = await this.redis.get(`stats:daily_queries:${today}`);
+        dailyQueries = parseInt(queryCount || '0');
+
+        // Get average response time from last 100 requests
+        const responseTimes = await this.redis.lrange('stats:response_times', 0, 99);
+        if (responseTimes && responseTimes.length > 0) {
+          const times = responseTimes.map((t: string) => parseFloat(t));
+          avgResponseTime = Math.round(times.reduce((a: number, b: number) => a + b, 0) / times.length);
+        }
+
+        // Get cache hit rate
+        const [hits, misses] = await Promise.all([
+          this.redis.get('cache:hits'),
+          this.redis.get('cache:misses')
+        ]);
+        const totalHits = parseInt(hits || '0');
+        const totalMisses = parseInt(misses || '0');
+        const totalRequests = totalHits + totalMisses;
+        cacheHitRate = totalRequests > 0 ? Math.round((totalHits / totalRequests) * 100) : 0;
+      } catch (err) {
+        console.error('Error getting performance metrics from Redis:', err);
+      }
+    }
+
+    return {
+      avgResponseTime,
+      dailyQueries,
+      cacheHitRate,
+      totalDocuments
+    };
+  }
+
+  /**
    * Get services status
    */
   async getServicesStatus(): Promise<ServiceStatus[]> {
@@ -448,12 +510,13 @@ export class SystemMetricsService {
    * Get all system metrics
    */
   async getAllMetrics(): Promise<SystemMetrics> {
-    const [disk, pipelines, database, redis, services] = await Promise.all([
+    const [disk, pipelines, database, redis, services, performance] = await Promise.all([
       this.getDiskUsage(),
       this.getPipelinesStatus(),
       this.getDatabaseStats(),
       this.getRedisStats(),
-      this.getServicesStatus()
+      this.getServicesStatus(),
+      this.getPerformanceMetrics()
     ]);
 
     return {
@@ -465,7 +528,8 @@ export class SystemMetricsService {
       services,
       pipelines,
       database,
-      redis
+      redis,
+      performance
     };
   }
 

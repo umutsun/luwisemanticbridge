@@ -331,6 +331,40 @@ app.use((req, res, next) => {
 // Apply enhanced general rate limiting - TEMPORARILY DISABLED FOR DEBUGGING
 // app.use(generalRateLimit.middleware);
 
+// Performance tracking middleware - tracks response times and query counts
+app.use((req, res, next) => {
+  const startTime = Date.now();
+
+  // Track API queries (exclude static files, health checks, and SSE streams)
+  const isApiRequest = req.path.startsWith('/api/') &&
+                       !req.path.includes('/health') &&
+                       !req.path.includes('/stream');
+
+  res.on('finish', async () => {
+    const responseTime = Date.now() - startTime;
+
+    // Only track meaningful API requests
+    if (isApiRequest && redis && redis.status === 'ready') {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+
+        // Increment daily query counter
+        await redis.incr(`stats:daily_queries:${today}`);
+        // Set expiry for 7 days
+        await redis.expire(`stats:daily_queries:${today}`, 7 * 24 * 60 * 60);
+
+        // Store response time (keep last 100)
+        await redis.lpush('stats:response_times', responseTime.toString());
+        await redis.ltrim('stats:response_times', 0, 99);
+      } catch (err) {
+        // Silent fail - don't break the request
+      }
+    }
+  });
+
+  next();
+});
+
 // Serve static files from uploads directory
 app.use("/uploads", express.static("uploads"));
 

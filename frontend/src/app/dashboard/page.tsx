@@ -287,6 +287,14 @@ export default function DashboardPage() {
     port?: number;
   }>>([]);
 
+  // Performance metrics from SSE stream
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    avgResponseTime: 0,
+    dailyQueries: 0,
+    cacheHitRate: 0,
+    totalDocuments: 0
+  });
+
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
 
@@ -403,6 +411,16 @@ export default function DashboardPage() {
                 ...prev,
                 total: data.database.documents || 0
               }));
+            }
+
+            // Update performance metrics
+            if (data.performance) {
+              setPerformanceMetrics({
+                avgResponseTime: data.performance.avgResponseTime || 0,
+                dailyQueries: data.performance.dailyQueries || 0,
+                cacheHitRate: data.performance.cacheHitRate || 0,
+                totalDocuments: data.performance.totalDocuments || 0
+              });
             }
 
           } catch (err) {
@@ -1573,19 +1591,29 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.responseTime')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">1.2s</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                    {performanceMetrics.avgResponseTime > 1000
+                      ? `${(performanceMetrics.avgResponseTime / 1000).toFixed(1)}s`
+                      : `${performanceMetrics.avgResponseTime}ms`}
+                  </div>
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.dailyQueries')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">247</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                    {performanceMetrics.dailyQueries.toLocaleString()}
+                  </div>
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.documents')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">1,428</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                    {performanceMetrics.totalDocuments.toLocaleString()}
+                  </div>
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.cacheHit')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">87%</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                    {performanceMetrics.cacheHitRate}%
+                  </div>
                 </div>
               </div>
             </CardContent>
