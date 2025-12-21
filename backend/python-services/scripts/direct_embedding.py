@@ -68,13 +68,17 @@ def save_progress(progress, table_total=None):
             # Calculate total across all tables if available
             total_to_embed = table_total if table_total else 0
 
+            # For percentage, use only current table progress (offset vs table total)
+            # current is cumulative across all tables, so use offset for single-table progress
+            current_table_progress = progress.get('offset', 0)
+
             redis_progress = {
                 'status': 'processing',
                 'currentTable': progress.get('table'),
-                'current': progress.get('processed', 0),
-                'total': total_to_embed,  # Add total for backend calculations
+                'current': progress.get('processed', 0),  # Cumulative total
+                'total': total_to_embed,  # Current table total
                 'offset': progress.get('offset', 0),
-                'percentage': int((progress.get('processed', 0) / total_to_embed * 100)) if total_to_embed > 0 else 0,
+                'percentage': int((current_table_progress / total_to_embed * 100)) if total_to_embed > 0 else 0,
                 'startTime': int(time.time() * 1000),
                 'processedTables': []  # Backend expects this field
             }
