@@ -313,25 +313,26 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
       }
     }
 
-    // Fallback: use default schema example_questions or chatbot settings
+    // Fallback: use default schema example_questions from industry_presets table
     if (suggestions.length === 0) {
       try {
-        // First try: Get default schema's example questions (genel_dokuman)
-        const { DataSchemaService } = await import('../services/data-schema.service');
-        const dataSchemaService = new DataSchemaService();
+        // Direct DB query for genel_dokuman preset's example_questions
+        const presetsResult = await dbConfig.query(`
+          SELECT templates->'example_questions' as example_questions
+          FROM industry_presets
+          WHERE is_active = true
+          AND templates->'example_questions' IS NOT NULL
+          ORDER BY
+            CASE WHEN schema_name = 'genel_dokuman' THEN 0 ELSE 1 END,
+            sort_order
+          LIMIT 1
+        `);
 
-        // Get default preset (genel_dokuman or first active preset) - use 'enterprise' to bypass tier filter
-        const presets = await dataSchemaService.getIndustryPresets(undefined, 'enterprise');
-        console.log(`[Suggestions] Found ${presets.length} presets, names: ${presets.map(p => p.schema_name).join(', ')}`);
-
-        const defaultPreset = presets.find(p => p.schema_name === 'genel_dokuman') || presets[0];
-
-        if (defaultPreset?.templates) {
-          const exampleQuestions = defaultPreset.templates.example_questions;
-          console.log(`[Suggestions] Preset ${defaultPreset.schema_name} has example_questions:`, exampleQuestions ? 'YES' : 'NO');
-          if (exampleQuestions && exampleQuestions.length > 0) {
+        if (presetsResult.rows.length > 0 && presetsResult.rows[0].example_questions) {
+          const exampleQuestions = presetsResult.rows[0].example_questions;
+          if (Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
             suggestions = [...exampleQuestions];
-            console.log(`[Suggestions] Using default preset example_questions: ${defaultPreset.schema_name} (${suggestions.length} questions)`);
+            console.log(`[Suggestions] Using preset example_questions: ${suggestions.length} questions`);
           }
         }
       } catch (presetError) {
