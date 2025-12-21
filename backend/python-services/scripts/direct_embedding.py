@@ -271,19 +271,25 @@ def main():
         'csv_maliansiklopedi'
     ]
 
-    for table in tables:
-        if progress.get('table') and table != progress['table']:
-            continue  # Skip until we reach the current table
+    # Find starting table index
+    start_idx = 0
+    current_table = progress.get('table')
+    if current_table and current_table in tables:
+        start_idx = tables.index(current_table)
 
+    # Process tables from current position
+    for table in tables[start_idx:]:
         progress['table'] = table
-        if table != progress.get('table'):
+
+        # Only reset offset if we're moving to a new table
+        if table != current_table:
             progress['offset'] = 0
+            save_progress(progress)
 
         process_table(client, table, progress)
 
-        # Reset offset for next table
-        progress['offset'] = 0
-        save_progress(progress)
+        # Mark current table as processed
+        current_table = table
 
     print("\n" + "=" * 60)
     print("EMBEDDING COMPLETE!")
