@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAnimatedPercentage } from '@/hooks/use-animated-counter';
 
 interface ProgressCircleProps {
   /**
@@ -56,13 +57,15 @@ export function ProgressCircle({
   statusText,
   className = '',
 }: ProgressCircleProps) {
+  // Animate progress percentage smoothly
+  const animatedProgress = useAnimatedPercentage(progress || 0, 700);
+
   // Calculate SVG dimensions
   const radius = (size / 2) * 0.833; // 75/90 ratio from original
   const center = size / 2;
   const strokeWidth = size * 0.0556; // 10/180 ratio from original
   const circumference = 2 * Math.PI * radius;
-  const safeProgress = progress || 0;
-  const strokeDashoffset = circumference * (1 - safeProgress / 100);
+  const strokeDashoffset = circumference * (1 - animatedProgress / 100);
 
   return (
     <div className={`relative flex-shrink-0 ${className}`} style={{ width: `${size}px`, height: `${size}px` }}>
@@ -125,10 +128,10 @@ export function ProgressCircle({
       {/* Center content */}
       <div className="absolute inset-0 flex items-center justify-center flex-col px-4 z-20">
         <div
-          className="font-bold tabular-nums transition-all duration-500 ease-out bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 bg-clip-text text-transparent"
+          className="font-bold tabular-nums bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 bg-clip-text text-transparent"
           style={{ fontSize: `${size * 0.222}px` }} // 40/180 ratio from original
         >
-          {progress}%
+          {animatedProgress}%
         </div>
         {statusText && (
           <div

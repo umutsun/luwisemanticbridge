@@ -10,6 +10,7 @@ import { TaoProgressBar } from '@/components/ui/tao-progress-bar';
 import { ListSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { ProgressCircle } from '@/components/ui/progress-circle';
 import { useToast } from '@/hooks/use-toast';
+import { AnimatedNumber } from '@/components/ui/animated-number';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import config from '@/config/api.config';
 import {
@@ -1221,13 +1222,17 @@ export default function EmbeddingsManagerPage() {
                       {progress.current !== undefined && progress.total !== undefined && (
                         <div className="flex justify-between">
                           <span className="text-blue-600 dark:text-blue-400">Records:</span>
-                          <span className="font-medium text-blue-900 dark:text-blue-100">{progress.current.toLocaleString()} / {progress.total.toLocaleString()}</span>
+                          <span className="font-medium text-blue-900 dark:text-blue-100">
+                            <AnimatedNumber value={progress.current} duration={500} /> / <AnimatedNumber value={progress.total} duration={500} />
+                          </span>
                         </div>
                       )}
                       {progress.tokensUsed !== undefined && progress.tokensUsed > 0 && (
                         <div className="flex justify-between">
                           <span className="text-blue-600 dark:text-blue-400">Tokens:</span>
-                          <span className="font-medium text-blue-900 dark:text-blue-100">{progress.tokensUsed.toLocaleString()}</span>
+                          <span className="font-medium text-blue-900 dark:text-blue-100">
+                            <AnimatedNumber value={progress.tokensUsed} duration={500} />
+                          </span>
                         </div>
                       )}
                       {progress.message && (
@@ -1248,7 +1253,9 @@ export default function EmbeddingsManagerPage() {
                       {progress.current !== undefined && (
                         <div className="flex justify-between">
                           <span className="text-green-600 dark:text-green-400">Processed:</span>
-                          <span className="font-medium text-green-900 dark:text-green-100">{progress.current.toLocaleString()} records</span>
+                          <span className="font-medium text-green-900 dark:text-green-100">
+                            <AnimatedNumber value={progress.current} duration={500} /> records
+                          </span>
                         </div>
                       )}
                       {progress.message && (
