@@ -53,10 +53,14 @@ def load_progress():
     try:
         if os.path.exists(PROGRESS_FILE):
             with open(PROGRESS_FILE, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Ensure startTime exists
+                if 'startTime' not in data:
+                    data['startTime'] = int(time.time() * 1000)
+                return data
     except:
         pass
-    return {'table': 'csv_danistaykararlari', 'offset': 0, 'processed': 0}
+    return {'table': 'csv_danistaykararlari', 'offset': 0, 'processed': 0, 'startTime': int(time.time() * 1000)}
 
 def save_progress(progress, table_total=None):
     """Save progress to file and Redis"""
@@ -80,7 +84,8 @@ def save_progress(progress, table_total=None):
                 'total': total_to_embed,  # Current table total
                 'offset': progress.get('offset', 0),
                 'percentage': int((current_table_progress / total_to_embed * 100)) if total_to_embed > 0 else 0,
-                'startTime': int(time.time() * 1000),
+                'startTime': progress.get('startTime', int(time.time() * 1000)),
+                'lastHeartbeat': int(time.time() * 1000),  # Keep alive for stuck detection
                 'processedTables': []  # Backend expects this field
             }
             redis_client.setex('embedding:progress', 86400, json.dumps(redis_progress))  # 24h expiry
