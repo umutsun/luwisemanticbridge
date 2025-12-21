@@ -2876,11 +2876,13 @@ export default function DocumentManagerPage() {
   };
 
   // Batch Analyze - Extract text from PDFs before embedding
-  const handleBatchAnalyze = async () => {
-    const selectedDocs = Array.from(selectedRows);
+  const handleBatchAnalyze = async (docsToAnalyze?: any[]) => {
+    const selectedDocs = docsToAnalyze || Array.from(selectedRows).map(id =>
+      documents.find(d => d.id === id)
+    ).filter(Boolean);
+
     // Filter PDF documents that need analysis (no content or insufficient content)
-    const pdfDocs = documents.filter(doc =>
-      selectedDocs.includes(doc.id) &&
+    const pdfDocs = selectedDocs.filter((doc: any) =>
       (doc.type || doc.file_type)?.toLowerCase() === 'pdf'
     );
 
@@ -4295,6 +4297,45 @@ export default function DocumentManagerPage() {
                 )}
               </div>
               <div className="flex gap-2">
+                {/* Batch Analyze Button */}
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    const selectedDocs = Array.from(selectedRows).map(id =>
+                      documents.find(d => d.id === id)
+                    ).filter(Boolean);
+
+                    if (selectedDocs.length === 0) {
+                      toast({
+                        title: 'No documents selected',
+                        description: 'Please select documents to analyze',
+                        variant: 'destructive'
+                      });
+                      return;
+                    }
+
+                    await handleBatchAnalyze(selectedDocs);
+                  }}
+                  disabled={batchProcessing || selectedRows.size === 0}
+                  className="gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  Batch Analyze ({selectedRows.size})
+                </Button>
+
+                {/* Batch Embed Button */}
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    await handleBatchEmbed();
+                  }}
+                  disabled={batchProcessing || selectedRows.size === 0}
+                  className="gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Batch Embed ({selectedRows.size})
+                </Button>
+
                 <Button
                   variant="outline"
                   onClick={() => {
