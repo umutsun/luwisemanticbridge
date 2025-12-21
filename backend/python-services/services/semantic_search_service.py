@@ -516,7 +516,7 @@ class SemanticSearchService:
             try:
                 # If OpenAI failed, try Gemini
                 if config.provider == 'openai':
-                    gemini_key = await self._get_api_key_from_db('google.apiKey')
+                    gemini_key = await self._get_api_key_from_db('google.apiKey') or os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
                     if gemini_key:
                         logger.info("Falling back to Gemini embedding...")
                         embedding = await self._get_gemini_embedding(text, gemini_key)
