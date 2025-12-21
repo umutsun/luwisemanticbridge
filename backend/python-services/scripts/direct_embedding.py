@@ -27,10 +27,11 @@ BATCH_SIZE = 10
 PROGRESS_FILE = '/var/www/vergilex/embedding_progress.json'
 REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
+REDIS_DB = int(os.environ.get('REDIS_DB', '2'))
 
 # Initialize Redis connection
 try:
-    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
     redis_client.ping()
     print("✅ Redis connected")
 except:
