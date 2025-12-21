@@ -339,7 +339,8 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
       }
     }
 
-    // Final fallback: chatbot settings or popular questions (only if still empty)
+    // Final fallback: chatbot settings (only manual questions, NOT auto-generated)
+    // Schema-based questions have priority, autoGenerate is ignored to avoid PDF names in suggestions
     if (suggestions.length === 0) {
       const settingsResult = await dbConfig.query(`
         SELECT value FROM settings WHERE key = 'chatbot'
@@ -349,16 +350,13 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
         const rawValue = settingsResult.rows[0].value;
         const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
 
-        // Only use auto-generated questions if explicitly enabled
-        const autoGenerate = chatbotData.autoGenerateSuggestions !== undefined
-          ? chatbotData.autoGenerateSuggestions
-          : false;  // Changed default to false - prefer schema questions
-
-        if (autoGenerate) {
-          suggestions = await ragChat.getPopularQuestions();
-        } else {
-          suggestions = chatbotData.suggestionQuestions || [];
+        // Use manually configured suggestion questions if available
+        if (chatbotData.suggestionQuestions && chatbotData.suggestionQuestions.length > 0) {
+          suggestions = chatbotData.suggestionQuestions;
+          console.log(`[Suggestions] Using manual chatbot suggestionQuestions: ${suggestions.length} questions`);
         }
+        // NOTE: autoGenerateSuggestions is intentionally ignored - schema questions have priority
+        // getPopularQuestions() often returns poor quality titles (PDF names, etc.)
       }
     }
 
