@@ -313,7 +313,30 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
       }
     }
 
-    // Fallback: use chatbot settings or popular questions
+    // Fallback: use default schema example_questions or chatbot settings
+    if (suggestions.length === 0) {
+      try {
+        // First try: Get default schema's example questions (genel_dokuman)
+        const { DataSchemaService } = await import('../services/data-schema.service');
+        const dataSchemaService = new DataSchemaService();
+
+        // Get default preset (genel_dokuman or first active preset)
+        const presets = await dataSchemaService.getIndustryPresets();
+        const defaultPreset = presets.find(p => p.schema_name === 'genel_dokuman') || presets[0];
+
+        if (defaultPreset?.templates) {
+          const exampleQuestions = (defaultPreset.templates as any).example_questions;
+          if (exampleQuestions && Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
+            suggestions = [...exampleQuestions];
+            console.log(`[Suggestions] Using default preset example_questions: ${defaultPreset.schema_name}`);
+          }
+        }
+      } catch (presetError) {
+        console.error('[Suggestions] Failed to get preset questions:', presetError);
+      }
+    }
+
+    // Final fallback: chatbot settings or popular questions (only if still empty)
     if (suggestions.length === 0) {
       const settingsResult = await dbConfig.query(`
         SELECT value FROM settings WHERE key = 'chatbot'
@@ -323,18 +346,22 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
         const rawValue = settingsResult.rows[0].value;
         const chatbotData = typeof rawValue === 'string' ? JSON.parse(rawValue) : (rawValue || {});
 
+        // Only use auto-generated questions if explicitly enabled
         const autoGenerate = chatbotData.autoGenerateSuggestions !== undefined
           ? chatbotData.autoGenerateSuggestions
-          : true;
+          : false;  // Changed default to false - prefer schema questions
 
         if (autoGenerate) {
           suggestions = await ragChat.getPopularQuestions();
         } else {
           suggestions = chatbotData.suggestionQuestions || [];
         }
-      } else {
-        suggestions = await ragChat.getPopularQuestions();
       }
+    }
+
+    // Final shuffle and limit
+    if (suggestions.length > 0) {
+      suggestions = suggestions.sort(() => Math.random() - 0.5).slice(0, 4);
     }
 
     res.json({ suggestions });
