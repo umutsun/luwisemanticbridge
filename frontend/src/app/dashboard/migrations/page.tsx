@@ -1119,7 +1119,7 @@ export default function EmbeddingsManagerPage() {
         {/* Alerts removed - using toast notifications instead */}
 
         {/* Progress Card moved to right column below Migration Settings */}
-        {false && progress && (progress.status === 'processing' || progress.status === 'completed') && (
+        {progress && (progress.status === 'processing' || progress.status === 'completed') && (
           <Card className={`border-primary/30 ${
             progress.status === 'completed'
               ? 'bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20'
