@@ -320,15 +320,18 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
         const { DataSchemaService } = await import('../services/data-schema.service');
         const dataSchemaService = new DataSchemaService();
 
-        // Get default preset (genel_dokuman or first active preset)
-        const presets = await dataSchemaService.getIndustryPresets();
+        // Get default preset (genel_dokuman or first active preset) - use 'enterprise' to bypass tier filter
+        const presets = await dataSchemaService.getIndustryPresets(undefined, 'enterprise');
+        console.log(`[Suggestions] Found ${presets.length} presets, names: ${presets.map(p => p.schema_name).join(', ')}`);
+
         const defaultPreset = presets.find(p => p.schema_name === 'genel_dokuman') || presets[0];
 
         if (defaultPreset?.templates) {
           const exampleQuestions = (defaultPreset.templates as any).example_questions;
+          console.log(`[Suggestions] Preset ${defaultPreset.schema_name} has example_questions:`, exampleQuestions ? 'YES' : 'NO');
           if (exampleQuestions && Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
             suggestions = [...exampleQuestions];
-            console.log(`[Suggestions] Using default preset example_questions: ${defaultPreset.schema_name}`);
+            console.log(`[Suggestions] Using default preset example_questions: ${defaultPreset.schema_name} (${suggestions.length} questions)`);
           }
         }
       } catch (presetError) {
