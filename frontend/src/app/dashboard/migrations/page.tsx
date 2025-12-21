@@ -354,76 +354,82 @@ export default function EmbeddingsManagerPage() {
     }
   }, []);
 
-  // SSE EventSource ref for cleanup
-  const eventSourceRef = useRef<EventSource | null>(null);
+  // Polling interval ref for cleanup
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Connect to SSE progress stream for real-time updates
-  const connectToProgressStream = useCallback(() => {
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+  // Fetch progress via polling (more reliable than SSE through Nginx)
+  const fetchProgressPolling = useCallback(async () => {
+    try {
+      // Use the non-streaming progress endpoint
+      const response = await fetchWithAuth(`${config.api.baseUrl}/api/v2/embeddings/progress`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      console.log('📡 Progress Poll:', data);
+
+      if (data.status === 'idle') {
+        // No active migration - clear progress
+        setProgress(null);
+        return;
+      }
+
+      // Update progress in real-time
+      setProgress({
+        status: data.status || 'processing',
+        current: data.current || 0,
+        total: data.total || 0,
+        percentage: data.percentage || 0,
+        currentTable: data.currentTable || null,
+        error: data.error || null,
+        tokensUsed: data.tokenUsage?.total || data.tokensUsed || 0,
+        message: data.message || null
+      });
+
+      // Update selected tables if available
+      if (data.tables) {
+        setSelectedTables(data.tables);
+      }
+
+      // Handle completion
+      if (data.status === 'completed') {
+        fetchAvailableTables();
+        fetchTokenStats();
+        // Stop polling on completion
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching progress:', e);
+    }
+  }, [fetchAvailableTables, fetchTokenStats]);
+
+  // Start polling for progress updates
+  const startProgressPolling = useCallback(() => {
+    // Clear existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
     }
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    // Backend route: app.use('/api/v2/embeddings', embeddingProgressRoutes)
-    // embeddingProgressRoutes has router.get('/progress/stream', ...)
-    const sseUrl = `${config.api.baseUrl}/api/v2/embeddings/progress/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    console.log('📡 Starting progress polling (every 2s)');
 
-    console.log('📡 Connecting to SSE progress stream:', sseUrl);
-    const eventSource = new EventSource(sseUrl);
-    eventSourceRef.current = eventSource;
+    // Fetch immediately
+    fetchProgressPolling();
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('📡 SSE Progress:', data);
-
-        if (data.status === 'idle') {
-          // No active migration
-          return;
-        }
-
-        // Update progress in real-time
-        setProgress({
-          status: data.status || 'processing',
-          current: data.current || 0,
-          total: data.total || 0,
-          percentage: data.percentage || 0,
-          currentTable: data.currentTable || null,
-          error: data.error || null,
-          tokensUsed: data.tokenUsage?.total || data.tokensUsed || 0,
-          message: data.message || null
-        });
-
-        // Update selected tables if available
-        if (data.tables) {
-          setSelectedTables(data.tables);
-        }
-
-        // Handle completion
-        if (data.status === 'completed') {
-          fetchAvailableTables();
-          fetchTokenStats();
-        }
-      } catch (e) {
-        console.error('Error parsing SSE data:', e);
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-      // Reconnect after 5 seconds if connection lost
-      setTimeout(() => {
-        if (eventSourceRef.current === eventSource) {
-          connectToProgressStream();
-        }
-      }, 5000);
-    };
+    // Then poll every 2 seconds
+    pollingIntervalRef.current = setInterval(fetchProgressPolling, 2000);
 
     return () => {
-      eventSource.close();
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
     };
-  }, [fetchAvailableTables, fetchTokenStats]);
+  }, [fetchProgressPolling]);
+
+  // Alias for backward compatibility
+  const connectToProgressStream = startProgressPolling;
 
   // Check for active migration (initial check only)
   const checkActiveMigration = useCallback(async () => {
@@ -713,14 +719,14 @@ export default function EmbeddingsManagerPage() {
     // Cleanup on unmount
     return () => {
       clearInterval(pollingInterval);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
     };
   }, [fetchAvailableTables, fetchTokenStats, connectToProgressStream]);
 
-  // Note: Progress updates now come from SSE stream + polling fallback
+  // Note: Progress updates now come from polling (SSE doesn't work reliably through Nginx)
 
   const startMigration = async () => {
     // Merge queued tables with currently selected table rows (checkboxes)
