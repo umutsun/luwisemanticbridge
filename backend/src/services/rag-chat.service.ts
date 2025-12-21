@@ -1207,12 +1207,32 @@ export class RAGChatService {
       .replace(/\s*\(Chunk\s*\d+\)/gi, '')
       // Remove common table prefixes
       .replace(/^(csv_|tbl_|unified_)/gi, '')
+      // Clean up volume/issue patterns
+      .replace(/ci̇lt\/volume:\s*\d+/gi, '')
+      .replace(/volume:\s*\d+/gi, '')
+      // Remove parenthetical metadata like (DİYALOGDERGİSİ)
+      .replace(/\([A-ZÇĞİÖŞÜa-zçğıöşü]+DERGİSİ\)/gi, '')
+      .replace(/\(YAKLASIM[^)]*\)/gi, '')
+      // Fix concatenated words (T.C.DANIŞTAY -> T.C. Danıştay)
+      .replace(/T\.C\.(DANIŞTAY|DANİŞTAY)/gi, 'Danıştay')
+      .replace(/(DANIŞTAY|DANİŞTAY)(DOKUZUNCU|DÖRDÜNCÜ|BEŞİNCİ|ALTINCI|YEDİNCİ|SEKİZİNCİ|ÜÇÜNCÜ|İKİNCİ|BİRİNCİ)/gi, 'Danıştay $2')
+      .replace(/DAİRE/gi, 'Dairesi')
+      // Remove "Esas No:" patterns
+      .replace(/Esas No:\s*/gi, '')
+      .replace(/Karar No:\s*/gi, '')
+      // Remove "Sorular ve cevapları ile" generic patterns
+      .replace(/Sorular ve cevapları ile\s*/gi, '')
       // Clean up multiple spaces and trim
       .replace(/\s+/g, ' ')
       .trim();
 
     // Apply sentence case after cleaning
     cleaned = this.toSentenceCase(cleaned);
+
+    // Final validation: if title is too short or looks like metadata, return empty
+    if (cleaned.length < 15 || /^(Dairesi|Danıştay|Mali çözüm|Halk eğitim)$/i.test(cleaned)) {
+      return '';
+    }
 
     return cleaned;
   }
