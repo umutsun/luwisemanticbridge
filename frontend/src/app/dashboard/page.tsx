@@ -19,6 +19,9 @@ import {
 import { useConfig } from "@/contexts/ConfigContext";
 import apiConfig from "@/config/api.config";
 import { fetchWithAuth, safeJsonParse } from "@/lib/auth-fetch";
+import { AnimatedNumber } from "@/components/ui/animated-number";
+import { AnimatedResourceBar } from "@/components/ui/animated-progress";
+import { useAnimatedPercentage } from "@/hooks/use-animated-counter";
 
 interface SystemStatus {
   database: {
@@ -1394,42 +1397,44 @@ export default function DashboardPage() {
 
       {/* Single Page Dashboard - No Tabs */}
       <div className="space-y-10">
-        {/* Session Metrics & Token Usage - Moved to Top */}
+        {/* Session Metrics & Token Usage - Animated */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Active Sessions */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.activeSession')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {chatStats?.overview?.total_conversations || 0}
+                <AnimatedNumber value={chatStats?.overview?.total_conversations || 0} />
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.currentlyActive')}</div>
             </CardContent>
           </Card>
 
           {/* Total Sessions */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.totalSession')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {chatStats?.overview?.total_conversations || 0}
+                <AnimatedNumber value={chatStats?.overview?.total_conversations || 0} />
               </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.today')}: {chatStats?.daily_activity?.[0]?.conversations || 0}</div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {t('dashboard.stats.today')}: <AnimatedNumber value={chatStats?.daily_activity?.[0]?.conversations || 0} />
+              </div>
             </CardContent>
           </Card>
 
           {/* Token Usage */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.tokenUsage')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {tokenStats.totalTokensUsed > 0 ? tokenStats.totalTokensUsed.toLocaleString() : '0'}
+                <AnimatedNumber value={tokenStats.totalTokensUsed} />
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {t('dashboard.stats.cost')}: ${tokenStats.totalCost.toFixed(4)}
@@ -1438,13 +1443,13 @@ export default function DashboardPage() {
           </Card>
 
           {/* Avg Messages per Session */}
-          <Card className="border-0 shadow-sm">
+          <Card className="border-0 shadow-sm hover:shadow-md transition-shadow duration-300">
             <CardContent className="p-6">
               <div className="mb-2">
                 <span className="text-base font-medium text-gray-600 dark:text-gray-400">{t('dashboard.stats.avgMessagesPerSession')}</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {chatStats?.avgMessagesPerConversation || 0}
+                <AnimatedNumber value={chatStats?.avgMessagesPerConversation || 0} />
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('dashboard.stats.performanceMetric')}</div>
             </CardContent>
@@ -1579,159 +1584,127 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Performance Metrics - Minimal */}
+          {/* Performance Metrics - Animated */}
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" />
                 <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.performance.title')}</h3>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.responseTime')}</div>
-                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
+                  <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg tabular-nums">
                     {performanceMetrics.avgResponseTime > 1000
                       ? `${(performanceMetrics.avgResponseTime / 1000).toFixed(1)}s`
-                      : `${performanceMetrics.avgResponseTime}ms`}
+                      : <><AnimatedNumber value={performanceMetrics.avgResponseTime} formatLocale={false} />ms</>}
                   </div>
                 </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.dailyQueries')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
-                    {performanceMetrics.dailyQueries.toLocaleString()}
+                    <AnimatedNumber value={performanceMetrics.dailyQueries} />
                   </div>
                 </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.documents')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
-                    {performanceMetrics.totalDocuments.toLocaleString()}
+                    <AnimatedNumber value={performanceMetrics.totalDocuments} />
                   </div>
                 </div>
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                   <div className="text-gray-500 dark:text-gray-400">{t('dashboard.performance.cacheHit')}</div>
                   <div className="font-semibold text-gray-700 dark:text-gray-200 text-lg">
-                    {performanceMetrics.cacheHitRate}%
+                    <AnimatedNumber value={performanceMetrics.cacheHitRate} formatLocale={false} />%
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* System Resources - Minimal */}
+          {/* System Resources - Animated */}
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-orange-500 rounded-full" />
+                <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
                 <h3 className="text-sm font-semibold tracking-tight">{t('dashboard.resources.title')}</h3>
               </div>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-3">
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.cpu')}</span>
-                    <span className={`font - medium ${realtimeResources.cpu > 80 ? 'text-red-600 dark:text-red-400' :
-                      realtimeResources.cpu > 60 ? 'text-yellow-600 dark:text-yellow-400' :
-                        'text-blue-600 dark:text-blue-400'
-                      } `}>
-                      {Math.round(realtimeResources.cpu)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.cpu > 80 ? 'bg-red-500' :
-                        realtimeResources.cpu > 60 ? 'bg-yellow-500' :
-                          'bg-blue-500'
-                        } `}
-                      style={{
-                        width: `${realtimeResources.cpu}% `,
-                        boxShadow: realtimeResources.cpu > 80 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                          realtimeResources.cpu > 60 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                            '0 0 8px rgba(59, 130, 246, 0.4)'
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.memory')}</span>
-                    <span className={`font - medium ${realtimeResources.memory > 85 ? 'text-red-600 dark:text-red-400' :
-                      realtimeResources.memory > 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                        'text-green-600 dark:text-green-400'
-                      } `}>
-                      {Math.round(realtimeResources.memory)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.memory > 85 ? 'bg-red-500' :
-                        realtimeResources.memory > 70 ? 'bg-yellow-500' :
-                          'bg-green-500'
-                        } `}
-                      style={{
-                        width: `${realtimeResources.memory}% `,
-                        boxShadow: realtimeResources.memory > 85 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                          realtimeResources.memory > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                            '0 0 8px rgba(34, 197, 94, 0.4)'
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.disk')}</span>
-                    <span className={`font - medium ${realtimeResources.disk > 90 ? 'text-red-600 dark:text-red-400' :
-                      realtimeResources.disk > 75 ? 'text-yellow-600 dark:text-yellow-400' :
-                        'text-green-600 dark:text-green-400'
-                      } `}>
-                      {Math.round(realtimeResources.disk)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.disk > 90 ? 'bg-red-500' :
-                        realtimeResources.disk > 75 ? 'bg-yellow-500' :
-                          'bg-green-500'
-                        } `}
-                      style={{
-                        width: `${realtimeResources.disk}% `,
-                        boxShadow: realtimeResources.disk > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                          realtimeResources.disk > 75 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                            '0 0 8px rgba(34, 197, 94, 0.4)'
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500 dark:text-gray-400">{t('dashboard.resources.gpu')}</span>
-                    <span className={`font - medium ${realtimeResources.gpu > 90 ? 'text-red-600 dark:text-red-400' :
-                      realtimeResources.gpu > 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                        realtimeResources.gpu > 30 ? 'text-purple-600 dark:text-purple-400' :
-                          'text-gray-600 dark:text-gray-400'
-                      } `}>
-                      {Math.round(realtimeResources.gpu)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className={`h - full rounded - full transition - all duration - 500 ease - out ${realtimeResources.gpu > 90 ? 'bg-red-500' :
-                        realtimeResources.gpu > 70 ? 'bg-yellow-500' :
-                          realtimeResources.gpu > 30 ? 'bg-purple-500' :
-                            'bg-gray-500'
-                        } `}
-                      style={{
-                        width: `${realtimeResources.gpu}% `,
-                        boxShadow: realtimeResources.gpu > 90 ? '0 0 8px rgba(239, 68, 68, 0.4)' :
-                          realtimeResources.gpu > 70 ? '0 0 8px rgba(245, 158, 11, 0.4)' :
-                            realtimeResources.gpu > 30 ? '0 0 8px rgba(168, 85, 247, 0.4)' :
-                              'none'
-                      }}
-                    />
-                  </div>
-                </div>
+                <AnimatedResourceBar
+                  label={t('dashboard.resources.cpu')}
+                  value={realtimeResources.cpu}
+                  thresholds={{ warning: 60, danger: 80 }}
+                />
+                <AnimatedResourceBar
+                  label={t('dashboard.resources.memory')}
+                  value={realtimeResources.memory}
+                  thresholds={{ warning: 70, danger: 85 }}
+                  colors={{
+                    normal: {
+                      text: 'text-green-600 dark:text-green-400',
+                      bar: 'bg-green-500',
+                      glow: 'rgba(34, 197, 94, 0.4)',
+                    },
+                    warning: {
+                      text: 'text-yellow-600 dark:text-yellow-400',
+                      bar: 'bg-yellow-500',
+                      glow: 'rgba(245, 158, 11, 0.4)',
+                    },
+                    danger: {
+                      text: 'text-red-600 dark:text-red-400',
+                      bar: 'bg-red-500',
+                      glow: 'rgba(239, 68, 68, 0.4)',
+                    },
+                  }}
+                />
+                <AnimatedResourceBar
+                  label={t('dashboard.resources.disk')}
+                  value={realtimeResources.disk}
+                  thresholds={{ warning: 75, danger: 90 }}
+                  colors={{
+                    normal: {
+                      text: 'text-green-600 dark:text-green-400',
+                      bar: 'bg-green-500',
+                      glow: 'rgba(34, 197, 94, 0.4)',
+                    },
+                    warning: {
+                      text: 'text-yellow-600 dark:text-yellow-400',
+                      bar: 'bg-yellow-500',
+                      glow: 'rgba(245, 158, 11, 0.4)',
+                    },
+                    danger: {
+                      text: 'text-red-600 dark:text-red-400',
+                      bar: 'bg-red-500',
+                      glow: 'rgba(239, 68, 68, 0.4)',
+                    },
+                  }}
+                />
+                <AnimatedResourceBar
+                  label={t('dashboard.resources.gpu')}
+                  value={realtimeResources.gpu}
+                  thresholds={{ warning: 70, danger: 90 }}
+                  colors={{
+                    normal: {
+                      text: 'text-gray-600 dark:text-gray-400',
+                      bar: 'bg-gray-400',
+                      glow: 'rgba(156, 163, 175, 0.3)',
+                    },
+                    warning: {
+                      text: 'text-purple-600 dark:text-purple-400',
+                      bar: 'bg-purple-500',
+                      glow: 'rgba(168, 85, 247, 0.4)',
+                    },
+                    danger: {
+                      text: 'text-red-600 dark:text-red-400',
+                      bar: 'bg-red-500',
+                      glow: 'rgba(239, 68, 68, 0.4)',
+                    },
+                  }}
+                />
               </div>
             </CardContent>
           </Card>
