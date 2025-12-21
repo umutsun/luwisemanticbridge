@@ -2719,10 +2719,15 @@ export default function DocumentManagerPage() {
   // Handle batch embedding for PDF/TXT/MD/DOC files
   const handleBatchEmbed = async () => {
     const selectedDocs = Array.from(selectedRows);
-    const embedDocs = documents.filter(doc =>
-      selectedDocs.includes(doc.id) &&
-      ['pdf', 'txt', 'md', 'doc', 'docx'].includes((doc.type || doc.file_type)?.toLowerCase() || '')
-    );
+    // Include all analyzed non-CSV documents for embedding
+    const embedDocs = documents.filter(doc => {
+      if (!selectedDocs.includes(doc.id)) return false;
+      const docType = (doc.type || doc.file_type || 'text')?.toLowerCase();
+      const isCSV = docType === 'csv';
+      const isAnalyzed = doc.processing_status === 'analyzed';
+      // Embed analyzed documents or known document types
+      return !isCSV && (isAnalyzed || ['pdf', 'txt', 'md', 'doc', 'docx', 'text'].includes(docType));
+    });
 
     if (embedDocs.length === 0) {
       toast({
@@ -3944,7 +3949,14 @@ export default function DocumentManagerPage() {
                         {(() => {
                           const selected = documents.filter(doc => selectedRows.has(doc.id));
                           const csvDocs = selected.filter(doc => (doc.type || doc.file_type)?.toLowerCase() === 'csv');
-                          const embedDocs = selected.filter(doc => ['pdf', 'txt', 'md', 'doc', 'docx'].includes((doc.type || doc.file_type)?.toLowerCase() || ''));
+                          // Include all non-CSV documents that are analyzed for embedding
+                          const embedDocs = selected.filter(doc => {
+                            const docType = (doc.type || doc.file_type || 'text')?.toLowerCase();
+                            const isCSV = docType === 'csv';
+                            const isAnalyzed = doc.processing_status === 'analyzed';
+                            // Include pdf, txt, md, doc, docx, text (fallback) - basically anything that's analyzed and not CSV
+                            return !isCSV && (isAnalyzed || ['pdf', 'txt', 'md', 'doc', 'docx', 'text'].includes(docType));
+                          });
 
                           return (
                             <>
@@ -3977,12 +3989,14 @@ export default function DocumentManagerPage() {
                                 </DropdownMenu>
                               )}
 
-                              {/* PDF Analyze Button - Extract text before embedding */}
+                              {/* Analyze Button - Extract text from documents before embedding */}
                               {(() => {
-                                const pdfDocs = selected.filter(doc =>
-                                  (doc.type || doc.file_type)?.toLowerCase() === 'pdf'
-                                );
-                                if (pdfDocs.length > 0) {
+                                // Show analyze for PDF and TEXT (fallback) types that need analysis
+                                const analyzableDocs = selected.filter(doc => {
+                                  const docType = (doc.type || doc.file_type || 'text')?.toLowerCase();
+                                  return ['pdf', 'text'].includes(docType) && doc.processing_status !== 'analyzed';
+                                });
+                                if (analyzableDocs.length > 0) {
                                   return (
                                     <TooltipProvider>
                                       <Tooltip>
@@ -3999,7 +4013,7 @@ export default function DocumentManagerPage() {
                                             ) : (
                                               <Brain className="w-4 h-4 text-amber-600 mr-1" />
                                             )}
-                                            <span className="text-xs font-medium">{t('documents.actions.analyze') || 'Analyze'} ({pdfDocs.length})</span>
+                                            <span className="text-xs font-medium">{t('documents.actions.analyze') || 'Analyze'} ({analyzableDocs.length})</span>
                                           </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>{t('documents.actions.analyzeTooltip') || 'Extract text from PDFs (OCR if needed)'}</TooltipContent>
