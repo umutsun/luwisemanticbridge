@@ -80,8 +80,9 @@ def save_progress(progress, table_total=None):
             redis_progress = {
                 'status': 'processing',
                 'currentTable': progress.get('table'),
-                'current': progress.get('processed', 0),  # Cumulative total
+                'current': current_table_progress,  # Current table's processed count (offset)
                 'total': total_to_embed,  # Current table total
+                'cumulativeTotal': progress.get('processed', 0),  # Total across all tables
                 'offset': progress.get('offset', 0),
                 'percentage': int((current_table_progress / total_to_embed * 100)) if total_to_embed > 0 else 0,
                 'startTime': progress.get('startTime', int(time.time() * 1000)),
