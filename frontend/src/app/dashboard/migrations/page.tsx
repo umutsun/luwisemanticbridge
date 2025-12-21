@@ -368,8 +368,13 @@ export default function EmbeddingsManagerPage() {
       console.log('📡 Progress Poll:', data);
 
       if (data.status === 'idle') {
-        // No active migration - clear progress
+        // No active migration - clear progress and stop polling
         setProgress(null);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+          console.log('📡 Polling stopped - status is idle');
+        }
         return;
       }
 
