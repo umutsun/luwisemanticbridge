@@ -69,8 +69,8 @@ def embed_missing_records(table_name, content_query, id_column='id'):
         if not records:
             continue
 
-        # Create embeddings - truncate to avoid token limit (max ~8000 tokens = ~30000 chars)
-        MAX_CHARS = 25000
+        # Create embeddings - truncate to avoid token limit (max ~8000 tokens = ~20000 chars)
+        MAX_CHARS = 20000
         texts = [f"{r[2] or ''}\n\n{r[1] or ''}"[:MAX_CHARS] for r in records]
 
         try:
