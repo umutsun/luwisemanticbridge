@@ -1176,6 +1176,48 @@ export class RAGChatService {
   }
 
   /**
+   * Clean title specifically for suggestion questions
+   * - Removes PDF names, file extensions, technical metadata
+   * - Fixes spaced-out text like "D A N I Ş T A Y" -> "Danıştay"
+   * - Removes ISSN/ISBN numbers and other academic metadata
+   */
+  private cleanTitleForSuggestions(title: string): string {
+    if (!title) return '';
+
+    let cleaned = title
+      // Fix spaced-out letters (D A N I Ş T A Y -> DANIŞTAY)
+      .replace(/([A-ZÇĞİÖŞÜ])\s+(?=[A-ZÇĞİÖŞÜ]\s*)/g, '$1')
+      // Remove PDF/file extensions
+      .replace(/\.(pdf|docx?|xlsx?|pptx?|txt)\s*/gi, ' ')
+      // Remove ISSN/ISBN patterns
+      .replace(/\b(e-)?issn\s*:?\s*[\d-]+/gi, '')
+      .replace(/\bissn\s*[\d-]+/gi, '')
+      .replace(/\bisbn\s*[\d-]+/gi, '')
+      // Remove common file name patterns
+      .replace(/\b\d+issn\b/gi, '')
+      .replace(/Malicozum\d+/gi, 'Mali Çözüm')
+      // Remove page/part indicators
+      .replace(/\s*[-–]\s*(page|sayfa|bölüm|part)\s*\d+/gi, '')
+      .replace(/\s*\((page|sayfa|bölüm|part)\s*\d+[^)]*\)/gi, '')
+      // Remove ID patterns
+      .replace(/\s*[-–]\s*ID:\s*\d+/gi, '')
+      .replace(/\s*\[ID:\s*\d+\]/gi, '')
+      // Remove chunk/part indicators
+      .replace(/\s*\(Part\s*\d+\/\d+\)/gi, '')
+      .replace(/\s*\(Chunk\s*\d+\)/gi, '')
+      // Remove common table prefixes
+      .replace(/^(csv_|tbl_|unified_)/gi, '')
+      // Clean up multiple spaces and trim
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Apply sentence case after cleaning
+    cleaned = this.toSentenceCase(cleaned);
+
+    return cleaned;
+  }
+
+  /**
    * Strip section headings from LLM response
    * Removes headings like "KISA GİRİŞ:", "ANA BİLGİ:", "UYGULAMA:", "KAYNAKÇA:", etc.
    */
@@ -2815,12 +2857,17 @@ UNUT: ${conversationTone} üslubunda YORUMLA, kopyalama. KENDI KELİMELERİNLE a
           continue;
         }
 
-        // Clean the text and convert ALL CAPS to sentence case
-        const cleanTitle = this.toSentenceCase(title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
+        // Clean the text - use specialized cleaner for suggestions
+        const cleanTitle = this.cleanTitleForSuggestions(title.replace(/<[^>]*>/g, ''));
         const cleanExcerpt = this.toSentenceCase(excerpt.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
 
-        // Skip URLs and unwanted patterns
+        // Skip URLs, file patterns, and unwanted content
         if (cleanTitle.includes('http') || cleanExcerpt.includes('http')) {
+          continue;
+        }
+
+        // Skip titles that are still technical/metadata-like after cleaning
+        if (cleanTitle.length < 10 || /^\d+$/.test(cleanTitle) || /^[A-Z]{2,}\d+/.test(cleanTitle)) {
           continue;
         }
 
