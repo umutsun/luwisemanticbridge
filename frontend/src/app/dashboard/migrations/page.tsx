@@ -365,8 +365,9 @@ export default function EmbeddingsManagerPage() {
     }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    // Updated endpoint to match backend SSE route
-    const sseUrl = `${config.api.baseUrl}/api/embedding-progress/progress/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    // Backend route: app.use('/api/v2/embeddings', embeddingProgressRoutes)
+    // embeddingProgressRoutes has router.get('/progress/stream', ...)
+    const sseUrl = `${config.api.baseUrl}/api/v2/embeddings/progress/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
     console.log('📡 Connecting to SSE progress stream:', sseUrl);
     const eventSource = new EventSource(sseUrl);
