@@ -851,51 +851,38 @@ router.get('/progress/stream', async (req: Request, res: Response) => {
         if (redisProgress) {
           const progressData = JSON.parse(redisProgress);
 
-          // If this is active migration progress, use it
+          // If this is active migration progress, use it directly from Redis
           if (progressData.status === 'processing' || progressData.status === 'paused') {
-            // Get actual embedded counts from database
-            let totalEmbedded = 0;
-            try {
-              const embeddedResult = await pgPool.query(`
-                SELECT source_table, COUNT(DISTINCT(metadata->>'source_id')) as count
-                FROM unified_embeddings
-                WHERE source_table IN ('Soru-Cevap', 'Makaleler', 'Danıştay Kararları', 'Özelgeler')
-                GROUP BY source_table
-              `);
-
-              embeddedResult.rows.forEach(row => {
-                totalEmbedded += parseInt(row.count);
-              });
-            } catch (dbError) {
-              console.error('Error fetching embedded counts:', dbError);
-            }
+            // Use Redis data directly - Python script provides accurate real-time data
+            const current = progressData.current || 0;
+            const total = progressData.total || 0;
 
             // Calculate processing speed
             const elapsedMs = Date.now() - (progressData.startTime || Date.now());
-            const recordsPerSecond = totalEmbedded / (elapsedMs / 1000);
+            const recordsPerSecond = current / (elapsedMs / 1000);
             const processingSpeed = recordsPerSecond * 60;
 
             // Calculate estimated time remaining
             let estimatedTimeRemaining = null;
-            if (recordsPerSecond > 0 && progressData.total > totalEmbedded) {
-              estimatedTimeRemaining = (progressData.total - totalEmbedded) / recordsPerSecond;
+            if (recordsPerSecond > 0 && total > current) {
+              estimatedTimeRemaining = (total - current) / recordsPerSecond;
             }
 
             return {
               status: progressData.status,
-              current: totalEmbedded,
-              total: progressData.total || 0,
-              percentage: progressData.total > 0 ? Math.round((totalEmbedded / progressData.total) * 100) : 0,
+              current: current,
+              total: total,
+              percentage: progressData.percentage || 0,
               currentTable: progressData.currentTable || null,
               error: progressData.error || null,
-              tokensUsed: totalEmbedded * 500,
-              estimatedCost: (totalEmbedded * 500) / 1000 * 0.0001,
+              tokensUsed: current * 500,
+              estimatedCost: (current * 500) / 1000 * 0.0001,
               startTime: progressData.startTime || Date.now(),
               estimatedTimeRemaining,
               processedTables: progressData.processedTables || [],
-              alreadyEmbedded: totalEmbedded,
-              pendingCount: Math.max(0, (progressData.total || 0) - totalEmbedded),
-              successCount: totalEmbedded,
+              alreadyEmbedded: current,
+              pendingCount: Math.max(0, total - current),
+              successCount: current,
               errorCount: progressData.errorCount || 0,
               newlyEmbedded: progressData.newlyEmbedded || 0,
               currentBatch: progressData.currentBatch || 0,
