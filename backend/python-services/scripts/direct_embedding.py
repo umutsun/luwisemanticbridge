@@ -239,10 +239,12 @@ def process_table(client, table_name, progress):
             save_progress(progress, total)
             # Force reconnection
             try:
+                source_conn.rollback()
                 source_conn.close()
             except:
                 pass
             try:
+                target_conn.rollback()
                 target_conn.close()
             except:
                 pass
@@ -253,7 +255,20 @@ def process_table(client, table_name, progress):
         except Exception as e:
             print(f"Error at offset {offset}: {e}")
             save_progress(progress, total)
-            time.sleep(5)  # Wait before retry
+            # Rollback and reconnect on any error to avoid stuck transactions
+            try:
+                source_conn.rollback()
+                source_conn.close()
+            except:
+                pass
+            try:
+                target_conn.rollback()
+                target_conn.close()
+            except:
+                pass
+            source_conn = get_connection(SOURCE_DB)
+            target_conn = get_connection(TARGET_DB)
+            time.sleep(5)
             continue
 
     # Close connections
