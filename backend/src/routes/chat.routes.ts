@@ -284,8 +284,8 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
 
         if (activeSchema?.templates) {
           // First priority: Use example_questions (static, no placeholders)
-          const exampleQuestions = (activeSchema.templates as any).example_questions;
-          if (exampleQuestions && Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
+          const exampleQuestions = activeSchema.templates.example_questions;
+          if (exampleQuestions && exampleQuestions.length > 0) {
             suggestions = [...exampleQuestions];
             console.log(`[Suggestions] Using example_questions for schema: ${activeSchema.name}`);
           }
@@ -327,9 +327,9 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
         const defaultPreset = presets.find(p => p.schema_name === 'genel_dokuman') || presets[0];
 
         if (defaultPreset?.templates) {
-          const exampleQuestions = (defaultPreset.templates as any).example_questions;
+          const exampleQuestions = defaultPreset.templates.example_questions;
           console.log(`[Suggestions] Preset ${defaultPreset.schema_name} has example_questions:`, exampleQuestions ? 'YES' : 'NO');
-          if (exampleQuestions && Array.isArray(exampleQuestions) && exampleQuestions.length > 0) {
+          if (exampleQuestions && exampleQuestions.length > 0) {
             suggestions = [...exampleQuestions];
             console.log(`[Suggestions] Using default preset example_questions: ${defaultPreset.schema_name} (${suggestions.length} questions)`);
           }

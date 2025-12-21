@@ -65,6 +65,10 @@ export interface DataSchema {
     // Takip sorusu kalıpları
     // Örnek: ["{{madde_no}}. maddenin istisnaları nelerdir?"]
     questions: string[];
+
+    // Statik örnek sorular (placeholder içermez)
+    // Örnek: ["Vergi iadesi nasıl alınır?"]
+    example_questions?: string[];
   };
 
   // LLM'e veri hakkında kılavuz

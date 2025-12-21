@@ -61,6 +61,7 @@ export interface IndustryPreset {
     analyze: string;
     citation: string;
     questions: string[];
+    example_questions?: string[];  // Static questions without placeholders
   };
   llm_guide?: string;
   llm_config?: LLMConfig;
@@ -83,6 +84,7 @@ export interface UserSchema {
     analyze: string;
     citation: string;
     questions: string[];
+    example_questions?: string[];  // Static questions without placeholders
   };
   llm_guide?: string;
   llm_config?: LLMConfig;
