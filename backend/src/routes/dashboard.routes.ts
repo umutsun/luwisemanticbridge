@@ -1394,7 +1394,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
 });
 
 // Dashboard streaming endpoint for real-time updates
-router.get('/api/v2/dashboard/stream', async (req: Request, res: Response) => {
+router.get('/stream', async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
