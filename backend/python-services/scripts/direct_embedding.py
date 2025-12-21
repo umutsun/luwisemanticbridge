@@ -57,7 +57,7 @@ def load_progress():
         pass
     return {'table': 'csv_danistaykararlari', 'offset': 0, 'processed': 0}
 
-def save_progress(progress):
+def save_progress(progress, table_total=None):
     """Save progress to file and Redis"""
     with open(PROGRESS_FILE, 'w') as f:
         json.dump(progress, f)
@@ -65,13 +65,18 @@ def save_progress(progress):
     # Also update Redis for real-time UI updates
     if redis_client:
         try:
+            # Calculate total across all tables if available
+            total_to_embed = table_total if table_total else 0
+
             redis_progress = {
                 'status': 'processing',
                 'currentTable': progress.get('table'),
                 'current': progress.get('processed', 0),
+                'total': total_to_embed,  # Add total for backend calculations
                 'offset': progress.get('offset', 0),
-                'percentage': 0,  # Will be calculated by backend
-                'startTime': int(time.time() * 1000)
+                'percentage': int((progress.get('processed', 0) / total_to_embed * 100)) if total_to_embed > 0 else 0,
+                'startTime': int(time.time() * 1000),
+                'processedTables': []  # Backend expects this field
             }
             redis_client.setex('embedding:progress', 86400, json.dumps(redis_progress))  # 24h expiry
         except Exception as e:
@@ -219,14 +224,14 @@ def process_table(client, table_name, progress):
             offset += BATCH_SIZE
             progress['offset'] = offset
             progress['processed'] = processed
-            save_progress(progress)
+            save_progress(progress, total)
 
             # Small delay to avoid rate limiting
             time.sleep(0.1)
 
         except psycopg2.OperationalError as e:
             print(f"DB Error at offset {offset}: {e}")
-            save_progress(progress)
+            save_progress(progress, total)
             # Force reconnection
             try:
                 source_conn.close()
@@ -242,7 +247,7 @@ def process_table(client, table_name, progress):
             continue
         except Exception as e:
             print(f"Error at offset {offset}: {e}")
-            save_progress(progress)
+            save_progress(progress, total)
             time.sleep(5)  # Wait before retry
             continue
 
