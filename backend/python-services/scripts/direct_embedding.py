@@ -61,17 +61,32 @@ def get_existing_ids(target_conn, table_name, ids):
         )
         return set(row[0] for row in cur.fetchall())
 
-def generate_embeddings(texts, client):
-    """Generate embeddings using OpenAI API"""
-    try:
-        response = client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=texts
-        )
-        return [item.embedding for item in response.data]
-    except Exception as e:
-        print(f"Embedding error: {e}")
-        return None
+def generate_embeddings(texts, client, max_retries=5):
+    """Generate embeddings using OpenAI API with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            response = client.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=texts
+            )
+            return [item.embedding for item in response.data]
+        except Exception as e:
+            error_str = str(e).lower()
+            if 'rate' in error_str or 'limit' in error_str or '429' in str(e):
+                wait_time = (2 ** attempt) * 10  # 10, 20, 40, 80, 160 seconds
+                print(f"  ⚠️ Rate limit hit, waiting {wait_time}s (attempt {attempt+1}/{max_retries})...")
+                time.sleep(wait_time)
+            elif 'timeout' in error_str or 'connection' in error_str:
+                wait_time = (2 ** attempt) * 5  # 5, 10, 20, 40, 80 seconds
+                print(f"  ⚠️ Connection error, waiting {wait_time}s (attempt {attempt+1}/{max_retries})...")
+                time.sleep(wait_time)
+            else:
+                print(f"  ❌ Embedding error: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(5)
+                else:
+                    return None
+    return None
 
 def process_table(client, table_name, progress):
     """Process a single table with auto-reconnection"""
