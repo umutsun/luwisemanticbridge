@@ -122,7 +122,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
                 OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
                 OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
-                OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
+                OR key LIKE 'voyage.%' OR key LIKE 'cohere.%' OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
                 OR key LIKE 'ocrSettings.%' OR key LIKE 'ocrProvider%'`,
 
       embeddings: `SELECT key, value FROM settings
@@ -211,7 +211,7 @@ router.get('/', cacheMiddleware, async (req: Request, res: Response) => {
     // Build apiStatus object for LLM category (includes translation providers)
     if (category === 'llm') {
       const apiStatus: any = {};
-      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter', 'deepl'];
+      const providers = ['openai', 'google', 'anthropic', 'deepseek', 'huggingface', 'openrouter', 'deepl', 'voyage', 'cohere'];
 
       providers.forEach(provider => {
         // IMPORTANT: Check both provider config AND apiStatus for validation data
@@ -432,6 +432,11 @@ router.post('/', async (req: Request, res: Response) => {
         'anthropic': 'llm',
         'google': 'llm',
         'deepseek': 'llm',
+        'voyage': 'llm',
+        'cohere': 'llm',
+        'huggingface': 'llm',
+        'openrouter': 'llm',
+        'embedding': 'embeddings',
         'ragSettings': 'rag',
         'embeddings': 'embeddings',
         'prompts': 'prompts',
@@ -497,7 +502,7 @@ router.get('/category/:categoryName', cacheMiddleware, async (req: Request, res:
              WHERE key LIKE 'openai.%' OR key LIKE 'google.%' OR key LIKE 'anthropic.%'
                 OR key LIKE 'deepseek.%' OR key LIKE 'llmSettings.%'
                 OR key LIKE 'ollama.%' OR key LIKE 'huggingface.%' OR key LIKE 'openrouter.%'
-                OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
+                OR key LIKE 'voyage.%' OR key LIKE 'cohere.%' OR key LIKE 'apiStatus.%' OR key LIKE 'llmStatus.%'
                 OR key LIKE 'ocrSettings.%' OR key LIKE 'ocrProvider%'`,
 
       embeddings: `SELECT key, value FROM settings

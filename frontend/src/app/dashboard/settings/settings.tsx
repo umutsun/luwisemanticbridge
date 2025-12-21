@@ -1025,34 +1025,37 @@ function LLMSettings() {
     return null;
   };
 
-  // Get embedding model details from API check results
+  // Get embedding model details with dimension info
   const getEmbeddingModelDetails = (provider: string, modelName: string) => {
-    const providerData = tempConfig?.[provider];
-    const modelResults = providerData?.modelResults;
+    // Hardcoded dimension info for embedding models
+    const modelDimensions: Record<string, { dim: number; note?: string }> = {
+      // OpenAI
+      'text-embedding-3-small': { dim: 1536 },
+      'text-embedding-3-large': { dim: 3072 },
+      // Google
+      'text-embedding-004': { dim: 1536, note: 'configurable' },
+      // Voyage
+      'voyage-3': { dim: 1024 },
+      'voyage-code-3': { dim: 1024, note: 'code' },
+      'voyage-law-2': { dim: 1024, note: 'legal' },
+      // Cohere
+      'embed-multilingual-v3.0': { dim: 1024, note: 'multilingual' },
+      'embed-english-v3.0': { dim: 1024, note: 'English' },
+      // HuggingFace
+      'BAAI/bge-large-en-v1.5': { dim: 1024 },
+      // OpenRouter
+      'openai/text-embedding-3-small': { dim: 1536 },
+      'openai/text-embedding-3-large': { dim: 3072 },
+    };
 
-    if (modelResults && Array.isArray(modelResults)) {
-      // For embedding models, check if the model was tested
-      const result = modelResults.find((r: any) => {
-        // Match embedding model name patterns
-        return r.model === modelName ||
-          r.model?.includes(modelName) ||
-          modelName?.includes(r.model);
-      });
-
-      if (result && result.success) {
-        const inputTokens = result.usage?.inputTokens || result.usage?.promptTokens || 0;
-        const outputTokens = result.usage?.outputTokens || result.usage?.completionTokens || 0;
-        const totalTokens = result.usage?.totalTokens || (inputTokens + outputTokens);
-        const responseTime = result.responseTime ? `${result.responseTime}ms` : '';
-
-        return {
-          tokens: totalTokens,
-          responseTime,
-          verifiedDate: providerData.verifiedDate ? new Date(providerData.verifiedDate).toLocaleDateString() : null
-        };
-      }
-    }
-    return null;
+    const dimInfo = modelDimensions[modelName];
+    return {
+      dimension: dimInfo?.dim || 1536,
+      note: dimInfo?.note || '',
+      tokens: dimInfo?.dim || 1536,
+      responseTime: '',
+      verifiedDate: null
+    };
   };
 
   const getEmbeddingModelsForProvider = (provider: string) => {
@@ -1064,26 +1067,30 @@ function LLMSettings() {
 
     console.log(`📋 [Embedding ${provider}] Using hardcoded embedding models (API validation tests chat models only)`);
 
+    // Embedding models with dimension info (1024+ only, production-ready)
     const models: Record<string, string[]> = {
       openai: [
-        'text-embedding-3-small',
-        'text-embedding-3-large',
-        'text-embedding-ada-002'
+        'text-embedding-3-small',     // 1536 dims
+        'text-embedding-3-large',     // 3072 dims
       ],
       google: [
-        'text-embedding-004',
-        'multimodalembedding'
+        'text-embedding-004',         // 1536 dims (with output_dimensionality)
+      ],
+      voyage: [
+        'voyage-3',                   // 1024 dims
+        'voyage-code-3',              // 1024 dims (code-optimized)
+        'voyage-law-2',               // 1024 dims (legal docs)
+      ],
+      cohere: [
+        'embed-multilingual-v3.0',    // 1024 dims (multilingual)
+        'embed-english-v3.0',         // 1024 dims (English only)
       ],
       huggingface: [
-        'sentence-transformers/all-MiniLM-L6-v2',
-        'sentence-transformers/all-mpnet-base-v2',
-        'BAAI/bge-small-en-v1.5',
-        'BAAI/bge-large-en-v1.5'
+        'BAAI/bge-large-en-v1.5',     // 1024 dims
       ],
       openrouter: [
-        'openai/text-embedding-3-small',
-        'openai/text-embedding-3-large',
-        'openai/text-embedding-ada-002'
+        'openai/text-embedding-3-small',  // 1536 dims
+        'openai/text-embedding-3-large',  // 3072 dims
       ]
     };
     return models[provider] || ['text-embedding-3-small'];
@@ -1093,6 +1100,8 @@ function LLMSettings() {
     const defaults: Record<string, string> = {
       openai: 'text-embedding-3-small',
       google: 'text-embedding-004',
+      voyage: 'voyage-3',
+      cohere: 'embed-multilingual-v3.0',
       huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
       openrouter: 'openai/text-embedding-3-small'
     };
@@ -1130,6 +1139,8 @@ function LLMSettings() {
       google: { key: tempConfig?.google?.apiKey || llmConfig?.google?.apiKey, name: 'Google AI' },
       anthropic: { key: tempConfig?.anthropic?.apiKey || llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
       deepseek: { key: tempConfig?.deepseek?.apiKey || llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
+      voyage: { key: tempConfig?.voyage?.apiKey || llmConfig?.voyage?.apiKey, name: 'Voyage AI' },
+      cohere: { key: tempConfig?.cohere?.apiKey || llmConfig?.cohere?.apiKey, name: 'Cohere' },
       huggingface: { key: tempConfig?.huggingface?.apiKey || llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
       openrouter: { key: tempConfig?.openrouter?.apiKey || llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
       deepl: { key: tempConfig?.deepl?.apiKey || translationConfig?.deepl?.apiKey, name: 'DeepL' },
@@ -1160,13 +1171,15 @@ function LLMSettings() {
             </CardHeader>
             <CardContent className="space-y-4">
               {Object.entries({
-                openai: { key: tempConfig?.openai?.apiKey ?? llmConfig?.openai?.apiKey, name: 'OpenAI' },
-                google: { key: tempConfig?.google?.apiKey ?? llmConfig?.google?.apiKey, name: 'Google AI' },
-                anthropic: { key: tempConfig?.anthropic?.apiKey ?? llmConfig?.anthropic?.apiKey, name: 'Anthropic' },
-                deepseek: { key: tempConfig?.deepseek?.apiKey ?? llmConfig?.deepseek?.apiKey, name: 'DeepSeek' },
-                huggingface: { key: tempConfig?.huggingface?.apiKey ?? llmConfig?.huggingface?.apiKey, name: 'HuggingFace' },
-                openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter' },
-                deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL' },
+                openai: { key: tempConfig?.openai?.apiKey ?? llmConfig?.openai?.apiKey, name: 'OpenAI', type: 'LLM + Embedding' },
+                google: { key: tempConfig?.google?.apiKey ?? llmConfig?.google?.apiKey, name: 'Google AI', type: 'LLM + Embedding' },
+                anthropic: { key: tempConfig?.anthropic?.apiKey ?? llmConfig?.anthropic?.apiKey, name: 'Anthropic', type: 'LLM' },
+                deepseek: { key: tempConfig?.deepseek?.apiKey ?? llmConfig?.deepseek?.apiKey, name: 'DeepSeek', type: 'LLM' },
+                voyage: { key: tempConfig?.voyage?.apiKey ?? llmConfig?.voyage?.apiKey, name: 'Voyage AI', type: 'Embedding' },
+                cohere: { key: tempConfig?.cohere?.apiKey ?? llmConfig?.cohere?.apiKey, name: 'Cohere', type: 'Embedding' },
+                huggingface: { key: tempConfig?.huggingface?.apiKey ?? llmConfig?.huggingface?.apiKey, name: 'HuggingFace', type: 'Embedding' },
+                openrouter: { key: tempConfig?.openrouter?.apiKey ?? llmConfig?.openrouter?.apiKey, name: 'OpenRouter', type: 'LLM + Embedding' },
+                deepl: { key: tempConfig?.deepl?.apiKey ?? translationConfig?.deepl?.apiKey, name: 'DeepL', type: 'Translation' },
               }).map(([provider, data]) => {
                 const providerStatus = getProviderStatus(provider);
                 const isValidated = isProviderValidated(provider);
@@ -1177,6 +1190,9 @@ function LLMSettings() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Label className="capitalize font-medium">{data.name}</Label>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                          {(data as any).type}
+                        </Badge>
                         {providerStatus.status === 'active' && verifiedDate && (
                           <span className="text-xs text-muted-foreground">
                             {verifiedDate.toLocaleDateString('tr-TR')}
@@ -1628,11 +1644,14 @@ function LLMSettings() {
                         const details = getEmbeddingModelDetails(tempConfig?.embeddingProvider || llmConfig.embeddingProvider || 'openai', model);
                         return (
                           <SelectItem key={model} value={model}>
-                            <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
                               <span className="font-medium">{model}</span>
-                              {details && (
-                                <span className="text-xs text-gray-500">
-                                  {details.verifiedDate} · {details.tokens} tokens · {details.responseTime}
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                {details?.dimension || 1536}d
+                              </Badge>
+                              {details?.note && (
+                                <span className="text-xs text-muted-foreground">
+                                  {details.note}
                                 </span>
                               )}
                             </div>
