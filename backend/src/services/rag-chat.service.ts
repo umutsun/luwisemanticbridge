@@ -874,12 +874,21 @@ export class RAGChatService {
 
         // Fast mode instruction - loaded from settings
         // IMPORTANT: Explicitly tell LLM not to use citation markers like [1], [2], [3]
-        const defaultFastModeEn = 'Answer directly and concisely based on the context. Write natural paragraphs without citations. NEVER use [1], [2], [3] or any citation markers - sources are shown separately.';
-        const defaultFastModeTr = 'Bağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı olmadan doğal paragraflar yaz. ASLA [1], [2], [3] gibi kaynak işaretleri KULLANMA - kaynaklar ayrıca gösterilecek.';
+        // Now supports {maxLength} placeholder for character count from settings
+        const fastModeMaxLength = parseInt(
+          settingsMap.get('ragSettings.summaryMaxLength') || '2000'
+        );
 
-        const fastModeInstruction = responseLanguage === 'en'
-          ? `\n\n${settingsMap.get('ragSettings.fastModeInstructionEn') || defaultFastModeEn}`
-          : `\n\n${settingsMap.get('ragSettings.fastModeInstructionTr') || defaultFastModeTr}`;
+        const defaultFastModeEn = 'Write a comprehensive answer of approximately {maxLength} characters based on the context. Write natural paragraphs without citations. NEVER use [1], [2], [3] or any citation markers - sources are shown separately.';
+        const defaultFastModeTr = 'Bağlam bilgilerine dayanarak yaklaşık {maxLength} karakter uzunluğunda kapsamlı bir yanıt yaz. Kaynak referansı olmadan doğal paragraflar yaz. ASLA [1], [2], [3] gibi kaynak işaretleri KULLANMA - kaynaklar ayrıca gösterilecek.';
+
+        let fastModeTemplate = responseLanguage === 'en'
+          ? (settingsMap.get('ragSettings.fastModeInstructionEn') || defaultFastModeEn)
+          : (settingsMap.get('ragSettings.fastModeInstructionTr') || defaultFastModeTr);
+
+        // Replace {maxLength} placeholder with actual value from settings
+        const fastModeInstruction = `\n\n${fastModeTemplate.replace(/{maxLength}/g, String(fastModeMaxLength))}`;
+        console.log(`⚡ FAST MODE: Using maxLength=${fastModeMaxLength} characters`);
 
         userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
