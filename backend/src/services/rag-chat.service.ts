@@ -389,14 +389,21 @@ export class RAGChatService {
       if (promptsListResult.rows.length > 0) {
         try {
           // Parse the JSON array of prompts
-          const promptsList = typeof promptsListResult.rows[0].value === 'string'
-            ? JSON.parse(promptsListResult.rows[0].value)
-            : promptsListResult.rows[0].value;
+          const rawValue = promptsListResult.rows[0].value;
+          console.log(`📋 prompts.list raw type: ${typeof rawValue}, length: ${rawValue?.length || 0}`);
+
+          const promptsList = typeof rawValue === 'string'
+            ? JSON.parse(rawValue)
+            : rawValue;
+
+          console.log(`📋 prompts.list parsed: isArray=${Array.isArray(promptsList)}, count=${Array.isArray(promptsList) ? promptsList.length : 0}`);
 
           // Find the active prompt
           const activePrompt = Array.isArray(promptsList)
             ? promptsList.find((p: any) => p.isActive === true)
             : null;
+
+          console.log(`📋 Active prompt found: ${!!activePrompt}, hasSystemPrompt=${!!activePrompt?.systemPrompt}, promptLength=${activePrompt?.systemPrompt?.length || 0}`);
 
           if (activePrompt) {
             const tone = activePrompt.conversationTone || 'professional';
@@ -404,13 +411,19 @@ export class RAGChatService {
             const content = activePrompt.systemPrompt || '';
 
             if (content) {
-              console.log(`✅ Using active prompt: ${activePrompt.name || activePrompt.id} with ${tone} tone`);
+              console.log(`✅ Using active prompt: ${activePrompt.name || activePrompt.id} with ${tone} tone (${content.length} chars)`);
               basePrompt = `${toneInstruction}\n\n${content}`;
+            } else {
+              console.warn(`⚠️ Active prompt found but systemPrompt is empty!`);
             }
+          } else {
+            console.warn(`⚠️ No active prompt found in prompts.list array`);
           }
         } catch (parseError) {
           console.warn('Failed to parse prompts.list:', parseError);
         }
+      } else {
+        console.warn(`⚠️ prompts.list not found in settings table`);
       }
 
       // Fallback: Try old format (prompts.{id}.active keys)
