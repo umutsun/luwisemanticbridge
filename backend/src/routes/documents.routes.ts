@@ -378,7 +378,7 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
     const totalCount = parseInt(countResult.rows[0].total);
 
     const result = await lsembPool.query(
-      `SELECT d.id, d.title, d.type, d.size, d.file_path, d.processing_status,
+      `SELECT d.id, d.title, d.type, d.file_type, d.size, d.file_size, d.file_path, d.processing_status,
               d.created_at, d.updated_at, d.metadata,
               d.tokens_used, d.model_used, d.cost_usd,
               d.verified_at, d.auto_verified,
