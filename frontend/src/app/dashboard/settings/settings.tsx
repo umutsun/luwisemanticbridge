@@ -2469,7 +2469,7 @@ function RAGSettings() {
 
   // Optimal default values for RAG settings
   const DEFAULT_RAG_SETTINGS = {
-    similarityThreshold: 0.25,      // 25% - Good balance between precision and recall
+    similarityThreshold: 0.01,      // 1% - Low threshold to capture more results (cosine similarity)
     minResults: 5,                   // Show 5 sources initially
     maxResults: 15,                  // Fetch up to 15 total sources
     parallelLLMCount: 4,            // Process 4 chunks in parallel
@@ -2736,12 +2736,12 @@ function RAGSettings() {
               <h3 className="text-lg font-medium">{t('settings.rag.searchParameters')}</h3>
               <div className="space-y-4">
                 <div>
-                  <Label>{t('settings.rag.similarityThreshold')}: {(tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold).toFixed(2)} (Default: 0.25)</Label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.rag.similarityHelp')}</p>
+                  <Label>{t('settings.rag.similarityThreshold')}: {(tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold).toFixed(2)} (Default: 0.01)</Label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('settings.rag.similarityHelp')} - Düşük değer = daha fazla sonuç</p>
                   <Slider
                     value={[tempRAGConfig?.ragSettings?.similarityThreshold ?? DEFAULT_RAG_SETTINGS.similarityThreshold]}
-                    max={1}
-                    min={0}
+                    max={0.5}
+                    min={0.001}
                     step={0.01}
                     className="mt-2"
                     onValueChange={([value]) => updateRAGSetting('similarityThreshold', value)}
