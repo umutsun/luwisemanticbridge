@@ -301,7 +301,7 @@ export default function DashboardPage() {
   // SSE connection status
   const [sseConnected, setSseConnected] = useState(false);
 
-  // Component mount'da verileri çek
+  // Component mount'da verileri çek - Sequential to avoid ERR_INSUFFICIENT_RESOURCES
   useEffect(() => {
     // Initialize console with startup logs
     addConsoleLog('[SYSTEM] ' + t('dashboard.console.starting'), 'info', 'system');
@@ -315,9 +315,13 @@ export default function DashboardPage() {
     addConsoleLog('[FRONTEND] ' + t('dashboard.console.dashboardApiConnected'), 'info', 'frontend');
     addConsoleLog('[SYSTEM] ' + t('dashboard.console.allServicesReady'), 'info', 'system');
 
-    fetchSystemStatus();
-    fetchDocuments();
-    fetchSessions();
+    // Fetch data sequentially to avoid too many concurrent requests
+    const fetchInitialData = async () => {
+      await fetchSystemStatus();
+      await fetchDocuments();
+      await fetchSessions();
+    };
+    fetchInitialData();
   }, []);
 
   // WebSocket connection disabled - backend doesn't have this endpoint
@@ -456,19 +460,22 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Fetch chat statistics
+  // Fetch chat statistics - delayed to avoid concurrent request overload
   useEffect(() => {
     const fetchChatStats = async () => {
+      // Wait a bit for initial data fetches to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       try {
         // Try dashboard stats first (for admin users)
-        const response = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/dashboard-stats`);
+        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/chat/dashboard-stats'));
 
         if (response.ok) {
           const data = await safeJsonParse(response); if (!data) return;
           setChatStats(data);
         } else if (response.status === 403) {
           // If not admin, try user-specific stats
-          const userResponse = await fetchWithAuth(`${process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8083'}/api/v2/chat/stats`);
+          const userResponse = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/chat/stats'));
 
           if (userResponse.ok) {
             const userData = await safeJsonParse(userResponse); if (!userData) return;
@@ -574,104 +581,97 @@ export default function DashboardPage() {
     fetchChatStats();
   }, []);
 
-  // Fetch document statistics
+  // Fetch all dashboard data - delayed and sequential to avoid too many concurrent requests
   useEffect(() => {
-    const fetchDocumentStats = async () => {
+    const fetchAllDashboardData = async () => {
+      // Wait for initial data fetches to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       try {
-        const response = await fetch('/api/v2/documents/stats');
-        if (response.ok) {
-          const data = await safeJsonParse(response); if (!data) return;
-          setDocumentStats(data);
+        // Fetch settings sequentially to avoid ERR_INSUFFICIENT_RESOURCES
+        let llmResponse = null;
+        let dbResponse = null;
+
+        try {
+          llmResponse = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=llm'));
+        } catch {}
+
+        try {
+          dbResponse = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=database'));
+        } catch {}
+
+        if (llmResponse?.ok) {
+          const data = await safeJsonParse(llmResponse);
+          if (data) setLlmSettings(data.llmSettings || data);
+        }
+
+        if (dbResponse?.ok) {
+          const data = await safeJsonParse(dbResponse);
+          if (data) setDatabaseSettings(data.database || data);
+        }
+
+        // Then fetch stats sequentially (less critical, can fail silently)
+        // Using sequential calls to avoid ERR_INSUFFICIENT_RESOURCES
+        let docResponse = null;
+        let embResponse = null;
+        let tokenResponse = null;
+
+        try {
+          docResponse = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/documents/stats'));
+        } catch {}
+
+        try {
+          embResponse = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/embeddings/stats'));
+        } catch {}
+
+        try {
+          tokenResponse = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/dashboard/stats'));
+        } catch {}
+
+        if (docResponse?.ok) {
+          const data = await safeJsonParse(docResponse);
+          if (data) setDocumentStats(data);
+        }
+
+        if (embResponse?.ok) {
+          const data = await safeJsonParse(embResponse);
+          if (data) setEmbeddingStats(data);
+        }
+
+        if (tokenResponse?.ok) {
+          const data = await safeJsonParse(tokenResponse);
+          if (data) {
+            setTokenStats({
+              totalTokensUsed: data.totalTokensUsed || 0,
+              totalCost: data.totalCost || 0
+            });
+          }
         }
       } catch (error) {
-        console.error('Error fetching document stats:', error);
+        console.error('Error fetching dashboard data:', error);
       }
     };
 
-    fetchDocumentStats();
-  }, []);
+    fetchAllDashboardData();
 
-  // Fetch embedding statistics
-  useEffect(() => {
-    const fetchEmbeddingStats = async () => {
-      try {
-        const response = await fetch('/api/v2/embeddings/stats');
-        if (response.ok) {
-          const data = await safeJsonParse(response); if (!data) return;
-          setEmbeddingStats(data);
-        }
-      } catch (error) {
-        console.error('Error fetching embedding stats:', error);
-      }
-    };
-
-    fetchEmbeddingStats();
-  }, []);
-
-  // Fetch LLM settings
-  useEffect(() => {
-    const fetchLlmSettings = async () => {
-      try {
-        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=llm'));
-        if (response.ok) {
-          const data = await safeJsonParse(response); if (!data) return;
-          console.log('📊 [DASHBOARD] LLM settings loaded from API:', {
-            hasLlmSettings: !!data.llmSettings,
-            activeChatModel: data.llmSettings?.activeChatModel || data.activeChatModel || 'NOT FOUND',
-            dataKeys: Object.keys(data),
-            llmSettingsKeys: data.llmSettings ? Object.keys(data.llmSettings) : []
-          });
-          setLlmSettings(data.llmSettings || data);
-        }
-      } catch (error) {
-        console.error('Error fetching LLM settings:', error);
-      }
-    };
-
-    fetchLlmSettings();
-  }, []);
-
-  // Fetch database settings
-  useEffect(() => {
-    const fetchDatabaseSettings = async () => {
-      try {
-        const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/config?category=database'));
-        if (response.ok) {
-          const data = await safeJsonParse(response); if (!data) return;
-          setDatabaseSettings(data.database || data);
-        }
-      } catch (error) {
-        console.error('Error fetching database settings:', error);
-      }
-    };
-
-    fetchDatabaseSettings();
-  }, []);
-
-  // Fetch token usage statistics
-  useEffect(() => {
-    const fetchTokenStats = async () => {
+    // Refresh token stats every 60 seconds (less frequent)
+    const interval = setInterval(async () => {
       try {
         const response = await fetchWithAuth(apiConfig.getApiUrl('/api/v2/dashboard/stats'));
-        if (response.ok) {
-          const data = await safeJsonParse(response); if (!data) return;
-          console.log('📊 [DASHBOARD] Token stats loaded:', {
-            totalTokens: data.totalTokensUsed,
-            totalCost: data.totalCost
-          });
-          setTokenStats({
-            totalTokensUsed: data.totalTokensUsed || 0,
-            totalCost: data.totalCost || 0
-          });
+        if (response?.ok) {
+          const data = await safeJsonParse(response);
+          if (data) {
+            setTokenStats({
+              totalTokensUsed: data.totalTokensUsed || 0,
+              totalCost: data.totalCost || 0
+            });
+          }
         }
-      } catch (error) {
-        console.error('Error fetching token stats:', error);
+      } catch {
+        // Silent fail for background refresh
       }
-    };
+    }, 60000);
 
-    fetchTokenStats();
-    // Refresh token stats every 30 seconds
-    const interval = setInterval(fetchTokenStats, 30000);
     return () => clearInterval(interval);
   }, []);
 
