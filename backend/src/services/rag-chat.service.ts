@@ -896,34 +896,43 @@ export class RAGChatService {
 
         userPrompt = `${contextLabel}:\n${enhancedContext}${followUpInstruction}\n\n${questionLabel}: ${message}${fastModeInstruction}`;
       } else {
-        // Normal mode with citation instructions - loaded from settings
-        // Supports {sourceCount} placeholder for dynamic source count
-        const defaultCitationEn =
-          `CRITICAL FORMATTING RULES:\n` +
-          ` Write ONLY natural paragraphs (like an expert explaining to someone)\n` +
-          ` INLINE CITATIONS: Place **[1]** after relevant statements. Example: "The deadline is 30 days **[1]** and extensions require written approval **[2]**."\n` +
-          ` NO DUPLICATE CITATIONS: Each source number should appear only ONCE in the response. Don't repeat **[1]** multiple times.\n` +
-          ` Use ONLY source numbers 1-{sourceCount} (you only have {sourceCount} sources)\n` +
-          ` NEVER add section headings or labels like "REFERENCES:"\n` +
-          `Write flowing text with unique inline citations.`;
+        // Normal mode with natural language summary instructions - loaded from settings
+        // Supports {sourceCount} and {maxLength} placeholders for dynamic values
+        const defaultSummaryEn =
+          `RESPONSE INSTRUCTIONS:\n` +
+          ` Write a comprehensive natural language summary that synthesizes ALL {sourceCount} sources provided above\n` +
+          ` DO NOT use citation markers like [1], [2], [3] - write as a cohesive narrative\n` +
+          ` Aim for approximately {maxLength} characters (adjust as needed for completeness)\n` +
+          ` Write ONLY natural paragraphs like an expert explaining the topic\n` +
+          ` Combine related information from multiple sources into unified insights\n` +
+          ` NEVER add section headings or labels like "SUMMARY:" or "CONCLUSION:"\n` +
+          `Provide a flowing, informative overview that addresses the question comprehensively.`;
 
-        const defaultCitationTr =
-          `KRİTİK FORMATLAMA KURALLARI:\n` +
-          ` SADECE doğal paragraflar yaz (bir uzman birine anlatıyormuş gibi)\n` +
-          ` INLINE KAYNAKÇA: İlgili bilgiden sonra **[1]** koy. Örnek: "Süre 30 gündür **[1]** ve uzatma yazılı başvuru gerektirir **[2]**."\n` +
-          ` TEKRAR ETME: Her kaynak numarası yanıtta sadece BİR KEZ geçsin. **[1]**'i birden fazla kullanma.\n` +
-          ` SADECE 1-{sourceCount} arası kaynak numarası kullan\n` +
-          ` ASLA bölüm başlığı veya "KAYNAKLAR:" gibi etiket ekleme\n` +
-          `Akıcı metin yaz, her kaynağı tek seferde kullan.`;
+        const defaultSummaryTr =
+          `YANIT TALİMATLARI:\n` +
+          ` Yukarıda verilen TÜM {sourceCount} kaynağı sentezleyen kapsamlı bir doğal dil özeti yaz\n` +
+          ` [1], [2], [3] gibi kaynak işaretleri KULLANMA - tutarlı bir anlatım olarak yaz\n` +
+          ` Yaklaşık {maxLength} karakter hedefle (bütünlük için gerekirse ayarla)\n` +
+          ` SADECE doğal paragraflar yaz, bir uzman konuyu anlatıyormuş gibi\n` +
+          ` Birden fazla kaynaktan ilgili bilgileri birleşik içgörüler halinde birleştir\n` +
+          ` ASLA "ÖZET:" veya "SONUÇ:" gibi bölüm başlıkları ekleme\n` +
+          `Soruyu kapsamlı bir şekilde ele alan akıcı, bilgilendirici bir genel bakış sun.`;
 
-        // Get instruction from settings or use default, then replace {sourceCount} placeholder
-        let citationTemplate = responseLanguage === 'en'
-          ? (settingsMap.get('ragSettings.citationInstructionEn') || defaultCitationEn)
-          : (settingsMap.get('ragSettings.citationInstructionTr') || defaultCitationTr);
+        // Get max summary length from settings (used in citation excerpt generation)
+        const maxSummaryLength = parseInt(
+          settingsMap.get('ragSettings.summaryMaxLength') || '800'
+        );
 
-        const citationInstruction = `\n\n${citationTemplate.replace(/{sourceCount}/g, String(initialDisplayCount))}`;
+        // Get instruction from settings or use default, then replace placeholders
+        let summaryTemplate = responseLanguage === 'en'
+          ? (settingsMap.get('ragSettings.citationInstructionEn') || defaultSummaryEn)
+          : (settingsMap.get('ragSettings.citationInstructionTr') || defaultSummaryTr);
 
-        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${citationInstruction}`;
+        const summaryInstruction = `\n\n${summaryTemplate
+          .replace(/{sourceCount}/g, String(initialDisplayCount))
+          .replace(/{maxLength}/g, String(maxSummaryLength))}`;
+
+        userPrompt = `${contextLabel}:\n${enhancedContext}\n\n${questionLabel}: ${message}${summaryInstruction}`;
       }
       console.log(` Best similarity score: ${(bestScore * 100).toFixed(1)}% (results sorted by relevance)`);
       console.log(`️ Sending temperature to LLM Manager: ${options.temperature} (type: ${typeof options.temperature})`);
