@@ -208,6 +208,47 @@ router.post('/refresh', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * @swagger
+ * /auth/verify:
+ *   get:
+ *     summary: Verify current access token
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 valid:
+ *                   type: boolean
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Invalid or expired token
+ */
+router.get('/verify', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.userId) {
+      return res.status(401).json({ valid: false, error: 'Invalid token' });
+    }
+
+    const user = await authService.getUserById(req.user.userId);
+
+    if (!user) {
+      return res.status(401).json({ valid: false, error: 'User not found' });
+    }
+
+    res.json({ valid: true, user });
+  } catch (error: any) {
+    res.status(401).json({ valid: false, error: error.message });
+  }
+});
+
 // Logout user
 router.post('/logout', authenticateToken, async (req: Request, res: Response) => {
   try {

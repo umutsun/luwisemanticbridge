@@ -1,6 +1,7 @@
 import { LLMManager } from './llm-manager.service';
 import { tableConfigService } from '../config/table-config.service';
 import { lsembPool } from '../config/database.config';
+import { dataSchemaService } from './data-schema.service';
 import crypto from 'crypto';
 
 export interface QuestionGenerationContext {
@@ -519,7 +520,15 @@ class QuestionGenerationService {
   }): Promise<string[]> {
     const questionPool: string[] = [];
 
-    // 1. Get questions from user pool (real user questions)
+    // 1. Get questions from schema's example_questions (tenant-specific)
+    console.log('[QuestionGen] Fetching schema example questions...');
+    const schemaQuestions = await this.getSchemaExampleQuestions();
+    if (schemaQuestions.length > 0) {
+      console.log(`[QuestionGen] Added ${schemaQuestions.length} questions from schema`);
+      questionPool.push(...schemaQuestions);
+    }
+
+    // 2. Get questions from user pool (real user questions)
     console.log('[QuestionGen] Fetching user pool questions...');
     const userPoolQuestions = await this.getUserPoolQuestions(15);
     if (userPoolQuestions.length > 0) {
@@ -527,24 +536,43 @@ class QuestionGenerationService {
       questionPool.push(...userPoolQuestions);
     }
 
-    // 2. Get actual data source statistics for richer context
+    // 3. Get actual data source statistics for richer context
     const dataSourceStats = await this.getDataSourceStats();
 
-    // 3. Enrich schema context with real data info
+    // 4. Enrich schema context with real data info
     const enrichedContext = {
       ...schemaContext,
       dataSourceStats
     };
 
-    // 4. Generate LLM questions with rich context (complement user questions)
-    const targetLLMCount = Math.max(5, 20 - questionPool.length); // Fill up to ~20 total
+    // 5. Generate LLM questions with rich context (complement existing questions)
+    const targetLLMCount = Math.max(5, 25 - questionPool.length); // Fill up to ~25 total
     const llmQuestions = await this.generateLLMQuestionsEnriched(enrichedContext, targetLLMCount);
     questionPool.push(...llmQuestions);
 
-    console.log(`[QuestionGen] Total pool: ${questionPool.length} questions (${userPoolQuestions.length} user + ${llmQuestions.length} LLM)`);
+    console.log(`[QuestionGen] Total pool: ${questionPool.length} questions (${schemaQuestions.length} schema + ${userPoolQuestions.length} user + ${llmQuestions.length} LLM)`);
 
     // Remove duplicates and return
     return [...new Set(questionPool)];
+  }
+
+  /**
+   * Get example questions from active schema configuration
+   */
+  private async getSchemaExampleQuestions(): Promise<string[]> {
+    try {
+      const config = await dataSchemaService.loadConfig();
+      const activeSchema = config.schemas.find(s => s.id === config.activeSchemaId);
+
+      if (activeSchema?.templates?.example_questions) {
+        return activeSchema.templates.example_questions;
+      }
+
+      return [];
+    } catch (error) {
+      console.log('[QuestionGen] Could not load schema example questions');
+      return [];
+    }
   }
 
   /**
