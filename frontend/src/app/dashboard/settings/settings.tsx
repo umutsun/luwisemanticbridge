@@ -1033,7 +1033,8 @@ function LLMSettings() {
       'text-embedding-3-small': { dim: 1536 },
       'text-embedding-3-large': { dim: 3072 },
       // Google
-      'text-embedding-004': { dim: 1536, note: 'configurable' },
+      'gemini-embedding-001': { dim: 1536, note: 'configurable 128-3072' },
+      'text-embedding-004': { dim: 768, note: 'legacy' },
       // Voyage
       'voyage-3': { dim: 1024 },
       'voyage-code-3': { dim: 1024, note: 'code' },
@@ -1074,7 +1075,8 @@ function LLMSettings() {
         'text-embedding-3-large',     // 3072 dims
       ],
       google: [
-        'text-embedding-004',         // 1536 dims (with output_dimensionality)
+        'gemini-embedding-001',       // 3072 default, 1536 with outputDimensionality (RECOMMENDED)
+        'text-embedding-004',         // 768 dims (legacy)
       ],
       voyage: [
         'voyage-3',                   // 1024 dims
@@ -1099,7 +1101,7 @@ function LLMSettings() {
   const getDefaultEmbeddingModelForProvider = (provider: string) => {
     const defaults: Record<string, string> = {
       openai: 'text-embedding-3-small',
-      google: 'text-embedding-004',
+      google: 'gemini-embedding-001',
       voyage: 'voyage-3',
       cohere: 'embed-multilingual-v3.0',
       huggingface: 'sentence-transformers/all-MiniLM-L6-v2',

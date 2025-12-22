@@ -100,7 +100,7 @@ export class LLMManager {
       model: '',  // NO default - will be set from database
       isInitialized: false,
       supportsEmbeddings: true,
-      embeddingModel: 'gemini-embedding-exp-03-07'  // Supports 1536 dimensions (OpenAI-compatible)
+      embeddingModel: 'gemini-embedding-001'  // Stable model, 1536 dims with outputDimensionality param
     });
 
     this.providers.set('deepseek', {
@@ -459,7 +459,7 @@ export class LLMManager {
 
   private resolveEmbeddingModelName(provider: string, requestedModel?: string): string {
     const prov = this.providers.get(provider);
-    const defaultModel = prov?.embeddingModel || (provider === 'gemini' ? 'text-embedding-004' : 'text-embedding-3-small');
+    const defaultModel = prov?.embeddingModel || (provider === 'gemini' ? 'gemini-embedding-001' : 'text-embedding-3-small');
 
     if (!requestedModel) {
       return defaultModel;
