@@ -576,7 +576,9 @@ export class RAGChatService {
         'ragSettings.citationInstructionEn',
         // Configurable messages (multi-tenant support)
         'ragSettings.noResultsMessageTr',
-        'ragSettings.noResultsMessageEn'
+        'ragSettings.noResultsMessageEn',
+        // Citation control
+        'ragSettings.disableCitationText'
       ];
 
       const settingsResult = await pool.query(
@@ -844,9 +846,12 @@ export class RAGChatService {
 
       let userPrompt: string;
 
-      // ⚡ FAST MODE: Simplified prompt without citation instructions
-      if (citationsDisabled) {
-        console.log('⚡ FAST MODE: Using simplified prompt (no citations)');
+      // Check if citation text should be disabled (sources shown but no [1], [2] in response)
+      const disableCitationText = settingsMap.get('ragSettings.disableCitationText') === 'true';
+
+      // ⚡ FAST MODE or Citation Text Disabled: Simplified prompt without citation instructions
+      if (citationsDisabled || disableCitationText) {
+        console.log(`⚡ NO CITATIONS MODE: citationsDisabled=${citationsDisabled}, disableCitationText=${disableCitationText}`);
 
         // 🔗 Add follow-up context instruction if this is a follow-up question
         // NOTE: Instruction loaded from settings (ragSettings.followUpInstructionTr/En)
