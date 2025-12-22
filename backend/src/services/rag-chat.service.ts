@@ -1225,6 +1225,29 @@ export class RAGChatService {
   }
 
   /**
+   * Fix spacing issues in metadata content
+   * Adds spaces between concatenated metadata fields like "TARİH:2012SAYI:123" -> "TARİH: 2012 SAYI: 123"
+   */
+  private fixMetadataSpacing(text: string): string {
+    if (!text) return '';
+
+    return text
+      // Add space after metadata labels (TARİH:value -> TARİH: value)
+      .replace(/([A-ZÇĞİÖŞÜa-zçğıöşü]+):(\S)/g, '$1: $2')
+      // Add space before uppercase metadata labels (valueSAYI: -> value SAYI:)
+      .replace(/([a-zçğıöşü0-9])([A-ZÇĞİÖŞÜ]{2,}:)/g, '$1 $2')
+      // Add space before "hk." (konuhk. -> konu hk.)
+      .replace(/([a-zçğıöşü])hk\./gi, '$1 hk.')
+      // Add space between date and next field (13/09/2012SAYI -> 13/09/2012 SAYI)
+      .replace(/(\d{2}\/\d{2}\/\d{4})([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      // Add space between number and uppercase (120.01SAYI -> 120.01 SAYI)
+      .replace(/(\d+\.\d+)([A-ZÇĞİÖŞÜ])/g, '$1 $2')
+      // Clean multiple spaces
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  /**
    * Strip HTML tags from text
    */
   private stripHtml(text: string): string {
@@ -1668,8 +1691,8 @@ export class RAGChatService {
 
         // Create natural language title and excerpt from LLM-processed content (if available)
         // Uses processedContent which is either LLM-generated or falls back to cleanExcerpt
-        const displayContent = processedContent || prep.cleanExcerpt;
-        const naturalTitle = this.truncateExcerpt(displayContent, Math.min(excerptMaxLength, 120)) + '...';
+        const displayContent = this.fixMetadataSpacing(processedContent || prep.cleanExcerpt);
+        const naturalTitle = this.truncateExcerpt(displayContent, Math.min(excerptMaxLength, 120));
         const naturalExcerpt = this.truncateExcerpt(displayContent, excerptMaxLength);
         const naturalContent = this.truncateExcerpt(displayContent, summaryMaxLength);
 
