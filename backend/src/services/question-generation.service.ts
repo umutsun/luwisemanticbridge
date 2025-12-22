@@ -493,10 +493,10 @@ class QuestionGenerationService {
       const questionPool = await this.buildQuestionPool(schemaContext);
       console.log(`[QuestionGen] Question pool built with ${questionPool.length} questions`);
 
-      // Store in Redis with 24 hour expiry
+      // Store in Redis with 1 hour expiry (shorter for more variety)
       if (questionPool.length > 0) {
-        await redis.setex(redisKey, 86400, JSON.stringify(questionPool));
-        console.log(`[QuestionGen] Pool cached in Redis`);
+        await redis.setex(redisKey, 3600, JSON.stringify(questionPool));
+        console.log(`[QuestionGen] Pool cached in Redis for 1 hour`);
       }
 
       return this.getRandomQuestions(questionPool, count);

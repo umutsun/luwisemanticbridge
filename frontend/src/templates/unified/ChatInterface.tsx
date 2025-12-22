@@ -87,9 +87,9 @@ export default function ChatInterface() {
     [chatbotSettings.features]
   );
 
-  // Suggestions cache
+  // Suggestions cache - short TTL to allow variety
   const suggestionsCache = useRef<{ data: string[], timestamp: number } | null>(null);
-  const SUGGESTIONS_CACHE_TTL = 60 * 60 * 1000;
+  const SUGGESTIONS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes for fresh suggestions
 
   const fetchSuggestedQuestions = async () => {
     if (suggestionsCache.current) {

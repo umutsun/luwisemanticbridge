@@ -30,17 +30,11 @@ export const ChatWelcome: React.FC<ChatWelcomeProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  // Shuffle suggestions deterministically
+  // Get suggestions - already shuffled from backend, take first 4
   const memoizedSuggestions = React.useMemo(() => {
     if (suggestedQuestions.length === 0) return [];
-    const unique = Array.from(new Set(suggestedQuestions));
-    const seed = unique[0]?.charCodeAt(0) || 1;
-    const shuffled = [...unique];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(((i + 1) * seed * 7) % shuffled.length);
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled.slice(0, 4);
+    // Remove duplicates and take first 4
+    return Array.from(new Set(suggestedQuestions)).slice(0, 4);
   }, [suggestedQuestions]);
 
   return (

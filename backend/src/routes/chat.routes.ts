@@ -352,11 +352,17 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
       }
     }
 
-    // Final shuffle and limit
+    // Final shuffle using Fisher-Yates for true randomness
     if (suggestions.length > 0) {
-      suggestions = suggestions.sort(() => Math.random() - 0.5).slice(0, 4);
+      const shuffled = [...suggestions];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      suggestions = shuffled.slice(0, 4);
     }
 
+    console.log(`[Suggestions] Returning ${suggestions.length} shuffled suggestions`);
     res.json({ suggestions });
   } catch (error: any) {
     console.error('Get suggestions error:', error);
