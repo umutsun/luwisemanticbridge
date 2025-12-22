@@ -1856,6 +1856,14 @@ export class RAGChatService {
     try {
       console.log('[FOLLOW-UP] Generating contextual follow-up questions...');
 
+      // 1. First try schema-based pattern matching
+      const patternQuestions = await this.generatePatternBasedQuestions(userQuestion, sources);
+      if (patternQuestions.length >= 2) {
+        console.log(`[FOLLOW-UP] Using ${patternQuestions.length} pattern-based questions`);
+        return patternQuestions.slice(0, 3);
+      }
+
+      // 2. Fallback to LLM generation if patterns don't match well
       // Extract topics from sources for context
       const sourceTopics = sources.slice(0, 3)
         .map(s => s.title || '')
@@ -1931,6 +1939,73 @@ SADECE 3 soruluk bir JSON dizisi döndür. Örnek format:
 
     } catch (error) {
       console.error('[FOLLOW-UP] Error generating follow-up questions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Generate questions based on schema's question patterns
+   * Matches source content against pattern keywords and generates relevant questions
+   */
+  private async generatePatternBasedQuestions(userQuestion: string, sources: any[]): Promise<string[]> {
+    try {
+      const config = await dataSchemaService.loadConfig();
+      const activeSchema = config.schemas.find(s => s.id === config.activeSchemaId);
+
+      if (!activeSchema?.questionPatterns || activeSchema.questionPatterns.length === 0) {
+        return [];
+      }
+
+      const questions: string[] = [];
+      const combinedText = [
+        userQuestion,
+        ...sources.slice(0, 3).map(s => (s.content || '') + ' ' + (s.title || ''))
+      ].join(' ').toLowerCase();
+
+      // Sort patterns by priority (higher first)
+      const sortedPatterns = [...activeSchema.questionPatterns].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+      for (const pattern of sortedPatterns) {
+        // Check if any pattern keyword matches the content
+        const matchedKeyword = pattern.keywords?.find(kw => combinedText.includes(kw.toLowerCase()));
+
+        if (matchedKeyword) {
+          // Extract topic from user question for template
+          const topic = userQuestion.replace(/\?$/, '').trim();
+
+          // Check for combination matches (more specific questions)
+          let questionAdded = false;
+          if (pattern.combinations) {
+            for (const combo of pattern.combinations) {
+              if (combinedText.includes(combo.when.toLowerCase())) {
+                const question = combo.question.replace('{topic}', topic);
+                if (!questions.includes(question)) {
+                  questions.push(question);
+                  questionAdded = true;
+                  break; // Only one question per pattern
+                }
+              }
+            }
+          }
+
+          // If no combination matched, use default question
+          if (!questionAdded && pattern.defaultQuestion) {
+            const question = pattern.defaultQuestion.replace('{topic}', topic);
+            if (!questions.includes(question)) {
+              questions.push(question);
+            }
+          }
+
+          // Stop after finding 3 questions
+          if (questions.length >= 3) break;
+        }
+      }
+
+      console.log(`[PATTERN] Generated ${questions.length} pattern-based questions from schema: ${activeSchema.name}`);
+      return questions;
+
+    } catch (error) {
+      console.warn('[PATTERN] Failed to generate pattern-based questions:', error);
       return [];
     }
   }
