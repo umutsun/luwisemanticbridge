@@ -3232,8 +3232,8 @@ export default function DocumentManagerPage() {
         {/* Files Section - 2 Column Layout */}
         <div className="space-y-4 sm:space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 items-stretch min-h-[600px]">
-            {/* Left Column (40%) - Upload & Physical Files */}
-            <div className="xl:col-span-5 lg:col-span-6 flex flex-col gap-4 h-full">
+            {/* Left Column - Upload & Physical Files */}
+            <div className="xl:col-span-4 lg:col-span-5 flex flex-col gap-4 h-full">
               {/* Upload Area */}
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
                 <CardContent className="p-4">
@@ -3698,8 +3698,8 @@ export default function DocumentManagerPage() {
 
             </div>
 
-            {/* Right Column (60%) - Database Files */}
-            <div className="xl:col-span-7 lg:col-span-6 flex flex-col gap-4 h-full">
+            {/* Right Column - Database Files */}
+            <div className="xl:col-span-8 lg:col-span-7 flex flex-col gap-4 h-full">
               {/* Search and Filter - Moved Above Table */}
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
                 <CardContent className="p-4">
