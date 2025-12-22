@@ -1033,7 +1033,8 @@ function LLMSettings() {
       'text-embedding-3-small': { dim: 1536 },
       'text-embedding-3-large': { dim: 3072 },
       // Google
-      'gemini-embedding-001': { dim: 1536, note: 'configurable 128-3072' },
+      'gemini-embedding-exp-03-07': { dim: 1536, note: '✅ OpenAI compatible' },
+      'gemini-embedding-001': { dim: 768, note: 'not 1536' },
       'text-embedding-004': { dim: 768, note: 'legacy' },
       // Voyage
       'voyage-3': { dim: 1024 },
@@ -1075,7 +1076,8 @@ function LLMSettings() {
         'text-embedding-3-large',     // 3072 dims
       ],
       google: [
-        'gemini-embedding-001',       // 3072 default, 1536 with outputDimensionality (RECOMMENDED)
+        'gemini-embedding-exp-03-07', // 1536 dims native (RECOMMENDED - OpenAI compatible)
+        'gemini-embedding-001',       // 768 dims default
         'text-embedding-004',         // 768 dims (legacy)
       ],
       voyage: [
@@ -1101,13 +1103,29 @@ function LLMSettings() {
   const getDefaultEmbeddingModelForProvider = (provider: string) => {
     const defaults: Record<string, string> = {
       openai: 'text-embedding-3-small',
-      google: 'gemini-embedding-001',
+      google: 'gemini-embedding-exp-03-07', // Supports 1536 dimensions (OpenAI-compatible)
       voyage: 'voyage-3',
       cohere: 'embed-multilingual-v3.0',
       huggingface: 'sentence-transformers/all-MiniLM-L6-v2',
       openrouter: 'openai/text-embedding-3-small'
     };
     return defaults[provider] || 'text-embedding-3-small';
+  };
+
+  const getEmbeddingModelDimensions = (model: string): number => {
+    const dimensionMap: Record<string, number> = {
+      'text-embedding-3-small': 1536,
+      'text-embedding-3-large': 3072,
+      'text-embedding-ada-002': 1536,
+      'gemini-embedding-exp-03-07': 1536, // Native 1536 with outputDimensionality
+      'text-embedding-004': 768, // Gemini default (not 1536-compatible)
+      'gemini-embedding-001': 768,
+      'voyage-3': 1024,
+      'embed-multilingual-v3.0': 1024,
+      'sentence-transformers/all-MiniLM-L6-v2': 384,
+      'openai/text-embedding-3-small': 1536
+    };
+    return dimensionMap[model] || 1536; // Default to 1536 (OpenAI standard)
   };
 
   const isProviderValidated = (provider: string) => {
@@ -1202,6 +1220,44 @@ function LLMSettings() {
                         )}
                       </div>
                     </div>
+
+                    {/* Token Usage & Cost Info */}
+                    {providerStatus.status === 'active' && tokenInfo[provider] && (
+                      <div className="bg-muted/50 rounded-md p-2 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Token Usage</span>
+                          <span className="font-medium">
+                            {tokenInfo[provider].used?.toLocaleString() || '0'} / {tokenInfo[provider].limit?.toLocaleString() || 'N/A'}
+                          </span>
+                        </div>
+                        {/* Progress bar */}
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${
+                              (tokenInfo[provider].used / tokenInfo[provider].limit) > 0.9
+                                ? 'bg-destructive'
+                                : (tokenInfo[provider].used / tokenInfo[provider].limit) > 0.7
+                                ? 'bg-yellow-500'
+                                : 'bg-primary'
+                            }`}
+                            style={{
+                              width: `${Math.min(100, (tokenInfo[provider].used / tokenInfo[provider].limit) * 100)}%`
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Cost: <span className="font-medium">${tokenInfo[provider].cost?.toFixed(4) || '0.0000'}</span>
+                          </span>
+                          {providerStatus.responseTime && (
+                            <span className="text-muted-foreground">
+                              {providerStatus.responseTime}ms
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Show error message only if validation failed */}
                     {providerStatus.status === 'error' && providerStatus.message && (
                       <div className="text-xs text-destructive mt-1">
