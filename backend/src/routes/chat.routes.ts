@@ -254,7 +254,9 @@ router.get('/api/v2/chat/conversation/:id', async (req: Request, res: Response) 
 });
 
 /**
- * Get popular/suggested questions - Schema-aware suggestions
+ * Get popular/suggested questions - LLM-generated schema-aware suggestions
+ * Uses QuestionGenerationService to create diverse, context-aware questions
+ * Results are cached for 30 minutes to reduce LLM calls
  */
 router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
   try {
@@ -274,42 +276,30 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
       }
     }
 
-    // If user is authenticated, get schema-aware suggestions
+    // If user is authenticated, generate LLM-based suggestions using schema context
     if (userId) {
       try {
         const { DataSchemaService } = await import('../services/data-schema.service');
         const dataSchemaService = new DataSchemaService();
+        const { questionGenerationService } = await import('../services/question-generation.service');
 
         const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);
 
-        if (activeSchema?.templates) {
-          // First priority: Use example_questions (static, no placeholders)
-          const exampleQuestions = activeSchema.templates.example_questions;
-          if (exampleQuestions && exampleQuestions.length > 0) {
-            suggestions = [...exampleQuestions];
-            console.log(`[Suggestions] Using example_questions for schema: ${activeSchema.name}`);
-          }
-          // Second priority: Use question templates that don't have placeholders
-          else if (activeSchema.templates.questions && activeSchema.templates.questions.length > 0) {
-            // Filter out templates with {{placeholders}} - only use static questions
-            const staticQuestions = activeSchema.templates.questions.filter(
-              (q: string) => !q.includes('{{') && !q.includes('}}')
-            );
-            if (staticQuestions.length > 0) {
-              suggestions = [...staticQuestions];
-              console.log(`[Suggestions] Using static questions from schema: ${activeSchema.name}`);
-            }
-          }
+        if (activeSchema) {
+          // Build schema context for LLM
+          const schemaContext = {
+            schemaName: activeSchema.name,
+            description: activeSchema.description,
+            categories: activeSchema.templates?.categories || [],
+            sampleContent: activeSchema.templates?.example_questions?.join(', ')
+          };
 
-          if (suggestions.length > 0) {
-            // Shuffle for variety
-            suggestions = suggestions.sort(() => Math.random() - 0.5);
-            // Limit to 4 suggestions
-            suggestions = suggestions.slice(0, 4);
-          }
+          // Generate LLM-based questions (cached for 30 mins)
+          suggestions = await questionGenerationService.generateWelcomeQuestions(schemaContext, 4);
+          console.log(`[Suggestions] Generated ${suggestions.length} LLM questions for schema: ${activeSchema.name}`);
         }
       } catch (schemaError) {
-        console.error('[Suggestions] Failed to get schema-aware suggestions:', schemaError);
+        console.error('[Suggestions] Failed to generate LLM suggestions:', schemaError);
       }
     }
 

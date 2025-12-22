@@ -465,6 +465,127 @@ class QuestionGenerationService {
   }
 
   /**
+   * Generate schema-aware welcome questions using LLM
+   * Takes schema context and generates diverse, relevant questions
+   */
+  async generateWelcomeQuestions(schemaContext: {
+    schemaName: string;
+    description?: string;
+    categories?: string[];
+    sampleContent?: string;
+  }, count: number = 4): Promise<string[]> {
+    const cacheKey = `welcome-${schemaContext.schemaName}`;
+    const cached = this.cache.get(cacheKey);
+
+    // Return cached questions if available and fresh
+    if (cached && Date.now() - this.getCacheTimestamp(cacheKey) < this.cacheExpiry) {
+      return cached.map(q => q.question).slice(0, count);
+    }
+
+    try {
+      // Build context for LLM
+      const context = this.buildSchemaContext(schemaContext);
+
+      // Generate questions using LLM
+      const prompt = `Sen bir soru öneri asistanısın. Kullanıcı aşağıdaki veri setine erişebilir ve bunlar hakkında sorular sorabilir:
+
+${context}
+
+Lütfen bu veri seti hakkında kullanıcıların sorabileceği ${count} adet ÇEŞİTLİ ve İLGİNÇ soru öner. Her soru:
+- Net ve anlaşılır olmalı
+- Veri setinin farklı yönlerini keşfetmeli
+- Kullanıcı için değerli bilgi sağlamalı
+- Türkçe olmalı
+- Doğrudan sorulabilir formatta olmalı (placeholder yok)
+
+Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama ekleme.`;
+
+      const response = await this.llmManager.chatCompletion({
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.8, // Higher temperature for more variety
+        maxTokens: 500
+      });
+
+      // Parse questions from response
+      const questions = this.parseQuestionsFromResponse(response);
+
+      // Cache the results
+      const generatedQuestions: GeneratedQuestion[] = questions.map(q => ({
+        question: q,
+        type: 'general',
+        confidence: 0.9,
+        keywords: []
+      }));
+
+      this.cache.set(cacheKey, generatedQuestions);
+      this.setCacheTimestamp(cacheKey);
+
+      return questions.slice(0, count);
+    } catch (error) {
+      console.error('Error generating welcome questions:', error);
+      // Fallback to schema-based static questions if available
+      return this.generateFallbackWelcomeQuestions(schemaContext, count);
+    }
+  }
+
+  /**
+   * Build context description from schema
+   */
+  private buildSchemaContext(schemaContext: {
+    schemaName: string;
+    description?: string;
+    categories?: string[];
+    sampleContent?: string;
+  }): string {
+    let context = `Veri Seti: ${schemaContext.schemaName}\n`;
+
+    if (schemaContext.description) {
+      context += `Açıklama: ${schemaContext.description}\n`;
+    }
+
+    if (schemaContext.categories && schemaContext.categories.length > 0) {
+      context += `Kategoriler: ${schemaContext.categories.join(', ')}\n`;
+    }
+
+    if (schemaContext.sampleContent) {
+      context += `Örnek İçerik: ${schemaContext.sampleContent.substring(0, 500)}...\n`;
+    }
+
+    return context;
+  }
+
+  /**
+   * Parse questions from LLM response
+   */
+  private parseQuestionsFromResponse(response: string): string[] {
+    return response
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 10 && line.includes('?'))
+      .map(line => line.replace(/^[-*•]\s*/, '').replace(/^\d+[\.)]\s*/, ''))
+      .slice(0, 10); // Max 10 questions
+  }
+
+  /**
+   * Generate fallback welcome questions without LLM
+   */
+  private generateFallbackWelcomeQuestions(schemaContext: {
+    schemaName: string;
+    description?: string;
+    categories?: string[];
+  }, count: number = 4): string[] {
+    const schemaName = schemaContext.schemaName;
+    const fallbacks = [
+      `${schemaName} veri setinde neler var?`,
+      `Bu sistem hakkında bilgi verir misiniz?`,
+      `Hangi konularda size yardımcı olabilirim?`,
+      `En çok aranan konular nelerdir?`
+    ];
+
+    return fallbacks.slice(0, count);
+  }
+
+  /**
    * Clear cache
    */
   clearCache(): void {
