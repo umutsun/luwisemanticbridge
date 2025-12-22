@@ -380,50 +380,36 @@ export class RAGChatService {
     let llmGuide = '';
 
     try {
-      // PRIORITY 1: Check schema's llmConfig.chatbotContext (tenant-specific)
-      try {
-        const schemaConfig = await dataSchemaService.loadConfig();
-        const activeSchema = schemaConfig.schemas.find(s => s.id === schemaConfig.activeSchemaId);
+      // System prompt comes from prompts.list (user-configurable via UI)
+      // Schema is for data structure guide (llmGuide), NOT system prompt
+      const promptsListResult = await pool.query(
+        "SELECT value FROM settings WHERE key = 'prompts.list'"
+      );
 
-        if (activeSchema?.llmConfig?.chatbotContext) {
-          console.log(`✅ Using system prompt from schema: ${activeSchema.name}`);
-          basePrompt = activeSchema.llmConfig.chatbotContext;
-        }
-      } catch (schemaError) {
-        console.warn('Failed to load schema chatbotContext:', schemaError);
-      }
+      if (promptsListResult.rows.length > 0) {
+        try {
+          // Parse the JSON array of prompts
+          const promptsList = typeof promptsListResult.rows[0].value === 'string'
+            ? JSON.parse(promptsListResult.rows[0].value)
+            : promptsListResult.rows[0].value;
 
-      // PRIORITY 2: Try to get prompts from prompts.list (new format - JSON array)
-      if (!basePrompt) {
-        const promptsListResult = await pool.query(
-          "SELECT value FROM settings WHERE key = 'prompts.list'"
-        );
+          // Find the active prompt
+          const activePrompt = Array.isArray(promptsList)
+            ? promptsList.find((p: any) => p.isActive === true)
+            : null;
 
-        if (promptsListResult.rows.length > 0) {
-          try {
-            // Parse the JSON array of prompts
-            const promptsList = typeof promptsListResult.rows[0].value === 'string'
-              ? JSON.parse(promptsListResult.rows[0].value)
-              : promptsListResult.rows[0].value;
+          if (activePrompt) {
+            const tone = activePrompt.conversationTone || 'professional';
+            const toneInstruction = this.getToneInstruction(tone);
+            const content = activePrompt.systemPrompt || '';
 
-            // Find the active prompt
-            const activePrompt = Array.isArray(promptsList)
-              ? promptsList.find((p: any) => p.isActive === true)
-              : null;
-
-            if (activePrompt) {
-              const tone = activePrompt.conversationTone || 'professional';
-              const toneInstruction = this.getToneInstruction(tone);
-              const content = activePrompt.systemPrompt || '';
-
-              if (content) {
-                console.log(`✅ Using active prompt: ${activePrompt.name || activePrompt.id} with ${tone} tone`);
-                basePrompt = `${toneInstruction}\n\n${content}`;
-              }
+            if (content) {
+              console.log(`✅ Using active prompt: ${activePrompt.name || activePrompt.id} with ${tone} tone`);
+              basePrompt = `${toneInstruction}\n\n${content}`;
             }
-          } catch (parseError) {
-            console.warn('Failed to parse prompts.list:', parseError);
           }
+        } catch (parseError) {
+          console.warn('Failed to parse prompts.list:', parseError);
         }
       }
 
