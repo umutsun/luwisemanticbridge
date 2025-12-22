@@ -601,11 +601,12 @@ export class SemanticSearchService {
 
       // Get embedding provider and model from settings, fall back to Google if not set
       const result = await this.pool.query(
-        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        'SELECT key, value FROM settings WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
         [
           'embedding_provider', 'embedding_model', 'openai_api_key', 'google_api_key',
           'llmSettings.embeddingProvider', 'llmSettings.embeddingModel',
-          'embeddings.provider', 'embeddings.model', 'openai.apiKey', 'google.apiKey'
+          'embeddings.provider', 'embeddings.model', 'openai.apiKey', 'google.apiKey',
+          'embeddingProvider', 'embeddingModel', 'embedding.provider', 'embedding.model'
         ]
       );
 
@@ -622,9 +623,13 @@ export class SemanticSearchService {
       }, {});
 
       // Determine provider and model from settings
-      // FIXED: Check for llmSettingsembeddingProvider (after dot removal)
-      let providerFromSettings = settings.llmSettingsembeddingProvider || settings.embedding_provider || settings.embeddingsprovider || 'google';
-      let modelFromSettings = settings.llmSettingsembeddingModel || settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
+      // Check all possible key formats: camelCase, dot notation, underscore
+      let providerFromSettings = settings.embeddingProvider || settings.embeddingprovider ||
+                                  settings.llmSettingsembeddingProvider ||
+                                  settings.embedding_provider || settings.embeddingsprovider || 'google';
+      let modelFromSettings = settings.embeddingModel || settings.embeddingmodel ||
+                              settings.llmSettingsembeddingModel ||
+                              settings.embedding_model || settings.embeddingsmodel || 'text-embedding-004';
 
       // Normalize provider name
       let provider = this.normalizeProvider(providerFromSettings);
