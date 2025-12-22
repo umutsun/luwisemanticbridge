@@ -1666,11 +1666,12 @@ export class RAGChatService {
           generatedQuestion = batchLLMResults[i].generatedQuestion || generatedQuestion;
         }
 
-        // Create natural language title from excerpt (no separate title)
-        // Title is just a shorter version of the excerpt for display
-        const naturalTitle = this.truncateExcerpt(prep.cleanExcerpt, Math.min(excerptMaxLength, 120)) + '...';
-        const naturalExcerpt = this.truncateExcerpt(prep.cleanExcerpt, excerptMaxLength);
-        const naturalContent = this.truncateExcerpt(processedContent, summaryMaxLength);
+        // Create natural language title and excerpt from LLM-processed content (if available)
+        // Uses processedContent which is either LLM-generated or falls back to cleanExcerpt
+        const displayContent = processedContent || prep.cleanExcerpt;
+        const naturalTitle = this.truncateExcerpt(displayContent, Math.min(excerptMaxLength, 120)) + '...';
+        const naturalExcerpt = this.truncateExcerpt(displayContent, excerptMaxLength);
+        const naturalContent = this.truncateExcerpt(displayContent, summaryMaxLength);
 
         formattedResults.push({
           id: r.id,
