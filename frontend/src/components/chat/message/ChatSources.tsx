@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { stripHtml } from '@/utils/html-utils';
 
 interface Source {
   title?: string;
@@ -82,20 +83,20 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
                 {/* Document title from schema */}
                 {source.title && (
                   <h4 className="text-xs sm:text-sm font-medium text-foreground line-clamp-1 mb-1">
-                    {source.title}
+                    {stripHtml(source.title)}
                   </h4>
                 )}
 
                 {/* Content - fewer lines on mobile */}
                 {source.content && (
                   <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4">
-                    {source.content}
+                    {stripHtml(source.content)}
                   </p>
                 )}
 
                 {source.excerpt && !source.content && (
                   <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4">
-                    {source.excerpt}
+                    {stripHtml(source.excerpt)}
                   </p>
                 )}
 
@@ -103,7 +104,7 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
                 {source.summary && (
                   <div className="hidden sm:block mt-1.5 p-2 rounded bg-primary/5 border-l-2 border-primary/30">
                     <p className="text-xs text-primary font-medium">
-                      💡 {source.summary}
+                      💡 {stripHtml(source.summary)}
                     </p>
                   </div>
                 )}

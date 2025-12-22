@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Source } from '@/types/chat';
 import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { stripHtml } from '@/utils/html-utils';
 
 interface SourceCitationProps {
   sources: Source[];
@@ -93,12 +94,13 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
           // Get display title
           const isUrl = (str: string) => str?.startsWith('http://') || str?.startsWith('https://');
           let displayTitle = '';
-          const rawTitle = source.citation || source.title || '';
+          const rawTitle = stripHtml(source.citation || source.title || '');
 
           if (isUrl(rawTitle)) {
             if (source.excerpt) {
-              const firstSentence = source.excerpt.split(/[.!?]/)[0]?.trim();
-              displayTitle = firstSentence?.length > 10 ? firstSentence : source.excerpt.slice(0, 100);
+              const cleanExcerpt = stripHtml(source.excerpt);
+              const firstSentence = cleanExcerpt.split(/[.!?]/)[0]?.trim();
+              displayTitle = firstSentence?.length > 10 ? firstSentence : cleanExcerpt.slice(0, 100);
             } else {
               displayTitle = getSourceTableName(source.sourceTable) + ' Kaynağı';
             }
@@ -146,15 +148,15 @@ export function SourceCitation({ sources, onLoadMore, hasMore = false, showLoadM
                     onClick={() => {
                       if (onExcerptClick) {
                         const question = generateFollowUpQuestion(
-                          source.excerpt!,
-                          source.citation || source.title || 'Bu kaynak'
+                          stripHtml(source.excerpt!),
+                          stripHtml(source.citation || source.title || 'Bu kaynak')
                         );
                         onExcerptClick(question);
                       }
                     }}
                     title="Bu konuyla ilgili detaylı araştırma yap"
                   >
-                    {source.excerpt}
+                    {stripHtml(source.excerpt)}
                   </p>
                 )}
               </div>

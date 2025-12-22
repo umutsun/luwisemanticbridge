@@ -53,46 +53,44 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b">
       <div className="max-w-6xl mx-auto w-[95%] md:w-full px-2 md:px-4 py-3 flex items-center justify-between">
         {/* Logo & Title */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            {settingsLoaded && chatbotSettings.logoUrl ? (
-              <img
-                src={chatbotSettings.logoUrl}
-                alt={chatbotSettings.title}
-                className="w-8 h-8 object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-            ) : null}
-            <Brain className={`w-8 h-8 text-primary ${settingsLoaded && chatbotSettings.logoUrl ? 'hidden' : ''}`} />
-            <div>
-              <h1 className="text-xl font-bold">
-                {settingsLoaded ? chatbotSettings.title : (
-                  <span className="inline-block w-32 h-6 bg-muted animate-pulse rounded"></span>
-                )}
-              </h1>
-              {/* Active Model Display */}
-              {settingsLoaded && chatbotSettings.activeChatModel && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 leading-tight uppercase tracking-wide">
-                    {chatbotSettings.activeChatModel.split('/')?.[1] || chatbotSettings.activeChatModel}
-                  </span>
-                </div>
+        <div className="flex items-center gap-2 min-w-0 flex-shrink">
+          {settingsLoaded && chatbotSettings.logoUrl ? (
+            <img
+              src={chatbotSettings.logoUrl}
+              alt={chatbotSettings.title}
+              className="w-7 h-7 md:w-8 md:h-8 object-contain flex-shrink-0"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+          ) : null}
+          <Brain className={`w-7 h-7 md:w-8 md:h-8 text-primary flex-shrink-0 ${settingsLoaded && chatbotSettings.logoUrl ? 'hidden' : ''}`} />
+          <div className="min-w-0">
+            <h1 className="text-base md:text-xl font-bold truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">
+              {settingsLoaded ? chatbotSettings.title : (
+                <span className="inline-block w-20 md:w-32 h-5 md:h-6 bg-muted animate-pulse rounded"></span>
               )}
-            </div>
+            </h1>
+            {/* Active Model Display - Hidden on mobile */}
+            {settingsLoaded && chatbotSettings.activeChatModel && (
+              <div className="hidden sm:flex items-center gap-1 mt-0.5">
+                <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 leading-tight uppercase tracking-wide truncate max-w-[150px]">
+                  {chatbotSettings.activeChatModel.split('/')?.[1] || chatbotSettings.activeChatModel}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
           {/* New Session Button */}
           <Button
             variant="ghost"
             size="sm"
             onClick={onClearChat}
-            className="gap-2 px-2"
+            className="p-2"
             title={t('chat.newChat', 'Yeni Sohbet')}
           >
             <Plus className="w-4 h-4" />
@@ -101,15 +99,15 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           {/* Admin/Manager View */}
           {user && ['admin', 'manager'].includes(user.role || '') ? (
             <>
-              {/* Admin-only Controls */}
-              <div className="flex items-center gap-1">
+              {/* Admin-only Controls - Hidden on small mobile */}
+              <div className="hidden sm:flex items-center gap-1">
                 {/* Settings Chip - Admin Only */}
                 {user?.role === 'admin' && (
                   <Link href="/dashboard/settings">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="gap-2 px-2"
+                      className="p-2"
                       title={t('common.settings', 'Ayarlar')}
                     >
                       <Settings className="w-4 h-4" />
@@ -123,7 +121,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="gap-2 px-2"
+                      className="p-2"
                       title={t('common.dashboard', 'Dashboard')}
                     >
                       <LayoutDashboard className="w-4 h-4" />

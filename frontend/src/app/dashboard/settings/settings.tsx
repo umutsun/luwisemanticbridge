@@ -2100,7 +2100,7 @@ function TemplateSelector() {
         {templates.map((template) => (
           <Card
             key={template.id}
-            className={`cursor-pointer transition-all hover:border-primary ${activeTemplate === template.id ? 'border-2 border-primary ring-2 ring-primary/20' : ''} ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`cursor-pointer transition-all hover:border-primary h-full flex flex-col ${activeTemplate === template.id ? 'border-2 border-primary ring-2 ring-primary/20' : ''} ${loading ? 'opacity-50 pointer-events-none' : ''}`}
             onClick={() => !loading && handleTemplateChange(template.id)}
           >
             <CardHeader className="pb-2">
@@ -2108,9 +2108,9 @@ function TemplateSelector() {
                 {template.name}
                 {activeTemplate === template.id && <Badge>Active</Badge>}
               </CardTitle>
-              <CardDescription>{template.description}</CardDescription>
+              <CardDescription className="line-clamp-2 min-h-[2.5rem]">{template.description}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col">
               <div className="aspect-video bg-muted rounded-md mb-4 flex items-center justify-center relative overflow-hidden group">
                 {template.id === 'base' ? (
                   <div className="text-center">
@@ -2129,7 +2129,7 @@ function TemplateSelector() {
                   <Button variant="secondary" size="sm">Select Template</Button>
                 </div>
               </div>
-              <div className="flex justify-between items-center text-xs text-muted-foreground">
+              <div className="flex justify-between items-center text-xs text-muted-foreground mt-auto">
                 <span>v{template.version}</span>
                 <span className="font-mono bg-muted px-1 rounded">{template.id}</span>
               </div>

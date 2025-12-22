@@ -562,7 +562,7 @@ export default function ChatInterface() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-[#0a0a0b] dark:to-[#131314]">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50/30 via-purple-50/20 to-pink-50/30 dark:from-[#0a0a0b] dark:via-purple-950/10 dark:to-[#131314]" data-theme="spark">
         {/* Header using new component */}
         <ChatHeader
           chatbotSettings={chatbotSettings}
