@@ -793,13 +793,31 @@ export class LLMManager {
         return response.data[0].embedding;
       }
       case 'gemini': {
-        const geminiModel = prov.client.getGenerativeModel({ model: model || prov.embeddingModel || 'text-embedding-004' });
-        const response = await geminiModel.embedContent({
-          content: {
-            parts: [{ text }]
+        // Use direct REST API call to support outputDimensionality parameter
+        // Google SDK doesn't expose this parameter, but the API supports it
+        const embeddingModel = model || prov.embeddingModel || 'text-embedding-004';
+        const apiKey = prov.apiKey;
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${embeddingModel}:embedContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: `models/${embeddingModel}`,
+              content: { parts: [{ text }] },
+              outputDimensionality: 1536  // Match OpenAI text-embedding-3-small dimension
+            })
           }
-        });
-        const values = response.embedding?.values;
+        );
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`Gemini embedding API error: ${response.status} - ${error}`);
+        }
+
+        const data = await response.json();
+        const values = data.embedding?.values;
         if (!values || !values.length) {
           throw new Error('Gemini embedding response did not include values');
         }
