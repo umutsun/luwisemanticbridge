@@ -465,28 +465,105 @@ class QuestionGenerationService {
   }
 
   /**
-   * Generate schema-aware welcome questions using LLM
-   * Takes schema context and generates diverse, relevant questions
+   * Generate schema-aware welcome questions using Redis cache pool
+   * Combines LLM-generated questions with user query history
+   * Returns random selection from cached pool
    */
   async generateWelcomeQuestions(schemaContext: {
     schemaName: string;
     description?: string;
     categories?: string[];
     sampleContent?: string;
+    userId?: string;
   }, count: number = 4): Promise<string[]> {
-    const cacheKey = `welcome-${schemaContext.schemaName}`;
-    const cached = this.cache.get(cacheKey);
-
-    // Return cached questions if available and fresh
-    if (cached && Date.now() - this.getCacheTimestamp(cacheKey) < this.cacheExpiry) {
-      return cached.map(q => q.question).slice(0, count);
-    }
-
     try {
-      // Build context for LLM
+      const { redisClient } = await import('../config/redis.config');
+      const redis = redisClient;
+      const redisKey = `suggestions:${schemaContext.schemaName}`;
+
+      // Try to get questions from Redis pool
+      const cachedPool = await redis.get(redisKey);
+
+      if (cachedPool) {
+        const questionPool = JSON.parse(cachedPool);
+        // Return random selection from pool
+        return this.getRandomQuestions(questionPool, count);
+      }
+
+      // No cache: generate new pool
+      const questionPool = await this.buildQuestionPool(schemaContext);
+
+      // Store in Redis with 24 hour expiry
+      await redis.setex(redisKey, 86400, JSON.stringify(questionPool));
+
+      return this.getRandomQuestions(questionPool, count);
+    } catch (error) {
+      console.error('Error generating welcome questions:', error);
+      return this.generateFallbackWelcomeQuestions(schemaContext, count);
+    }
+  }
+
+  /**
+   * Build question pool from multiple sources
+   */
+  private async buildQuestionPool(schemaContext: {
+    schemaName: string;
+    description?: string;
+    categories?: string[];
+    sampleContent?: string;
+    userId?: string;
+  }): Promise<string[]> {
+    const questionPool: string[] = [];
+
+    // 1. Get user query history (popular questions)
+    const userQuestions = await this.getUserQuestions(schemaContext.schemaName);
+    questionPool.push(...userQuestions);
+
+    // 2. Generate LLM questions (for diversity)
+    const llmQuestions = await this.generateLLMQuestions(schemaContext, 20); // Generate 20 for large pool
+    questionPool.push(...llmQuestions);
+
+    // Remove duplicates and return
+    return [...new Set(questionPool)];
+  }
+
+  /**
+   * Get user questions from message history
+   */
+  private async getUserQuestions(schemaName: string, limit: number = 10): Promise<string[]> {
+    try {
+      // Query messages table for user questions
+      const result = await lsembPool.query(`
+        SELECT DISTINCT content
+        FROM messages
+        WHERE role = 'user'
+          AND content IS NOT NULL
+          AND LENGTH(content) > 10
+          AND LENGTH(content) < 200
+          AND content LIKE '%?%'
+        ORDER BY created_at DESC
+        LIMIT $1
+      `, [limit]);
+
+      return result.rows.map(row => row.content.trim());
+    } catch (error) {
+      console.error('Error fetching user questions:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Generate questions using LLM
+   */
+  private async generateLLMQuestions(schemaContext: {
+    schemaName: string;
+    description?: string;
+    categories?: string[];
+    sampleContent?: string;
+  }, count: number = 20): Promise<string[]> {
+    try {
       const context = this.buildSchemaContext(schemaContext);
 
-      // Generate questions using LLM
       const prompt = `Sen bir soru öneri asistanısın. Kullanıcı aşağıdaki veri setine erişebilir ve bunlar hakkında sorular sorabilir:
 
 ${context}
@@ -502,30 +579,33 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
 
       const response = await this.llmManager.chatCompletion({
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.8, // Higher temperature for more variety
-        maxTokens: 500
+        temperature: 0.9, // Very high for maximum diversity
+        maxTokens: 1000
       });
 
-      // Parse questions from response
-      const questions = this.parseQuestionsFromResponse(response);
-
-      // Cache the results
-      const generatedQuestions: GeneratedQuestion[] = questions.map(q => ({
-        question: q,
-        type: 'general',
-        confidence: 0.9,
-        keywords: []
-      }));
-
-      this.cache.set(cacheKey, generatedQuestions);
-      this.setCacheTimestamp(cacheKey);
-
-      return questions.slice(0, count);
+      return this.parseQuestionsFromResponse(response);
     } catch (error) {
-      console.error('Error generating welcome questions:', error);
-      // Fallback to schema-based static questions if available
-      return this.generateFallbackWelcomeQuestions(schemaContext, count);
+      console.error('Error generating LLM questions:', error);
+      return [];
     }
+  }
+
+  /**
+   * Get random questions from pool
+   */
+  private getRandomQuestions(pool: string[], count: number): string[] {
+    if (pool.length <= count) {
+      return pool;
+    }
+
+    // Fisher-Yates shuffle and take first N
+    const shuffled = [...pool];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    return shuffled.slice(0, count);
   }
 
   /**
