@@ -5,6 +5,8 @@ import { User, Bot } from 'lucide-react';
 import { Message } from '@/types/chat';
 import { SourceCitation } from './source-citation';
 import { MessageSkeleton } from './message-skeleton';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 /**
  * Highlights repeating keywords in text with markup
@@ -136,13 +138,96 @@ export function MessageItem({ message }: MessageItemProps) {
           </div>
         )}
         
-        <div className={cn(
-          'prose prose-sm max-w-none',
-          isUser ? 'prose-invert' : 'prose-gray dark:prose-invert',
-          '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0'
+        {isUser ? (
+          <div className="text-sm whitespace-pre-wrap">
+            {message.content}
+          </div>
+        ) : (
+          <div className={cn(
+            'prose prose-sm max-w-none',
+            'prose-headings:text-gray-900 dark:prose-headings:text-gray-100',
+            'prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2',
+            'prose-h1:text-lg prose-h2:text-base prose-h3:text-sm',
+            'prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:my-2 prose-p:leading-relaxed',
+            'prose-strong:text-gray-900 dark:prose-strong:text-white prose-strong:font-semibold',
+            'prose-ul:my-2 prose-ul:pl-4 prose-li:my-1',
+            'prose-ol:my-2 prose-ol:pl-4',
+            '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0'
+          )}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Custom heading styles
+                h1: ({ children }) => (
+                  <h1 className="text-lg font-bold text-gray-900 dark:text-white mt-4 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700">
+                    {children}
+                  </h1>
+                ),
+                h2: ({ children }) => (
+                  <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100 mt-4 mb-2">
+                    {children}
+                  </h2>
+                ),
+                h3: ({ children }) => (
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">
+                    {children}
+                  </h3>
+                ),
+                // Paragraphs
+                p: ({ children }) => (
+                  <p className="text-gray-700 dark:text-gray-300 my-2 leading-relaxed">
+                    {children}
+                  </p>
+                ),
+                // Bold text
+                strong: ({ children }) => (
+                  <strong className="font-semibold text-gray-900 dark:text-white">
+                    {children}
+                  </strong>
+                ),
+                // Unordered lists
+                ul: ({ children }) => (
+                  <ul className="list-disc list-outside ml-4 my-2 space-y-1">
+                    {children}
+                  </ul>
+                ),
+                // Ordered lists
+                ol: ({ children }) => (
+                  <ol className="list-decimal list-outside ml-4 my-2 space-y-1">
+                    {children}
+                  </ol>
+                ),
+                // List items
+                li: ({ children }) => (
+                  <li className="text-gray-700 dark:text-gray-300 pl-1">
+                    {children}
+                  </li>
+                ),
+                // Blockquotes (for warnings/notes)
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-4 py-2 my-3 text-amber-800 dark:text-amber-200 italic">
+                    {children}
+                  </blockquote>
+                ),
+                // Code blocks
+                code: ({ children, className }) => {
+                  const isInline = !className;
+                  return isInline ? (
+                    <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800 dark:text-gray-200">
+                      {children}
+                    </code>
+                  ) : (
+                    <code className="block bg-gray-100 dark:bg-gray-800 p-3 rounded-lg text-sm font-mono overflow-x-auto">
+                      {children}
+                    </code>
+                  );
+                },
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
         )}
-        dangerouslySetInnerHTML={{ __html: processedContent }}
-        />
         
         {message.sources && message.sources.length > 0 && (
           <SourceCitation
