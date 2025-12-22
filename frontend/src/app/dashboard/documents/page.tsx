@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { TableSkeleton, TableBodySkeleton, StatsCardSkeleton, UploadSkeleton } from '@/components/ui/skeleton';
+// Removed: Skeleton imports - using Spinner (Loader2) instead
 import { Label } from '@/components/ui/label';
 import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-counter';
 import { ProgressCircle } from '@/components/ui/progress-circle';
@@ -3433,21 +3433,8 @@ export default function DocumentManagerPage() {
                   {/* Files List - fixed height with inline scroll */}
                   <ScrollArea className="max-h-[500px]">
                     {(physicalFilesLoading || foldersLoading) ? (
-                      <div className="divide-y divide-border">
-                        {[...Array(8)].map((_, i) => (
-                          <div key={i} className="flex items-center gap-2 p-4">
-                            {/* Action buttons skeleton on left */}
-                            <div className="flex gap-1 flex-shrink-0">
-                              <div className="w-7 h-7 bg-muted rounded animate-pulse" />
-                              <div className="w-7 h-7 bg-muted rounded animate-pulse" />
-                            </div>
-                            {/* File name skeleton */}
-                            <div className="flex-1 space-y-2 min-w-0">
-                              <div className="h-4 bg-muted rounded animate-pulse w-3/4" />
-                              <div className="h-3 bg-muted rounded animate-pulse w-1/2" />
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-center py-24">
+                        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : physicalFilesFilter === 'folders' ? (
                       /* Folders View */
@@ -3761,11 +3748,11 @@ export default function DocumentManagerPage() {
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (
-                          <TableBodySkeleton
-                            rows={20}
-                            columns={6}
-                            columnWidths={['7%', '40%', '14%', '23%', '11%', '17%']}
-                          />
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-24">
+                              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
+                            </TableCell>
+                          </TableRow>
                         ) : filteredDocuments.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
