@@ -352,4 +352,70 @@ router.put('/api/v2/search/source-table-weights', async (req: Request, res: Resp
   }
 });
 
+/**
+ * Get embedding counts by source type for RAG Settings display
+ * Returns counts for: database (csv tables), documents, web, chat
+ */
+router.get('/api/v2/search/embedding-counts', async (req: Request, res: Response) => {
+  try {
+    const { lsembPool } = require('../config/database.config');
+
+    // Get unified_embeddings counts by source_type
+    const unifiedResult = await lsembPool.query(`
+      SELECT
+        source_type,
+        COUNT(*) as count
+      FROM unified_embeddings
+      GROUP BY source_type
+    `);
+
+    // Get document_embeddings count
+    const docResult = await lsembPool.query(`
+      SELECT COUNT(*) as count FROM document_embeddings
+    `);
+
+    // Get scraped_pages count (web content)
+    const webResult = await lsembPool.query(`
+      SELECT COUNT(*) as count FROM scraped_pages WHERE status = 'processed'
+    `);
+
+    // Get message embeddings count (from conversations/messages)
+    const chatResult = await lsembPool.query(`
+      SELECT COUNT(*) as count FROM messages
+    `);
+
+    // Build response
+    const unifiedCounts: Record<string, number> = {};
+    let totalDatabase = 0;
+
+    for (const row of unifiedResult.rows) {
+      const sourceType = row.source_type || 'unknown';
+      const count = parseInt(row.count, 10);
+      unifiedCounts[sourceType] = count;
+
+      // csv, court_decision, article, qa are all "database" type content
+      if (['csv', 'court_decision', 'article', 'qa'].includes(sourceType)) {
+        totalDatabase += count;
+      }
+    }
+
+    // Add document type from unified_embeddings if exists
+    const documentFromUnified = unifiedCounts['document'] || 0;
+
+    res.json({
+      success: true,
+      counts: {
+        database: totalDatabase,
+        documents: parseInt(docResult.rows[0]?.count || '0', 10) + documentFromUnified,
+        web: parseInt(webResult.rows[0]?.count || '0', 10),
+        chat: parseInt(chatResult.rows[0]?.count || '0', 10)
+      },
+      detailed: unifiedCounts
+    });
+  } catch (error) {
+    console.error('Get embedding counts error:', error);
+    res.status(500).json({ error: 'Failed to get embedding counts' });
+  }
+});
+
 export default router;

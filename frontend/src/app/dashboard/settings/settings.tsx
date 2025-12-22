@@ -2465,6 +2465,14 @@ function RAGSettings() {
   const [tableWeights, setTableWeights] = useState<Record<string, number>>({});
   const [tablesLoading, setTablesLoading] = useState(true);
 
+  // Embedding counts by source type for RAG priority display
+  const [embeddingCounts, setEmbeddingCounts] = useState<{
+    database: number;
+    documents: number;
+    web: number;
+    chat: number;
+  }>({ database: 0, documents: 0, web: 0, chat: 0 });
+
   const { toast } = useToast();
 
   // Optimal default values for RAG settings
@@ -2495,9 +2503,10 @@ function RAGSettings() {
       const headers: HeadersInit = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const [tablesResponse, weightsResponse] = await Promise.all([
+      const [tablesResponse, weightsResponse, countsResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/api/v2/search/source-tables`, { headers }),
-        fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, { headers })
+        fetch(`${API_BASE_URL}/api/v2/search/source-table-weights`, { headers }),
+        fetch(`${API_BASE_URL}/api/v2/search/embedding-counts`, { headers })
       ]);
 
       if (tablesResponse.ok) {
@@ -2511,6 +2520,14 @@ function RAGSettings() {
           initialWeights[table.name] = weightsData.weights?.[table.name] ?? 1.0;
         });
         setTableWeights(initialWeights);
+      }
+
+      // Load embedding counts for RAG priority display
+      if (countsResponse.ok) {
+        const countsData = await countsResponse.json();
+        if (countsData.counts) {
+          setEmbeddingCounts(countsData.counts);
+        }
       }
     } catch (error) {
       console.error('Failed to load source tables:', error);
@@ -2865,7 +2882,12 @@ function RAGSettings() {
                 <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium">Database Content</Label>
+                      <Label className="text-sm font-medium">
+                        Database Content
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          ({embeddingCounts.database.toLocaleString()})
+                        </span>
+                      </Label>
                       <p className="text-xs text-muted-foreground mt-0.5">Connected database tables</p>
                     </div>
                     <Badge variant={(tempRAGConfig?.ragSettings?.databasePriority ?? 8) > 0 ? "default" : "secondary"}>
@@ -2886,7 +2908,12 @@ function RAGSettings() {
                 <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium">Documents</Label>
+                      <Label className="text-sm font-medium">
+                        Documents
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          ({embeddingCounts.documents.toLocaleString()})
+                        </span>
+                      </Label>
                       <p className="text-xs text-muted-foreground mt-0.5">Uploaded PDFs, Word docs, etc.</p>
                     </div>
                     <Badge variant={(tempRAGConfig?.ragSettings?.documentsPriority ?? 5) > 0 ? "default" : "secondary"}>
@@ -2907,7 +2934,12 @@ function RAGSettings() {
                 <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium">Chat Messages</Label>
+                      <Label className="text-sm font-medium">
+                        Chat Messages
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          ({embeddingCounts.chat.toLocaleString()})
+                        </span>
+                      </Label>
                       <p className="text-xs text-muted-foreground mt-0.5">Previous conversations and Q&A</p>
                     </div>
                     <Badge variant={(tempRAGConfig?.ragSettings?.chatPriority ?? 3) > 0 ? "default" : "secondary"}>
@@ -2928,7 +2960,12 @@ function RAGSettings() {
                 <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm font-medium">Web Content</Label>
+                      <Label className="text-sm font-medium">
+                        Web Content
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          ({embeddingCounts.web.toLocaleString()})
+                        </span>
+                      </Label>
                       <p className="text-xs text-muted-foreground mt-0.5">Scraped web pages</p>
                     </div>
                     <Badge variant={(tempRAGConfig?.ragSettings?.webPriority ?? 4) > 0 ? "default" : "secondary"}>
