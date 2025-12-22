@@ -518,16 +518,118 @@ class QuestionGenerationService {
   }): Promise<string[]> {
     const questionPool: string[] = [];
 
-    // 1. Get user query history (popular questions)
-    const userQuestions = await this.getUserQuestions(schemaContext.schemaName);
-    questionPool.push(...userQuestions);
+    // 1. Get actual data source statistics for richer context
+    const dataSourceStats = await this.getDataSourceStats();
 
-    // 2. Generate LLM questions (for diversity)
-    const llmQuestions = await this.generateLLMQuestions(schemaContext, 20); // Generate 20 for large pool
+    // 2. Enrich schema context with real data info
+    const enrichedContext = {
+      ...schemaContext,
+      dataSourceStats
+    };
+
+    // 3. Generate LLM questions with rich context (skip user history for cleaner suggestions)
+    const llmQuestions = await this.generateLLMQuestionsEnriched(enrichedContext, 15);
     questionPool.push(...llmQuestions);
 
     // Remove duplicates and return
     return [...new Set(questionPool)];
+  }
+
+  /**
+   * Get data source statistics for context
+   */
+  private async getDataSourceStats(): Promise<{ table: string; count: number; displayName: string }[]> {
+    try {
+      const result = await lsembPool.query(`
+        SELECT source_table, COUNT(*) as cnt
+        FROM unified_embeddings
+        GROUP BY source_table
+        ORDER BY cnt DESC
+        LIMIT 6
+      `);
+
+      // Map table names to Turkish display names
+      const tableDisplayNames: Record<string, string> = {
+        'csv_danistaykararlari': 'Danıştay Kararları',
+        'csv_ozelge': 'Özelgeler (Vergi Görüşleri)',
+        'csv_sorucevap': 'Soru-Cevap Arşivi',
+        'csv_makale_arsiv_2022': 'Vergi Makaleleri (2022)',
+        'csv_makale_arsiv_2021': 'Vergi Makaleleri (2021)',
+        'csv_makale_arsiv_2023': 'Vergi Makaleleri (2023)',
+        'csv_makale_arsiv_2024': 'Vergi Makaleleri (2024)',
+        'csv_maliansiklopedi': 'Mali Ansiklopedi',
+        'documents': 'Yüklenen Belgeler'
+      };
+
+      return result.rows.map(row => ({
+        table: row.source_table,
+        count: parseInt(row.cnt),
+        displayName: tableDisplayNames[row.source_table] || row.source_table
+      }));
+    } catch (error) {
+      console.error('Error fetching data source stats:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Generate LLM questions with enriched context
+   */
+  private async generateLLMQuestionsEnriched(context: {
+    schemaName: string;
+    description?: string;
+    categories?: string[];
+    sampleContent?: string;
+    dataSourceStats?: { table: string; count: number; displayName: string }[];
+  }, count: number = 15): Promise<string[]> {
+    console.log(`[QuestionGen] generateLLMQuestionsEnriched called`);
+    try {
+      // Build rich context description
+      let contextDesc = `Bu sistem aşağıdaki vergi ve hukuk kaynaklarına erişim sağlar:\n\n`;
+
+      if (context.dataSourceStats && context.dataSourceStats.length > 0) {
+        context.dataSourceStats.forEach(source => {
+          contextDesc += `• ${source.displayName}: ${source.count.toLocaleString('tr-TR')} kayıt\n`;
+        });
+      }
+
+      const prompt = `Sen Türkiye'nin önde gelen vergi danışmanlık platformunun soru öneri asistanısın.
+
+${contextDesc}
+
+Kullanıcılar bu kapsamlı veritabanını kullanarak vergi sorunlarına cevap arıyor.
+
+Lütfen GERÇEK VERGİ SORUNLARINA dayalı ${count} adet ETKİLEYİCİ ve PROFESYONEL soru öner:
+
+Soru türleri (karışık olmalı):
+1. DANIŞTAY KARARLARI: "Danıştay hangi durumlarda KDV iadesini reddetti?", "Vergi kaçakçılığında emsal kararlar nelerdir?"
+2. ÖZELGELER: "Gayrimenkul satışında tapu harcı hesaplaması nasıl yapılır?", "E-fatura zorunluluğu hangi mükellefleri kapsıyor?"
+3. PRATİK SORULAR: "Limited şirket kar dağıtımında vergi avantajları nelerdir?", "Serbest meslek kazançlarında indirilecek giderler nelerdir?"
+4. GÜNCEL KONULAR: "2024 yılı vergi takvimi nasıl?", "Enflasyon düzeltmesi nasıl uygulanır?"
+
+Her soru:
+- Spesifik ve profesyonel olmalı (genel değil)
+- Gerçek bir vergi sorununun çözümüne yönelik olmalı
+- Türkiye vergi mevzuatına uygun olmalı
+- Türkçe ve düzgün formatta olmalı
+
+SADECE soruları listele, her satırda bir soru:`;
+
+      console.log(`[QuestionGen] Calling LLM with enriched prompt...`);
+      const result = await this.llmManager.generateChatResponse(prompt, {
+        temperature: 0.85,
+        maxTokens: 1200
+      });
+      console.log(`[QuestionGen] LLM response: ${result.content?.length} chars`);
+
+      const questions = this.parseQuestionsFromResponse(result.content);
+      console.log(`[QuestionGen] Parsed ${questions.length} enriched questions`);
+      return questions;
+    } catch (error) {
+      console.error('[QuestionGen] Error generating enriched questions:', error);
+      // Fallback to original method
+      return this.generateLLMQuestions(context, count);
+    }
   }
 
   /**
