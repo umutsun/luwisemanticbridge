@@ -3200,7 +3200,15 @@
     "errors": {
       "adminLimit": "Admin kullanıcı olarak sınırsız erişiminiz olmalı. Ancak teknik bir sorun görüyoruz.",
       "queryLimit": "Üzgünüz, aylık soru limitinize ulaştınız. Devam etmek için lütfen abonelik planınızı yükseltin veya bir yöneticiyle iletişime geçin.",
-      "general": "Üzgünüz, bir hata oluştu."
+      "general": "Üzgünüz, bir hata oluştu.",
+      "connectionFailed": "Bağlantı kurulamadı. Lütfen tekrar deneyin.",
+      "authenticationFailed": "Oturum süreniz doldu. Lütfen tekrar giriş yapın.",
+      "rateLimitExceeded": "Sorgu limitine ulaşıldı. Lütfen biraz bekleyin.",
+      "noResultsFound": "Bu konuda ilgili bilgi bulunamadı.",
+      "processingFailed": "İşlem başarısız oldu. Lütfen tekrar deneyin.",
+      "serverError": "Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.",
+      "networkError": "İnternet bağlantınızı kontrol edin.",
+      "timeout": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin."
     },
     "newChat": "Yeni Sohbet",
     "input": {
@@ -3208,7 +3216,12 @@
     },
     "messageCount": "{{count}} mesaj",
     "messagesLabel": "mesaj",
-    "followUp": "İlgili sorular"
+    "followUp": "İlgili sorular",
+    "skeleton": {
+      "searching": "Kaynaklar aranıyor...",
+      "generating": "Yanıt oluşturuluyor...",
+      "processing": "İşleniyor..."
+    }
   },
   "workflows": {
     "title": "Başlık",

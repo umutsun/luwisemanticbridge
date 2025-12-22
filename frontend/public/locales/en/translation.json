@@ -3104,7 +3104,13 @@
       "help": "Press Enter to send, Shift+Enter for new line"
     },
     "messageCount": "{{count}} messages",
-    "messagesLabel": "messages"
+    "messagesLabel": "messages",
+    "followUp": "Related questions",
+    "skeleton": {
+      "searching": "Searching sources...",
+      "generating": "Generating response...",
+      "processing": "Processing..."
+    }
   },
   "systemMonitor": {
     "title": "System Monitor",

@@ -161,6 +161,44 @@ export class RAGChatService {
   }
 
   /**
+   * 📝 INTELLIGENT TEXT TRUNCATION
+   * Extracts meaningful context by truncating at sentence boundaries
+   * Preserves complete sentences for better context understanding
+   */
+  private extractMeaningfulContext(content: string, maxLength: number = 600): string {
+    if (!content || content.length <= maxLength) {
+      return content || '';
+    }
+
+    const truncated = content.substring(0, maxLength);
+
+    // Find the last sentence boundary (. ! ? or Turkish equivalents)
+    const sentenceEnders = ['.', '!', '?', ':', ';'];
+    let lastSentenceEnd = -1;
+
+    for (const ender of sentenceEnders) {
+      const lastIndex = truncated.lastIndexOf(ender);
+      if (lastIndex > lastSentenceEnd && lastIndex > maxLength * 0.4) {
+        lastSentenceEnd = lastIndex;
+      }
+    }
+
+    // If we found a good sentence boundary, use it
+    if (lastSentenceEnd > maxLength * 0.4) {
+      return truncated.substring(0, lastSentenceEnd + 1).trim();
+    }
+
+    // Otherwise, try to cut at a word boundary
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > maxLength * 0.7) {
+      return truncated.substring(0, lastSpace).trim() + '...';
+    }
+
+    // Fallback: just truncate with ellipsis
+    return truncated.trim() + '...';
+  }
+
+  /**
    * 🔗 CONVERSATION CONTEXT DETECTION
    * Detects if the current question is a follow-up to a previous question
    * Returns enhanced query that includes context from previous messages
@@ -248,8 +286,8 @@ export class RAGChatService {
       if (history[i].role === 'user' && !lastUserQuestion) {
         lastUserQuestion = history[i].content;
       } else if (history[i].role === 'assistant' && !lastAssistantResponse) {
-        // Get just the first 200 chars of assistant response for context
-        lastAssistantResponse = history[i].content.substring(0, 200);
+        // Get meaningful context from assistant response (up to 600 chars, at sentence boundary)
+        lastAssistantResponse = this.extractMeaningfulContext(history[i].content, 600);
       }
       if (lastUserQuestion && lastAssistantResponse) break;
     }
@@ -428,10 +466,41 @@ export class RAGChatService {
       console.warn('Failed to fetch system prompt from database:', error);
     }
 
-    // Generic default system prompt (multi-language, not domain-specific)
+    // Default system prompt from settings (NO HARDCODED DEFAULTS - multi-tenant support)
     if (!basePrompt) {
-      console.log('️ No active prompt found, using generic default');
-      basePrompt = `You are a helpful AI assistant. Answer questions based on the provided context information. Structure your response in clear paragraphs.`;
+      // Get default prompts from settings - each tenant can customize these
+      let responseLanguage = 'tr';
+      let customDefaultTr: string | null = null;
+      let customDefaultEn: string | null = null;
+
+      try {
+        const settingsResult = await pool.query(
+          "SELECT key, value FROM settings WHERE key IN ('response_language', 'ragSettings.defaultSystemPromptTr', 'ragSettings.defaultSystemPromptEn')"
+        );
+
+        for (const row of settingsResult.rows) {
+          if (row.key === 'response_language') responseLanguage = row.value || 'tr';
+          if (row.key === 'ragSettings.defaultSystemPromptTr') customDefaultTr = row.value;
+          if (row.key === 'ragSettings.defaultSystemPromptEn') customDefaultEn = row.value;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch default system prompt settings:', e);
+      }
+
+      // Use settings-based defaults (admin must configure these per tenant)
+      basePrompt = responseLanguage === 'en'
+        ? customDefaultEn
+        : customDefaultTr;
+
+      if (basePrompt) {
+        console.log(`️ Using default system prompt from settings (${responseLanguage})`);
+      } else {
+        // Minimal fallback only if settings not configured - admin should configure this
+        console.warn('⚠️ No system prompt configured in settings! Please configure ragSettings.defaultSystemPromptTr/En in admin panel.');
+        basePrompt = responseLanguage === 'en'
+          ? 'Answer based on the provided context.'
+          : 'Sağlanan bağlama göre yanıt ver.';
+      }
     }
 
     // Combine base prompt with LLM Guide if available
@@ -504,7 +573,10 @@ export class RAGChatService {
         'ragSettings.fastModeInstructionTr',
         'ragSettings.fastModeInstructionEn',
         'ragSettings.citationInstructionTr',
-        'ragSettings.citationInstructionEn'
+        'ragSettings.citationInstructionEn',
+        // Configurable messages (multi-tenant support)
+        'ragSettings.noResultsMessageTr',
+        'ragSettings.noResultsMessageEn'
       ];
 
       const settingsResult = await pool.query(
@@ -672,6 +744,7 @@ export class RAGChatService {
       const llmManager = LLMManager.getInstance();
 
       // Create enhanced context with actual content for better response generation
+      // Now includes schema metadata for richer LLM context
       const enhancedContext = searchResults.slice(0, initialDisplayCount).map((r, idx) => {
         const score = Math.round(r.score || (r.similarity_score * 100) || 0);
         const title = r.title || `Kaynak ${idx + 1}`;
@@ -684,7 +757,20 @@ export class RAGChatService {
         if (!content || content.trim().length === 0) {
           content = `Bu kaynak "${title}" başlıklı bir belgedir.`;
         }
-        return `${idx + 1}. %${score} - ${title}:\n${content}\n`;
+
+        // Add schema metadata for richer context (tarih, kurum, makam, konu, kategori, yil)
+        let metadataLine = '';
+        if (r.metadata) {
+          const relevantFields = ['tarih', 'kurum', 'makam', 'konu', 'kategori', 'yil', 'sayi', 'esas_no', 'karar_no']
+            .filter(f => r.metadata[f])
+            .map(f => `${f}: ${r.metadata[f]}`)
+            .join(', ');
+          if (relevantFields) {
+            metadataLine = `\n   [${relevantFields}]`;
+          }
+        }
+
+        return `${idx + 1}. ${title}${metadataLine}\n${content}\n`;
       }).join('\n');
 
       // Check confidence levels based on similarity scores
@@ -721,11 +807,15 @@ export class RAGChatService {
 
       console.log(` Context quality: bestScore=${(bestScore * 100).toFixed(1)}%, threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%, results=${searchResults.length}, hasActualContent=${hasActualContent}, high=${hasHighConfidence}, partial=${hasPartialMatch}, belowThreshold=${isBelowThreshold}`);
 
-      // CASE 1: No results - return "not found" message (removed threshold check to show all results)
+      // CASE 1: No results - return "not found" message from settings (configurable per tenant)
       if (hasNoResults) {
-        const noResultsMessage = responseLanguage === 'en'
-          ? "I couldn't find relevant information in the database for your question. Please try rephrasing your question or using different keywords."
-          : "Bu konuda veritabanımda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.";
+        // Get customizable "no results" message from settings
+        const noResultsMessageTr = settingsMap.get('ragSettings.noResultsMessageTr') ||
+          'Bu konuda yeterli bilgi bulunamadı. Daha spesifik bir soru sorarak veya farklı anahtar kelimelerle tekrar deneyebilirsiniz.';
+        const noResultsMessageEn = settingsMap.get('ragSettings.noResultsMessageEn') ||
+          "I couldn't find relevant information for your question. Please try rephrasing or using different keywords.";
+
+        const noResultsMessage = responseLanguage === 'en' ? noResultsMessageEn : noResultsMessageTr;
 
         console.log(`️ No relevant context found for query: "${message}" (bestScore=${(bestScore * 100).toFixed(1)}% < threshold=${(LOW_CONFIDENCE_THRESHOLD * 100).toFixed(0)}%)`);
 
@@ -878,13 +968,43 @@ export class RAGChatService {
         return providerNames[language]?.[provider] || provider;
       };
 
-      // ⚡ FAST MODE: Skip source formatting and follow-up questions
+      // ⚡ FAST MODE: Simple source formatting without LLM summaries
       if (citationsDisabled) {
-        console.log('⚡ FAST MODE: Skipping source formatting and follow-up generation');
+        // Format sources quickly without LLM-generated summaries
+        const fastModeSources = searchResults.slice(0, initialDisplayCount || 5).map((r, idx) => {
+          // Clean raw metadata content
+          const rawContent = r.excerpt || r.content || '';
+          const cleanedContent = this.cleanRawMetadataContent(rawContent, r.metadata);
+          const content = this.truncateExcerpt(cleanedContent, 200);
+
+          // Extract metadata for display
+          let metadataInfo = '';
+          if (r.metadata) {
+            const relevantFields = ['tarih', 'kurum', 'makam', 'konu', 'kategori', 'yil']
+              .filter(f => r.metadata[f])
+              .map(f => r.metadata[f])
+              .slice(0, 2);
+            if (relevantFields.length > 0) {
+              metadataInfo = ` (${relevantFields.join(' - ')})`;
+            }
+          }
+
+          return {
+            title: (r.title || `Kaynak ${idx + 1}`) + metadataInfo,
+            content: content || `Bu kaynak "${r.title}" başlıklı bir belgedir.`,
+            excerpt: content,
+            score: r.score || (r.similarity_score * 100) || 0,
+            sourceTable: r.source_table || r.table_name,
+            sourceType: r.source_type || r.type,
+            metadata: r.metadata
+          };
+        });
+
+        console.log(`⚡ FAST MODE: Returning ${fastModeSources.length} sources (no LLM summaries)`);
 
         return {
           response: response.content,
-          sources: [], // No sources in fast mode
+          sources: fastModeSources, // ⚡ Now returns formatted sources
           relatedTopics: [],
           followUpQuestions: [],
           conversationId: convId,
@@ -1355,18 +1475,42 @@ export class RAGChatService {
         // Only multiply by 100 if similarity_score is in 0-1 range (< 1)
         const score = r.score || (r.similarity_score && r.similarity_score < 1 ? Math.round(r.similarity_score * 100) : r.similarity_score) || 50;
 
-        // Build proper citation
+        // Build proper citation with schema-aware field labels
         let citation = `[Source ${idx + 1}]`;
         if (r.metadata) {
-          const parts = [];
-          Object.keys(r.metadata).forEach(key => {
+          // Field label mappings for better readability (Turkish display names)
+          const fieldLabels: Record<string, string> = {
+            'tarih': 'Tarih',
+            'kurum': 'Kurum',
+            'makam': 'Makam',
+            'konu': 'Konu',
+            'kategori': 'Kategori',
+            'yil': 'Yıl',
+            'sayi': 'Sayı',
+            'esas_no': 'Esas No',
+            'karar_no': 'Karar No',
+            'karar_tarihi': 'Karar Tarihi',
+            'daire': 'Daire',
+            'yazar': 'Yazar',
+            'baslik': 'Başlık',
+            'ozet': 'Özet'
+          };
+
+          // Priority fields for citation (most informative first)
+          const priorityFields = ['kurum', 'makam', 'tarih', 'konu', 'kategori', 'yil', 'sayi'];
+          const parts: string[] = [];
+
+          for (const key of priorityFields) {
             const value = r.metadata[key];
             if (value && typeof value === 'string' && value.trim()) {
-              parts.push(`${key}: ${value}`);
+              const label = fieldLabels[key] || key;
+              parts.push(`${label}: ${value}`);
+              if (parts.length >= 3) break; // Max 3 fields for readability
             }
-          });
+          }
+
           if (parts.length > 0) {
-            citation = parts.join(' - ');
+            citation = parts.join(' | ');
           }
         }
 

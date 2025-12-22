@@ -72,7 +72,7 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
             title={t('chat.source.detailedResearch', 'Bu konuyla ilgili detaylı araştırma yap')}
           >
             <div className="flex items-start gap-2 sm:gap-3">
-              {/* Source number - smaller on mobile */}
+              {/* Source number - smaller on mobile (score used for sorting, not displayed) */}
               <div className="flex-shrink-0">
                 <span className="flex items-center justify-center w-5 h-5 sm:w-7 sm:h-7 text-[10px] sm:text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                   {idx + 1}

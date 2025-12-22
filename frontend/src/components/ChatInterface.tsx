@@ -1072,9 +1072,9 @@ export default function ChatInterface() {
         </header>
 
         {/* Main Chat Area */}
-        <div className="pt-20 pb-32 max-w-4xl mx-auto w-[95%] md:w-full px-2 md:px-5">
-          <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
-            <div className="space-y-4 py-4 pr-2">
+        <div className="pt-20 pb-32 max-w-4xl mx-auto w-[98%] sm:w-[95%] md:w-full px-1 sm:px-2 md:px-5">
+          <ScrollArea className="h-[calc(100vh-12rem)] pr-1 sm:pr-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4 pr-0 sm:pr-2">
               {/* Suggestions skeleton loader */}
               {/* Welcome Message (only when no user interaction yet) */}
               {isClient && showSuggestions && messages.length === 0 && settingsLoaded && (
@@ -1108,15 +1108,15 @@ export default function ChatInterface() {
                   transition={{ duration: settingsLoaded ? 0 : 0.3 }}
                   className="my-8"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                     {isSuggestionsLoading ? (
                       // Loading skeleton
                       Array.from({ length: 4 }).map((_, index) => (
                         <div
                           key={`skeleton-${index}`}
-                          className="text-left p-4 rounded-lg border bg-card"
+                          className="text-left p-3 sm:p-4 rounded-lg border bg-card"
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 sm:gap-3">
                             <div className="w-2 h-2 rounded-full bg-muted animate-pulse" />
                             <Skeleton className="h-4 w-3/4" />
                           </div>
@@ -1131,14 +1131,14 @@ export default function ChatInterface() {
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: settingsLoaded ? 0 : index * 0.05 }}
                           onClick={() => handleSuggestionClick(question)}
-                          className="text-left p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
+                          className="text-left p-3 sm:p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors group"
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/60" />
-                              <span className="text-sm">{question}</span>
+                            <div className="flex items-center gap-2 sm:gap-3">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-primary to-primary/60 flex-shrink-0" />
+                              <span className="text-xs sm:text-sm line-clamp-2">{question}</span>
                             </div>
-                            <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hidden sm:block" />
                           </div>
                         </motion.button>
                       ))
@@ -1179,35 +1179,40 @@ export default function ChatInterface() {
                             ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
                             : 'bg-card'
                       }`}>
-                        <CardContent className="p-3">
+                        <CardContent className="p-2 sm:p-3">
                           {message.isTyping ? (
-                            <MessageSkeleton />
+                            <MessageSkeleton type="searching" />
                           ) : (
                             <>
-                              {message.isStreaming ? (
-                                <MessageSkeleton type="generating" />
+                              {message.isStreaming && !message.content ? (
+                                // Streaming but no content yet - show generating skeleton
+                                <MessageSkeleton type={message.sources && message.sources.length > 0 ? 'generating' : 'searching'} />
                               ) : (
-                                <div className="flex items-start gap-2">
+                                <div className="flex items-start gap-2 overflow-hidden">
                                   {message.role === 'user' && message.isFromSource && (
                                     <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                   )}
-                                  <p
-                                    className="text-sm whitespace-pre-wrap flex-1"
-                                    dangerouslySetInnerHTML={{
-                                      __html: message.content
-                                        // Convert **[1]**, **[2, 5]** citations to bold
-                                        .replace(/\*\*\[([0-9,\s]+)\]\*\*/g, '<strong>[$1]</strong>')
-                                        // Convert plain [1], [2] to bold (fallback)
-                                        .replace(/(?<!\*\*)\[([0-9,\s]+)\](?!\*\*)/g, '<strong>[$1]</strong>')
-                                        // Preserve line breaks
-                                        .replace(/\n/g, '<br/>')
-                                    }}
-                                  />
+                                  {message.content ? (
+                                    <p
+                                      className="text-xs sm:text-sm whitespace-pre-wrap flex-1 break-words overflow-wrap-anywhere"
+                                      dangerouslySetInnerHTML={{
+                                        __html: message.content
+                                          // Convert **[1]**, **[2, 5]** citations to bold
+                                          .replace(/\*\*\[([0-9,\s]+)\]\*\*/g, '<strong>[$1]</strong>')
+                                          // Convert plain [1], [2] to bold (fallback)
+                                          .replace(/(?<!\*\*)\[([0-9,\s]+)\](?!\*\*)/g, '<strong>[$1]</strong>')
+                                          // Preserve line breaks
+                                          .replace(/\n/g, '<br/>')
+                                      }}
+                                    />
+                                  ) : message.isStreaming ? (
+                                    <MessageSkeleton type="generating" />
+                                  ) : null}
                                 </div>
                               )}
 
                               {message.sources && message.sources.length > 0 && (
-                                <div className="mt-4 pt-3 border-t border-border/50">
+                                <div className="mt-3 sm:mt-4 pt-2 sm:pt-3 border-t border-border/50">
                                   {(() => {
                                     const sortedSources = (message.sources || []).sort((a, b) => (b.score || 0) - (a.score || 0));
                                     const visibleCount = visibleSourcesCount[message.id] || ragSettings.minResults;
@@ -1216,11 +1221,11 @@ export default function ChatInterface() {
 
                                     return (
                                       <>
-                                        <div className="space-y-2">
+                                        <div className="space-y-1.5 sm:space-y-2">
                                           {visibleSources.map((source, idx) => (
                                             <div
                                               key={idx}
-                                              className="relative p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
+                                              className="relative p-2 sm:p-3 rounded-lg bg-card border hover:shadow-md transition-all cursor-pointer group"
                                               onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
@@ -1228,23 +1233,23 @@ export default function ChatInterface() {
                                               }}
                                               title="Bu konuyla ilgili detaylı araştırma yap"
                                             >
-                                              <div className="flex items-start gap-3">
-                                                <div className="flex-1 min-w-0">
+                                              <div className="flex items-start gap-2 sm:gap-3">
+                                                <div className="flex-1 min-w-0 overflow-hidden">
                                                   {source.sourceType && (
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                      <span className="text-xs px-2 py-1 rounded font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                                                      <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
                                                         {source.sourceType}
                                                       </span>
                                                       {source.score && (
-                                                        <span className="text-xs text-muted-foreground">
+                                                        <span className="text-[10px] sm:text-xs text-muted-foreground">
                                                           %{Math.min(100, Math.round(source.score))}
                                                         </span>
                                                       )}
                                                     </div>
                                                   )}
-                                                  {/* LLM-generated summary */}
+                                                  {/* LLM-generated summary - hidden on mobile */}
                                                   {source.summary && (
-                                                    <div className="mt-2 p-2 rounded bg-primary/5 border-l-2 border-primary/30">
+                                                    <div className="hidden sm:block mt-2 p-2 rounded bg-primary/5 border-l-2 border-primary/30">
                                                       <p className="text-xs text-primary font-medium">
                                                         💡 {source.summary}
                                                       </p>
@@ -1403,36 +1408,36 @@ export default function ChatInterface() {
 
         {/* Input Area */}
         <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-md border-t">
-          <div className="max-w-4xl mx-auto w-[95%] md:w-full px-2 md:px-4 py-3 md:py-4">
-            <div className="flex gap-2">
+          <div className="max-w-4xl mx-auto w-[98%] sm:w-[95%] md:w-full px-1 sm:px-2 md:px-4 py-2 sm:py-3 md:py-4">
+            <div className="flex gap-1.5 sm:gap-2">
               <Textarea
                 ref={textareaRef}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder={chatbotSettings.placeholder}
-                className="min-h-[60px] max-h-[120px] resize-none"
+                className="min-h-[50px] sm:min-h-[60px] max-h-[100px] sm:max-h-[120px] resize-none text-sm"
                 disabled={isLoading}
               />
               <Button
                 onClick={() => handleSendMessage()}
                 disabled={!inputText.trim() || isLoading}
                 size="lg"
-                className="px-8"
+                className="px-4 sm:px-8"
               >
                 {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                 ) : (
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                 )}
               </Button>
             </div>
 
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-muted-foreground">
+            <div className="flex items-center justify-between mt-1.5 sm:mt-2">
+              <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">
                 Enter ile gönder, Shift+Enter ile yeni satır
               </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground ml-auto">
                 <span>{messages.length - 1} mesaj</span>
               </div>
             </div>

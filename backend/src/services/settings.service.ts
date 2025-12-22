@@ -366,7 +366,8 @@ export class SettingsService {
 
         // Clear cache when setting is updated
         this.clearCache('all_settings');
-        logger.debug('Cache cleared due to setting update');
+        this.clearCache(`setting:${key}`);
+        logger.debug(`Cache cleared for setting ${key}`);
       } finally {
         client.release();
       }
@@ -376,8 +377,29 @@ export class SettingsService {
     }
   }
 
-  // Get a single setting by key
+  // Get a single setting by key (with in-memory cache)
   async getSetting(key: string): Promise<string | null> {
+    // Check single key cache first
+    const singleKeyCacheKey = `setting:${key}`;
+    const cachedValue = this.getCache(singleKeyCacheKey);
+    if (cachedValue !== null) {
+      logger.debug(`Setting ${key} returned from cache`);
+      return cachedValue;
+    }
+
+    // Check if we have all_settings cached - use that instead of DB query
+    const allSettingsCache = this.getCache('all_settings');
+    if (allSettingsCache && typeof allSettingsCache === 'object') {
+      const value = allSettingsCache[key] || null;
+      // Cache the individual key for faster future lookups
+      if (value !== null) {
+        this.setCache(singleKeyCacheKey, value, this.CACHE_TTL);
+      }
+      logger.debug(`Setting ${key} returned from all_settings cache`);
+      return value;
+    }
+
+    // Fall back to database query
     try {
       const client = await lsembPool.connect();
 
@@ -387,7 +409,15 @@ export class SettingsService {
           [key]
         );
 
-        return result.rows.length > 0 ? result.rows[0].value : null;
+        const value = result.rows.length > 0 ? result.rows[0].value : null;
+
+        // Cache the result for future lookups
+        if (value !== null) {
+          this.setCache(singleKeyCacheKey, value, this.CACHE_TTL);
+          logger.debug(`Setting ${key} cached`);
+        }
+
+        return value;
       } finally {
         client.release();
       }
