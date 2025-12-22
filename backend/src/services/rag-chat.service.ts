@@ -873,8 +873,9 @@ export class RAGChatService {
         }
 
         // Fast mode instruction - loaded from settings
-        const defaultFastModeEn = 'Answer directly and concisely based on the context. Write natural paragraphs without citations or source references.';
-        const defaultFastModeTr = 'Bağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı veya atıf olmadan doğal paragraflar yaz.';
+        // IMPORTANT: Explicitly tell LLM not to use citation markers like [1], [2], [3]
+        const defaultFastModeEn = 'Answer directly and concisely based on the context. Write natural paragraphs without citations. NEVER use [1], [2], [3] or any citation markers - sources are shown separately.';
+        const defaultFastModeTr = 'Bağlam bilgilerine dayanarak doğrudan ve özlü yanıt ver. Kaynak referansı olmadan doğal paragraflar yaz. ASLA [1], [2], [3] gibi kaynak işaretleri KULLANMA - kaynaklar ayrıca gösterilecek.';
 
         const fastModeInstruction = responseLanguage === 'en'
           ? `\n\n${settingsMap.get('ragSettings.fastModeInstructionEn') || defaultFastModeEn}`
@@ -943,6 +944,12 @@ export class RAGChatService {
 
       // Clean response content - remove section headings that LLM might add despite instructions
       response.content = this.stripSectionHeadings(response.content);
+
+      // Strip citation markers when disableCitationText is enabled (sources shown separately)
+      if (disableCitationText) {
+        response.content = this.stripCitationMarkers(response.content);
+        console.log(' Citation markers stripped from response (disableCitationText=true)');
+      }
 
       // 5. Save messages to database with error handling
       try {
@@ -1243,12 +1250,38 @@ export class RAGChatService {
   private cleanRawMetadataContent(content: string, metadata?: Record<string, unknown>): string {
     if (!content) return '';
 
-    // Detect raw metadata format: starts with "listing_id:" or contains URL pattern at start
+    // Detect raw metadata format patterns:
+    // 1. Real estate: listing_id:, url:
+    // 2. Court records: row_id:, daire:, esasno:, kararno:
+    // 3. Tax documents: sayi:, tarih:, konu:
     const isRawMetadata = content.match(/^listing_id:\s*\d+/i) ||
-                          content.match(/^url:\s*https?:\/\//i);
+                          content.match(/^url:\s*https?:\/\//i) ||
+                          content.match(/^row_id:\s*\d+/i) ||
+                          content.match(/^daire:\s*/i) ||
+                          content.match(/^esasno:\s*/i) ||
+                          content.match(/^kararno:\s*/i) ||
+                          content.match(/^sayi:\s*/i);
 
     if (!isRawMetadata) {
       return content; // Normal content, return as-is
+    }
+
+    // Try to extract actual content from known content fields
+    // Priority: icerik > metin > ozet > karar_ozeti > aciklama
+    const contentFieldPatterns = [
+      /(?:icerik|içerik):\s*(.+?)(?=\n[a-z_]+:|$)/is,
+      /metin:\s*(.+?)(?=\n[a-z_]+:|$)/is,
+      /ozet:\s*(.+?)(?=\n[a-z_]+:|$)/is,
+      /karar_ozeti:\s*(.+?)(?=\n[a-z_]+:|$)/is,
+      /aciklama:\s*(.+?)(?=\n[a-z_]+:|$)/is,
+      /konu:\s*(.+?)(?=\n[a-z_]+:|$)/is
+    ];
+
+    for (const pattern of contentFieldPatterns) {
+      const match = content.match(pattern);
+      if (match && match[1] && match[1].trim().length > 30) {
+        return match[1].trim();
+      }
     }
 
     // Try to extract title from raw metadata content
@@ -1267,11 +1300,24 @@ export class RAGChatService {
       return metadata.title;
     }
 
-    // Last resort: clean up the raw content by removing URLs and IDs
+    // Last resort: clean up the raw content by removing all metadata field patterns
     return content
-      .replace(/listing_id:\s*\d+\n?/gi, '')
-      .replace(/url:\s*https?:\/\/[^\s\n]+\n?/gi, '')
+      // Real estate patterns
+      .replace(/listing_id:\s*\d+\s*/gi, '')
+      .replace(/url:\s*https?:\/\/[^\s\n]+\s*/gi, '')
       .replace(/title:\s*/gi, '')
+      // Court record patterns (Danıştay, etc.)
+      .replace(/row_id:\s*\d+\s*/gi, '')
+      .replace(/daire:\s*[^\n]+\s*/gi, '')
+      .replace(/esasno:\s*[^\n]+\s*/gi, '')
+      .replace(/kararno:\s*[^\n]+\s*/gi, '')
+      .replace(/tarih:\s*[\d\-\/]+\s*/gi, '')
+      // Tax document patterns
+      .replace(/sayi:\s*[^\n]+\s*/gi, '')
+      .replace(/kurum:\s*[^\n]+\s*/gi, '')
+      .replace(/makam:\s*[^\n]+\s*/gi, '')
+      .replace(/kategori:\s*[^\n]+\s*/gi, '')
+      .replace(/yil:\s*\d+\s*/gi, '')
       .trim();
   }
 
@@ -1431,6 +1477,34 @@ export class RAGChatService {
       .trim();
 
     return cleanedText;
+  }
+
+  /**
+   * Strip citation markers from LLM response
+   * Removes inline citations like [1], [2], [3] that LLM might add despite instructions
+   * Called when disableCitationText is enabled (sources shown separately, no need for inline refs)
+   */
+  private stripCitationMarkers(text: string): string {
+    if (!text) return '';
+
+    return text
+      // Remove simple citation markers: [1], [2], [3], etc.
+      .replace(/\[\d+\]/g, '')
+      // Remove citation ranges: [1-3], [1,2,3], [1, 2], etc.
+      .replace(/\[\d+[-,\s]+\d+(?:[-,\s]+\d+)*\]/g, '')
+      // Remove superscript-style citations: ¹, ², ³, etc.
+      .replace(/[¹²³⁴⁵⁶⁷⁸⁹⁰]+/g, '')
+      // Remove parenthetical citations: (1), (2), (3)
+      .replace(/\(\d+\)/g, '')
+      // Remove "Kaynak X" references in Turkish
+      .replace(/\bKaynak\s*\d+\b/gi, '')
+      .replace(/\bKaynak\s*\[\d+\]\b/gi, '')
+      // Remove "Source X" references in English
+      .replace(/\bSource\s*\d+\b/gi, '')
+      .replace(/\bSource\s*\[\d+\]\b/gi, '')
+      // Clean up any resulting double spaces
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   }
 
   /**
