@@ -1444,6 +1444,10 @@ export class RAGChatService {
     const enableLLMGenerationSetting = await settingsService.getSetting('ragSettings.enableLLMSummaries');
     const enableLLMGeneration = enableLLMGenerationSetting === 'true'; // Default: false (disabled for performance)
 
+    // Get excerpt and summary lengths from settings (configurable)
+    const excerptMaxLength = parseInt(await settingsService.getSetting('ragSettings.excerptMaxLength') || '300');
+    const summaryMaxLength = parseInt(await settingsService.getSetting('ragSettings.summaryMaxLength') || '500');
+
     // Get maxQuestionLength from chatbot settings for question generation
     const chatbotSettingsRaw = await settingsService.getSetting('chatbot');
     let maxQuestionLength = 500; // Default
@@ -1573,11 +1577,17 @@ export class RAGChatService {
           generatedQuestion = batchLLMResults[i].generatedQuestion || generatedQuestion;
         }
 
+        // Create natural language title from excerpt (no separate title)
+        // Title is just a shorter version of the excerpt for display
+        const naturalTitle = this.truncateExcerpt(prep.cleanExcerpt, Math.min(excerptMaxLength, 120)) + '...';
+        const naturalExcerpt = this.truncateExcerpt(prep.cleanExcerpt, excerptMaxLength);
+        const naturalContent = this.truncateExcerpt(processedContent, summaryMaxLength);
+
         formattedResults.push({
           id: r.id,
-          title: prep.cleanTitle,
-          excerpt: this.truncateExcerpt(prep.cleanExcerpt, 250),
-          content: processedContent,
+          title: naturalTitle, // Natural language, not metadata title
+          excerpt: naturalExcerpt, // Configurable length from settings
+          content: naturalContent, // Summary with configurable length
           question: generatedQuestion,
           category: prep.category,
           sourceTable: r.source_table || 'documents',
