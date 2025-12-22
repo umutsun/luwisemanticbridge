@@ -34,6 +34,8 @@ import ThemeToggle from '@/components/ThemeToggle';
 import { useAuth } from '@/contexts/AuthProvider';
 import { createEnhancedSourceClickHandler } from '@/utils/semantic-search-enhancement';
 import { MessageSkeleton } from '@/components/chat/message-skeleton';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1193,18 +1195,78 @@ export default function ChatInterface() {
                                     <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                   )}
                                   {message.content ? (
-                                    <p
-                                      className="text-xs sm:text-sm whitespace-pre-wrap flex-1 break-words overflow-wrap-anywhere"
-                                      dangerouslySetInnerHTML={{
-                                        __html: message.content
-                                          // Convert **[1]**, **[2, 5]** citations to bold
-                                          .replace(/\*\*\[([0-9,\s]+)\]\*\*/g, '<strong>[$1]</strong>')
-                                          // Convert plain [1], [2] to bold (fallback)
-                                          .replace(/(?<!\*\*)\[([0-9,\s]+)\](?!\*\*)/g, '<strong>[$1]</strong>')
-                                          // Preserve line breaks
-                                          .replace(/\n/g, '<br/>')
-                                      }}
-                                    />
+                                    message.role === 'user' ? (
+                                      <p className="text-xs sm:text-sm whitespace-pre-wrap flex-1 break-words">
+                                        {message.content}
+                                      </p>
+                                    ) : (
+                                      <div className="flex-1 prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-foreground/90 prose-strong:text-foreground prose-li:text-foreground/90">
+                                        <ReactMarkdown
+                                          remarkPlugins={[remarkGfm]}
+                                          components={{
+                                            h1: ({ children }) => (
+                                              <h1 className="text-base sm:text-lg font-bold mt-4 mb-2 pb-1 border-b border-border">
+                                                {children}
+                                              </h1>
+                                            ),
+                                            h2: ({ children }) => (
+                                              <h2 className="text-sm sm:text-base font-semibold mt-4 mb-2">
+                                                {children}
+                                              </h2>
+                                            ),
+                                            h3: ({ children }) => (
+                                              <h3 className="text-xs sm:text-sm font-semibold mt-3 mb-1">
+                                                {children}
+                                              </h3>
+                                            ),
+                                            p: ({ children }) => (
+                                              <p className="text-xs sm:text-sm my-2 leading-relaxed">
+                                                {children}
+                                              </p>
+                                            ),
+                                            strong: ({ children }) => (
+                                              <strong className="font-semibold text-foreground">
+                                                {children}
+                                              </strong>
+                                            ),
+                                            ul: ({ children }) => (
+                                              <ul className="list-disc list-outside ml-4 my-2 space-y-1 text-xs sm:text-sm">
+                                                {children}
+                                              </ul>
+                                            ),
+                                            ol: ({ children }) => (
+                                              <ol className="list-decimal list-outside ml-4 my-2 space-y-1 text-xs sm:text-sm">
+                                                {children}
+                                              </ol>
+                                            ),
+                                            li: ({ children }) => (
+                                              <li className="pl-1">
+                                                {children}
+                                              </li>
+                                            ),
+                                            blockquote: ({ children }) => (
+                                              <blockquote className="border-l-4 border-amber-400 bg-amber-50 dark:bg-amber-900/20 pl-3 py-2 my-3 text-amber-800 dark:text-amber-200 italic text-xs sm:text-sm">
+                                                {children}
+                                              </blockquote>
+                                            ),
+                                            code: ({ children, className }) => {
+                                              const isInline = !className;
+                                              return isInline ? (
+                                                <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
+                                                  {children}
+                                                </code>
+                                              ) : (
+                                                <code className="block bg-muted p-3 rounded-lg text-xs font-mono overflow-x-auto">
+                                                  {children}
+                                                </code>
+                                              );
+                                            },
+                                          }}
+                                        >
+                                          {message.content}
+                                        </ReactMarkdown>
+                                      </div>
+                                    )
                                   ) : message.isStreaming ? (
                                     <MessageSkeleton type="generating" />
                                   ) : null}
