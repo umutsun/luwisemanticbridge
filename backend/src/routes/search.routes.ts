@@ -369,20 +369,32 @@ router.get('/api/v2/search/embedding-counts', async (req: Request, res: Response
       GROUP BY source_type
     `);
 
-    // Get document_embeddings count
-    const docResult = await lsembPool.query(`
-      SELECT COUNT(*) as count FROM document_embeddings
-    `);
+    // Get document_embeddings count (with error handling)
+    let docCount = 0;
+    try {
+      const docResult = await lsembPool.query(`SELECT COUNT(*) as count FROM document_embeddings`);
+      docCount = parseInt(docResult.rows[0]?.count || '0', 10);
+    } catch (e) {
+      console.log('document_embeddings table not found or error:', e.message);
+    }
 
-    // Get scraped_pages count (web content)
-    const webResult = await lsembPool.query(`
-      SELECT COUNT(*) as count FROM scraped_pages WHERE status = 'processed'
-    `);
+    // Get scraped_pages count (web content) - no status column
+    let webCount = 0;
+    try {
+      const webResult = await lsembPool.query(`SELECT COUNT(*) as count FROM scraped_pages`);
+      webCount = parseInt(webResult.rows[0]?.count || '0', 10);
+    } catch (e) {
+      console.log('scraped_pages table not found or error:', e.message);
+    }
 
     // Get message embeddings count (from conversations/messages)
-    const chatResult = await lsembPool.query(`
-      SELECT COUNT(*) as count FROM messages
-    `);
+    let chatCount = 0;
+    try {
+      const chatResult = await lsembPool.query(`SELECT COUNT(*) as count FROM messages`);
+      chatCount = parseInt(chatResult.rows[0]?.count || '0', 10);
+    } catch (e) {
+      console.log('messages table not found or error:', e.message);
+    }
 
     // Build response
     const unifiedCounts: Record<string, number> = {};
@@ -406,9 +418,9 @@ router.get('/api/v2/search/embedding-counts', async (req: Request, res: Response
       success: true,
       counts: {
         database: totalDatabase,
-        documents: parseInt(docResult.rows[0]?.count || '0', 10) + documentFromUnified,
-        web: parseInt(webResult.rows[0]?.count || '0', 10),
-        chat: parseInt(chatResult.rows[0]?.count || '0', 10)
+        documents: docCount + documentFromUnified,
+        web: webCount,
+        chat: chatCount
       },
       detailed: unifiedCounts
     });
