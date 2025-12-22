@@ -1566,7 +1566,7 @@ export class RAGChatService {
 
         // Use batch LLM result if available, otherwise use fallback
         let processedContent = prep.cleanExcerpt;
-        let generatedQuestion = this.generateDynamicQuestion(prep.cleanTitle, prep.cleanExcerpt, prep.category, maxQuestionLength);
+        let generatedQuestion = this.generateDynamicQuestion(prep.cleanTitle, prep.cleanExcerpt, prep.category, maxQuestionLength, undefined, r.metadata);
 
         if (enableLLMGeneration && batchLLMResults[i]) {
           processedContent = batchLLMResults[i].processedContent || prep.cleanExcerpt;
@@ -1677,35 +1677,58 @@ export class RAGChatService {
   }
 
   /**
-   * Generate dynamic question based on title, excerpt and category without LLM
-   * IMPORTANT: Questions must include the TOPIC from title to be meaningful standalone
+   * Generate dynamic question based on title, excerpt, category and metadata
+   * Uses schema metadata for meaningful questions when available
    * @param maxLength - Maximum question length from settings (default 500)
    * @param customPatterns - Optional custom patterns from settings
+   * @param metadata - Source metadata from schema (tarih, kurum, makam, konu, etc.)
    */
   private generateDynamicQuestion(
     title: string,
     excerpt: string,
     category: string,
     maxLength: number = 500,
-    customPatterns?: QuestionPattern[]
+    customPatterns?: QuestionPattern[],
+    metadata?: Record<string, unknown>
   ): string {
     // Detect language
     const isTurkish = /[çğıöşüÇĞİÖŞÜ]/.test(excerpt) ||
       /(\b(ve|ile|için|hakkında|nasıl|neden|ne|hangi)\b)/i.test(excerpt);
 
-    // Calculate max topic length based on maxLength setting (question template ~50 chars)
+    // If we have meaningful metadata, use it for better questions
+    if (metadata && isTurkish) {
+      const kurum = metadata.kurum as string;
+      const makam = metadata.makam as string;
+      const konu = metadata.konu as string;
+      const tarih = metadata.tarih as string;
+      const yil = metadata.yil as string;
+      const baslik = metadata.baslik as string || title;
+
+      // Generate schema-aware question based on available fields
+      if (konu) {
+        return `${konu} konusunda detaylı bilgi ver.`;
+      }
+      if (kurum && makam) {
+        return `${kurum} ${makam} kararı hakkında bilgi ver.`;
+      }
+      if (kurum) {
+        return `${kurum} görüşü hakkında detaylı bilgi ver.`;
+      }
+      if (baslik && baslik !== title) {
+        return `"${baslik.substring(0, 60)}${baslik.length > 60 ? '...' : ''}" hakkında detaylı bilgi ver.`;
+      }
+    }
+
+    // Fallback: Extract topic from title
     const maxTopicLength = Math.min(45, Math.max(20, maxLength - 60));
 
-    // Extract main topic from title (respecting maxLength setting)
     const extractTopic = (text: string): string => {
-      // Remove common prefixes and clean up
       let topic = text
         .replace(/^(prof\.?\s*dr\.?|dr\.?|doç\.?|yrd\.?\s*doç\.?)\s*/gi, '')
-        .replace(/\s*[-–:]\s*.{0,20}$/, '') // Remove trailing subtitles
+        .replace(/\s*[-–:]\s*.{0,20}$/, '')
         .replace(/\s+/g, ' ')
         .trim();
 
-      // Get first meaningful part (respecting max topic length)
       if (topic.length > maxTopicLength) {
         const truncated = topic.substring(0, maxTopicLength);
         const lastSpace = truncated.lastIndexOf(' ');
