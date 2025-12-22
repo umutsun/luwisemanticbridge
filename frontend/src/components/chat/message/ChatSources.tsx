@@ -80,22 +80,22 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                {/* Document title from schema */}
+                {/* Document title from schema - allow 2-3 lines */}
                 {source.title && (
-                  <h4 className="text-xs sm:text-sm font-medium text-foreground line-clamp-1 mb-1">
+                  <h4 className="text-xs sm:text-sm font-medium text-foreground line-clamp-2 sm:line-clamp-3 mb-1">
                     {stripHtml(source.title)}
                   </h4>
                 )}
 
-                {/* Content - fewer lines on mobile */}
+                {/* Content - show more lines */}
                 {source.content && (
-                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4">
+                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-3 sm:line-clamp-5">
                     {stripHtml(source.content)}
                   </p>
                 )}
 
                 {source.excerpt && !source.content && (
-                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2 sm:line-clamp-4">
+                  <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-3 sm:line-clamp-5">
                     {stripHtml(source.excerpt)}
                   </p>
                 )}
@@ -142,7 +142,7 @@ export const ChatSources: React.FC<ChatSourcesProps> = ({
             }}
           >
             <ChevronDown className="w-4 h-4 mr-2" />
-            {t('chat.source.showMore', `Daha fazla göster (${sortedSources.length - visibleCount} konu daha)`)}
+            {t('chat.source.showMore', 'Daha fazla göster')}
           </Button>
         )}
       </div>
