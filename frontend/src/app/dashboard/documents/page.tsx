@@ -3733,9 +3733,9 @@ export default function DocumentManagerPage() {
               </Card>
 
               <Card className="bg-white dark:bg-black border-gray-200 dark:border-gray-700 shadow-sm flex flex-col flex-1">
-                <CardContent className="p-0 flex flex-col flex-1 min-h-0">
+                <CardContent className="p-4 pt-3 flex flex-col flex-1 min-h-0">
                   {/* Fixed Header */}
-                  <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700">
+                  <div className="flex-shrink-0 border-b border-gray-100 dark:border-gray-700 -mx-4 px-4">
                     <Table>
                       <TableHeader className="bg-gray-50 dark:bg-gray-900">
                         <TableRow>
@@ -3757,7 +3757,7 @@ export default function DocumentManagerPage() {
                   </div>
 
                   {/* Scrollable Body - fixed height with inline scroll */}
-                  <ScrollArea className="max-h-[650px]">
+                  <ScrollArea className="max-h-[650px] -mx-4 px-4">
                     <Table>
                       <TableBody>
                         {(loading || batchProcessing) ? (

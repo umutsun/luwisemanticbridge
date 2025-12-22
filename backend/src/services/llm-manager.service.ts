@@ -100,7 +100,7 @@ export class LLMManager {
       model: '',  // NO default - will be set from database
       isInitialized: false,
       supportsEmbeddings: true,
-      embeddingModel: 'text-embedding-004'
+      embeddingModel: 'gemini-embedding-exp-03-07'  // Supports 1536 dimensions (OpenAI-compatible)
     });
 
     this.providers.set('deepseek', {
@@ -821,6 +821,13 @@ export class LLMManager {
         if (!values || !values.length) {
           throw new Error('Gemini embedding response did not include values');
         }
+
+        // CRITICAL: Verify dimension is 1536 (OpenAI-compatible)
+        // Gemini may ignore outputDimensionality parameter and return 768
+        if (values.length !== 1536) {
+          throw new Error(`Gemini returned ${values.length} dimensions instead of 1536 - outputDimensionality not supported`);
+        }
+
         return values;
       }
       default:
