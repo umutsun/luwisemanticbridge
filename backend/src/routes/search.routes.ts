@@ -405,20 +405,18 @@ router.get('/api/v2/search/embedding-counts', async (req: Request, res: Response
       const count = parseInt(row.count, 10);
       unifiedCounts[sourceType] = count;
 
-      // csv, court_decision, article, qa are all "database" type content
-      if (['csv', 'court_decision', 'article', 'qa'].includes(sourceType)) {
+      // csv, document, court_decision, article, qa are all "database" type content
+      // 'document' = embeddings from CSV-transformed tables in source DB
+      if (['csv', 'document', 'court_decision', 'article', 'qa'].includes(sourceType)) {
         totalDatabase += count;
       }
     }
 
-    // Add document type from unified_embeddings if exists
-    const documentFromUnified = unifiedCounts['document'] || 0;
-
     res.json({
       success: true,
       counts: {
-        database: totalDatabase,
-        documents: docCount + documentFromUnified,
+        database: totalDatabase,  // CSV-transformed tables (csv, document, court_decision, article, qa)
+        documents: docCount,      // Uploaded PDFs/Word docs from document_embeddings table
         web: webCount,
         chat: chatCount
       },
