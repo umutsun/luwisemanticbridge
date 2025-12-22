@@ -474,6 +474,7 @@ class QuestionGenerationService {
     sampleContent?: string;
     userId?: string;
   }, count: number = 4): Promise<string[]> {
+    console.log(`[QuestionGen] generateWelcomeQuestions called for schema: ${schemaContext.schemaName}`);
     try {
       const { redisClient } = await import('../config/redis.config');
       const redis = redisClient;
@@ -489,14 +490,19 @@ class QuestionGenerationService {
       }
 
       // No cache: generate new pool
+      console.log(`[QuestionGen] No cache found, building question pool...`);
       const questionPool = await this.buildQuestionPool(schemaContext);
+      console.log(`[QuestionGen] Question pool built with ${questionPool.length} questions`);
 
       // Store in Redis with 24 hour expiry
-      await redis.setex(redisKey, 86400, JSON.stringify(questionPool));
+      if (questionPool.length > 0) {
+        await redis.setex(redisKey, 86400, JSON.stringify(questionPool));
+        console.log(`[QuestionGen] Pool cached in Redis`);
+      }
 
       return this.getRandomQuestions(questionPool, count);
     } catch (error) {
-      console.error('Error generating welcome questions:', error);
+      console.error('[QuestionGen] Error generating welcome questions:', error);
       return this.generateFallbackWelcomeQuestions(schemaContext, count);
     }
   }
@@ -559,8 +565,10 @@ class QuestionGenerationService {
     categories?: string[];
     sampleContent?: string;
   }, count: number = 20): Promise<string[]> {
+    console.log(`[QuestionGen] generateLLMQuestions called for schema: ${schemaContext.schemaName}, count: ${count}`);
     try {
       const context = this.buildSchemaContext(schemaContext);
+      console.log(`[QuestionGen] Built context: ${context.substring(0, 200)}...`);
 
       const prompt = `Sen bir soru öneri asistanısın. Kullanıcı aşağıdaki veri setine erişebilir ve bunlar hakkında sorular sorabilir:
 
@@ -575,14 +583,18 @@ Lütfen bu veri seti hakkında kullanıcıların sorabileceği ${count} adet ÇE
 
 Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama ekleme.`;
 
+      console.log(`[QuestionGen] Calling LLM for questions...`);
       const result = await this.llmManager.generateChatResponse(prompt, {
         temperature: 0.9, // Very high for maximum diversity
         maxTokens: 1000
       });
+      console.log(`[QuestionGen] LLM response received, provider: ${result.provider}, length: ${result.content?.length}`);
 
-      return this.parseQuestionsFromResponse(result.content);
+      const questions = this.parseQuestionsFromResponse(result.content);
+      console.log(`[QuestionGen] Parsed ${questions.length} questions from LLM response`);
+      return questions;
     } catch (error) {
-      console.error('Error generating LLM questions:', error);
+      console.error('[QuestionGen] Error generating LLM questions:', error);
       return [];
     }
   }

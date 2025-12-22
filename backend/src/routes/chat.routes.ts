@@ -277,6 +277,7 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
     }
 
     // If user is authenticated, generate LLM-based suggestions using schema context
+    console.log(`[Suggestions] userId from token: ${userId}`);
     if (userId) {
       try {
         const { DataSchemaService } = await import('../services/data-schema.service');
@@ -284,6 +285,7 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
         const { questionGenerationService } = await import('../services/question-generation.service');
 
         const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);
+        console.log(`[Suggestions] Active schema for user: ${activeSchema?.name || 'none'}`);
 
         if (activeSchema) {
           // Build schema context for LLM
