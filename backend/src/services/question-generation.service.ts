@@ -149,15 +149,13 @@ class QuestionGenerationService {
 
     try {
       // Generate questions using LLM
-      const response = await this.llmManager.generateCompletion({
-        prompt,
+      const result = await this.llmManager.generateChatResponse(prompt, {
         maxTokens: 300,
-        temperature: 0.8, // Higher temperature for more diversity
-        model: 'gpt-3.5-turbo-instruct' // Use instruction-tuned model
+        temperature: 0.8 // Higher temperature for more diversity
       });
 
       // Parse and validate questions
-      const questions = this.parseQuestionsResponse(response, context);
+      const questions = this.parseQuestionsResponse(result.content, context);
 
       // Ensure we have enough questions
       while (questions.length < count) {
@@ -577,13 +575,12 @@ Lütfen bu veri seti hakkında kullanıcıların sorabileceği ${count} adet ÇE
 
 Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama ekleme.`;
 
-      const response = await this.llmManager.chatCompletion({
-        messages: [{ role: 'user', content: prompt }],
+      const result = await this.llmManager.generateChatResponse(prompt, {
         temperature: 0.9, // Very high for maximum diversity
         maxTokens: 1000
       });
 
-      return this.parseQuestionsFromResponse(response);
+      return this.parseQuestionsFromResponse(result.content);
     } catch (error) {
       console.error('Error generating LLM questions:', error);
       return [];
