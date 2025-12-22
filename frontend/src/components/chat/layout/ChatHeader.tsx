@@ -67,7 +67,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           ) : null}
           <Brain className={`w-7 h-7 md:w-8 md:h-8 text-primary flex-shrink-0 ${settingsLoaded && chatbotSettings.logoUrl ? 'hidden' : ''}`} />
           <div className="min-w-0">
-            <h1 className="text-base md:text-xl font-bold truncate max-w-[120px] sm:max-w-[200px] md:max-w-none">
+            <h1 className="text-base md:text-xl font-bold truncate max-w-[180px] sm:max-w-[280px] md:max-w-none">
               {settingsLoaded ? chatbotSettings.title : (
                 <span className="inline-block w-20 md:w-32 h-5 md:h-6 bg-muted animate-pulse rounded"></span>
               )}

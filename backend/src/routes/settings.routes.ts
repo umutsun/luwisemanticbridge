@@ -763,9 +763,10 @@ router.get('/active-template', async (req: Request, res: Response) => {
       `SELECT value FROM settings WHERE key = 'template.active'`
     );
     const active = result.rows.length > 0 ? result.rows[0].value : 'base';
+    console.log('🔍 [TEMPLATE] GET active-template:', { found: result.rows.length > 0, active });
     res.json({ active });
   } catch (error) {
-    console.error('Error fetching active template:', error);
+    console.error('🔍 [TEMPLATE] Error fetching active template:', error);
     res.json({ active: 'base' }); // Return default on error
   }
 });
@@ -774,6 +775,7 @@ router.get('/active-template', async (req: Request, res: Response) => {
 router.post('/set-active-template', async (req: Request, res: Response) => {
   try {
     const { templateId } = req.body;
+    console.log('🔍 [TEMPLATE] SET active-template:', { templateId });
     await lsembPool.query(
       `INSERT INTO settings (key, value, category, description, updated_at)
        VALUES ('template.active', $1, 'app', 'Active document template', CURRENT_TIMESTAMP)
@@ -781,9 +783,10 @@ router.post('/set-active-template', async (req: Request, res: Response) => {
        DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP`,
       [templateId]
     );
+    console.log('🔍 [TEMPLATE] Template saved successfully:', templateId);
     res.json({ success: true, active: templateId });
   } catch (error) {
-    console.error('Error setting active template:', error);
+    console.error('🔍 [TEMPLATE] Error setting active template:', error);
     res.status(500).json({ error: 'Failed to set active template' });
   }
 });

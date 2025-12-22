@@ -7,6 +7,7 @@ import dbConfig from '../config/database';
 import { chatWss, chatConnections } from '../server';
 import { MessageStorageService } from '../services/message-storage.service';
 import { v4 as uuidv4 } from 'uuid';
+import { questionGenerationService } from '../services/question-generation.service';
 
 const router = Router();
 const subscriptionService = new SubscriptionService();
@@ -170,6 +171,14 @@ router.post('/api/v2/chat', authenticateToken, async (req: AuthenticatedRequest,
           );
 
           console.log('Enhanced message interaction saved:', { conversationId, userId });
+
+          // Capture quality user questions for suggestion pool
+          // Only if response was successful (has sources or meaningful content)
+          if ((result.sources?.length > 0 || result.response.length > 100) && message.includes('?')) {
+            questionGenerationService.addToUserQuestionPool(message, 'user_chat').catch(err => {
+              console.error('[QuestionPool] Failed to add question:', err);
+            });
+          }
         } catch (saveError) {
           console.error('Failed to save message interaction:', saveError);
         }
@@ -824,6 +833,13 @@ async function streamChatResponse(
         relatedTopics: result.relatedTopics,
         fastMode: (result as any).fastMode || false // Pass fastMode flag to frontend
       }));
+    }
+
+    // Capture quality user questions for suggestion pool (WebSocket)
+    if ((result.sources?.length > 0 || result.response?.length > 100) && message.includes('?')) {
+      questionGenerationService.addToUserQuestionPool(message, 'user_chat').catch(err => {
+        console.error('[QuestionPool] Failed to add question:', err);
+      });
     }
 
     // Track user usage

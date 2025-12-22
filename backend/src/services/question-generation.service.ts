@@ -1,6 +1,7 @@
 import { LLMManager } from './llm-manager.service';
 import { tableConfigService } from '../config/table-config.service';
 import { lsembPool } from '../config/database.config';
+import crypto from 'crypto';
 
 export interface QuestionGenerationContext {
   title: string;
@@ -518,18 +519,29 @@ class QuestionGenerationService {
   }): Promise<string[]> {
     const questionPool: string[] = [];
 
-    // 1. Get actual data source statistics for richer context
+    // 1. Get questions from user pool (real user questions)
+    console.log('[QuestionGen] Fetching user pool questions...');
+    const userPoolQuestions = await this.getUserPoolQuestions(15);
+    if (userPoolQuestions.length > 0) {
+      console.log(`[QuestionGen] Added ${userPoolQuestions.length} questions from user pool`);
+      questionPool.push(...userPoolQuestions);
+    }
+
+    // 2. Get actual data source statistics for richer context
     const dataSourceStats = await this.getDataSourceStats();
 
-    // 2. Enrich schema context with real data info
+    // 3. Enrich schema context with real data info
     const enrichedContext = {
       ...schemaContext,
       dataSourceStats
     };
 
-    // 3. Generate LLM questions with rich context (skip user history for cleaner suggestions)
-    const llmQuestions = await this.generateLLMQuestionsEnriched(enrichedContext, 15);
+    // 4. Generate LLM questions with rich context (complement user questions)
+    const targetLLMCount = Math.max(5, 20 - questionPool.length); // Fill up to ~20 total
+    const llmQuestions = await this.generateLLMQuestionsEnriched(enrichedContext, targetLLMCount);
     questionPool.push(...llmQuestions);
+
+    console.log(`[QuestionGen] Total pool: ${questionPool.length} questions (${userPoolQuestions.length} user + ${llmQuestions.length} LLM)`);
 
     // Remove duplicates and return
     return [...new Set(questionPool)];
@@ -781,6 +793,186 @@ Sadece soruları listele, her satırda bir soru. Numaralandırma veya açıklama
   clearCache(): void {
     this.cache.clear();
     this.cacheTimestamps.clear();
+  }
+
+  // ============================================
+  // USER QUESTION POOL MANAGEMENT
+  // ============================================
+
+  /**
+   * Check if a question is quality enough to be added to the pool
+   */
+  isQualityQuestion(question: string): { isQuality: boolean; score: number; reason?: string } {
+    const trimmed = question.trim();
+
+    // Basic validation
+    if (!trimmed || trimmed.length < 15) {
+      return { isQuality: false, score: 0, reason: 'Too short' };
+    }
+
+    if (trimmed.length > 250) {
+      return { isQuality: false, score: 0, reason: 'Too long' };
+    }
+
+    // Must contain a question mark or question word
+    const hasQuestionMark = trimmed.includes('?');
+    const hasQuestionWord = /\b(ne|nasıl|neden|kim|hangi|kaç|nedir|midir|mıdır|mı|mi|what|how|why|when|where|who|which)\b/i.test(trimmed);
+
+    if (!hasQuestionMark && !hasQuestionWord) {
+      return { isQuality: false, score: 0, reason: 'Not a question' };
+    }
+
+    // Filter out junk patterns
+    const junkPatterns = [
+      /\bhttp/i,           // URLs
+      /\bwww\./i,          // URLs
+      /\.pdf\b/i,          // File references
+      /\.docx?\b/i,        // File references
+      /@/,                 // Email addresses
+      /\b\d{10,}\b/,       // Long numbers (phone, ID)
+      /test\s*\d*/i,       // Test messages
+      /deneme/i,           // Test messages (Turkish)
+      /selam|merhaba|hey\b/i, // Greetings only
+      /^[a-z]{1,3}$/i,     // Single letters/abbreviations
+      /^\d+$/,             // Only numbers
+    ];
+
+    for (const pattern of junkPatterns) {
+      if (pattern.test(trimmed)) {
+        return { isQuality: false, score: 0, reason: 'Contains junk pattern' };
+      }
+    }
+
+    // Calculate quality score
+    let score = 0.5; // Base score
+
+    // Bonus for question mark
+    if (hasQuestionMark) score += 0.1;
+
+    // Bonus for proper length (sweet spot: 30-150 chars)
+    if (trimmed.length >= 30 && trimmed.length <= 150) score += 0.15;
+
+    // Bonus for domain-specific keywords (vergi/hukuk)
+    const domainKeywords = /\b(vergi|kdv|gelir|kurumlar|stopaj|matrah|beyanname|fatura|iade|indirim|mükellef|gider|kanun|yönetmelik|mahkeme|dava|karar|hüküm|madde|tebliğ|özelge)\b/i;
+    if (domainKeywords.test(trimmed)) score += 0.2;
+
+    // Bonus for professional tone (ends with question mark, starts with capital)
+    if (hasQuestionMark && /^[A-ZÇĞİÖŞÜ]/.test(trimmed)) score += 0.05;
+
+    // Cap at 1.0
+    score = Math.min(1.0, score);
+
+    return {
+      isQuality: score >= 0.5,
+      score: Math.round(score * 100) / 100
+    };
+  }
+
+  /**
+   * Add a user question to the pool if it's quality
+   */
+  async addToUserQuestionPool(question: string, source: string = 'user_chat'): Promise<boolean> {
+    try {
+      const qualityCheck = this.isQualityQuestion(question);
+
+      if (!qualityCheck.isQuality) {
+        console.log(`[QuestionPool] Rejected: "${question.substring(0, 50)}..." - ${qualityCheck.reason}`);
+        return false;
+      }
+
+      const trimmed = question.trim();
+      const hash = crypto.createHash('md5').update(trimmed.toLowerCase()).digest('hex');
+
+      // Insert or ignore if exists
+      await lsembPool.query(`
+        INSERT INTO user_question_pool (question, question_hash, source, quality_score, language)
+        VALUES ($1, $2, $3, $4, 'tr')
+        ON CONFLICT (question_hash) DO UPDATE SET
+          usage_count = user_question_pool.usage_count,
+          updated_at = CURRENT_TIMESTAMP
+      `, [trimmed, hash, source, qualityCheck.score]);
+
+      console.log(`[QuestionPool] Added: "${trimmed.substring(0, 50)}..." (score: ${qualityCheck.score})`);
+
+      // Invalidate Redis cache to include new question
+      try {
+        const { redis } = await import('../config/redis');
+        const keys = await redis.keys('suggestions:*');
+        if (keys.length > 0) {
+          await redis.del(...keys);
+          console.log(`[QuestionPool] Cleared ${keys.length} suggestion cache keys`);
+        }
+      } catch (e) {
+        // Redis might not be available
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[QuestionPool] Error adding question:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get questions from user pool for suggestions
+   */
+  async getUserPoolQuestions(limit: number = 20): Promise<string[]> {
+    try {
+      const result = await lsembPool.query(`
+        SELECT question
+        FROM user_question_pool
+        WHERE is_active = true
+          AND quality_score >= 0.5
+        ORDER BY
+          quality_score DESC,
+          click_count DESC,
+          created_at DESC
+        LIMIT $1
+      `, [limit]);
+
+      return result.rows.map(row => row.question);
+    } catch (error) {
+      // Table might not exist yet
+      console.log('[QuestionPool] user_question_pool table not found, skipping');
+      return [];
+    }
+  }
+
+  /**
+   * Record that a suggestion was clicked
+   */
+  async recordSuggestionClick(question: string): Promise<void> {
+    try {
+      const hash = crypto.createHash('md5').update(question.trim().toLowerCase()).digest('hex');
+
+      await lsembPool.query(`
+        UPDATE user_question_pool
+        SET click_count = click_count + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE question_hash = $1
+      `, [hash]);
+    } catch (error) {
+      // Ignore errors
+    }
+  }
+
+  /**
+   * Record that a suggestion was shown
+   */
+  async recordSuggestionUsage(questions: string[]): Promise<void> {
+    try {
+      const hashes = questions.map(q =>
+        crypto.createHash('md5').update(q.trim().toLowerCase()).digest('hex')
+      );
+
+      await lsembPool.query(`
+        UPDATE user_question_pool
+        SET usage_count = usage_count + 1
+        WHERE question_hash = ANY($1)
+      `, [hashes]);
+    } catch (error) {
+      // Ignore errors
+    }
   }
 }
 

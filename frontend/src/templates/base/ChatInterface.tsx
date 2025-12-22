@@ -585,7 +585,7 @@ export default function ChatInterface() {
         />
 
         {/* Main Chat Area */}
-        <div className="pt-20 pb-32 max-w-4xl mx-auto w-[95%] md:w-full px-2 md:px-5">
+        <div className="pt-20 pb-32 max-w-5xl mx-auto w-[95%] md:w-full px-2 md:px-5">
           <ScrollArea className="h-[calc(100vh-12rem)] pr-4">
             <div className="space-y-4 py-4 pr-2">
               {/* Welcome using new component */}

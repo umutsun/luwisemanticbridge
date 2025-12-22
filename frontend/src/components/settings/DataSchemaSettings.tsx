@@ -53,6 +53,7 @@ export default function DataSchemaSettings() {
   const [allSchemas, setAllSchemas] = useState<UnifiedSchema[]>([]);
   const [activeSchemaId, setActiveSchemaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
   const [editedSchema, setEditedSchema] = useState<EditedSchema | null>(null);
@@ -64,10 +65,17 @@ export default function DataSchemaSettings() {
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
+      console.log('🔍 [SCHEMA] Loading schemas...');
+
       const [schemasRes, settingsRes] = await Promise.all([
         apiClient.get('/api/v2/data-schema/all-schemas'),
         apiClient.get('/api/v2/data-schema/user/settings')
       ]);
+
+      console.log('🔍 [SCHEMA] Schemas response:', schemasRes?.data);
+      console.log('🔍 [SCHEMA] Settings response:', settingsRes?.data);
+
       const schemasData = schemasRes?.data?.schemas || [];
       setAllSchemas(Array.isArray(schemasData) ? schemasData : []);
       const activeId = settingsRes?.data?.settings?.active_schema_id;
@@ -76,9 +84,14 @@ export default function DataSchemaSettings() {
         const active = schemasData.find((s: UnifiedSchema) => s.id === activeId);
         if (active) selectSchema(active);
       }
-    } catch (error) {
-      console.error('Failed to load:', error);
-      toast.error('Veriler yüklenemedi');
+      console.log('🔍 [SCHEMA] Loaded', schemasData.length, 'schemas');
+    } catch (error: any) {
+      console.error('🔍 [SCHEMA] Failed to load:', error);
+      const errorMsg = error?.response?.status === 401
+        ? 'Oturum süresi doldu. Lütfen tekrar giriş yapın.'
+        : error?.response?.data?.error || error?.message || 'Veriler yüklenemedi';
+      setLoadError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -291,7 +304,61 @@ export default function DataSchemaSettings() {
 
   const isActive = activeSchemaId === selectedSchemaId;
 
-  if (loading) return <div className="flex justify-center p-8"><RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) return (
+    <div className="grid grid-cols-[35%_65%] gap-6">
+      {/* Sol - Skeleton Liste */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between">
+            <div className="h-5 w-24 bg-muted animate-pulse rounded" />
+            <div className="flex gap-1">
+              <div className="h-7 w-7 bg-muted animate-pulse rounded" />
+              <div className="h-7 w-7 bg-muted animate-pulse rounded" />
+              <div className="h-7 w-7 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 pt-0 space-y-3">
+          <div className="h-8 bg-muted animate-pulse rounded" />
+          <div className="space-y-1.5">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="p-2.5 rounded-md border">
+                <div className="h-4 w-3/4 bg-muted animate-pulse rounded mb-1.5" />
+                <div className="h-3 w-1/2 bg-muted animate-pulse rounded" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+      {/* Sağ - Skeleton Detay */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <div className="h-5 w-32 bg-muted animate-pulse rounded" />
+        </CardHeader>
+        <CardContent className="space-y-4 px-4">
+          <div className="h-9 bg-muted animate-pulse rounded" />
+          <div className="h-9 bg-muted animate-pulse rounded" />
+          <div className="h-20 bg-muted animate-pulse rounded" />
+          <div className="h-32 bg-muted animate-pulse rounded" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Error state
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center py-12 px-4">
+      <div className="text-center max-w-md">
+        <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-medium mb-2">Şemalar Yüklenemedi</h3>
+        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+        <Button onClick={loadData} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Tekrar Dene
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="grid grid-cols-[35%_65%] gap-6">

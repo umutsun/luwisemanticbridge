@@ -26,15 +26,18 @@ export async function getActiveTemplateId(): Promise<string> {
       cache: 'no-store' // Always fetch fresh
     });
 
+    console.log('🔍 [TEMPLATE] API response status:', response.status);
+
     if (!response.ok) {
-      console.warn('Failed to fetch active template, using default');
+      console.warn('🔍 [TEMPLATE] Failed to fetch active template, using default');
       return 'base';
     }
 
     const data: ActiveTemplateResponse = await response.json();
+    console.log('🔍 [TEMPLATE] API returned template ID:', data.active);
     return data.active || 'base';
   } catch (error) {
-    console.error('Error loading active template:', error);
+    console.error('🔍 [TEMPLATE] Error loading active template:', error);
     return 'base';
   }
 }
@@ -47,19 +50,28 @@ export async function loadTemplate(templateId: string): Promise<{
   Widget?: any;
   config: any;
 }> {
+  console.log('🔍 [TEMPLATE] loadTemplate called with ID:', templateId);
+  console.log('🔍 [TEMPLATE] Available templates:', Object.keys(chatTemplates));
+
   try {
     const template = getTemplate(templateId);
+    console.log('🔍 [TEMPLATE] getTemplate result:', template ? template.name : 'null');
 
     if (!template) {
-      console.warn(`Template "${templateId}" not found, using default`);
+      console.warn(`🔍 [TEMPLATE] Template "${templateId}" not found, using default`);
       return loadDefaultTemplate();
     }
+
+    console.log('🔍 [TEMPLATE] Loading ChatInterface for:', template.id);
 
     // Load template modules
     const [ChatInterfaceModule, configModule] = await Promise.all([
       template.ChatInterface(),
       template.config()
     ]);
+
+    console.log('🔍 [TEMPLATE] ChatInterface module loaded:', !!ChatInterfaceModule.default);
+    console.log('🔍 [TEMPLATE] Config loaded:', configModule.default?.name || configModule?.name || 'unknown');
 
     // Load widget if available
     let WidgetModule;
@@ -73,7 +85,7 @@ export async function loadTemplate(templateId: string): Promise<{
       config: configModule.default || configModule
     };
   } catch (error) {
-    console.error(`Error loading template "${templateId}":`, error);
+    console.error(`🔍 [TEMPLATE] Error loading template "${templateId}":`, error);
     return loadDefaultTemplate();
   }
 }

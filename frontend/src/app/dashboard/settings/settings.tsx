@@ -2052,18 +2052,21 @@ function TemplateSelector() {
 
   useEffect(() => {
     // Load active template from backend
+    console.log('🔍 [SETTINGS] Loading active template...');
     fetch('/api/v2/settings/active-template')
       .then(res => res.json())
       .then(data => {
+        console.log('🔍 [SETTINGS] Active template loaded:', data);
         setActiveTemplate(data.active || 'base');
       })
       .catch(err => {
-        console.error('Failed to load active template:', err);
+        console.error('🔍 [SETTINGS] Failed to load active template:', err);
         setActiveTemplate('base');
       });
   }, []);
 
   const handleTemplateChange = async (value: string) => {
+    console.log('🔍 [SETTINGS] Saving template:', value);
     setLoading(true);
     try {
       const res = await fetch('/api/v2/settings/set-active-template', {
@@ -2071,6 +2074,9 @@ function TemplateSelector() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId: value })
       });
+
+      const responseData = await res.json();
+      console.log('🔍 [SETTINGS] Save response:', responseData);
 
       if (res.ok) {
         setActiveTemplate(value);
@@ -2082,6 +2088,7 @@ function TemplateSelector() {
         throw new Error('Failed to set template');
       }
     } catch (error) {
+      console.error('🔍 [SETTINGS] Error saving template:', error);
       toast({
         title: "Error",
         description: "Failed to activate template",

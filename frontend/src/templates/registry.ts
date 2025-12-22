@@ -81,5 +81,5 @@ export function templateExists(templateId: string): boolean {
  * Get default template
  */
 export function getDefaultTemplate(): TemplateConfig {
-  return chatTemplates['spark'];
+  return chatTemplates['base'];
 }
