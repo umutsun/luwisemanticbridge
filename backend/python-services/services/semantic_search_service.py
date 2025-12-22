@@ -205,24 +205,45 @@ class SemanticSearchService:
         return self.openai_client
 
     async def _get_gemini_embedding(self, text: str, api_key: str, model: str = GEMINI_EMBEDDING_MODEL) -> List[float]:
-        """Generate embedding using Google Gemini API"""
+        """Generate embedding using Google Gemini API with 1536 dimensions (OpenAI-compatible)"""
         try:
-            import google.generativeai as genai
+            import aiohttp
 
-            genai.configure(api_key=api_key)
-            result = genai.embed_content(
-                model=f"models/{model}",
-                content=text,
-                task_type="retrieval_query"
-            )
+            # Use direct REST API to support outputDimensionality parameter
+            # Google SDK doesn't expose this parameter, but the API supports it
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
+            headers = {"Content-Type": "application/json"}
 
-            embedding = result['embedding']
-            logger.info(f"Gemini embedding generated: {len(embedding)} dimensions")
-            return embedding
+            payload = {
+                "model": f"models/{model}",
+                "content": {"parts": [{"text": text}]},
+                "outputDimensionality": EMBEDDING_DIMENSIONS  # 1536 - OpenAI-compatible
+            }
 
-        except ImportError:
-            logger.error("google-generativeai package not installed. Run: pip install google-generativeai")
-            raise ValueError("Google Generative AI package not installed")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{url}?key={api_key}",
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if not response.ok:
+                        error_text = await response.text()
+                        logger.error(f"Gemini API error: {response.status} - {error_text}")
+                        raise ValueError(f"Gemini embedding API error: {response.status}")
+
+                    data = await response.json()
+                    embedding = data.get("embedding", {}).get("values", [])
+
+                    if not embedding:
+                        raise ValueError("Gemini embedding response did not include values")
+
+                    logger.info(f"Gemini embedding generated: {len(embedding)} dimensions (native, not scaled)")
+                    return embedding
+
+        except ImportError as e:
+            logger.error(f"Required package not installed: {e}")
+            raise ValueError("aiohttp package not installed")
 
     def _scale_embedding(self, embedding: List[float], target_dims: int = EMBEDDING_DIMENSIONS) -> List[float]:
         """Scale embedding to target dimensions using interpolation or padding"""
