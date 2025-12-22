@@ -280,8 +280,7 @@ router.get('/api/v2/chat/suggestions', async (req: Request, res: Response) => {
     console.log(`[Suggestions] userId from token: ${userId}`);
     if (userId) {
       try {
-        const { DataSchemaService } = await import('../services/data-schema.service');
-        const dataSchemaService = new DataSchemaService();
+        const { dataSchemaService } = await import('../services/data-schema.service');
         const { questionGenerationService } = await import('../services/question-generation.service');
 
         const activeSchema = await dataSchemaService.getActiveSchemaForUser(userId);

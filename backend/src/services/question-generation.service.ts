@@ -476,8 +476,7 @@ class QuestionGenerationService {
   }, count: number = 4): Promise<string[]> {
     console.log(`[QuestionGen] generateWelcomeQuestions called for schema: ${schemaContext.schemaName}`);
     try {
-      const { redisClient } = await import('../config/redis.config');
-      const redis = redisClient;
+      const { redis } = await import('../config/redis');
       const redisKey = `suggestions:${schemaContext.schemaName}`;
 
       // Try to get questions from Redis pool
