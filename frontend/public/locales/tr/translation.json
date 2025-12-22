@@ -3296,23 +3296,23 @@
     }
   },
   "chatInterface": {
-    "welcomeMessage": "[AUTO] Welcome! How can I help you today?",
+    "welcomeMessage": "Merhaba! Size nasıl yardımcı olabilirim?",
     "confidence": {
-      "high": "[AUTO] High",
-      "medium": "[AUTO] Medium",
-      "low": "[AUTO] Low"
+      "high": "Yüksek",
+      "medium": "Orta",
+      "low": "Düşük"
     },
     "source": {
-      "detailedResearch": "[AUTO] Conduct detailed research on this topic",
-      "legalConditions": "[AUTO] and in this case, relevant legal provisions apply.",
-      "timeConditions": "[AUTO] These conditions are considered when calculating this period.",
-      "taxConditions": "[AUTO] Legal provisions are referenced for this issue.",
-      "generalConditions": "[AUTO] Detailed information can be accessed from the sources on the subject.",
-      "showMore": "[AUTO] Show more ({{count}} more topics)"
+      "detailedResearch": "Bu konu hakkında detaylı araştırma yap",
+      "legalConditions": "ve bu durumda ilgili yasal hükümler geçerlidir.",
+      "timeConditions": "Bu süre hesaplanırken bu koşullar dikkate alınır.",
+      "taxConditions": "Bu konu için yasal hükümler referans alınmaktadır.",
+      "generalConditions": "Konu hakkında kaynaklardan detaylı bilgiye ulaşılabilir.",
+      "showMore": "Daha fazla göster ({{count}} konu daha)"
     },
     "keyword": {
-      "fromQuery": "[AUTO] 🔍 From your search query: \"{{keyword}}\"",
-      "keyword": "[AUTO] Keyword"
+      "fromQuery": "🔍 Arama sorgunuzdan: \"{{keyword}}\"",
+      "keyword": "Anahtar Kelime"
     }
   },
   "systemMonitor": {
