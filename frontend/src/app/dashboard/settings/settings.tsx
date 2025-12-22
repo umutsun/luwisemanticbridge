@@ -48,7 +48,9 @@ import {
   Plus,
   HardDrive,
   Loader2,
-  Copy
+  Copy,
+  Download,
+  Upload
 } from 'lucide-react';
 import {
   getSettingsCategory,
@@ -5573,6 +5575,8 @@ export default function OptimizedSettingsPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const initialTab = searchParams.get('tab') || 'app';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const { toast } = useToast();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Update URL when tab changes
   const handleTabChange = (value: string) => {
@@ -5584,14 +5588,146 @@ export default function OptimizedSettingsPage() {
     }
   };
 
+  // Export all settings as JSON
+  const exportSettings = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const API_BASE_URL = typeof window !== 'undefined' ? (window as any).API_CONFIG?.baseUrl || '' : '';
+
+      // Fetch all settings
+      const [appSettings, llmSettings, ragSettings, chatbotSettings] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/v2/settings/app`, { headers }).then(res => res.json()),
+        fetch(`${API_BASE_URL}/api/v2/settings/llm`, { headers }).then(res => res.json()),
+        fetch(`${API_BASE_URL}/api/v2/settings/rag`, { headers }).then(res => res.json()),
+        fetch(`${API_BASE_URL}/api/v2/chatbot/settings`, { headers }).then(res => res.json())
+      ]);
+
+      const exportData = {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        settings: {
+          app: appSettings,
+          llm: llmSettings,
+          rag: ragSettings,
+          chatbot: chatbotSettings
+        }
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `settings_export_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({ title: 'Success', description: 'Settings exported successfully' });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({ title: 'Error', description: 'Failed to export settings', variant: 'destructive' });
+    }
+  };
+
+  // Import settings from JSON
+  const importSettings = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (!data.settings || !data.version) {
+        toast({ title: 'Error', description: 'Invalid settings file format', variant: 'destructive' });
+        return;
+      }
+
+      const token = localStorage.getItem('accessToken');
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const API_BASE_URL = typeof window !== 'undefined' ? (window as any).API_CONFIG?.baseUrl || '' : '';
+
+      // Import settings
+      const promises = [];
+
+      if (data.settings.app) {
+        promises.push(
+          fetch(`${API_BASE_URL}/api/v2/settings/app`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data.settings.app)
+          })
+        );
+      }
+
+      if (data.settings.llm) {
+        promises.push(
+          fetch(`${API_BASE_URL}/api/v2/settings/llm`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data.settings.llm)
+          })
+        );
+      }
+
+      if (data.settings.rag) {
+        promises.push(
+          fetch(`${API_BASE_URL}/api/v2/settings/rag`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data.settings.rag)
+          })
+        );
+      }
+
+      await Promise.all(promises);
+
+      toast({ title: 'Success', description: 'Settings imported successfully. Reload page to apply changes.' });
+    } catch (error) {
+      console.error('Import error:', error);
+      toast({ title: 'Error', description: 'Failed to import settings', variant: 'destructive' });
+    }
+
+    if (e.target) e.target.value = '';
+  };
+
   return (
     <div className="w-full max-w-[90%] mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold">Settings</h1>
-        <p className="text-muted-foreground">
-          Configure your application settings. Each tab loads only relevant configuration.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Settings</h1>
+          <p className="text-muted-foreground">
+            Configure your application settings. Each tab loads only relevant configuration.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportSettings}>
+            <Download className="w-4 h-4 mr-2" />
+            Export JSON
+          </Button>
+          <Button variant="outline" size="sm" onClick={importSettings}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import JSON
+          </Button>
+        </div>
       </div>
+
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={handleFileImport}
+      />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid w-full grid-cols-7 h-14">
