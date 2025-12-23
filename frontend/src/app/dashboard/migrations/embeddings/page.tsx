@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { apiConfig } from '@/lib/api/config';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -133,7 +134,7 @@ export default function EmbeddingsPage() {
 
   const fetchTables = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/migration/stats');
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/migration/stats'));
       const data = await response.json();
       setTables(data.tables || []);
     } catch (error) {
@@ -143,7 +144,7 @@ export default function EmbeddingsPage() {
 
   const fetchMigrationProgress = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/migration/progress');
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/migration/progress'));
       const data = await response.json();
       setMigrationProgress(data);
     } catch (error) {
@@ -153,7 +154,7 @@ export default function EmbeddingsPage() {
 
   const fetchMigrationHistory = async () => {
     try {
-      const response = await fetch('http://localhost:8083/api/v2/migration/history');
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/migration/history'));
       const data = await response.json();
       setMigrationHistory(data || []);
     } catch (error) {
@@ -169,7 +170,7 @@ export default function EmbeddingsPage() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8083/api/v2/migration/start', {
+      const response = await fetch(apiConfig.getApiUrl('/api/v2/migration/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,7 +201,7 @@ export default function EmbeddingsPage() {
     if (!migrationProgress?.id) return;
 
     try {
-      await fetch(`http://localhost:8083/api/v2/migration/pause/${migrationProgress.id}`, {
+      await fetch(apiConfig.getApiUrl(`/api/v2/migration/pause/${migrationProgress.id}`), {
         method: 'POST'
       });
       fetchMigrationProgress();
@@ -213,7 +214,7 @@ export default function EmbeddingsPage() {
     if (!migrationProgress?.id) return;
 
     try {
-      await fetch(`http://localhost:8083/api/v2/migration/resume/${migrationProgress.id}`, {
+      await fetch(apiConfig.getApiUrl(`/api/v2/migration/resume/${migrationProgress.id}`), {
         method: 'POST'
       });
       fetchMigrationProgress();
@@ -226,7 +227,7 @@ export default function EmbeddingsPage() {
     if (!migrationProgress?.id) return;
 
     try {
-      await fetch(`http://localhost:8083/api/v2/migration/stop/${migrationProgress.id}`, {
+      await fetch(apiConfig.getApiUrl(`/api/v2/migration/stop/${migrationProgress.id}`), {
         method: 'POST'
       });
       fetchMigrationProgress();
