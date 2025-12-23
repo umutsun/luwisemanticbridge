@@ -94,13 +94,14 @@ const extractPdfText = async (pdfPath) => {
   console.log(`Temp directory: ${tempDir}`);
   console.log(`Skip existing content: ${skipExisting}\n`);
 
-  // Get PDFs without content
+  // Get PDFs without content (exclude failed and already embedded)
   const query = `
     SELECT id, title, file_path, file_type, processing_status
     FROM documents
     WHERE (file_type ILIKE '%pdf%' OR type ILIKE '%pdf%')
       AND (content IS NULL OR LENGTH(content) < 100)
       AND file_path IS NOT NULL
+      AND processing_status NOT IN ('embedded', 'failed')
     ORDER BY created_at DESC
     LIMIT $1
   `;
