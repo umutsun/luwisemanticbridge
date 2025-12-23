@@ -13,7 +13,7 @@ const fs = require('fs');
     const pool = new Pool({ connectionString: dbUrl });
 
     // Get Google Drive config
-    const result = await pool.query("SELECT value FROM settings WHERE key = $1", ['google_drive_config']);
+    const result = await pool.query("SELECT value FROM settings WHERE key = $1", ['googleDrive.config']);
     if (!result.rows.length) {
       console.log('No Google Drive config found');
       await pool.end();
@@ -26,7 +26,7 @@ const fs = require('fs');
     console.log('Enabled:', config.enabled);
 
     // Get OAuth config
-    const oauthResult = await pool.query("SELECT value FROM settings WHERE key = $1", ['google_oauth_config']);
+    const oauthResult = await pool.query("SELECT value FROM settings WHERE key = $1", ['googleDrive.oauth']);
     const oauthConfig = JSON.parse(oauthResult.rows[0].value);
 
     // Setup OAuth client
